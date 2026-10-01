@@ -57,3 +57,34 @@ select = ["E", "F"]
 # E741: `l` is the angular-momentum quantum number throughout the codebase
 # (spherical harmonics, lmax, ...); it is a deliberate, standard physics name.
 ignore = ["E501", "E741"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "ruff==0.16.7",
+    "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
+]
+
+# Lint and type ratchet (D13). Legacy code keeps the E, F set of [tool.ruff.lint] above; the strict
+# set lives in a nested ruff.toml inside each NEW package (never in tensorpotential/ itself, a nested
+# config applies to every file below its directory). tools/lint_ratchet.py keeps the legacy counts
+# from rising (baselines/lint_ratchet.json).
+[tool.ty.environment]
+python = "./.venv"
+
+[[tool.ty.overrides]]
+include = ["tensorpotential/**", "tests/**"]
+exclude = ["tensorpotential/torch_backend/**", "tensorpotential/core/**"]
+
+[tool.ty.overrides.rules]
+invalid-parameter-default = "ignore"
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+unsupported-operator = "ignore"
+
+[tool.coverage.run]
+branch = true
+source = ["tensorpotential"]
+# fail_under is set per package in CI (M2.1)
