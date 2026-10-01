@@ -20,6 +20,7 @@ user and an issue disagree, ask.
 uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty
 
 # Tests: run from the repository root (they do not depend on the working directory and write nothing into the tree)
+# (under -n N, every worker gets cores/N TensorFlow and OpenMP threads from conftest.py; variables you set yourself win)
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
