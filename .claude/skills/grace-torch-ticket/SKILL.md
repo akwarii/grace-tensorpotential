@@ -77,7 +77,7 @@ branch: <id>-<slug>                e.g. clean1-triage-table   (the id in lower c
 base:   torch-backend              (the integration branch on the fork; never master, never ICAMS)
 ```
 
-- Open a draft PR only when the user tells you to; committing on the work branch and preparing and checking the description beforehand are allowed, merging is never yours. Its description contains `Refs #<issue number>` (not `Closes`: the issue is closed by `board.py done` after the merge) and the Verify
+- When the work is ready (see `CLAUDE.md`), open a **draft** PR yourself and ask the user to review it; marking it ready, auto-merge and merging are never yours. Its description contains `Refs #<issue number>` (not `Closes`: the issue is closed by `board.py done` after the merge) and the Verify
   output and per-unit coverage. Then `python tools/board.py status CLEAN1 "PR Open"` (it refuses unless an open PR references the issue). Make sure your `torch-backend` is current first.
 - **Work in your own worktree** (other agents may be running): `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` in it: git sets the upstream
   to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. Do not use a tree that is not yours, and do not put two agents on one
@@ -89,7 +89,7 @@ base:   torch-backend              (the integration branch on the fork; never ma
   fork never waits; nothing is sent to ICAMS without an explicit go for that unit. `CLAUDE.md`, `.claude/`, `tools/` and `baselines/` never appear on such a branch:
   run `python tools/check_pr_branch.py` (it fails on any fork-only path in the diff against `upstream/master`). Draft PR text goes through `python tools/board.py sanitise`.
 - Commit messages are imperative with `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`; test commits come before the change they protect;
-  a refactor never shares a commit with a behaviour change. You may commit on the work branch of the issue; you push it only when told to push or to open the PR, and never commit to `torch-backend` or `master` directly.
+  a refactor never shares a commit with a behaviour change. You may commit on the work branch of the issue; you push it to open the draft PR and to update that PR, and never commit to `torch-backend` or `master` directly.
 
 ## Creating an issue
 
@@ -100,7 +100,7 @@ sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority,
 
 ## Writing the PR summary
 
-Pull requests into `torch-backend` use the fork's template, `.github/PULL_REQUEST_TEMPLATE/torch-backend.md`. Open one only when the user tells you to (preparing the description earlier is fine).
+Pull requests into `torch-backend` use the fork's template, `.github/PULL_REQUEST_TEMPLATE/torch-backend.md`. Open it as a draft when the work is ready, then ask the user to review it (the user marks it ready and merges).
 
 ```bash
 python tools/board.py pr-body CLEAN1 > body.md      # template pre-filled: Refs, the exit criterion, the Definition of Done state
