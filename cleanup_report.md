@@ -69,7 +69,7 @@ Conclusion: **out of scope, no change allowed** (owner decision of 2026-10-01, o
 
 ## 2. Class E register (disabled wiring of documented or user-visible options)
 
-Copied from `cleanup_triage.md` (M0.2). Locations are re-measured on the current tree: M0.3 deleted comment blocks above these lines, so they moved by a few lines; the id is the stable key. Default action: keep. Each row needs a decision from the owner (retire, or complete).
+Copied from `cleanup_triage.md` (M0.2). Locations are re-measured on the current tree: M0.3 deleted comment blocks above these lines, so they moved by a few lines; the id is the stable key. Default action: keep. Each row needed a decision from the owner; they were taken on 2026-10-01 and are in 2.1.
 
 | id | location (current tree) | what is disabled | evidence | decision to take |
 |---|---|---|---|---|
@@ -86,7 +86,19 @@ Copied from `cleanup_triage.md` (M0.2). Locations are re-measured on the current
 | `94abfc6e` | `tests/test_integration_test.py:328-363` | test `test_MoNbTaW_MLP_switch_ef_lr_reduction_early_stop` (MLP model, ef/lr switch, early stop; 6 epochs of numeric references) | `tests/MoNbTaW-MLP/input.yaml` is tracked | re-baseline the references and re-enable, or retire with the input |
 | `0bb0b394` | `tests/test_integration_test.py:501-537` | test `test_MoNbTaW_GRACE_2L_MP` (2L message-passing model; 3 epochs of numeric references) | `tests/MoNbTaW-GRACE/input_2L_MP.yaml` is tracked | same |
 
-Grouped by the decision they need: **LoRA** (3 rows, one decision), **Gaussian `normalized`** (3 rows, one decision, touches the model format), **`stress_units` in `grace_preprocess`** (1), **`grace_utils aux_model --aux`** (3 rows, one decision; the documentation currently describes behaviour the code does not have), **two disabled integration tests** (2). Five decisions in total. None of them is taken here; M0.2 recorded that a decision is needed, M0.3 left all 12 blocks in place (verified: the 12 blocks are present above).
+Grouped by the decision they need: **LoRA** (3 rows, one decision), **Gaussian `normalized`** (3 rows, one decision, touches the model format), **`stress_units` in `grace_preprocess`** (1), **`grace_utils aux_model --aux`** (3 rows, one decision; the documentation currently describes behaviour the code does not have), **two disabled integration tests** (2). Five decisions in total, taken in 2.1 and **not carried out here**; M0.2 recorded that a decision is needed, M0.3 left all 12 blocks in place (verified: the 12 blocks are present above).
+
+### 2.1 Owner decisions (2026-10-01)
+
+| Decision | Blocks | Outcome | What carrying it out means (not done in M0.5) |
+|---|---|---|---|
+| E1 LoRA | `5a978b0c`, `8acc3b08`, `bfc0922a` | **finish it** | Re-enable the three blocks in `cli/gracemaker.py` and make `lora` / `reduce_lora` work end to end (activation, reduction, re-save of the model yaml). Touches live TF code in `functions/nn.py`, `instructions/base.py`, `instructions/compute.py`, `tpmodel.py` (each modified unit at 90% coverage first), needs a test with physical oracles (a reduced LoRA model reproduces the activated one), and the docs lose "not supported". The TODO at `gracemaker.py:652` (the first jitted save converts the function for good) is part of it. |
+| E2 Gaussian `normalized` | `1c5d0a40`, `ca55d8af`, `caafca75` | **mark as deprecated** | Keep accepting the argument (saved yamls stay loadable, no model-format change) and emit a `DeprecationWarning` when it is passed; document that it has no effect. The commented code stays or goes with that change. |
+| E3 `stress_units` | `cf89403b` | **wire it** | `grace_preprocess` passes `stress_units` through like `gracemaker` does (`cli/data.py`); a test converts GPa / kbar / -kbar input and compares with eV/A3 by hand-computed factors. Changes preprocessing output for users who set the option. |
+| E4 `--aux` | `d1ac63dd`, `f0d17646`, `fb708616` | **correct the docs** | `docs/gracemaker/utilities.md` (lines 228 and 347) and the argparse help describe only what `aux_model` does today (`compute_energy`); the three commented blocks are then dead code and can be deleted in the same change. Documentation only. |
+| E5 disabled tests | `94abfc6e`, `0bb0b394` | **re-enable** | Uncomment the two tests and re-baseline their numeric references (6 and 3 epochs of metrics); needs a training run on this machine. Regenerating references is its own change, never inside a feature PR. |
+
+None of these fits M0.5, whose scope is report-only (no behaviour change, no new feature, no other issue's work). They need follow-up issues, proposed to the owner in the session; this PR records the decisions only.
 
 ## 3. Rules
 
@@ -125,7 +137,7 @@ Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy
 
 ## 4. Decisions this report needs from the owner
 
-1. **Class E**: five decisions (LoRA, Gaussian `normalized`, `stress_units` in `grace_preprocess`, `grace_utils aux_model --aux`, the two disabled integration tests); a model-format break is involved only in the Gaussian one.
+1. **Class E**: decided (2.1); open: where the follow-up work is tracked (new issues, on the owner's go).
 2. **Upstream issues (U10)**: whether to report F1 (reporting does not change the code) and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
 
 ## Provenance
