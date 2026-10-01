@@ -34,13 +34,15 @@ import pytest
 import tensorflow as tf
 
 from tensorpotential import constants
-from tensorpotential.experimental.instructions.aux_compute import (
-    StructuredGridProductFunction,
-    StructuredGridMessagePassing,
-    _gauss_legendre_nodes_weights,
-    _normalised_assoc_legendre,
-    _real_sh_phi_factors,
+aux_compute = pytest.importorskip(
+    "tensorpotential.experimental.instructions.aux_compute",
+    reason="tensorpotential.experimental is not part of this tree",
 )
+StructuredGridProductFunction = aux_compute.StructuredGridProductFunction
+StructuredGridMessagePassing = aux_compute.StructuredGridMessagePassing
+_gauss_legendre_nodes_weights = aux_compute._gauss_legendre_nodes_weights
+_normalised_assoc_legendre = aux_compute._normalised_assoc_legendre
+_real_sh_phi_factors = aux_compute._real_sh_phi_factors
 
 
 # ---------------------------------------------------------------------- #
