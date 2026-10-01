@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import socket
 
 import subprocess
 from pathlib import Path
@@ -11,6 +12,13 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 prefix = Path(__file__).parent.resolve()
+
+
+def _free_port():
+    """A port the OS has just handed out, so parallel runs never share one."""
+    with socket.socket() as sock:
+        sock.bind(("localhost", 0))
+        return sock.getsockname()[1]
 
 
 TF_DATASET = "tf_dataset"
@@ -96,7 +104,7 @@ def _compute_distributed_data_and_distrib_fit(work):
     tf_config_env = current_env.copy()
     tf_config_env["TF_CONFIG"] = json.dumps(
         {
-            "cluster": {"worker": ["localhost:12345"]},
+            "cluster": {"worker": [f"localhost:{_free_port()}"]},
             "task": {"type": "worker", "index": 0},
         }
     )
