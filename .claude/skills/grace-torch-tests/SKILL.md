@@ -1,0 +1,67 @@
+---
+name: grace-torch-tests
+description: How to test changes in this repository - the 90% coverage rule for modified code, characterization tests, the two test layers (logic and physical values), planted mutants, parallel and fast test runs, and the guideline on mocks. Use before modifying any existing function or class, when writing or reviewing tests, when a test is slow or flaky, or when asked whether something is well tested.
+---
+
+# grace-torch-tests
+
+## The coverage rule (modified code)
+
+A function, method or class you are about to **modify** must already be covered at **90% or more**, branches included, by the existing suite. Unit =
+a def or method (a class body counts when a class attribute changes). Coverage = (statements + branches executed) / (statements + branches).
+
+1. Measure the unit on the unmodified code (branch coverage; `pytest --cov=tensorpotential --cov-branch -n 4`, per-function numbers through
+   `tools/check_touched_coverage.py` when it exists, otherwise from the coverage JSON).
+2. Below 90%: write **characterization tests first**, check that they pass on the code before the change (the `pre-cleanup` tag or the parent commit),
+   commit them separately as `test:`.
+3. Make the change. Re-run the check; it must report 90% or more for every touched unit.
+4. Exempt: comment-only, docstring-only and annotation-only edits (AST identical), and test code itself.
+5. Not modified: units the suite cannot execute here (multi-GPU, distributed, HPC-only), and units whose tests would cost more than half a day for a
+   cosmetic fix. Report them on the issue instead.
+
+New code in `core/` and `torch_backend/` is held to 90% (branch) per package in CI. `# pragma: no cover` needs a reason in the comment. Raising coverage
+beyond the touched units is welcome; a file's coverage never falls.
+
+## Two layers: logic and physics
+
+Coverage shows that code ran, not that anything was checked. Every unit gets both layers where physics applies:
+
+- **Logic layer**: each branch, each raised error (type and message), shapes and dtypes, empty and single-element inputs, option values, no mutation of arguments.
+- **Physics layer**: values that hold whatever the implementation, from an oracle that neither calls nor shares code with the unit under test. A refactor may
+  change the logic and the test must still pass; a change that breaks the physics must fail it.
+
+| Family | Physical or value checks |
+|---|---|
+| Spherical harmonics | orthonormality by quadrature, parity `(-1)^l`, rotation covariance against scipy/sympy |
+| Radial basis, cutoff | Chebyshev recurrence against `numpy.polynomial`; envelope is 1 at 0 and reaches 0 at `rc` smoothly |
+| Clebsch-Gordan, plans | selection rules, orthogonality, sympy values, the committed Kokkos tables as a third source |
+| Contractions | equivariance (rotate input, output rotates with the Wigner matrices), invariant scalars, neighbour permutation |
+| Energy model | rotation, translation, permutation invariance; extensivity (two far copies give twice the energy); isolated atom energy |
+| Forces | central finite difference of the energy; `sum(F) = 0`; no net torque for a cluster |
+| Virial, stress | finite-strain derivative of the energy; symmetry; sign and units fixed by a hand case |
+| Neighbour lists | completeness against a brute-force oracle; invariance under lattice translation; strict `d < rc` |
+| Data pipeline | hand-computed numbers on toy frames; reference-energy subtraction conserves the total |
+| I/O | npz and yaml round trips exact; unknown keys and shape mismatches raise |
+
+Non-physical units (argument parsing, plumbing) need the logic layer only.
+
+**Planted mutants.** For each new test file apply at least one logic mutant (a flipped comparison or branch) and one physics mutant (a wrong sign, factor,
+index or dropped term) in a scratch copy: every one must make a test fail. A survivor means the test is rewritten, not the mutant dropped. An automated
+mutation tool may be added to the `dev` group; say which and from where before downloading it.
+
+## Mocks are a guideline, not a rule
+
+Prefer real objects. A mock, stub or monkeypatch is acceptable to replace an external boundary (network, clock, absent hardware, a slow download) or
+something that cannot run here, with a comment on what is replaced and why. Never for the unit under test or for a numeric or physical path. Keep a
+count of mock uses before and after when you change a test file.
+
+## Speed
+
+- Run the suite from inside `tests/`. Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 min instead of 32 min on 14 cores with the identical outcome.
+  Choose the worker count from memory (TF processes are large) and give each worker `cores / N` threads.
+- Tests must be safe in parallel: `tmp_path` or a per-worker directory for every file written, no test reads another test's output, no fixed ports.
+- Share real expensive objects (built models, prepared data, trained tiny models) through module- or session-scoped fixtures when tests only read them,
+  with a check that they are not mutated. Merge training runs that differ only in what is asserted afterwards, keeping every assertion. Reduce work
+  only where the assertion does not depend on it, and list each cut; never relax a tolerance for speed.
+- `@pytest.mark.slow` for tests of 30 s or more gives a fast loop (`-m "not slow"`); CI and gates run everything, and nothing is skipped by default.
+- Compare a run with the baselines: same counts, same outcome per test id (`tools/junit_outcomes.py compare`).
