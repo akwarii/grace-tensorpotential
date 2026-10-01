@@ -75,8 +75,10 @@ base:   torch-backend              (the integration branch on the fork; never ma
 
 - Open a draft PR only when the user tells you to; committing on the work branch and preparing and checking the description beforehand are allowed, merging is never yours. Its description contains `Refs #<issue number>` (not `Closes`: the issue is closed by `board.py done` after the merge) and the Verify
   output and per-unit coverage. Then `python tools/board.py status CLEAN1 "PR Open"` (it refuses unless an open PR references the issue). Make sure your `torch-backend` is current first.
-- When you create the PR branch with `git worktree add -b <branch> <dir> origin/torch-backend`, run `git branch --unset-upstream` in it: git sets the upstream to `origin/torch-backend`,
-  and a plain `git push` would then try to update the integration branch itself instead of the PR branch.
+- **Work in your own worktree** (other agents may be running): `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` in it: git sets the upstream
+  to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. Do not use a tree that is not yours, and do not put two agents on one
+  issue (`board.py` rewrites the whole issue body when it ticks a box). **When the PR is merged** and `board.py done` has run, remove it: `git worktree remove ../<repository>-<id>` (no `--force`; a refusal
+  means uncommitted work, so report it), `git branch -d <branch>`; the remote branch stays unless the user says to delete it. `git worktree list` shows what is still around.
 - **The issue's scope is binding.** If it turns out bigger than its estimate, propose a split with a finding. Do not expand silently and do not fold in
   an unrelated fix you noticed. A tolerance change, regenerating a golden reference, or reformatting existing files is never part of a feature PR.
 - **Units that could be offered upstream** (non-breaking, not about PyTorch, no new dependency) are cut from `upstream/master` as `pr/U<n>-<slug>` so the
