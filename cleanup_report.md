@@ -140,6 +140,32 @@ Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy
 1. **Class E**: decided (2.1); the follow-up work is tracked in LORA1, DATA1, CLEAN5 and TEST5 (2.1).
 2. **Upstream issues (U10)**: whether to report F1 (reporting does not change the code) and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
 
+## 5. Parallel test execution (TEST3)
+
+Measured on 2026-10-01 on the TEST3 branch (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20, pytest-xdist 3.8.0). Every run is the full suite from the repository root on a **read-only bind mount** of the tree (`unshare -rm`, then `mount --bind` and `mount -o remount,ro,bind`; `/tmp` stays writable), `--dist load`, with `tests/test_structured_grid.py` and `tests/test_foundation_model_regression.py` ignored as in `baselines/`. Each worker gets `cores / N` TensorFlow and OpenMP threads (root `conftest.py`, `tests/thread_budget.py`). The serial reference is the 32 min 19 s measured on 2026-10-01 (`baselines/outcomes_pd2.json` holds the outcomes). The machine was not idle: other applications held 9 to 11 GB before each run.
+
+| N | threads per worker | wall time | single-process peak RSS | peak system memory above start | outcome per test id vs `outcomes_pd2.json` |
+|---:|---:|---:|---:|---:|---|
+| 2 | 7 | 15 min 20 s | 10.5 GB | 15.6 GB | identical |
+| 4 (run 1) | 3 | 11 min 51 s | 6.6 GB | 17.7 GB | identical |
+| 4 (run 2) | 3 | 11 min 38 s | 6.7 GB | 16.1 GB | identical |
+| 4 (run 3) | 3 | 11 min 54 s | 6.6 GB | 16.9 GB | identical |
+| 6 | 2 | 10 min 08 s | 5.5 GB | 18.3 GB | identical |
+| 8 | 1 | 13 min 09 s | 5.0 GB | 19.5 GB | identical |
+
+Every run: 709 passed, 6 skipped, 2 xfailed, 1 xpassed, 0 failed (`tools/junit_outcomes.py compare` reports no changed test; the only differences are the 5 run-isolation tests of TEST1 and the 18 thread-budget tests added since the baseline). A first `-n 4` run on the same mount before a machine restart took 9 min 58 s.
+
+Reading of the numbers:
+
+- **The target of a third of the serial time (10 min 46 s) is met by N = 6 only** (10 min 08 s). N = 4 took 11 min 38 s to 11 min 54 s in three consecutive runs, one minute above the target, and 9 min 58 s in the run before the restart; background load is the likely cause of the spread, but the cause was not isolated.
+- N = 8 is slower than N = 6. At N = 8 the system came within 1.5 GB of the 30 GB (peak 28.7 GB used, which includes about 9 GB of other applications), so memory pressure is the probable cause; not verified.
+- Per-test durations were not analysed for these runs. The earlier profile (28 tests of 20 s or more hold 1,517 s of 1,939 s; the two longest take 243 s and 189 s) means the wall time cannot fall below about 4 min whatever N is.
+- Memory: a worker is large (the single largest process peaked at 5 to 10 GB); N = 6 is the highest count that leaves headroom on this machine.
+
+**Not measured yet** (open points of the exit criterion): `--dist worksteal` against `load`; coverage per file under `--cov -n 4` against a serial run (0.1 percentage points); the effect of the thread budget alone (the default of all threads per worker was not timed on the read-only mount).
+
+**Write audit.** The first read-only run found one write into the working directory: `test_graph_split.py::TestGraphSplitSaveReload::test_split_model_save_reload` saved `temp_saved_model_test` there (now `tmp_path`). `chmod -R a-w` is not a valid way to make the tree read-only for this check: `shutil.copy` and `copytree` propagate the mode and then fail on the copy; a read-only bind mount does not.
+
 ## Provenance
 
 Counts re-measured on the tree named at the top; the F1 reproduction was run with the project environment. Compared with the issue text: star imports are 3 in `.py` files (4 with the notebook), everything else (1 `NameError`, 8 bare `except`, 52 markers, the unimported package) matches.
