@@ -29,13 +29,19 @@ def test_seeded_values_are_reproducible_and_name_dependent():
 
 
 def test_seeded_values_matrices_are_scaled_and_vectors_centred_on_one():
+    # Bounds are N_SIGMA standard errors of the sampling distribution of each statistic
+    # (mean: sd/sqrt(n); standard deviation of normal data: relative 1/sqrt(2n)).
+    n_sigma = 5
     w = osn.seeded_values("big", (400, 400))
+    sd_w = 1 / np.sqrt(400)
     assert w.shape == (400, 400)
-    assert abs(w.mean()) < 0.01
-    assert w.std() == pytest.approx(1 / np.sqrt(400), rel=0.05)
+    assert abs(w.mean()) < n_sigma * sd_w / np.sqrt(w.size)
+    assert w.std() == pytest.approx(sd_w, rel=n_sigma / np.sqrt(2 * w.size), abs=0)
     vec = osn.seeded_values("vec", (50_000,))
-    assert vec.mean() == pytest.approx(1.0, abs=0.01)
-    assert vec.std() == pytest.approx(0.1, rel=0.05)
+    assert vec.mean() == pytest.approx(
+        1.0, abs=n_sigma * 0.1 / np.sqrt(vec.size), rel=0
+    )
+    assert vec.std() == pytest.approx(0.1, rel=n_sigma / np.sqrt(2 * vec.size), abs=0)
     scalar = osn.seeded_values("scalar", ())
     assert scalar.shape == () and 0.5 < scalar < 1.5
     assert np.all(osn.seeded_values("never zero", (64,)) != 0)
@@ -58,7 +64,7 @@ def test_compare_reports_largest_difference_and_its_key():
     b = _snap(x=[1.0, 2.5], y=[5.25])
     report = osn.compare_snapshots(a, b)
     assert not report["ok"]
-    assert report["max_abs_diff"] == pytest.approx(0.5)
+    assert report["max_abs_diff"] == 0.5  # 2.5 - 2.0, exact in binary
     assert report["max_abs_key"] == "x"
     assert report["exceeding"] == ["x", "y"]
 
@@ -81,7 +87,7 @@ def test_compare_scale_tolerance_is_relative_to_the_largest_element():
     assert osn.compare_snapshots(a, b, scale_rtol=1e-12)["ok"]
     assert not osn.compare_snapshots(a, b, scale_rtol=5e-15)["ok"]
     report = osn.compare_snapshots(a, b)
-    assert report["max_scaled_diff"] == pytest.approx(1e-14, rel=1e-6, abs=1e-20)
+    assert report["max_scaled_diff"] == pytest.approx(1e-14, rel=1e-12, abs=0)
     # an all-zero reference array has no scale: only exact equality passes
     zero = _snap(z=[0.0, 0.0])
     assert (
@@ -206,7 +212,7 @@ def test_build_model_keeps_constants_and_sets_nonzero_trainables(tf_model):
     constants = [v for v in tf_model.variables if not v.trainable]
     assert {v.name.split("/")[-1] for v in constants} >= {"cutoff:0"}
     cutoff = next(v for v in constants if v.name.endswith("cutoff:0"))
-    assert float(cutoff.numpy()) == pytest.approx(6.0)
+    assert float(cutoff.numpy()) == 6.0  # rcut of the yaml, stored as float64
     for var in tf_model.trainable_variables:
         assert np.all(np.isfinite(var.numpy()))
         assert np.any(var.numpy() != 0), var.name
