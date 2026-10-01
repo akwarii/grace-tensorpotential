@@ -54,7 +54,7 @@ sanitise as you go (the helper does it for what it posts).
 
 ## The project table
 
-The table view shows Status, Stage, Priority, **Blocked by** (dependencies that are not Done), **PR** (pull requests whose description has `Refs #<issue>`, with their state). GitHub's own "Linked pull requests" column stays empty on purpose: it only fills for closing keywords, which this fork does not use. `board.py status` and `board.py done`
+The table view shows Status, Stage, Priority, **Blocked by** (dependencies that are not Done), **PR** (pull requests whose description has `Refs #<issue>`, with their state). GitHub's own "Linked pull requests" column stays empty: tested on this fork, neither a closing keyword (`Closes #N`) nor a linked branch links a pull request whose base is not the default branch (`master`), and our pull requests target `torch-backend`; hence the PR column. `board.py status` and `board.py done`
 refresh the two text columns by themselves; after anything else that changes them (a PR opened or closed, an issue created) run `python tools/board.py refresh` (it writes only the cells that changed).
 
 ## Keep the Definition of Done current
