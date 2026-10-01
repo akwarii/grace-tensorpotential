@@ -1,14 +1,14 @@
 ---
 name: Milestone or task
 about: A unit of work on the torch-backend effort (fork only; created only when the owner says so)
-title: "M<stage>.<n> — <short title>"
+title: "<THEME><n> — <short title>"
 labels: ""
 ---
 
 <!--
 Fork-only template. Rules for the text (see the grace-torch-ticket skill): the issue must be implementable without opening anything else; use the same
 section names as the existing milestone issues; sanitise everything (`python tools/board.py sanitise`); no personal data, local paths, e-mail addresses,
-stray `#N`, `@mentions`, or links into other repositories. Delete every comment before submitting.
+stray `#N`, `@mentions`, or links into other repositories. Delete every comment before submitting. The id is a theme and a number (see "Ids" in the skill), unique across the board; the title is `<id> — <short title>`.
 -->
 
 **Depends on:** #<issue>, #<issue> · **Blocks:** none · **Related:** none
