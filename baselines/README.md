@@ -9,7 +9,7 @@ numpy 2.5.3, ASE 3.29.0, Python 3.12.3). Stage 0 must leave all of this unchange
 | `junit_pd2.xml`, `outcomes_pd2.json` | full suite, pandas 2.3.3 | see below |
 | `junit_pd3.xml`, `outcomes_pd3.json` | full suite, pandas 3.0.3 | see below |
 | `oracle_snapshot.npz` (git-ignored, 52 MB) and `oracle_snapshot.meta.json` | TensorFlow numerics of the three test yamls | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
-| `lint_ratchet.json` | ruff (E, F, ERA001, F401, F841, F811) and ty findings of legacy code per file and rule, with the tool versions (M0.7); the strict packages have no baseline | `python tools/lint_ratchet.py check` |
+| `lint_ratchet.json` | ruff (E, F, ERA001) and ty findings of legacy code per file and rule, with the tool versions (TOOL1); the strict packages have no baseline | `python tools/lint_ratchet.py check` |
 
 The plan said 183 `.py` files; `git ls-files '*.py'` gives 165 (243 tracked files in total, as the plan also says), so the
 manifest covers 165.

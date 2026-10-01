@@ -1,7 +1,8 @@
 # Hooks for prek (https://github.com/j178/prek); they run on the changed files only and use the
 # versions pinned in the dev group of pyproject.toml: `uv sync --group dev`, then `prek install`.
 # Legacy code is not linted file by file (its findings are tolerated, not fixed); tools/lint_ratchet.py
-# only lets their counts fall. The strict rule sets are in the ruff.toml of each new package.
+# only lets their counts fall. The strict rule set applies to the new packages only, through the single ruff
+# configuration of pyproject.toml.
 repos:
   - repo: local
     hooks:
