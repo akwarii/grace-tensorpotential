@@ -17,12 +17,12 @@ user and an issue disagree, ask.
 
 ```bash
 # Environment (creates .venv from uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
-uv sync
+uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty
 
 # Tests: run from the repository root (they do not depend on the working directory and write nothing into the tree)
-uv run --frozen --no-sync --with pytest --with pytest-xdist pytest tests -q -n 4 --dist load \
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
-uv run --frozen --no-sync --with pytest pytest tests/test_instructions.py -vv      # one file, serial
+uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
 
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # nested ruff.toml of a new package = strict set; elsewhere E, F
