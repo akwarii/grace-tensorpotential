@@ -24,10 +24,13 @@ uv run --frozen --no-sync --with pytest --with pytest-xdist pytest tests -q -n 4
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
 uv run --frozen --no-sync --with pytest pytest tests/test_instructions.py -vv      # one file, serial
 
-# Lint / format / types (versions pinned: ruff 0.16.7; ty is pre-1.0)
-uvx ruff@0.16.7 check path/to/file.py
-uvx ruff@0.16.7 format --preview path/to/new_file.py      # NEW files only, never reformat existing files
-uv tool run ty check path/to/new_package
+# Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
+uv run --frozen --no-sync ruff check path/to/file.py       # nested ruff.toml of a new package = strict set; elsewhere E, F
+uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
+uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
+uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise
+uv run --frozen --no-sync python tools/lint_ratchet.py record   # after a drop: records the lower baseline (a rise needs --allow-rise)
+prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Compare against the untouched-tree baselines (see baselines/README.md)
 python tools/ast_manifest.py check baselines/ast_manifest.json
@@ -104,6 +107,9 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   be read by pandas 2.
 - TF numerics are not bit-reproducible across processes: some float64 intermediates (`large_base`: `YI`, `B`, `BB`, ...) differ by about one ulp
   between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
+- Two agent sessions in one checkout trample each other: `git checkout -b` moves the branch the other session committed on (a commit then lands on the wrong
+  branch). Give each issue its own `git worktree add -b <branch> ../<dir> <base>`, and link `.venv` and `uv.lock` from the main checkout. Never run
+  `uv sync` there: it repoints the editable `tensorpotential` install of the shared `.venv` to the worktree (run `uv sync --frozen --group dev` in the main checkout to repair it).
 - Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
   `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
 - The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.
