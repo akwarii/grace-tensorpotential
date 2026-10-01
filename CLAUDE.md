@@ -107,9 +107,8 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   be read by pandas 2.
 - TF numerics are not bit-reproducible across processes: some float64 intermediates (`large_base`: `YI`, `B`, `BB`, ...) differ by about one ulp
   between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
-- Two agent sessions in one checkout trample each other: `git checkout -b` moves the branch the other session committed on (a commit then lands on the wrong
-  branch). Give each issue its own `git worktree add -b <branch> ../<dir> <base>`, and link `.venv` and `uv.lock` from the main checkout. Never run
-  `uv sync` there: it repoints the editable `tensorpotential` install of the shared `.venv` to the worktree (run `uv sync --frozen --group dev` in the main checkout to repair it).
+- A worktree has no `.venv` (git-ignored): link `.venv` and `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable `tensorpotential`
+  install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout). `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
 - Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
   `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
 - The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.
