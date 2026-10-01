@@ -341,13 +341,18 @@ class TestGraphSplitSaveReload:
     """Tests for saving and reloading models with aux_compute."""
 
     def test_split_model_save_reload(
-        self, grace_2layer_config, nacl_structure, communication_keys, l1_out_specs
+        self,
+        grace_2layer_config,
+        nacl_structure,
+        communication_keys,
+        l1_out_specs,
+        tmp_path,
     ):
         """Test saving/loading model with aux_compute and verify output consistency."""
         np.random.seed(322)
         tf.random.set_seed(322)
 
-        model_path = "temp_saved_model_test"
+        model_path = str(tmp_path / "temp_saved_model_test")
 
         try:
             preset = get_preset("GRACE_2LAYER_latest")
