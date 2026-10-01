@@ -1,10 +1,10 @@
-# Cleanup report: findings that are reported, not fixed (M0.5)
+# Cleanup report: findings that are reported, not fixed (CLEAN4)
 
-Status: **draft for review**. No source file was edited; this report only records what the tree contains, what was measured, and the rules that govern the next removals and upstream merges.
+Status: **ready for review in the pull request**. No source file was edited; this report only records what the tree contains, what was measured, and the rules that govern the next removals and upstream merges.
 
 **Scope rule (owner, 2026-10-01): `tensorpotential/compat/pace/` is out of scope and no change to it is allowed**, by this issue or by any other: no edit, deletion, reformatting or fix, including the findings below that sit inside it (F1, F2, F4 and part of F3). It is reported here and left as it is.
 
-Measured on 2026-10-01 on `torch-backend` at `c313e3e` (after M0.3), CPU, Python 3.12.3, `ruff 0.16.7 --isolated`, TensorFlow 2.20. Commands are given so each number can be reproduced.
+Measured on 2026-10-01 on `torch-backend` at `c313e3e` (after CLEAN2), CPU, Python 3.12.3, `ruff 0.16.7 --isolated`, TensorFlow 2.20. Commands are given so each number can be reproduced.
 
 ## 1. Findings
 
@@ -69,7 +69,7 @@ Conclusion: **out of scope, no change allowed** (owner decision of 2026-10-01, o
 
 ## 2. Class E register (disabled wiring of documented or user-visible options)
 
-Copied from `cleanup_triage.md` (M0.2). Locations are re-measured on the current tree: M0.3 deleted comment blocks above these lines, so they moved by a few lines; the id is the stable key. Default action: keep. Each row needed a decision from the owner; they were taken on 2026-10-01 and are in 2.1.
+Copied from `cleanup_triage.md` (CLEAN1). Locations are re-measured on the current tree: CLEAN2 deleted comment blocks above these lines, so they moved by a few lines; the id is the stable key. Default action: keep. Each row needed a decision from the owner; they were taken on 2026-10-01 and are in 2.1.
 
 | id | location (current tree) | what is disabled | evidence | decision to take |
 |---|---|---|---|---|
@@ -86,11 +86,11 @@ Copied from `cleanup_triage.md` (M0.2). Locations are re-measured on the current
 | `94abfc6e` | `tests/test_integration_test.py:328-363` | test `test_MoNbTaW_MLP_switch_ef_lr_reduction_early_stop` (MLP model, ef/lr switch, early stop; 6 epochs of numeric references) | `tests/MoNbTaW-MLP/input.yaml` is tracked | re-baseline the references and re-enable, or retire with the input |
 | `0bb0b394` | `tests/test_integration_test.py:501-537` | test `test_MoNbTaW_GRACE_2L_MP` (2L message-passing model; 3 epochs of numeric references) | `tests/MoNbTaW-GRACE/input_2L_MP.yaml` is tracked | same |
 
-Grouped by the decision they need: **LoRA** (3 rows, one decision), **Gaussian `normalized`** (3 rows, one decision, touches the model format), **`stress_units` in `grace_preprocess`** (1), **`grace_utils aux_model --aux`** (3 rows, one decision; the documentation currently describes behaviour the code does not have), **two disabled integration tests** (2). Five decisions in total, taken in 2.1 and **not carried out here**; M0.2 recorded that a decision is needed, M0.3 left all 12 blocks in place (verified: the 12 blocks are present above).
+Grouped by the decision they need: **LoRA** (3 rows, one decision), **Gaussian `normalized`** (3 rows, one decision, touches the model format), **`stress_units` in `grace_preprocess`** (1), **`grace_utils aux_model --aux`** (3 rows, one decision; the documentation currently describes behaviour the code does not have), **two disabled integration tests** (2). Five decisions in total, taken in 2.1 and **not carried out here**; CLEAN1 recorded that a decision is needed, CLEAN2 left all 12 blocks in place (verified: the 12 blocks are present above).
 
 ### 2.1 Owner decisions (2026-10-01)
 
-| Decision | Blocks | Outcome | What carrying it out means (not done in M0.5) |
+| Decision | Blocks | Outcome | What carrying it out means (not done in CLEAN4) |
 |---|---|---|---|
 | E1 LoRA | `5a978b0c`, `8acc3b08`, `bfc0922a` | **finish it** | Re-enable the three blocks in `cli/gracemaker.py` and make `lora` / `reduce_lora` work end to end (activation, reduction, re-save of the model yaml). Touches live TF code in `functions/nn.py`, `instructions/base.py`, `instructions/compute.py`, `tpmodel.py` (each modified unit at 90% coverage first), needs a test with physical oracles (a reduced LoRA model reproduces the activated one), and the docs lose "not supported". The TODO at `gracemaker.py:652` (the first jitted save converts the function for good) is part of it. |
 | E2 Gaussian `normalized` | `1c5d0a40`, `ca55d8af`, `caafca75` | **mark as deprecated** | Keep accepting the argument (saved yamls stay loadable, no model-format change) and emit a `DeprecationWarning` when it is passed; document that it has no effect. The commented code stays or goes with that change. |
@@ -98,7 +98,7 @@ Grouped by the decision they need: **LoRA** (3 rows, one decision), **Gaussian `
 | E4 `--aux` | `d1ac63dd`, `f0d17646`, `fb708616` | **correct the docs** | `docs/gracemaker/utilities.md` (lines 228 and 347) and the argparse help describe only what `aux_model` does today (`compute_energy`); the three commented blocks are then dead code and can be deleted in the same change. Documentation only. |
 | E5 disabled tests | `94abfc6e`, `0bb0b394` | **re-enable** | Uncomment the two tests and re-baseline their numeric references (6 and 3 epochs of metrics); needs a training run on this machine. Regenerating references is its own change, never inside a feature PR. |
 
-None of these fits M0.5, whose scope is report-only (no behaviour change, no new feature, no other issue's work). They need follow-up issues, proposed to the owner in the session; this PR records the decisions only.
+None of these fits CLEAN4, whose scope is report-only (no behaviour change, no new feature, no other issue's work). They are tracked as follow-up issues, all depending on GATE-CLEAN so that the gate's comparison with the untouched baseline stays meaningful: E1 in LORA1 (#103), E3 in DATA1 (#104), E2 and E4 in CLEAN5 (#105), E5 in TEST5 (#106). This PR records the decisions only.
 
 ## 3. Rules
 
@@ -109,7 +109,7 @@ State today: `origin` is the fork; `upstream` is the ICAMS repository with its p
 Incoming (upstream changes into the fork):
 
 1. `git fetch upstream`, then the rev-list count above. If the left number is 0, there is nothing to do.
-2. Otherwise branch `sync-upstream-<yyyymmdd>` from `origin/torch-backend` and **merge** `upstream/master` (a merge keeps the history that a later `pr/U*` squash-merge needs; no rebase of published branches). Conflicts are expected where upstream edits near a block that M0.3 deleted or a file the fork changed: keep upstream's behaviour, re-apply the fork's removal only if the deleted block is still dead.
+2. Otherwise branch `sync-upstream-<yyyymmdd>` from `origin/torch-backend` and **merge** `upstream/master` (a merge keeps the history that a later `pr/U*` squash-merge needs; no rebase of published branches). Conflicts are expected where upstream edits near a block that CLEAN2 deleted or a file the fork changed: keep upstream's behaviour, re-apply the fork's removal only if the deleted block is still dead.
 3. Verify before the sync PR is opened, from the repository root: the full suite with `-n 4 --dist load` compared with `baselines/outcomes_pd2.json` through `tools/junit_outcomes.py compare`; the AST manifest check for the files upstream changed (every `changed:` line must be explained by the upstream diff); the oracle snapshot if `instructions/`, `functions/`, `tpmodel.py` or `poly.py` changed. A sync is one PR into `torch-backend`, opened and merged by the owner.
 4. Never push to `master` of the fork's `origin` as a way to track upstream, and never push to `upstream`.
 
@@ -121,11 +121,11 @@ Outgoing (a unit offered to ICAMS), as decided in D6 and D17:
 4. Nothing is opened, pushed or commented upstream without an explicit go for that unit; the owner checks the licence clause of the upstream PR template with the institution before the first PR (D6); at most two upstream PRs are open at a time.
 5. If upstream merges the unit (squash), merging `upstream/master` is a no-op or a trivial conflict; if upstream changes it during review, rebase the fork's copy onto the merged version.
 
-Consequence of M0.3 for later syncs (an expectation, not yet observed because upstream has not moved): the 169 deleted blocks and the other clean-up edits are fork-only (the U6 upstream units were skipped, so nothing replays them upstream), hence a future merge can conflict wherever upstream edits next to a deleted block. The divergence ledger of M1.11 (D17b) will list fork-modified upstream files; until it exists, `git diff --stat upstream/master...origin/torch-backend -- tensorpotential` is the list.
+Consequence of CLEAN2 for later syncs (an expectation, not yet observed because upstream has not moved): the 169 deleted blocks and the other clean-up edits are fork-only (the U6 upstream units were skipped, so nothing replays them upstream), hence a future merge can conflict wherever upstream edits next to a deleted block. The divergence ledger of BOARD2 (D17b) will list fork-modified upstream files; until it exists, `git diff --stat upstream/master...origin/torch-backend -- tensorpotential` is the list.
 
 ### 3.2 Removal protocol for any future retirement of code
 
-Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy code; applies to deleting a module, a class, an option or a package (for example a class-E item above; **never `compat/pace/`**, which is out of scope). A comment-only deletion follows M0.2 and M0.3 instead (triage table, AST manifest equal).
+Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy code; applies to deleting a module, a class, an option or a package (for example a class-E item above; **never `compat/pace/`**, which is out of scope). A comment-only deletion follows CLEAN1 and CLEAN2 instead (triage table, AST manifest equal).
 
 1. **The replacement is the default and its parity is green.** A retirement names what replaces the code and shows the comparison (suite outcome equal to `baselines/`, oracle snapshot within tolerance when numerics are touched) before the deletion, never in the same commit.
 2. **Nothing live imports the code.** Evidence is an import-resolution check (every `import` / `from` in the tree resolves after the change) and an import smoke (`python -W always -c "import <every module>"`), plus the dynamic routes of this repository: `importlib.import_module` calls, `tpmodel.__getattr__` and `instructions.__getattr__` (saved `model.yaml` files import classes by name through them, so a class deletion is a model-format break), console scripts of `pyproject.toml`, and entry points.
@@ -137,7 +137,7 @@ Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy
 
 ## 4. Decisions this report needs from the owner
 
-1. **Class E**: decided (2.1); open: where the follow-up work is tracked (new issues, on the owner's go).
+1. **Class E**: decided (2.1); the follow-up work is tracked in LORA1, DATA1, CLEAN5 and TEST5 (2.1).
 2. **Upstream issues (U10)**: whether to report F1 (reporting does not change the code) and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
 
 ## Provenance
