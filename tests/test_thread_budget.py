@@ -40,6 +40,9 @@ def test_worker_gets_cores_over_workers_in_every_variable() -> None:
     env = {WORKER_COUNT_VAR: "4"}
     assert apply_thread_budget(env, cores=14) == 3
     assert {var: env[var] for var in THREAD_VARS} == dict.fromkeys(THREAD_VARS, "3")
+    # the variables TensorFlow and the OpenMP runtime actually read
+    for name in ("OMP_NUM_THREADS", "TF_NUM_INTRAOP_THREADS", "TF_NUM_INTEROP_THREADS"):
+        assert env[name] == "3"
 
 
 def test_values_set_by_the_contributor_are_kept() -> None:
@@ -63,7 +66,7 @@ def test_unknown_core_count_falls_back_to_one_thread(
 ) -> None:
     # os.cpu_count returns None on platforms that cannot tell.
     monkeypatch.setattr("os.cpu_count", lambda: None)
-    assert apply_thread_budget({WORKER_COUNT_VAR: "3"}) == 1
+    assert apply_thread_budget({WORKER_COUNT_VAR: "1"}) == 1
 
 
 def test_process_environment_is_used_when_no_mapping_is_given(
@@ -79,3 +82,16 @@ def test_process_environment_is_used_when_no_mapping_is_given(
 def test_malformed_worker_count_is_an_actionable_error() -> None:
     with pytest.raises(ValueError, match=r"PYTEST_XDIST_WORKER_COUNT.*'many'"):
         apply_thread_budget({WORKER_COUNT_VAR: "many"})
+
+
+def test_xdist_worker_received_its_budget_before_tensorflow_started() -> None:
+    # Only meaningful inside a pytest-xdist worker; the root conftest.py must have
+    # applied the budget to this very process.
+    raw = os.environ.get(WORKER_COUNT_VAR)
+    if raw is None:
+        pytest.skip("not running under pytest-xdist")
+    expected = threads_per_worker(os.cpu_count() or 1, int(raw))
+    for var in THREAD_VARS:
+        if os.environ.get(var) != str(expected):
+            pytest.skip(f"{var} was set by the caller: {os.environ.get(var)!r}")
+    assert all(os.environ[var] == str(expected) for var in THREAD_VARS)

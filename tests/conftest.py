@@ -1,11 +1,5 @@
 import pytest
 import os
-
-# Under pytest-xdist each worker gets cores/N threads. This must run before the
-# first TensorFlow import below, which reads the thread variables once.
-from .thread_budget import apply_thread_budget
-
-apply_thread_budget()
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 import pandas as pd
 import numpy as np
