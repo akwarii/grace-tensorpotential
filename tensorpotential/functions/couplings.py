@@ -2457,7 +2457,6 @@ def real_coupling_metainformation(
                     else:
                         key = (l1, l2, L)
                     RCG *= CG_normalization_dict.get(key, 1.0)
-                    # RCG *= np.sqrt(2 * L + 1)
 
                 # for all M = -L ... L
                 for M in range(-L, L + 1):
@@ -2489,7 +2488,6 @@ def real_coupling_metainformation(
                         B_ind_list = []
                         for (A_ind, B_ind), sum_cg in AB_to_CG_dict.items():
                             if abs(sum_cg) > 1e-15:
-                                # print(f"{A_ind=}, {B_ind=}, {l1=}, {l2=}")
                                 gen_cg_list.append(sum_cg)
                                 A_ind_list.append(A_ind)
                                 B_ind_list.append(B_ind)
@@ -2556,11 +2554,6 @@ def real_coupling_metainformation(
             "cg_list",
         ],
     )
-    # cdf["norm"] = cdf["cg_list"].map(lambda x: len(x))
-    # h_g = cdf.groupby(["l", "parity", "hist"]).indices
-    # for h, i in h_g.items():
-    #     m_norm = cdf.iloc[i]["norm"].mean()
-    #     cdf.iloc[i, cdf.columns.get_loc("norm")] = 1.0 / np.sqrt(m_norm)
 
     # TODO: check if sorting influences on  perf
     cdf = cdf.sort_values(["l", "parity", "hist", "m"]).reset_index(drop=True)
@@ -2582,13 +2575,6 @@ def c2r_harm_matrix(l):  # noqa: E741
     return C
 
 
-# def gen_CG_matrix(l1, l2, L):
-#     CG_matrix = np.zeros((2 * L + 1, 2 * l1 + 1, 2 * l2 + 1,))  # L, l1,l2
-#     for M in np.arange(-L, L + 1):
-#         mscgs = generate_ms_cg_list(ls=[l1, l2], half_basis=False, L=L, M=M, check_is_even=False)
-#         for c in mscgs:
-#             CG_matrix[M + L, c.ms[0] + l1, c.ms[1] + l2] = c.gen_cg
-#     return CG_matrix
 
 
 def gen_CG_matrix2(l1, l2, L):

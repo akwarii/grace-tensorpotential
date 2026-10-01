@@ -177,7 +177,6 @@ class SphericalHarmonics(tf.Module):
         m = 0
         for l in range(0, self.lmax + 1):  # noqa: E741
             ylm_r += [plm[self.lm1d(l, m)]]
-            # ylm_i += [self.float_tensor(tf.zeros_like(plm[self.lm1d(l, m)]))]
             ylm_i += [tf.zeros_like(plm[self.lm1d(l, m)], dtype=self.float_dtype)]
 
         m = 1
@@ -255,19 +254,6 @@ class SphericalHarmonics(tf.Module):
                 ph = 1.0 - 2.0 * tf.cast(m % 2, rhat.dtype)
                 ind = self.lmsh(l, m)
                 zlm += [sqrt2 * ylm_r[ind] * ph]
-            # for m in range(-l, l + 1):
-            #     ph = 1.0 - 2.0 * tf.cast(m % 2, rhat.dtype)
-            #     if m < 0:
-            #         ind = self.lmsh(l, m)
-            #         zlm += [sqrt2 * ylm_i[ind] * ph]
-            #     elif m > 0:
-            #         ind = self.lmsh(l, m)
-            #         zlm += [sqrt2 * ylm_r[ind] * ph]
-            #     elif m == 0:
-            #         ind = self.lmsh(l, m)
-            #         zlm += [ylm_r[ind]]
-            #     else:
-            #         pass
         zlm = tf.transpose(tf.stack(zlm), [1, 0])
 
         if not self.norm:
@@ -276,8 +262,6 @@ class SphericalHarmonics(tf.Module):
         return zlm
 
     def __call__(self, rhat):
-        # if not self.is_built:
-        #     self._build(rhat.dtype)
 
         if self.type == "real":
             return self._compute_rsh(rhat)
