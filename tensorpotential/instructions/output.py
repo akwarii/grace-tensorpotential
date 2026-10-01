@@ -191,7 +191,6 @@ class FSOut2ScalarTarget(TPOutputInstruction):
         )
 
         arho = tf.abs(rho)
-        # func = tf.where(mask, rho, tf.sign(rho) * (tf.sqrt(tf.abs(arho + 0.25 * tf.exp(-arho))) - 0.5 * tf.exp(-arho)))
         exprho = tf.exp(-arho)
         nx = 1.0 / mexp
         xoff = tf.pow(nx, (nx / (1.0 - nx))) * exprho
@@ -273,7 +272,6 @@ class MLPOut2ScalarTarget(TPOutputInstruction):
             self.mlp.build(float_dtype)
         if self.normalize is not None:
             shape = [1, self.origin[0].n_out]
-            # self.scale = tf.Variable(tf.zeros(shape, dtype=float_dtype))
             self.scale = tf.Variable(
                 tf.random.normal(shape, stddev=1e-16, dtype=float_dtype), name="scale"
             )
@@ -298,7 +296,6 @@ class MLPOut2ScalarTarget(TPOutputInstruction):
         for ins in self.origin:
             origin += input_data[f"{ins.name}"][:, :, 0]
         if self.normalize == "layer":
-            # origin = self.rmsln(origin, input_data)
             n_at_b_real = input_data[constants.N_ATOMS_BATCH_REAL]
             n_at_b_total = input_data[constants.N_ATOMS_BATCH_TOTAL]
             r_map = tf.reshape(
@@ -374,7 +371,6 @@ class LinMLPOut2ScalarTarget(TPOutputInstruction, LORAInstructionMixin):
             self.mlp.build(float_dtype)
         if self.normalize is not None:
             shape = [1, self.origin[0].n_out - 1]
-            # self.scale = tf.Variable(tf.zeros(shape, dtype=float_dtype))
             self.scale = tf.Variable(
                 tf.random.normal(shape, stddev=1e-16, dtype=float_dtype), name="scale"
             )

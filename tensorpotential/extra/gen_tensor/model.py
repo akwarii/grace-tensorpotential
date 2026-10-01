@@ -115,7 +115,6 @@ def grace_1(
                 Lmax=lmax,
                 keep_parity=Parity.REAL_PARITY,
                 normalize=True,
-                # n_out=n_rad_max[1]  # reduce
             )
             instructions.append(AA)
 
@@ -316,7 +315,6 @@ def grace_2(
                 Lmax=lmax,
                 keep_parity=Parity.REAL_PARITY,
                 normalize=True,
-                # n_out=n_rad_max[1]  # reduce
             )
             instructions.append(AA)
 

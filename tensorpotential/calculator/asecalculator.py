@@ -915,7 +915,6 @@ class TPCalculator(Calculator):
             elements_map=self.element_map,
             cutoff=self.cutoff,
             cutoff_dict=self.cutoff_dict,
-            # float_dtype="float64",
             # In dense mode the builder's pad_batch emits the per-atom-uniform reshape layout,
             # driven by the DensePaddingManager-selected (atoms, width) shape.
             dense_nbr=self.dense_reshape,

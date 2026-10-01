@@ -262,9 +262,6 @@ def add_loaded_model_parameter(potential_file_name, args_yaml):
             scale = ins_dict["scale"]
             args_yaml[tc.INPUT_POTENTIAL_SECTION]["scale"] = scale
             log.info(f"Setting {tc.INPUT_POTENTIAL_SECTION}::scale to {scale}")
-            # shift = ins_dict["shift"]
-            # if shift != 0:
-            #     args_yaml[tc.INPUT_POTENTIAL_SECTION]["shift"] = shift
         if "avg_n_neigh" in ins_dict:
             args_yaml[tc.INPUT_POTENTIAL_SECTION]["avg_n_neigh"] = ins_dict[
                 "avg_n_neigh"
@@ -334,7 +331,6 @@ def main(argv=None, strategy=None, strategy_desc=""):
     tf.random.set_seed(seed)
 
     # distributed strategy
-    # global strategy, strategy_desc
     if strategy is None:
         if fit_config.get("strategy") == "mirrored" or args_parse.multigpu:
             # The auto-MWMS upgrade for single-host multi-GPU is done by

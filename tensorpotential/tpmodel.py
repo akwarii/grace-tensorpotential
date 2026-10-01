@@ -356,7 +356,6 @@ class ComputeBatchEnergyForcesVirials(TrainFunction):
             num_segments=input_data[constants.N_STRUCTURES_BATCH_TOTAL],
         )
 
-        # nat = tf.reshape(input_data[constants.N_ATOMS_BATCH_TOTAL], [])
         nat = tf.shape(input_data[constants.ATOMIC_MU_I])[0]
         total_f = tf.math.unsorted_segment_sum(
             pair_f, input_data[constants.BOND_IND_J], num_segments=nat
@@ -408,7 +407,6 @@ class ComputeStructureEnergyAndForcesAndVirial(ComputeFunction):
         e_atomic = tf.cast(e_atomic, dtype=pair_f.dtype)
         total_energy = tf.reduce_sum(e_atomic, axis=0, keepdims=True)
 
-        # nat = tf.reshape(input_data[constants.N_ATOMS_BATCH_TOTAL], [])
         nat = tf.shape(input_data[constants.ATOMIC_MU_I])[0]
         total_f = tf.math.unsorted_segment_sum(
             pair_f, input_data[constants.BOND_IND_J], num_segments=nat
@@ -651,7 +649,6 @@ class ComputeBlockInputGradient(ComputeFunction):
             )
             target = input_data[self.target_key]
             target = input_data[self.target_key]
-        # print("target", target)
         grads = tape.gradient(target, wrt_tensors)
         # Convert IndexedSlices to dense tensors and handle None
         converted_grads = []
@@ -842,7 +839,6 @@ class TPModel(tf.Module):
         )
 
     def get_flat_trainable_variables(self):
-        # ctx = tf.distribute.get_replica_context()
         self.count_coefs = 0
         self.slices = [0]
         flat_val = []
@@ -1024,7 +1020,6 @@ class TPModel(tf.Module):
         # if there are 'forward_layer_1' in aux_compute, then add to metadata.yaml
         if self.aux_compute is not None and "forward_layer_1" in self.aux_compute:
             parallel_comm = {}
-            # logger.info("Extracting shapes for forward_layer_1")
             tf_func = self._aux_tf_funcs["forward_layer_1"]
             sig = self._aux_compute_sigs["forward_layer_1"]
             concrete_func = tf_func.get_concrete_function(sig)
@@ -1127,8 +1122,6 @@ class TPModel(tf.Module):
                     logging.info(f"Setting {var.name} as trainable")
             else:
                 var._trainable = False
-                # if verbose:
-                #     logging.info(f"Setting {var.name} as non-trainable")
 
     def enable_lora_adaptation(self, lora_config=None):
         if lora_config is None:

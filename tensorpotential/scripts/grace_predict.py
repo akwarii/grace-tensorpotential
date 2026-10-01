@@ -100,7 +100,6 @@ def main(args=None):
         model=model_path,
         pad_atoms_number=20,
         pad_neighbors_fraction=0.30,
-        # max_number_reduction_recompilation=3,
     )
 
     logger.info(f"Loading dataset from: {dataset_file}")

@@ -126,7 +126,6 @@ class VirialMetrics(AbstractMetrics):
     ) -> dict[str, tf.Tensor]:
         """Compute force related metrics."""
         tot_struc_real = input_data[constants.N_STRUCTURES_BATCH_REAL]
-        # map_at2struc = input_data[constants.ATOMS_TO_STRUCTURE_MAP][:tot_nat_real]
 
         delta_virials = (
             input_data[constants.DATA_REFERENCE_VIRIAL]

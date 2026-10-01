@@ -215,7 +215,6 @@ def capture_init_args(cls):
         if "__cls__" in dct:
             cls = str_to_class(dct.pop("__cls__"))
         # TODO: call pre_deserialize ?
-        # print(f"Deserialize class {cls} with args {dct}")
         return cls(**dct)
 
     cls.__init__ = __init__
@@ -468,7 +467,6 @@ class TPEquivariantInstruction(TPInstruction):
         if l_p_list is None:
             plist = []
             for l in range(max_l + 1):  # noqa: E741
-                # p = 1 if l % 2 == 0 else -1
                 plist.append([l, 1])
                 plist.append([l, -1])
         else:
@@ -513,7 +511,6 @@ class TPEquivariantInstruction(TPInstruction):
         if l_p_list is None:
             plist = []
             for l in range(max_l + 1):  # noqa: E741
-                # p = 1 if l % 2 == 0 else -1
                 plist.append([l, 1])
                 plist.append([l, -1])
         else:

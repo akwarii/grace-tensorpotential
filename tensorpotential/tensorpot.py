@@ -137,13 +137,7 @@ class TensorPotential:
                 if self.use_ema:
                     self.swap_on_epoch = True
                     self._ema_weights_in_model = False
-                # self.setup_checkpoint_with_optimizer()
-            # else:
             #     self.checkpoint = tf.train.Checkpoint(
-            #         model=self.model,
-            #         step=tf.Variable(0, dtype=tf.int32, trainable=False),
-            #         epoch=tf.Variable(0, dtype=tf.int32, trainable=False),
-            #     )
             self.setup_checkpoint()
 
     # Allowlist of variable name patterns that should have weight decay applied.
@@ -610,7 +604,6 @@ class TensorPotential:
         # TODO:  cleaner solution ?
         if self.strategy.num_replicas_in_sync > 1:
             for k, v in d.items():
-                # dtype = v.values[0].dtype
                 if k.endswith("/per_struct"):
                     try:
                         d[k] = tf.concat(v.values, axis=0)  # over all replics
@@ -650,7 +643,6 @@ class TensorPotential:
 
         results = self.strategy.run(self.train_bfgs_step, args=(distributed_values,))
         self.reduce_dict(results)
-        # tf.print(results, 'results')
         return results
 
     def test_step(self, input_data):

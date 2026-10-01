@@ -141,7 +141,6 @@ class Linear(tf.Module):
         x2 = tf.reshape(x, [-1, xs[-1]])
         y2 = tf.matmul(x2, w)
         x = tf.reshape(y2, tf.concat([xs[:-1], [tf.shape(w)[-1]]], axis=0))
-        # x = tf.einsum("...k,...kn->...n", x, w)
         if self.use_bias:
             x += self.b * self.norm
 
@@ -408,7 +407,6 @@ class FullyConnectedMLP(tf.Module):
                 lora_config=self.lora_config,
                 name=f"{self.name}_layer{i}",
             )
-            # layer.build()
             setattr(self, f"layer{i}", layer)
             self.nlayers += 1
 

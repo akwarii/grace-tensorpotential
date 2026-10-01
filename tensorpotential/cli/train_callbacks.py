@@ -221,9 +221,6 @@ class CosineDecay(TPCallback):
             logfile,
             **kwargs,
         )
-        # self.alpha = (
-        #     min_lr / warmup_target if self._is_warmup() else min_lr / initial_lr
-        # )
         self.alpha = (
             min_lr / warmup_target
         )

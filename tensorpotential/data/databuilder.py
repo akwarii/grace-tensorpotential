@@ -40,7 +40,6 @@ def symbols_to_indices(symbols, sym_to_idx, *, default=None) -> np.ndarray:
         [sym_to_idx.get(s, sentinel) for s in symbols], dtype=np.int32
     )
 
-# from ase.neighborlist import neighbor_list as nl
 
 DEFAULT_STRESS_UNITS = "eV/A3"
 MININTERVAL = 2  # min interval for progress bar
@@ -452,21 +451,10 @@ class GeometricalDataBuilder(AbstractDataBuilder):
             ase_atoms.get_chemical_symbols(), self.elements_map
         )
 
-        # nat_per_specie = defaultdict(int)
-        # total_nei_per_specie = defaultdict(int)
-        # u_i, n_j = np.unique(ind_i, return_counts=True)
 
-        # for at_i, nb_i in zip(u_i, n_j):
-        #     specie_i = atomic_mu_i[at_i]
-        #     nat_per_specie[specie_i] += 1
-        #     total_nei_per_specie[specie_i] += nb_i
 
         all_atom_ind = np.arange(len(ase_atoms))
         if np.unique(ind_i).shape[0] < all_atom_ind.shape[0]:
-            # print(
-            #     f"Found an atom with no neighbors within cutoff."
-            #     f" Adding a fictitious neighbor beyond cutoff. Structure id: id"
-            # )
             missing_ind = all_atom_ind[~np.isin(all_atom_ind, np.unique(ind_i))]
             ind_j_to_add = np.zeros(len(missing_ind)).astype(int)
             dv_j_to_add = (
@@ -498,8 +486,6 @@ class GeometricalDataBuilder(AbstractDataBuilder):
             constants.N_ATOMS_BATCH_REAL: np.array(len(ase_atoms)).astype(np.int32),
             constants.N_STRUCTURES_BATCH_REAL: np.array(1).astype(np.int32),
             constants.N_NEIGHBORS_REAL: np.array(len(bond_vector)).astype(np.int32),
-            # "nat_per_specie": nat_per_specie,
-            # "total_nei_per_specie": total_nei_per_specie,
         }
 
     def get_sample_dtypes(self):
@@ -583,17 +569,6 @@ class GeometricalDataBuilder(AbstractDataBuilder):
             map_bonds_to_structure
         ).astype(np.int32)
 
-        # nat_per_specie = defaultdict(int)
-        # total_nei_per_specie = defaultdict(int)
-        # for data_dict in pre_batch_list:
-        #     nps = data_dict["nat_per_specie"]
-        #     tnps = data_dict["total_nei_per_specie"]
-        #     for k, v in nps.items():
-        #         nat_per_specie[k] += v
-        #     for k, v in tnps.items():
-        #         total_nei_per_specie[k] += v
-        # res_dict["nat_per_specie"] = nat_per_specie
-        # res_dict["total_nei_per_specie"] = total_nei_per_specie
 
         return res_dict
 

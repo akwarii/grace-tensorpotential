@@ -158,7 +158,6 @@ def addup_metrics(metrics, acc_metrics):
 def concatenate_per_structure_metrics(out, b_data, agg_concat_per_structure_metrics):
     if isinstance(b_data, list):  # manual dataset
         for b in b_data:
-            # cur_structure_ids += list(b[constants.DATA_STRUCTURE_ID])
             agg_concat_per_structure_metrics[constants.DATA_STRUCTURE_ID] += [
                 ind
                 for ind in b[constants.DATA_STRUCTURE_ID].numpy().reshape(-1)
@@ -176,7 +175,6 @@ def concatenate_per_structure_metrics(out, b_data, agg_concat_per_structure_metr
                 ind for ind in structure_ind_tensor.numpy().reshape(-1) if ind != -1
             ]
 
-    # cur_metrics_per_struct_dict = defaultdict(list)
     for metric_name, metric_values in out.items():
         if metric_name.endswith("per_struct"):
             agg_concat_per_structure_metrics[metric_name] += list(

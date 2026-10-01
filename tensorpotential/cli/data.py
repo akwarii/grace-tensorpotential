@@ -254,9 +254,6 @@ def compute_number_of_batches(dds, key):
 def limit_dataset_size(current_size, limit_size):
     # further limit train size to train_size
     if limit_size is not None:
-        # if limit_size < 1:
-        #     # limit_size is a fraction
-        #     limit_size = max(1, int(limit_size * current_size))
         return min(current_size, limit_size)
     return current_size
 
@@ -277,7 +274,6 @@ class FutureDistributedDataset:
         log.info(f"Initial TRAIN dataset path: {self.dataset_path}")
         self.datasets_filenames = glob.glob(self.dataset_path)
         log.info(f"Initial TRAIN dataset: {len(self.datasets_filenames)} shards found")
-        # random.shuffle(self.datasets_filenames)  # shuffle
 
         if self.test_dataset_path is not None:
             if "*" not in self.test_dataset_path:
@@ -286,7 +282,6 @@ class FutureDistributedDataset:
                 )
             log.info(f"Initial TEST dataset path: {self.test_dataset_path}")
             self.test_datasets_filenames = glob.glob(self.test_dataset_path)
-            # random.shuffle(self.test_datasets_filenames)  # shuffle
         else:
             self.test_datasets_filenames = None
 
@@ -928,7 +923,6 @@ def load_and_prepare_datasets(
             pass
         else:
             # Standard path: lstsq on energy_corrected
-            # train_df["energy_corrected_orig"] = train_df["energy_corrected"]
             elements = compute_compositions(train_df)
             n_elements_cols = ["n_" + e for e in elements]
             n_elements = train_df[n_elements_cols]
@@ -1287,7 +1281,6 @@ def load_and_prepare_datasets(
             _log_dense_padding_report(test_padding_stats, "TEST")
 
     else:
-        # tuple_of_test_datasets = None
         test_batches = None
     # esa_dict: el -> e0
     # element_map: el -> mu
@@ -1312,7 +1305,6 @@ def load_and_prepare_datasets(
             if esa_dict is not None
             else None
         )
-    # use_per_specie_n_nei = args_yaml.get(tc.INPUT_USE_PER_SPECIE_N_NEI, False)
     data_stats = {
         "avg_n_neigh": (
             avg_n_neigh  # if not use_per_specie_n_nei else avg_n_neigh_per_specie
@@ -1438,8 +1430,6 @@ def regroup_similar_batches(ds, n_group=1):
         if buckets_dict[key]:
             grouped_ds.extend(buckets_dict[key])
 
-    # for batch_dict in grouped_ds:
-    #     print(key_for_batch_dict(batch_dict))
     assert len(grouped_ds) == len(ds)
     return grouped_ds
 

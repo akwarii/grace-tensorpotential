@@ -99,7 +99,6 @@ def export_to_yaml(
     cutoff = rad_basis.basis_function.rcut
     nradmax = lin_rad_fun.n_rad_max
 
-    # assert collector_ins.chemical_embedding is None
     assert collector_ins.is_central_atom_type_dependent
     ndens = collector_ins.n_out
 
@@ -193,7 +192,6 @@ def export_to_yaml(
             for orig_bfunc, cur_coeff in zip(ls_b_funcs_list, cur_coeffs):
                 bfunc = copy.copy(orig_bfunc)
 
-                # rank = bfunc.rank
 
                 bfunc.ns = n + 1  # [n + 1] * rank
                 bfunc.ndensity = ndens

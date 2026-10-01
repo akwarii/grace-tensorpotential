@@ -99,7 +99,6 @@ class SingleParticleBasisFunctionScalarInd2(TPEquivariantInstruction):
         atom_a_nl = tf.math.unsorted_segment_sum(
             bond_a_nl, segment_ids=ind_i, num_segments=batch_tot_nat
         )
-        # atom_a_nl /= self.avg_n_neigh
 
         return atom_a_nl
 

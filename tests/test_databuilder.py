@@ -58,7 +58,6 @@ def test_construct_batches_df() -> None:
         verbose=True,
     )
 
-    # print("batches", batches)
     print("padding_stats", padding_stats)
     padding_stats_ref = {
         "pad_nstruct": 5,
@@ -74,9 +73,6 @@ def test_construct_batches_df() -> None:
     b1 = batches[1]
     assert b0["n_struct_total"] == 11
     assert b1["n_struct_total"] == 11
-    #
-    # assert b0["batch_tot_nat"] == 199
-    # assert b1["batch_tot_nat"] == 199
 
     assert padding_stats_ref == padding_stats_ref
 
@@ -109,7 +105,6 @@ def test_construct_batches_multiple_db() -> None:
         verbose=True,
     )
 
-    # print("batches", batches)
     print("padding_stats", padding_stats)
     padding_stats_ref = {
         "pad_nstruct": 5,
@@ -223,7 +218,6 @@ def test_construct_batches_df_parallel() -> None:
         max_workers=2,
     )
 
-    # print("batches", batches)
     print("padding_stats", padding_stats)
     padding_stats_ref = {
         "pad_nstruct": 5,
@@ -239,8 +233,6 @@ def test_construct_batches_df_parallel() -> None:
     b1 = batches[1]
     assert b0["n_struct_total"] == 11
     assert b1["n_struct_total"] == 11
-    #
-    # assert b0["batch_tot_nat"] == 185
     assert b0["batch_tot_nat"] == 199
     assert b1["batch_tot_nat"] == 199
 

@@ -166,11 +166,6 @@ class BondLength(TPInstruction):
             )
             + 1e-10,
         )
-        # return tf.linalg.norm(
-        #     input_data[self._instruction_with_bonds_name],
-        #     axis=1,
-        #     keepdims=True,
-        # )
 
 
 @capture_init_args
@@ -186,7 +181,6 @@ class ScaledBondVector(TPInstruction):
 
     input_tensor_spec = {constants.BOND_VECTOR: {"shape": [None, 3], "dtype": "float"}}
 
-    # data_spec = {"bond_vector": GeometricalDataBuilder}
 
     def __init__(
         self,
@@ -206,18 +200,15 @@ class ScaledBondVector(TPInstruction):
                 self.bonds = bonds
         else:
             self.bonds = constants.BOND_VECTOR
-        # self.epsilon = None
 
     @tf.Module.with_name_scope
     def build(self, float_dtype):
         if not self.is_built:
-            # self.epsilon = tf.constant(1e-10, dtype=tf.float32)
             self.is_built = True
 
     def frwrd(self, input_data: dict, training=False, local=False):
         r_ij = input_data[self.bonds]
         d_ij = input_data[self.bond_length]
-        # return r_ij / (d_ij + self.epsilon)
         return r_ij / d_ij
 
 
@@ -314,11 +305,8 @@ class BondAvgSphericalHarmonic(TPEquivariantInstruction):
     def frwrd(self, input_data: dict, training=False, local=False):
         y = input_data[self.sg.name]
         r = input_data[self.bonds.name]
-        # cut_func = self.cutoff_func(r / self.rcut, self.p)
-        # cut_func = tf.where(r > self.rcut, tf.zeros_like(r, dtype=r.dtype), cut_func)
         rcut = tf.cast(self.rcut, dtype=r.dtype)
         y = tf.where(r > rcut, tf.zeros_like(y), y)
-        # zy = tf.einsum("bn,bl->bnl", cut_func, y)
         zy = tf.math.unsorted_segment_sum(
             y,
             segment_ids=input_data[constants.BOND_IND_I],
@@ -624,10 +612,8 @@ class LinearRadialFunction(TPInstruction):
     @tf.Module.with_name_scope
     def build(self, float_dtype):
         if not self.is_built:
-            # self.norm = tf.convert_to_tensor(1, dtype=float_dtype)
             if self.init == "random":
                 limit = np.sqrt(2 / float(self.n_rad_max + self.input_shape))
-                # limit = 1.
                 self.crad = tf.Variable(
                     tf.random.normal(
                         [self.n_rad_max, self.lmax + 1, self.input_shape],
@@ -654,7 +640,6 @@ class LinearRadialFunction(TPInstruction):
 
         crad = tf.cast(self.crad, dtype=basis.dtype)
         y = tf.einsum("nlk,ak->anl", crad, basis)
-        # y *= self.norm
         y_l = tf.gather(y, self.l_tile, axis=-1)
 
         return y_l
@@ -3084,7 +3069,6 @@ class FunctionReduce(TPEquivariantInstruction, ElementsReduceInstructionMixin):
             new_tensors = {}
             for tn in reducing_tensor_names:
                 var = getattr(self, tn)
-                # print(tn, var.shape)
                 new_tensors[tn] = tf.Variable(tf.gather(var, index_to_select, axis=0))
 
             return new_tensors
@@ -3167,7 +3151,6 @@ class FunctionReduceN(
                     for m in range(-l_idx, l_idx + 1):
                         # TODO:  possibly move to the base class method
                         collector_data.append([l_idx, m, "", p, l_idx])
-                        # collector_data.append([l_idx, m, f"({lbl},0)", p, l_idx])
         cdf = pd.DataFrame(
             collector_data, columns=["l", "m", "hist", "parity", "sum_of_ls"]
         )
@@ -3445,7 +3428,6 @@ class FunctionReduceN(
             new_tensors = {}
             for tn in reducing_tensor_names:
                 var = getattr(self, tn)
-                # print(tn, var.shape)
                 new_tensors[tn] = tf.Variable(tf.gather(var, index_to_select, axis=0))
 
             return new_tensors
@@ -3469,11 +3451,6 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
         lm_first: bool = False,
         # n_out: int,
         # allowed_l_p: list[list],
-        # out_norm: bool = False,
-        # is_central_atom_type_dependent: bool = False,
-        # number_of_atom_types: int = None,
-        # init_vars: Literal["random", "zeros"] = "random",
-        # scale=1.0,
     ):
         super().__init__(name=name, lmax=np.max(ls_max))
         self.lm_first = lm_first
@@ -3484,24 +3461,11 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
         assert np.max(ls_max) == 0
 
         self.ls_max = ls_max
-        # self.n_out = n_out
-        # self.out_norm = out_norm
         # enforce conversion to list of lists
         allowed_l_p = [[0, 1]]
         self.allowed_l_p = [list(lp) for lp in allowed_l_p]
-        # self.is_central_atom_type_dependent = is_central_atom_type_dependent
-        # self.number_of_atom_types = number_of_atom_types
         self.n_instr = len(self.instructions)
 
-        # assert init_vars in [
-        #     "random",
-        #     "zeros",
-        # ], f'Unknown variable initialization "{init_vars}"'
-        # self.init_vars = init_vars
-        #
-        # self.scale = scale
-        # if self.is_central_atom_type_dependent:
-        #     assert self.number_of_atom_types is not None
 
         instr_names = [instr.name for instr in self.instructions]
         assert len(instr_names) == len(set(instr_names)), "duplicate instruction names"
@@ -3544,48 +3508,6 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
     @tf.Module.with_name_scope
     def build(self, float_dtype):
         if not self.is_built:
-            # size = 0
-            # for k, v in self.collector.items():
-            #     w_shape = v["w_shape"]
-            #     n_in = v["n_out"]
-            #     size += w_shape * n_in
-            # if self.is_central_atom_type_dependent:
-            #     c_shape = [self.number_of_atom_types, self.n_out, size]
-            # else:
-            #     c_shape = [self.n_out, size]
-            #
-            # name_v = "full"
-            # if self.init_vars == "random":
-            #     limit = 1
-            #     setattr(
-            #         self,
-            #         f"reducing_{name_v}",
-            #         tf.Variable(
-            #             tf.random.normal(
-            #                 c_shape,
-            #                 stddev=self.scale * limit,
-            #                 dtype=float_dtype,
-            #             ),
-            #             name=f"reducing_{name_v}",
-            #         ),
-            #     )
-            # elif self.init_vars == "zeros":
-            #     coeff = np.zeros(c_shape)
-            #     setattr(
-            #         self,
-            #         f"reducing_{name_v}",
-            #         tf.Variable(
-            #             coeff,
-            #             dtype=float_dtype,
-            #             name=f"reducing_{name_v}",
-            #         ),
-            #     )
-            # else:
-            #     raise NotImplementedError(
-            #         f"FunctionCollector.init = {self.init_vars} is unknown"
-            #     )
-            #
-            # self.norm = tf.constant(1 / size, dtype=float_dtype)
             self.float_dtype = float_dtype
             self.is_built = True
 
@@ -3607,23 +3529,10 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
                 )  # [collected, atoms, n]->[atoms, n, collected]
             shp = tf.shape(A)
             A = tf.reshape(A, [-1, shp[1] * shp[2]])
-            # rms = tf.math.rsqrt(tf.reduce_mean(A**2, axis=-1, keepdims=True) + 1e-16)
-            # collection += [A * rms]
             collection += [A]
         basis = tf.concat(collection, axis=1)
 
-        # rms = tf.math.rsqrt(tf.reduce_mean(basis**2, axis=-1, keepdims=True) + 1e-16)
-        # basis *= rms
 
-        # w = getattr(self, f"reducing_full")
-        # if self.is_central_atom_type_dependent:
-        #     w = tf.gather(w, input_data[constants.ATOMIC_MU_I], axis=0)
-        #     eq = "akn,an->ak"
-        # else:
-        #     eq = "kn,an->ak"
-        # pr = tf.einsum(eq, w, basis, name=f"ein_basis") * self.norm
-        #
-        # return pr[:, :, tf.newaxis]
         return basis
 
     def prepare_variables_for_selected_elements(self, index_to_select):
@@ -3700,11 +3609,6 @@ class FCRight2Left(
         self.init_vars = init_vars
         self.normalize = normalize
 
-        # if self.is_central_atom_type_dependent:
-        #     assert self.number_of_atom_types is not None
-        #     self.eq = "aknw,anw->wak"
-        # else:
-        #     self.eq = "knw,anw->wak"
         self.eq_elem = "aknw,anw->wak"
         self.eq = "knw,anw->wak"
 
@@ -4707,7 +4611,6 @@ class FunctionReduceParticular(
                 eq = "aknw,wan->wak" if self.lm_first else "aknw,anw->wak"
             else:
                 eq = "knw,wan->wak" if self.lm_first else "knw,anw->wak"
-            # w_al = tf.gather(w, instruction_collection["w_l_tile"], axis=-1)
             norm = getattr(self, f"norm_{instr.name}")
             if A_r.dtype != w.dtype:
                 A_r = tf.cast(A_r, w.dtype)

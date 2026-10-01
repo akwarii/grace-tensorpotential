@@ -293,7 +293,6 @@ def test_calculator_with_fake_neighbors():
         pad_neighbors_fraction=None,
         pad_atoms_number=None,
     )
-    # print(f"{calc.padding_manager.current_max_neighbors=} at the start")
     np.random.seed(322)
     s = bulk("W", cubic=True) * (2, 2, 2)
     s.positions += np.random.uniform(-0.2, 0.2, size=(len(s), 3))
@@ -305,7 +304,6 @@ def test_calculator_with_fake_neighbors():
     assert np.shape(f) == (len(s), 3)
     st = s.get_stress()
     print(st)
-    # print(f"{calc.padding_manager.current_max_neighbors=} at the end")
     st_num = calc.calculate_numerical_stress(s)
     assert np.allclose(st, st_num, rtol=1e-5)
 
@@ -334,10 +332,6 @@ def test_dynamic_padding():
     e1 = s1.get_potential_energy()
     print(f"{e1=}")
     assert len(calc.padding_manager.padding_bounds) == 1
-    # print(
-    #     calc.padding_manager.current_max_atoms,
-    #     calc.padding_manager.current_max_neighbors,
-    # )
 
     s2 = bulk("W", a=3.165, cubic=True) * (2, 2, 2)
     s2.calc = calc
@@ -345,7 +339,6 @@ def test_dynamic_padding():
     print(f"{e2=}")
     assert e1 != e2
     assert len(calc.padding_manager.padding_bounds) == 2
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
 
     s3 = bulk("W", a=2.5, cubic=True)
     s3.calc = calc
@@ -353,7 +346,6 @@ def test_dynamic_padding():
     print(f"{e3=}")
     assert e1 != e3
     assert len(calc.padding_manager.padding_bounds) == 2
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
 
     s4 = bulk("W", a=2.75, cubic=True)
     s4.calc = calc
@@ -361,7 +353,6 @@ def test_dynamic_padding():
     print(f"{e4=}")
     assert e4 != e3
     assert len(calc.padding_manager.padding_bounds) == 2
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
 
 
 def test_dynamic_padding_reducing():
@@ -376,7 +367,6 @@ def test_dynamic_padding_reducing():
     e2 = s2.get_potential_energy()
     print(f"{e2=}")
     assert len(calc.padding_manager.padding_bounds) == 1
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
     print("padding history=", calc.padding_manager.padding_bounds)
 
     s1 = bulk("W", a=3.165, cubic=True)
@@ -385,7 +375,6 @@ def test_dynamic_padding_reducing():
     print(f"{e1=}")
     assert e1 != e2
     assert len(calc.padding_manager.padding_bounds) == 2
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
     print("padding history=", calc.padding_manager.padding_bounds)
 
 
@@ -404,7 +393,6 @@ def test_dynamic_padding_reducing_limit():
     e2 = s2.get_potential_energy()
     print(f"{e2=}")
     assert len(calc.padding_manager.padding_bounds) == 1
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
     print("padding history=", calc.padding_manager.padding_bounds)
 
     s1 = bulk("W", a=3.165, cubic=True)
@@ -413,7 +401,6 @@ def test_dynamic_padding_reducing_limit():
     print(f"{e1=}")
     assert e1 != e2
     assert len(calc.padding_manager.padding_bounds) == 1
-    # print(calc.current_max_atoms, calc.current_max_neighbors)
     print("padding history=", calc.padding_manager.padding_bounds)
 
 
@@ -426,8 +413,6 @@ def test_calculator_with_fake_atoms():
     calc1 = TPCalculator(
         model="./test_calculator_model",
     )
-    # print(f"{calc.current_max_neighbors=} at the start")
-    # print(f"{calc.current_max_atoms=} at the start")
     np.random.seed(322)
     s = bulk("W", cubic=True) * (2, 2, 2)
     s.positions += np.random.uniform(-0.2, 0.2, size=(len(s), 3))
@@ -439,8 +424,6 @@ def test_calculator_with_fake_atoms():
     print(f)
     st = s.get_stress()
     print(st)
-    # print(f"{calc.padding_manager.current_max_neighbors=} at the end")
-    # print(f"{calc.padding_manager.current_max_atoms=} at the end")
     st_num = calc.calculate_numerical_stress(s)
     assert np.allclose(st, st_num, rtol=1e-5)
 
@@ -586,7 +569,6 @@ def test_padding_manager():
     data = pm.get_data(atoms)
     assert len(pm.padding_bounds) == 2
 
-    # print("data=", data)
     data = {k: v for k, v in data.items()}
 
     ins = load_instructions("model_grace.yaml")
@@ -599,7 +581,6 @@ def test_padding_manager():
     tf_data = Dataset.from_tensors(data).get_single_element()
     model.compute(tf_data)
 
-    # print("output=", output)
 
 
 def test_padding_manager_no_padding():
@@ -644,7 +625,6 @@ def test_padding_manager_no_padding():
     data = pm.get_data(atoms)
     assert len(pm.padding_bounds) == 0
 
-    # print("data=", data)
     data = {k: v for k, v in data.items()}
 
     ins = load_instructions("model_grace.yaml")

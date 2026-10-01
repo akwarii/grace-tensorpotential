@@ -110,8 +110,6 @@ def reciprocal_ewald_energy(
     dipole_density = tf.cast(1j, c_dtype) * sum_dip  # shape: (None, G)
     dipole_density *= envelope
 
-    # return monopole_density, dipole_density
-    # total_density = monopole_density + dipole_density
     total_density = dipole_density
     total_density_sqr = tf.square(tf.abs(total_density))
     total_density_sqr = tf.where(
@@ -119,7 +117,6 @@ def reciprocal_ewald_energy(
     )
     unit_factor = 14.39964546868
     volume = det(input_data[constants.CELL_VECTORS])
-    # scale = 0.5 * 4 * np.pi / volume * unit_factor
     scale = 2 * np.pi * unit_factor / volume
     scale /= tf.where(k_squared == 0, tf.ones_like(k_squared), k_squared)
 
@@ -131,7 +128,6 @@ def reciprocal_ewald_energy(
 
     norm_sqr = tf.reduce_sum(dipoles**2, axis=-1, keepdims=True)
     # self energy contribution for each dipole
-    # self_energy_per_d = norm_sqr
     # sum over all dipoles per structure
     self_energy = tf.math.unsorted_segment_sum(
         norm_sqr,

@@ -91,7 +91,6 @@ class GaussianRadialBasisFunction(RadialBasisFunction):
         self.pcut = p
         self.rmin = rmin
         self.grid = np.linspace(self.rmin, self.rcut, self.nfunc).reshape(1, -1)
-        # self.scale = np.ones_like(self.grid) * init_gamma
         self.scale = (
             -0.5 / (init_gamma * (self.grid[0, 1] - self.grid[0, 0])).item() ** 2
         )
@@ -119,7 +118,6 @@ class GaussianRadialBasisFunction(RadialBasisFunction):
             self.is_build = True
 
     def compute_basis(self, r):
-        # basis = tf.math.exp(-self.scale * 0.5 * (r - self.grid) ** 2)
         basis = tf.math.exp(self.scale * (r - self.grid) ** 2)
         # if self.normalized:
         #     if self.trainable:
@@ -168,7 +166,6 @@ class ChebSqrRadialBasisFunction(RadialBasisFunction):
             r_rescale = -2.0 * (1.0 - tf.abs(1.0 - r / rc) ** self.lmbda) + 1.0
         else:
             r_rescale = 2.0 * (1.0 - tf.abs(1.0 - r / rc) ** self.lmbda) - 1.0
-        # basis = 1 - chebvander(r_rescale, self.nfunc+1)[:, 1:]
         basis = chebvander(r_rescale, self.nfunc + 1, self.kind)[:, 1:]
         basis *= cutoff_func_p_order_poly(r / rc, self.pcut)
         if self.normalized:

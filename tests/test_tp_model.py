@@ -17,9 +17,6 @@ from tensorpotential.utils import convert_model_reduce_elements
 from tensorpotential.tensorpot import TensorPotential
 from tensorpotential.tpmodel import TPModel, ExtractBasisFunctions
 
-# from tensorpotential.potentials.presets import (
-#    GRACE_2LAYER,
-# )
 from tensorpotential.potentials import get_preset
 from tensorpotential.instructions import (
     load_instructions,
@@ -481,10 +478,8 @@ def test_extract_basis_functions_GRACE_1LAYER_latest():
     tp = TensorPotential(
         instr_1L,
         model_compute_function=ExtractBasisFunctions(
-            # reduce_1L_instruction_name="rho"
         ),
     )
-    # tp.load_checkpoint(checkpoint_name=model_path+'/checkpoint', verbose=True)
     calc = TPCalculator(
         model=tp.model, extra_properties=["1L_basis"], truncate_extras_by_natoms=True
     )
@@ -507,12 +502,9 @@ def test_extract_basis_functions_GRACE_2LAYER_latest():
     tp = TensorPotential(
         instr_2L,
         model_compute_function=ExtractBasisFunctions(
-            # reduce_1L_instruction_name='I_out_0',
-            # reduce_2L_instruction_name='I_out_1',
             extract_2L_basis=True
         ),
     )
-    # tp.load_checkpoint(checkpoint_name=model_path+'/checkpoint', verbose=True)
     calc = TPCalculator(
         model=tp.model,
         extra_properties=["1L_basis", "2L_basis"],

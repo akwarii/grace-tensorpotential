@@ -336,7 +336,6 @@ class EnergyBasedWeightingPolicy:
                 df.loc[eup_mask, DATA_ENERGY_WEIGHTS] = (
                     fup * df.loc[eup_mask, DATA_ENERGY_WEIGHTS]
                 )
-                # log.info('df["w_energy"].sum() after = {}'.format(df["w_energy"].sum()))
                 energy_weights_sum = df[DATA_ENERGY_WEIGHTS].sum()
                 assert np.allclose(
                     energy_weights_sum, 1
