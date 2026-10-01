@@ -136,7 +136,6 @@ MODELS_METADATA = {
     ########################################################
     "GRACE-FS-OAM": {
         MODEL_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/models/GRACE-FS-OAM-model.tar.gz",
-        # "dirname": "GRACE-FS-OAM_28Feb25",
         DESCRIPTION_KEY: """A FS-like single-layer local GRACE model, pre-fitted on the OMat24 and fine-tuned on sAlex+MPTraj datasets, """
         """with fixed 6 A cutoff.""",
         LICENSE_KEY: "Academic Software License",
@@ -147,7 +146,6 @@ MODELS_METADATA = {
     },
     "GRACE-1L-OAM": {
         MODEL_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/models/GRACE-1L-OAM-model.tar.gz",
-        # "dirname": "GRACE-1L-OAM_2Feb25",
         DESCRIPTION_KEY: """A single-layer local GRACE model, pre-fitted on the OMat24 and fine-tuned on sAlex+MPTraj datasets, """
         """with fixed 6 A cutoff.""",
         LICENSE_KEY: "Academic Software License",
@@ -158,7 +156,6 @@ MODELS_METADATA = {
     },
     "GRACE-2L-OAM": {
         MODEL_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/models/GRACE-2L-OAM-model.tar.gz",
-        # "dirname": "GRACE-2L-OAM_28Jan25",
         DESCRIPTION_KEY: """A two-layer semi-local GRACE model, pre-fitted on the OMat24 and fine-tuned on sAlex+MPTraj datasets, """
         """with fixed 6 A cutoff.""",
         LICENSE_KEY: "Academic Software License",
@@ -172,7 +169,6 @@ MODELS_METADATA = {
     ########################################################
     "GRACE-FS-OMAT": {
         MODEL_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/models/GRACE-FS-OMAT-model.tar.gz",
-        # "dirname": "GRACE-2L-OMAT-3Feb25",
         DESCRIPTION_KEY: """A simple FS-like local GRACE model, fitted on the OMat24 dataset, with fixed 6 A cutoff.""",
         LICENSE_KEY: "Academic Software License",
         CHECKPOINT_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/checkpoints/GRACE-FS-OMAT-checkpoint.tar.gz",
@@ -182,7 +178,6 @@ MODELS_METADATA = {
     },
     "GRACE-1L-OMAT": {
         MODEL_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/models/GRACE-1L-OMAT-model.tar.gz",
-        # "dirname": "GRACE-1L-OMAT-30Jan25",
         DESCRIPTION_KEY: """A single-layer local GRACE model, fitted on the OMat24 dataset, with fixed 6 A cutoff.""",
         LICENSE_KEY: "Academic Software License",
         CHECKPOINT_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/checkpoints/GRACE-1L-OMAT-checkpoint.tar.gz",
@@ -193,7 +188,6 @@ MODELS_METADATA = {
     #######################
     "GRACE-2L-OMAT": {
         MODEL_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/models/GRACE-2L-OMAT-model.tar.gz",
-        # "dirname": "GRACE-2L-OMAT-3Feb25",
         DESCRIPTION_KEY: """A two-layer semi-local GRACE model, fitted on the OMat24 dataset, with fixed 6 A cutoff.""",
         LICENSE_KEY: "Academic Software License",
         CHECKPOINT_URL_KEY: "https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models/resolve/kk/checkpoints/GRACE-2L-OMAT-checkpoint.tar.gz",

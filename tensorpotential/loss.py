@@ -153,11 +153,6 @@ class LossComponent(tf.Module, ABC):
         )
         self.epsilon = tf.constant(1e-10, dtype=float_dtype)
 
-    # def get_corresponding_metrics(self):
-    #     if hasattr(self, "corresponding_metrics"):
-    #         return self.corresponding_metrics
-    #     else:
-    #         return None
 
     def set_loss_component_weight(self, loss_component_weight: float):
         self.loss_component_weight.assign(loss_component_weight)
