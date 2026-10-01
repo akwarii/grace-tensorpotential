@@ -114,8 +114,8 @@ Rules for the text:
 3. **Say what kind of change it is.** Behaviour-preserving, or exactly what changes. List the touched files and units, and what was deliberately left alone.
 4. **Be honest about limits.** List failing or skipped tests with ids and causes, anything you could not run (GPU, HPC, real weights, the other pandas version) and why, and a
    partly met exit criterion as partly met.
-5. **Unexpected findings** are linked to their issue comments, or "none". **Review focus** names one to three concrete places: the riskiest unit, the assertion that matters,
-   the tolerance row used.
+5. **Unexpected findings** are linked to their issue comments, or "none". **Review focus** names one to three concrete places (the riskiest unit, the assertion that matters,
+   the tolerance row used), what could go wrong, and how to undo it (usually: revert).
 6. **Style.** Impersonal and concrete ("Adds ...", "Replaces ..."), short paragraphs, numbers with units, no first-person chatter, no marketing, no emoji. One concern per PR within the
    size budget (about 400 lines without fixtures), or the reason it is larger.
 7. **Sanitised.** `pr-check` fails on unsanitised text; the rules of `CLAUDE.md` apply (no personal data, local paths, e-mail addresses, stray `#N`, `@mentions`, links into other
