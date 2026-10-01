@@ -20,13 +20,14 @@ import board
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def issue_body(deps="none", score=81, blocks="none", extra=""):
+def issue_body(deps="none", score=81, blocks="none", extra="", legacy=None):
+    legacy_line = f"- Legacy id: {legacy}\n" if legacy else ""
     return f"""**Depends on:** {deps} · **Blocks:** {blocks} · **Related:** none
 
 ## Context
 
 - Stage 0: Cleanup
-- Priority: P0 (score {score}); slack 0 days; on the critical path
+{legacy_line}- Priority: P0 (score {score}); slack 0 days; on the critical path
 
 ## Work
 
@@ -73,20 +74,20 @@ class FakeGH:
             },
             {
                 "number": 2,
-                "title": "M0.1 — Safety net",
-                "body": issue_body(),
+                "title": "SAFE1 — Safety net",
+                "body": issue_body(legacy="M0.1"),
                 "state": "OPEN",
             },
             {
                 "number": 3,
-                "title": "M0.2 — Triage",
-                "body": issue_body("#2", 60, "#4"),
+                "title": "CLEAN1 — Triage",
+                "body": issue_body("#2", 60, "#4", legacy="M0.2"),
                 "state": "OPEN",
             },
             {
                 "number": 4,
-                "title": "M0.3 — Remove code",
-                "body": issue_body("#3", 70),
+                "title": "CLEAN2 — Remove code",
+                "body": issue_body("#3", 70, legacy="M0.3"),
                 "state": "OPEN",
             },
             {
@@ -97,15 +98,15 @@ class FakeGH:
             },
             {
                 "number": 6,
-                "title": "G0 — Stage 0 gate",
-                "body": "**Depends on:** #4 · **Blocks:** none · **Related:** none\n\n## Pass criterion\n\nok\n",
+                "title": "GATE-CLEAN — Stage 0 gate",
+                "body": "**Depends on:** #4 · **Blocks:** none · **Related:** none\n\n## Context\n\n- Legacy id: G0\n\n## Pass criterion\n\nok\n",
                 "state": "OPEN",
             },
         ]
         self.prs = [
             {
                 "number": 10,
-                "title": "M0.1 - safety net",
+                "title": "SAFE1 - safety net",
                 "body": "Refs #2",
                 "baseRefName": "torch-backend",
                 "mergedAt": "2026-10-01T10:00:00Z",
@@ -114,7 +115,7 @@ class FakeGH:
             },
             {
                 "number": 11,
-                "title": "M0.2 triage",
+                "title": "CLEAN1 triage",
                 "body": "Refs #3",
                 "baseRefName": "torch-backend",
                 "mergedAt": None,
@@ -132,10 +133,10 @@ class FakeGH:
             },
         ]
         self.status = {
-            "M0.1": "Todo",
-            "M0.2": "Todo",
-            "M0.3": "Todo",
-            "G0": "Todo",
+            "SAFE1": "Todo",
+            "CLEAN1": "Todo",
+            "CLEAN2": "Todo",
+            "GATE-CLEAN": "Todo",
             "Decisions": "Todo",
         }
         self.options = {
@@ -317,31 +318,47 @@ def test_gh_success_returns_stripped_output(monkeypatch):
 
 
 def test_item_ids():
-    assert board.item_id_of("M0.1 — Safety net") == "M0.1"
+    assert board.item_id_of("SAFE1 — Safety net") == "SAFE1"
     assert board.item_id_of("Decisions — D1 to D19 tracker") == "Decisions"
     assert board.item_id_of("Appendix E — pandas") == "Appendix E"
 
 
 def test_issues_parse_dependencies_and_scores(fake):
     info = board.issues()
-    assert info["M0.2"]["needs"] == ["M0.1"]
-    assert info["M0.2"]["score"] == 60
-    assert info["M0.1"]["needs"] == []
+    assert info["CLEAN1"]["needs"] == ["SAFE1"]
+    assert info["CLEAN1"]["score"] == 60
+    assert info["SAFE1"]["needs"] == []
     assert info["Appendix A"]["score"] == 0
-    assert info["G0"]["needs"] == ["M0.3"]
+    assert info["GATE-CLEAN"]["needs"] == ["CLEAN2"]
 
 
 def test_resolve_is_case_insensitive_and_rejects_unknown(fake):
     info = board.issues()
-    assert board.resolve("m0.1", info) == "M0.1"
+    assert board.resolve("safe1", info) == "SAFE1"
     with pytest.raises(SystemExit, match="unknown id"):
         board.resolve("M9.9", info)
+
+
+def test_legacy_ids_resolve_to_the_new_id(fake, capsys):
+    info = board.issues()
+    assert info["SAFE1"]["legacy"] == "M0.1"
+    assert info["Appendix A"]["legacy"] is None
+    assert board.resolve("M0.2", info) == "CLEAN1"
+    assert board.resolve("g0", info) == "GATE-CLEAN"
+    assert "[M0.2 is now CLEAN1]" in capsys.readouterr().err
+    assert board.resolve("CLEAN1", info) == "CLEAN1"
+    assert capsys.readouterr().err == ""
+
+
+def test_legacy_id_gives_the_same_start_as_the_new_id(fake):
+    board.cmd_start(ns(id="M0.1", force=False))
+    assert fake.status["SAFE1"] == "In Progress"
 
 
 def test_project_and_statuses(fake):
     number, proj, field = board.project()
     assert (number, proj, field["name"]) == ("2", "P2", "Status")
-    assert board.statuses()["M0.1"] == "Todo"
+    assert board.statuses()["SAFE1"] == "Todo"
 
 
 def test_project_missing(fake, monkeypatch):
@@ -351,11 +368,11 @@ def test_project_missing(fake, monkeypatch):
 
 
 def test_set_status_updates_the_board_and_validates(fake, capsys):
-    board.set_status("M0.1", "In Progress")
-    assert fake.status["M0.1"] == "In Progress"
+    board.set_status("SAFE1", "In Progress")
+    assert fake.status["SAFE1"] == "In Progress"
     assert "Status -> In Progress" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="status must be one of"):
-        board.set_status("M0.1", "Finished")
+        board.set_status("SAFE1", "Finished")
 
 
 def test_known_numbers_include_issues_and_pull_requests(fake):
@@ -364,18 +381,18 @@ def test_known_numbers_include_issues_and_pull_requests(fake):
 
 def test_merged_pr_for_requires_merge_into_the_integration_branch(fake):
     info = board.issues()
-    pr = board.merged_pr_for(info, "M0.1")
+    pr = board.merged_pr_for(info, "SAFE1")
     assert pr is not None and pr["number"] == 10
-    assert board.merged_pr_for(info, "M0.2") is None  # its PR is still open
-    assert board.merged_pr_for(info, "M0.3") is None  # merged, but into another branch
-    explicit = board.merged_pr_for(info, "M0.1", explicit=10)
+    assert board.merged_pr_for(info, "CLEAN1") is None  # its PR is still open
+    assert board.merged_pr_for(info, "CLEAN2") is None  # merged, but into another branch
+    explicit = board.merged_pr_for(info, "SAFE1", explicit=10)
     assert explicit is not None and explicit["number"] == 10
-    assert board.merged_pr_for(info, "M0.1", explicit=99) is None
+    assert board.merged_pr_for(info, "SAFE1", explicit=99) is None
 
 
 def test_merged_pr_reference_must_match_the_issue_number_exactly(fake):
     fake.prs[0]["body"] = "Refs #22 and #20"
-    assert board.merged_pr_for(board.issues(), "M0.1") is None  # #2 is not #22 or #20
+    assert board.merged_pr_for(board.issues(), "SAFE1") is None  # #2 is not #22 or #20
 
 
 # ---------------------------------------------------------------- posting
@@ -383,7 +400,7 @@ def test_merged_pr_reference_must_match_the_issue_number_exactly(fake):
 
 def test_comment_is_sanitised_before_posting(fake):
     info = board.issues()
-    board.comment(info, "M0.1", "see /home/x/y and #9999")
+    board.comment(info, "SAFE1", "see /home/x/y and #9999")
     number, text = fake.comments[-1]
     assert number == 2
     assert "<local path>" in text
@@ -392,7 +409,7 @@ def test_comment_is_sanitised_before_posting(fake):
 
 def test_put_body_is_sanitised_and_written(fake):
     info = board.issues()
-    board.put_body(info, "M0.1", "new body for @someone")
+    board.put_body(info, "SAFE1", "new body for @someone")
     assert fake.issue(2)["body"] == "new body for @​someone"
 
 
@@ -413,16 +430,16 @@ def test_dod_lines_only_inside_the_section():
 
 def test_set_boxes_ticks_unticks_and_marks_not_applicable(fake, capsys):
     info = board.issues()
-    board.set_boxes(info, "M0.1", [1], True)
+    board.set_boxes(info, "SAFE1", [1], True)
     assert (
         board.dod_lines(fake.issue(2)["body"])
         and "- [x] Exit criterion met" in fake.issue(2)["body"]
     )
     info = board.issues()
-    board.set_boxes(info, "M0.1", [1], False)
+    board.set_boxes(info, "SAFE1", [1], False)
     assert "- [ ] Exit criterion met" in fake.issue(2)["body"]
     info = board.issues()
-    board.set_boxes(info, "M0.1", [2], True, na_reason="no code")
+    board.set_boxes(info, "SAFE1", [2], True, na_reason="no code")
     assert "- [x] ~~Tests written~~ (not applicable: no code)" in fake.issue(2)["body"]
     assert "as not applicable" in capsys.readouterr().out
 
@@ -430,34 +447,34 @@ def test_set_boxes_ticks_unticks_and_marks_not_applicable(fake, capsys):
 def test_set_boxes_rejects_bad_numbers_and_missing_checklists(fake):
     info = board.issues()
     with pytest.raises(SystemExit, match="box number must be 1..3"):
-        board.set_boxes(info, "M0.1", [4], True)
+        board.set_boxes(info, "SAFE1", [4], True)
     with pytest.raises(SystemExit, match="no Definition of Done"):
         board.set_boxes(info, "Appendix A", [1], True)
 
 
 def test_cmd_dod_prints_numbered_boxes(fake, capsys):
-    board.cmd_dod(ns(id="m0.1"))
+    board.cmd_dod(ns(id="safe1"))
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith("1. - [ ] Exit criterion met")
     assert len(out) == 3
 
 
 def test_cmd_check_with_note_comments_the_evidence(fake):
-    board.cmd_check(ns(id="M0.1", numbers=[1, 2], note="command and result"))
+    board.cmd_check(ns(id="SAFE1", numbers=[1, 2], note="command and result"))
     assert "- [x] Exit criterion met" in fake.issue(2)["body"]
     assert any("command and result" in t for _, t in fake.comments)
 
 
 def test_cmd_check_without_note_does_not_comment(fake):
-    board.cmd_check(ns(id="M0.1", numbers=[1], note=None))
+    board.cmd_check(ns(id="SAFE1", numbers=[1], note=None))
     assert fake.comments == []
 
 
 def test_cmd_na_and_cmd_uncheck(fake):
-    board.cmd_na(ns(id="M0.1", number=2, reason="irrelevant"))
+    board.cmd_na(ns(id="SAFE1", number=2, reason="irrelevant"))
     assert "not applicable: irrelevant" in fake.issue(2)["body"]
-    board.cmd_check(ns(id="M0.1", numbers=[1], note=None))
-    board.cmd_uncheck(ns(id="M0.1", numbers=[1]))
+    board.cmd_check(ns(id="SAFE1", numbers=[1], note=None))
+    board.cmd_uncheck(ns(id="SAFE1", numbers=[1]))
     assert "- [ ] Exit criterion met" in fake.issue(2)["body"]
 
 
@@ -472,11 +489,11 @@ def test_pr_box_number():
 def test_cmd_next_lists_only_ready_items_best_first(fake, capsys):
     board.cmd_next(ns())
     out = capsys.readouterr().out
-    assert "M0.1" in out
-    assert "M0.2" not in out  # blocked by M0.1, which is not Done
-    fake.status["M0.1"] = "Done"
+    assert "SAFE1" in out
+    assert "CLEAN1" not in out  # blocked by SAFE1, which is not Done
+    fake.status["SAFE1"] = "Done"
     board.cmd_next(ns())
-    assert capsys.readouterr().out.split()[0] == "M0.2"
+    assert capsys.readouterr().out.split()[0] == "CLEAN1"
 
 
 def test_cmd_next_when_nothing_is_ready(fake, capsys):
@@ -487,80 +504,80 @@ def test_cmd_next_when_nothing_is_ready(fake, capsys):
 
 
 def test_cmd_list_filters_by_status(fake, capsys):
-    fake.status["M0.1"] = "In Progress"
+    fake.status["SAFE1"] = "In Progress"
     board.cmd_list(ns(status="In Progress"))
     out = capsys.readouterr().out
-    assert "M0.1" in out and "M0.2" not in out
+    assert "SAFE1" in out and "CLEAN1" not in out
     board.cmd_list(ns(status=None))
-    assert "M0.2" in capsys.readouterr().out
+    assert "CLEAN1" in capsys.readouterr().out
 
 
 def test_cmd_context_prints_the_issue_and_its_dependencies(fake, capsys):
-    board.cmd_context(ns(id="M0.2"))
+    board.cmd_context(ns(id="CLEAN1"))
     out = capsys.readouterr().out
     assert "issue 3 with comments" in out and "issue 2 with comments" in out
 
 
 def test_cmd_start_refuses_a_blocked_issue_unless_forced(fake, capsys):
     with pytest.raises(SystemExit, match="blocked by"):
-        board.cmd_start(ns(id="M0.2", force=False))
-    board.cmd_start(ns(id="M0.2", force=True))
-    assert fake.status["M0.2"] == "In Progress"
+        board.cmd_start(ns(id="CLEAN1", force=False))
+    board.cmd_start(ns(id="CLEAN1", force=True))
+    assert fake.status["CLEAN1"] == "In Progress"
     assert "forced" in fake.comments[-1][1]
 
 
 def test_cmd_start_moves_a_ready_issue_to_in_progress(fake):
-    board.cmd_start(ns(id="M0.1", force=False))
-    assert fake.status["M0.1"] == "In Progress"
+    board.cmd_start(ns(id="SAFE1", force=False))
+    assert fake.status["SAFE1"] == "In Progress"
     assert fake.comments[-1][0] == 2
 
 
 def test_cmd_finding_comments_on_the_issue_and_the_affected_ones(fake):
-    board.cmd_finding(ns(id="M0.1", text="a surprise", also=["M0.2", "G0"]))
+    board.cmd_finding(ns(id="SAFE1", text="a surprise", also=["CLEAN1", "GATE-CLEAN"]))
     assert [n for n, _ in fake.comments] == [2, 3, 6]
     assert all("a surprise" in t for _, t in fake.comments)
-    board.cmd_finding(ns(id="M0.1", text="another", also=None))
+    board.cmd_finding(ns(id="SAFE1", text="another", also=None))
     assert fake.comments[-1][0] == 2
 
 
 def test_cmd_status_refuses_done_and_requires_an_open_pr_for_pr_open(fake):
     with pytest.raises(SystemExit, match="use `done`"):
-        board.cmd_status(ns(id="M0.1", status="Done"))
+        board.cmd_status(ns(id="SAFE1", status="Done"))
     with pytest.raises(SystemExit, match="No open pull request"):
-        board.cmd_status(ns(id="M0.1", status="PR Open"))  # its PR is merged, not open
-    board.cmd_status(ns(id="M0.2", status="PR Open"))  # PR 11 is open and references #3
-    assert fake.status["M0.2"] == "PR Open"
-    board.cmd_status(ns(id="M0.2", status="In Progress"))
-    assert fake.status["M0.2"] == "In Progress"
+        board.cmd_status(ns(id="SAFE1", status="PR Open"))  # its PR is merged, not open
+    board.cmd_status(ns(id="CLEAN1", status="PR Open"))  # PR 11 is open and references #3
+    assert fake.status["CLEAN1"] == "PR Open"
+    board.cmd_status(ns(id="CLEAN1", status="In Progress"))
+    assert fake.status["CLEAN1"] == "In Progress"
 
 
 def test_cmd_done_refuses_without_a_merged_pr(fake):
     with pytest.raises(SystemExit, match="No pull request referencing #3 is merged"):
-        board.cmd_done(ns(id="M0.2", evidence="e", waive=None, pr=None, waive_pr=None))
+        board.cmd_done(ns(id="CLEAN1", evidence="e", waive=None, pr=None, waive_pr=None))
     assert fake.closed == []
 
 
 def test_cmd_done_with_a_merged_pr_ticks_the_pr_box_then_needs_the_rest(fake):
     with pytest.raises(SystemExit, match="boxes still open: \\[1, 2\\]"):
-        board.cmd_done(ns(id="M0.1", evidence="e", waive=None, pr=None, waive_pr=None))
+        board.cmd_done(ns(id="SAFE1", evidence="e", waive=None, pr=None, waive_pr=None))
     assert "- [x] A pull request referencing this issue" in fake.issue(2)["body"]
     assert fake.closed == []
 
 
 def test_cmd_done_closes_the_issue_when_everything_is_satisfied(fake):
-    board.cmd_check(ns(id="M0.1", numbers=[1, 2], note=None))
+    board.cmd_check(ns(id="SAFE1", numbers=[1, 2], note=None))
     board.cmd_done(
-        ns(id="M0.1", evidence="all green", waive=None, pr=None, waive_pr=None)
+        ns(id="SAFE1", evidence="all green", waive=None, pr=None, waive_pr=None)
     )
     assert fake.closed == [2]
-    assert fake.status["M0.1"] == "Done"
+    assert fake.status["SAFE1"] == "Done"
     assert "Merged pull request: #10" in fake.comments[-1][1]
 
 
 def test_cmd_done_with_waivers_records_the_reasons(fake):
     board.cmd_done(
         ns(
-            id="M0.2",
+            id="CLEAN1",
             evidence="gate passed",
             waive="not applicable here",
             pr=None,
@@ -581,7 +598,7 @@ def test_cmd_done_with_waivers_records_the_reasons(fake):
 
 def test_cmd_done_for_an_issue_without_a_checklist_with_waived_pr(fake):
     board.cmd_done(
-        ns(id="G0", evidence="criterion met", waive=None, pr=None, waive_pr="gate")
+        ns(id="GATE-CLEAN", evidence="criterion met", waive=None, pr=None, waive_pr="gate")
     )
     assert fake.closed == [6]
 
@@ -628,6 +645,34 @@ def test_lint_reports_each_kind_of_stale_text(fake, capsys):
         assert expected in out
 
 
+def test_lint_flags_legacy_ids_but_not_the_legacy_line(fake, capsys):
+    for n in (2, 3, 4):
+        fake.issue(n)["body"] = fake.issue(n)["body"].replace("{n}", str(n))
+    fake.issue(3)["body"] = issue_body("#2", 60, "#4", extra=" After M0.1 and G0.", legacy="M0.2").replace("{n}", "3")
+    code, out = lint(fake, capsys)
+    assert code == 1
+    assert "uses the legacy id M0.1; write SAFE1" in out
+    assert "uses the legacy id G0; write GATE-CLEAN" in out
+    assert "legacy id M0.2" not in out  # the `- Legacy id:` line itself is allowed
+
+
+def test_lint_flags_unknown_ids_of_the_new_scheme_but_not_ruff_codes(fake, capsys):
+    fake.issue(2)["body"] = issue_body(
+        extra=" Needs CLEAN9 and GATE-NOPE; ruff CLEAN401 and CLEAN1a are fine.", legacy="M0.1"
+    )
+    code, out = lint(fake, capsys)
+    assert code == 1
+    assert "unknown id CLEAN9" in out and "unknown id GATE-NOPE" in out
+    assert "CLEAN401" not in out and "unknown id CLEAN1" not in out
+
+
+def test_id_reference_pattern_uses_the_prefixes_in_use():
+    pattern = board.id_reference_pattern({"CLEAN1", "TWIN10", "GATE-CLEAN", "Decisions"})
+    text = "CLEAN1, TWIN10, TWIN123, SIM2, GATE-CLEAN, xTWIN1, CLEAN2a"
+    assert pattern.findall(text) == ["CLEAN1", "TWIN10", "GATE-CLEAN", "CLEAN2"]
+    assert board.id_reference_pattern({"Decisions"}).findall("TWIN1 GATE-X") == ["GATE-X"]
+
+
 def test_lint_second_person_is_fine_when_the_note_says_so(fake, capsys):
     fake.issue(1)["body"] += " your"
     code, out = lint(fake, capsys)
@@ -647,16 +692,16 @@ def test_section_extraction():
 
 
 def test_cmd_pr_body_fills_refs_exit_criterion_and_checklist(fake, capsys):
-    board.cmd_pr_body(ns(id="M0.1"))
+    board.cmd_pr_body(ns(id="SAFE1"))
     captured = capsys.readouterr()
     assert "Refs #2" in captured.out
     assert "Exit criterion of the issue: It works." in captured.out
     assert "- [ ] Tests written" in captured.out
     assert "<!--" not in captured.out
-    assert "Suggested PR title: M0.1 — Safety net" in captured.err
+    assert "Suggested PR title: SAFE1 — Safety net" in captured.err
 
 
-def filled_pr_body(fake, capsys, ident="M0.1"):
+def filled_pr_body(fake, capsys, ident="SAFE1"):
     board.cmd_pr_body(ns(id=ident))
     text = capsys.readouterr().out
     number = fake.issue(2)["number"]
@@ -686,7 +731,7 @@ def filled_pr_body(fake, capsys, ident="M0.1"):
 def test_cmd_pr_check_accepts_a_filled_description(fake, capsys, tmp_path):
     f = tmp_path / "body.md"
     f.write_text(filled_pr_body(fake, capsys))
-    board.cmd_pr_check(ns(id="M0.1", file=str(f)))
+    board.cmd_pr_check(ns(id="SAFE1", file=str(f)))
     assert "0 problem(s)" in capsys.readouterr().out
 
 
@@ -696,7 +741,7 @@ def test_cmd_pr_check_reports_every_rule(fake, capsys, tmp_path):
         "<!-- left over -->\n## Summary\n\nshort\n\nCloses #2\n\n## What changed\n\n-\n\n## Evidence\n\n| | | |\n\nsee /home/someone/x\n"
     )
     with pytest.raises(SystemExit):
-        board.cmd_pr_check(ns(id="M0.1", file=str(f)))
+        board.cmd_pr_check(ns(id="SAFE1", file=str(f)))
     out = capsys.readouterr().out
     for expected in (
         "missing `Refs #2`",
@@ -726,14 +771,14 @@ def test_cmd_sanitise_reads_a_file(fake, capsys, tmp_path):
     [
         ["list"],
         ["next"],
-        ["dod", "M0.1"],
-        ["check", "M0.1", "1", "--note", "n"],
-        ["uncheck", "M0.1", "1"],
-        ["na", "M0.1", "2", "why"],
-        ["start", "M0.1", "--force"],
-        ["finding", "M0.1", "text", "--also", "M0.2"],
-        ["status", "M0.2", "PR Open"],
-        ["context", "M0.1"],
+        ["dod", "SAFE1"],
+        ["check", "SAFE1", "1", "--note", "n"],
+        ["uncheck", "SAFE1", "1"],
+        ["na", "SAFE1", "2", "why"],
+        ["start", "SAFE1", "--force"],
+        ["finding", "SAFE1", "text", "--also", "CLEAN1"],
+        ["status", "CLEAN1", "PR Open"],
+        ["context", "SAFE1"],
         ["lint"],
     ],
 )
@@ -752,7 +797,7 @@ def test_main_done_and_pr_commands(fake, monkeypatch, tmp_path, capsys):
         [
             "board.py",
             "done",
-            "G0",
+            "GATE-CLEAN",
             "evidence",
             "--waive-pr",
             "gate",
@@ -764,10 +809,10 @@ def test_main_done_and_pr_commands(fake, monkeypatch, tmp_path, capsys):
     assert fake.closed == [6]
     body = tmp_path / "b.md"
     body.write_text("x")
-    monkeypatch.setattr(sys, "argv", ["board.py", "pr-check", "M0.1", str(body)])
+    monkeypatch.setattr(sys, "argv", ["board.py", "pr-check", "SAFE1", str(body)])
     with pytest.raises(SystemExit):
         board.main()
-    monkeypatch.setattr(sys, "argv", ["board.py", "pr-body", "M0.1"])
+    monkeypatch.setattr(sys, "argv", ["board.py", "pr-body", "SAFE1"])
     board.main()
     monkeypatch.setattr(sys, "argv", ["board.py", "sanitise", str(body)])
     board.main()
