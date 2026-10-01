@@ -139,6 +139,9 @@ class FakeGH:
             "GATE-CLEAN": "Todo",
             "Decisions": "Todo",
         }
+        self.text_fields = False  # whether the project has the Blocked by / PR columns
+        self.text = {}  # (item key, column name) -> text
+        self.cell_writes = 0
         self.options = {
             "opt-todo": "Todo",
             "opt-prog": "In Progress",
@@ -176,25 +179,43 @@ class FakeGH:
             })
         if head == ("project", "field-list"):
             options = [{"name": n, "id": i} for i, n in self.options.items()]
-            return json.dumps({
-                "fields": [
-                    {"name": "Title", "id": "f0"},
-                    {"name": "Status", "id": "fs", "options": options},
+            fields = [
+                {"name": "Title", "id": "f0"},
+                {"name": "Status", "id": "fs", "options": options},
+            ]
+            if self.text_fields:
+                fields += [
+                    {"name": "Blocked by", "id": "fb"},
+                    {"name": "PR", "id": "fp"},
                 ]
-            })
+            return json.dumps({"fields": fields})
         if head == ("project", "item-list"):
             items = []
             for issue in self.issues:
                 key = board.item_id_of(str(issue["title"]))
                 if key in self.status:
-                    items.append({
+                    item = {
                         "title": issue["title"],
                         "id": f"item-{key}",
                         "status": self.status[key],
-                    })
+                    }
+                    for column in ("Blocked by", "PR"):
+                        if (key, column) in self.text:
+                            item[column.lower()] = self.text[key, column]
+                    items.append(item)
             return json.dumps({"items": items})
         if head == ("api", "graphql"):
             query = args[3]
+            if "$field" in query:  # a text cell: set, or cleared when there is no $text
+                kv = dict(a.split("=", 1) for a in args[3::2])
+                key = kv["item"].removeprefix("item-")
+                column = {"fb": "Blocked by", "fp": "PR"}[kv["field"]]
+                if "$text" in query:
+                    self.text[key, column] = kv["text"]
+                else:
+                    self.text.pop((key, column), None)
+                self.cell_writes += 1
+                return ""
             item_match = re.search(r'itemId:"item-([^"]+)"', query)
             option_match = re.search(r'singleSelectOptionId:"([^"]+)"', query)
             assert item_match and option_match
@@ -760,6 +781,78 @@ def test_cmd_sanitise_reads_a_file(fake, capsys, tmp_path):
     f.write_text("see #2 and #9999 and @someone")
     board.cmd_sanitise(ns(file=str(f)))
     assert capsys.readouterr().out == "see #2 and No. 9999 and @​someone"
+
+
+# ---------------------------------------------------------------- table columns
+
+
+@pytest.fixture
+def columns(fake):
+    fake.text_fields = True
+    return fake
+
+
+def test_pr_label_states():
+    base = {"number": 5, "mergedAt": None, "state": "OPEN", "isDraft": False}
+    assert board.pr_label(base) == "#5 open"
+    assert board.pr_label({**base, "isDraft": True}) == "#5 draft"
+    assert board.pr_label({**base, "state": "CLOSED"}) == "#5 closed"
+    assert board.pr_label({**base, "mergedAt": "2026-10-01"}) == "#5 merged"
+    assert board.pr_label({k: v for k, v in base.items() if k != "isDraft"}) == "#5 open"
+
+
+def test_link_columns_blockers_and_refs(columns):
+    info = board.issues()
+    sts = {"SAFE1": "Done", "CLEAN1": "Todo", "CLEAN2": "Todo", "GATE-CLEAN": "Todo"}
+    got = board.link_columns(info, sts, columns.prs)
+    assert got["SAFE1"] == ("", "#10 merged")
+    assert got["CLEAN1"] == ("", "#11 open")  # SAFE1 is Done, so it no longer blocks
+    assert got["CLEAN2"] == ("CLEAN1", "#12 merged")
+    assert got["GATE-CLEAN"] == ("CLEAN2", "")
+    assert "Decisions" not in got  # not in `sts`
+
+
+def test_refresh_writes_only_the_cells_that_changed(columns, capsys):
+    assert board.refresh_links() == 6
+    assert columns.text["CLEAN1", "Blocked by"] == "SAFE1"
+    assert columns.text["CLEAN1", "PR"] == "#11 open"
+    assert ("SAFE1", "Blocked by") not in columns.text
+    assert board.refresh_links() == 0  # nothing left to write
+    assert columns.cell_writes == 6
+    assert "refresh: 0 cell(s) written" in capsys.readouterr().out
+    columns.status["SAFE1"] = "Done"  # a blocker is resolved: that cell is cleared
+    assert board.refresh_links() == 1
+    assert ("CLEAN1", "Blocked by") not in columns.text
+
+
+def test_refresh_passes_text_as_a_variable_not_in_the_query(columns):
+    columns.prs[1]["title"] = 'quote " and \\ backslash Refs #3'
+    board.refresh_links()
+    assert columns.text["CLEAN1", "PR"] == "#11 open"
+    assert not any('quote' in str(c) and 'query=' in str(c) for c in columns.calls)
+
+
+def test_refresh_without_the_columns(fake, capsys):
+    with pytest.raises(SystemExit, match="no text column"):
+        board.refresh_links()
+    assert board.refresh_links(strict=False) == 0
+    assert "refresh skipped" in capsys.readouterr().err
+    assert fake.cell_writes == 0
+
+
+def test_status_and_done_refresh_the_columns(columns):
+    columns.status["SAFE1"] = "In Progress"
+    board.cmd_status(ns(id="CLEAN1", status="PR Open"))
+    assert columns.text["CLEAN1", "PR"] == "#11 open"
+    board.cmd_done(ns(id="SAFE1", evidence="ok", waive="boxes not ticked in this fixture", pr=None, waive_pr=None))
+    assert columns.status["SAFE1"] == "Done"
+    assert ("CLEAN1", "Blocked by") not in columns.text
+
+
+def test_cmd_refresh_dispatch(columns, capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["board.py", "refresh"])
+    board.main()
+    assert "refresh: 6 cell(s) written" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------- command line
