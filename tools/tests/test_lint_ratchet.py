@@ -1,12 +1,13 @@
 """Tests for tools/lint_ratchet.py.
 
-The end-to-end tests run the real ruff and ty on a scratch project that copies the strict
-``ruff.toml`` of the repository, so they also check the two mechanisms of M0.7: the strict set
-flags a module in a new package and not the same code in legacy, and so do the ty overrides.
+The end-to-end tests run the real ruff and ty on a scratch project that carries the ruff tables
+of the repository's ``pyproject.toml``, so they also check the two mechanisms of TOOL1: the strict
+set flags a module in a new package and not the same code in legacy, and so do the ty overrides.
 """
 
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -18,10 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import lint_ratchet as lr
 
 REPO = Path(__file__).resolve().parents[2]
-STRICT_RULES = REPO / "tests_torch" / "ruff.toml"
+PYPROJECT = REPO / "pyproject.toml"
 
 # Violates the strict set (I001, T201, ERA001, UP006, D103, ...) and ty (invalid-parameter-default,
-# unresolved-attribute). In legacy only the commented-out code is counted (ERA001, a ratchet rule).
+# unresolved-attribute). In legacy only the commented-out code is counted (ERA001).
 PROBE = """import sys
 import os
 from typing import List
@@ -36,6 +37,12 @@ CLEAN = "def f(a: int) -> int:\n    return a\n"
 ERA = "# x = compute(1)\nVALUE = 1\n"
 
 
+def _repo_ruff_tables() -> str:
+    """The ``[tool.ruff*]`` tables of the repository, as text."""
+    text = PYPROJECT.read_text()
+    return text[text.index("[tool.ruff]") : text.index("[dependency-groups]")]
+
+
 def _pyproject(ruff: str = "0.16.7", ty: str = "0.0.84") -> str:
     return f"""[project]
 name = "scratch"
@@ -44,10 +51,7 @@ version = "0"
 [dependency-groups]
 dev = ["ruff=={ruff}", "ty=={ty}"]
 
-[tool.ruff.lint]
-select = ["E", "F"]
-ignore = ["E501"]
-
+{_repo_ruff_tables()}
 [tool.ty.environment]
 python = "{sys.prefix}"
 
@@ -66,13 +70,12 @@ def _installed(tool: str) -> str:
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    """Scratch project: a legacy module, a strict package and the repository's strict config."""
+    """Scratch project: a legacy module, a strict package and the ruff tables of the repository."""
     (tmp_path / "legacy").mkdir()
     (tmp_path / "tests_torch").mkdir()
     (tmp_path / "pyproject.toml").write_text(
         _pyproject(_installed("ruff"), _installed("ty"))
     )
-    shutil.copy(STRICT_RULES, tmp_path / "tests_torch" / "ruff.toml")
     (tmp_path / "legacy" / "mod.py").write_text(PROBE)
     (tmp_path / "tests_torch" / "test_ok.py").write_text(CLEAN)
     return tmp_path
@@ -128,6 +131,19 @@ def test_json_list_rejects_garbage_and_non_lists() -> None:
         lr._json_list("not json", "x")
     with pytest.raises(lr.ToolError, match="expected a list"):
         lr._json_list("{}", "x")
+
+
+def test_parse_ruff_keys_a_finding_without_a_code_as_a_syntax_error(
+    tmp_path: Path,
+) -> None:
+    text = json.dumps([
+        {"filename": str(tmp_path / "a.py"), "code": "F401"},
+        {"filename": str(tmp_path / "sub" / "b.py"), "code": None},
+    ])
+    assert lr.parse_ruff(text, tmp_path) == [
+        ("a.py", "F401"),
+        ("sub/b.py", "syntax-error"),
+    ]
 
 
 def test_run_raises_for_an_exit_code_that_is_not_accepted(tmp_path: Path) -> None:
@@ -331,70 +347,54 @@ def _tomllib() -> ModuleType:
     )  # Python 3.11+; the supported floor of the tools is 3.10
 
 
-NEW_RULE_FILES = [
-    REPO / "tensorpotential" / "torch_backend" / "ruff.toml",
-    REPO / "tensorpotential" / "core" / "ruff.toml",
-    REPO / "tests_torch" / "ruff.toml",
-]
+def _ruff() -> dict:
+    return _tomllib().loads(PYPROJECT.read_text())["tool"]["ruff"]
 
 
-@pytest.mark.parametrize("path", NEW_RULE_FILES, ids=lambda p: p.parent.name)
-def test_every_new_package_has_the_strict_set_and_the_engineering_limits(
-    path: Path,
-) -> None:
-    cfg = _tomllib().loads(path.read_text())
-    lint = cfg["lint"]
-    for rule in (
-        "I",
-        "UP",
-        "B",
-        "SIM",
-        "C4",
-        "RUF",
-        "PD",
-        "NPY",
-        "PIE",
-        "PLE",
-        "PLW",
-        "PERF",
-        "RET",
-        "PTH",
-        "T20",
-        "ERA",
-        "W",
-        "C90",
-        "PLR0913",
-        "D",
-        "BLE",
-        "TRY",
-        "S",
-        "ARG",
-        "A",
-        "TD",
-        "FIX",
-    ):
-        assert rule in lint["extend-select"], rule
+STRICT_FAMILIES = (
+    "I", "UP", "B", "SIM", "C4", "RUF", "PD", "NPY", "PIE", "PLE", "PLW", "PERF", "RET", "PTH",
+    "T20", "ERA", "W", "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "D", "BLE", "TRY", "S",
+    "ARG", "A", "TD", "FIX",
+)  # fmt: skip
+NEW_GLOB = "{" + ",".join(lr.NEW_PACKAGES) + "}/**"
+
+
+def test_ruff_is_configured_once_in_pyproject() -> None:
+    listed = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "*ruff.toml"],  # noqa: S607 - git on PATH, the repository is a git checkout
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert [name for name in listed if (REPO / name).exists()] == []
+
+
+def test_strict_families_and_engineering_limits_are_configured() -> None:
+    lint = _ruff()["lint"]
+    assert set(STRICT_FAMILIES) | {"E", "F"} == set(lint["select"])
     assert lint["mccabe"]["max-complexity"] == 10
-    assert lint["pylint"]["max-args"] == 6
+    assert lint["pylint"] == {"max-args": 6, "max-branches": 12, "max-statements": 50}
     assert lint["pydocstyle"]["convention"] == "numpy"
-    assert (path.parent / cfg["extend"]).resolve() == REPO / "pyproject.toml"
-    assert (
-        "extend-select" in lint and "select" not in lint
-    )  # adds to E, F instead of replacing
+    assert {"E741", "N806", "N803", "PLR2004"} <= set(
+        lint["ignore"]
+    )  # physics names, constants
 
 
-def test_new_packages_of_the_ratchet_are_the_directories_with_a_strict_config() -> None:
-    with_config = {p.parent.relative_to(REPO).as_posix() for p in NEW_RULE_FILES}
-    assert with_config == set(lr.NEW_PACKAGES)
-    assert not (
-        REPO / "tensorpotential" / "ruff.toml"
-    ).exists()  # would flag every legacy sibling
+def test_legacy_ignores_every_strict_family_except_the_commented_out_code() -> None:
+    ignores = _ruff()["lint"]["per-file-ignores"]
+    assert set(ignores[f"!{NEW_GLOB}"]) == set(STRICT_FAMILIES) - {"ERA"}
+    assert set(ignores["tests_torch/**"]) == {"D", "S101"}
+    assert set(ignores) == {f"!{NEW_GLOB}", "tests_torch/**"}
+
+
+def test_new_packages_have_python_310_as_target() -> None:
+    assert _ruff()["per-file-target-version"] == {NEW_GLOB: "py310"}
 
 
 def test_pyproject_ty_overrides_cover_legacy_and_exclude_the_new_packages() -> None:
-    cfg = _tomllib().loads((REPO / "pyproject.toml").read_text())["tool"]["ty"][
-        "overrides"
-    ][0]
+    cfg = _tomllib().loads(PYPROJECT.read_text())["tool"]["ty"]["overrides"][0]
+    assert set(cfg["rules"].values()) == {"ignore"}
     assert set(cfg["rules"]) == {
         "invalid-parameter-default", "unresolved-attribute", "invalid-argument-type", "unsupported-operator",
     }  # fmt: skip

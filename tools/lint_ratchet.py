@@ -1,8 +1,9 @@
 """No-increase ratchet on the ruff and ty findings of legacy code (D13).
 
-Legacy code keeps the root ruff config (E, F) and the ty overrides of ``pyproject.toml``; the findings
-that remain, plus ERA001, F401, F841 and F811, are counted per (file, rule) and may not rise. The
-strict sets of the new packages have no baseline: any finding there fails. Counts are keyed by file and
+Ruff has one configuration, in ``pyproject.toml``: the strict set is selected everywhere and switched
+off by per-file-ignores outside the new packages, so legacy code keeps E, F and ERA001. These findings
+and the ty findings left by the ``[[tool.ty.overrides]]`` are counted per (file, rule) and may not rise.
+The new packages have no baseline: any finding there fails. Counts are keyed by file and
 rule, never by line or message, because Stage 0 moves lines; ty's ``unresolved-import`` is dropped
 because it depends on the installed environment.
 
@@ -28,7 +29,6 @@ from collections import Counter
 from pathlib import Path
 
 NEW_PACKAGES = ("tensorpotential/torch_backend", "tensorpotential/core", "tests_torch")
-RATCHET_RULES = ("ERA001", "F401", "F841", "F811")
 IGNORED_TY_RULES = ("unresolved-import",)
 BASELINE = Path("baselines/lint_ratchet.json")
 VERSION_FILES = (
@@ -94,15 +94,19 @@ def _relative(path: str, root: Path) -> str:
 
 
 def run_ruff(root: Path) -> list[tuple[str, str]]:
-    """``(file, code)`` of every ruff finding: the project config plus the ratchet rules."""
+    """``(file, code)`` of every ruff finding under the configuration of ``pyproject.toml``."""
     out = _run(
-        [_exe("ruff"), "check", "--no-cache", "--output-format", "json",
-         "--extend-select", ",".join(RATCHET_RULES), "."],
+        [_exe("ruff"), "check", "--no-cache", "--output-format", "json", "."],
         root, (0, 1),
     )  # fmt: skip
+    return parse_ruff(out, root)
+
+
+def parse_ruff(text: str, root: Path) -> list[tuple[str, str]]:
+    """``(file, code)`` from ruff's JSON; a finding without a code is a ``syntax-error``."""
     return [
         (_relative(d["filename"], root), d["code"] or "syntax-error")
-        for d in _json_list(out, "ruff")
+        for d in _json_list(text, "ruff")
     ]
 
 
