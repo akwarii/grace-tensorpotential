@@ -110,6 +110,9 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
 - A worktree has no `.venv` (git-ignored): link `.venv` and `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable `tensorpotential`
   install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout). `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
+- `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` in code, tests, docs and notebooks, `__cls__` strings,
+  every module in a fresh interpreter, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
+- `test_graph_split.py` writes `temp_saved_model_test/` into the working directory and removes it at the end; a killed run leaves it behind (untracked), delete it before committing.
 - Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
   `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
 - The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.
@@ -119,16 +122,18 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 
 ## Working agreements
 
-- **You may commit, but you may not open or merge a pull request unless you are told to.** Commit on the work branch of the issue (one concern per commit, imperative message with
-  `feat:`, `fix:`, `refactor:`, `test:`, `docs:` or `chore:`, test commits before the change they protect, never on `torch-backend` or `master`). Push a work branch to the fork only when told
-  to push or to open the PR. **Opening a pull request needs an explicit instruction from the user, and so does merging one** (the user merges). Nothing is ever pushed to, or opened against,
-  the upstream `ICAMS` repositories without an explicit go for that unit; the `upstream` remote has its push URL disabled.
+- **You may commit, and once the work of your issue is ready you open a draft pull request for it yourself and ask the user to review it. You never merge it, mark it ready for review or turn on
+  auto-merge: the user does.** Commit on the work branch of the issue (one concern per commit, imperative message with `feat:`, `fix:`, `refactor:`, `test:`, `docs:` or `chore:`, test commits before
+  the change they protect, never on `torch-backend` or `master`). *Ready* means: the exit criterion is met, the checks the issue names are green, and the description made with `python tools/board.py
+  pr-body <ID>` passes `pr-check`. Push that branch (only that branch) to the fork when you open the draft PR into `torch-backend` and to update it after review; then `python tools/board.py status <ID>
+  "PR Open"` and tell the user the PR number and what to look at. Nothing is ever pushed to, or opened against, the upstream `ICAMS` repositories without an explicit go for that unit (so no `pr/U*`
+  branch is pushed or opened on your own); the `upstream` remote has its push URL disabled.
 - **Several agents may work at the same time, so each works in its own git worktree, and removes it when its pull request is merged.** Create it from the integration branch,
   `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then run `git branch --unset-upstream` in it (git sets the upstream to `torch-backend`, and a plain push would
   update that branch). Never switch branches in, or run a branch-changing command on, a tree that another agent or the user is using. One agent per issue: `board.py` rewrites the whole issue body
   when it ticks a box, so two agents on the same issue overwrite each other. After the merge, and once `board.py done` has run: `git worktree remove ../<repository>-<id>` (without `--force`; if it
   refuses, the tree holds uncommitted work, so report it) and `git branch -d <branch>`. Leave the remote branch unless the user says to delete it.
-- Ask before any download (file, source, size) and before any outward action (creating or closing issues, PRs, repository settings).
+- Ask before any download (file, source, size) and before any other outward action (creating or closing issues, repository settings); the draft PR for your own issue is covered by the rule above.
   Development dependencies (test, coverage, parallelism, lint, typing, mutation tools) may be added to the `dev` group; runtime dependencies are decisions.
 - New issues (only on the user's go) start from `.github/ISSUE_TEMPLATE/milestone.md`; see "Creating an issue" in the `grace-torch-ticket` skill.
 - Pull-request descriptions use the fork's template (`.github/PULL_REQUEST_TEMPLATE/torch-backend.md`, generated with `python tools/board.py pr-body <ID>` and checked with

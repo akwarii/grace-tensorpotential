@@ -1359,7 +1359,6 @@ def test_initialize_lora_tensors_additive():
     ],
 )
 def test_rot_invar_2l(full_par):
-    from tensorpotential.utils import Parity
 
     lmax_bond = 5
     n_rad_base = 8
@@ -1913,7 +1912,6 @@ def _build_general_product_test_data(dtype=float64):
 def test_general_product_function_rot_invar(mode, param_dtype):
     """Test that GeneralProductFunction preserves rotational invariance
     when contracted to scalars via FunctionReduce, for all 4 modes."""
-    from tensorpotential.utils import Parity
 
     inpt_dict, A, lmax_bond, n_rad_max = _build_general_product_test_data(
         dtype=param_dtype
@@ -1983,7 +1981,6 @@ def test_general_product_function_rot_invar(mode, param_dtype):
 @pytest.mark.parametrize("use_S", [True, False])
 def test_general_product_function_shapes(mode, use_S):
     """Test output shapes and trainable variable counts for all CP modes."""
-    from tensorpotential.utils import Parity
 
     size = 10
     lmax = 2
@@ -2050,7 +2047,6 @@ def test_general_product_function_shapes(mode, use_S):
 def test_general_product_function_elementwise_matches_product_function():
     """Verify that GeneralProductFunction(mode='elementwise') produces
     the same output as ProductFunction."""
-    from tensorpotential.utils import Parity
 
     inpt_dict, A, lmax_bond, n_rad_max = _build_general_product_test_data()
 
@@ -2139,7 +2135,6 @@ def test_general_product_function_gradients(mode):
 
 def test_general_product_function_compatible_with_reduce_n():
     """Test full pipeline: GeneralProductFunction -> FunctionReduceN."""
-    from tensorpotential.utils import Parity
 
     inpt_dict, A, lmax_bond, n_rad_max = _build_general_product_test_data()
     rank = 6
@@ -2178,7 +2173,6 @@ def test_general_product_function_compatible_with_reduce_n():
 @pytest.mark.parametrize("mode", ["cp", "cp_l", "cp_lL"])
 def test_general_product_function_group_counts(mode):
     """Verify the group assignment dimensions are sensible."""
-    from tensorpotential.utils import Parity
 
     size = 5
     lmax = 3
