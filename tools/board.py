@@ -692,6 +692,12 @@ def cmd_lint(_a) -> None:
                     )
         if DOD_HEADING in body and "merged into `torch-backend`" not in body:
             hard.append(f"{head}: Definition of Done lacks the merged-PR box")
+        for dep in v["needs"]:
+            a, b = re.fullmatch(r"([A-Z]+)(\d+)", dep), re.fullmatch(r"([A-Z]+)(\d+)", k)
+            if a and b and a[1] == b[1] and int(a[2]) > int(b[2]):
+                soft.append(
+                    f"{head}: depends on {dep}, which has a higher number in the same theme (numbers follow the dependency order)"
+                )
         if re.search(r"\b(?:76|79|82|85) (?:milestone|issues)\b", body):
             soft.append(f"{head}: an old issue or milestone count")
         if (

@@ -12,8 +12,7 @@ the fork. Run it from the repository root.
 
 An issue id is a theme and a number, written as in the issue title: `SAFE1`, `CLEAN1`-`CLEAN4`, `DEPS1`, `TOOL1`, `AGENT1`, `QUAL1`-`QUAL2`, `CPU1`, `TEST1`-`TEST4` (Stage 0);
 `BOARD`, `SPEC`, `CORE`, `FIX`, `CI` (Stage 1); `TORCH`, `SH`, `RAD`, `DENSE`, `PLAN`, `ORACLE`, `NBR` (Stage 2); `TWIN`, `EXEC` (Stage 3); `MODEL` (4); `IO` (5); `EQUIV` (6);
-`SIM`, `DOC` (7); `PERF` (8); gates `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV`, `GATE-SIM`. Numbers restart in each theme; order comes from the dependency graph, not
-from the number. The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches
+`SIM`, `DOC` (7); `PERF` (8); gates `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV`, `GATE-SIM`. Numbers restart in each theme and follow the dependency order: an issue never depends on a higher number of its own theme (`lint` reminds you). A new issue takes the next free number, and an insertion in the middle renumbers the later ones only when nobody is working on them. The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches
 and pull requests keep using it, and `lint` reports it in issue text. Write the new id everywhere new.
 
 ## Session ritual

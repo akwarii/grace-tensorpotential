@@ -694,6 +694,16 @@ def test_id_reference_pattern_uses_the_prefixes_in_use():
     assert board.id_reference_pattern({"Decisions"}).findall("TWIN1 GATE-X") == ["GATE-X"]
 
 
+def test_lint_warns_when_a_number_precedes_its_dependency(fake, capsys):
+    for n in (2, 3, 4):
+        fake.issue(n)["body"] = fake.issue(n)["body"].replace("{n}", str(n))
+    fake.issue(3)["body"] = fake.issue(3)["body"].replace("#2 ", "#4 ", 1)  # CLEAN1 now needs CLEAN2
+    code, out = lint(fake, capsys)
+    assert code == 0  # a reminder to check, not a stale finding
+    assert "CLEAN1 (#3): depends on CLEAN2, which has a higher number" in out
+    assert "SAFE1" not in "".join(l for l in out.splitlines() if "higher number" in l)
+
+
 def test_lint_second_person_is_fine_when_the_note_says_so(fake, capsys):
     fake.issue(1)["body"] += " your"
     code, out = lint(fake, capsys)
