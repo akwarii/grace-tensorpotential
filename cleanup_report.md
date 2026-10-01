@@ -2,17 +2,19 @@
 
 Status: **draft for review**. No source file was edited; this report only records what the tree contains, what was measured, and the rules that govern the next removals and upstream merges.
 
+**Scope rule (owner, 2026-10-01): `tensorpotential/compat/pace/` is out of scope and no change to it is allowed**, by this issue or by any other: no edit, deletion, reformatting or fix, including the findings below that sit inside it (F1, F2, F4 and part of F3). It is reported here and left as it is.
+
 Measured on 2026-10-01 on `torch-backend` at `c313e3e` (after M0.3), CPU, Python 3.12.3, `ruff 0.16.7 --isolated`, TensorFlow 2.20. Commands are given so each number can be reproduced.
 
 ## 1. Findings
 
 | # | Finding | Count | Where | Action taken |
 |---|---|---:|---|---|
-| F1 | Latent `NameError` (`rankmax` instead of the parameter `ranksmax`) | 1 | `compat/pace/potentials/ace.py:975` | none; reported (F1) |
-| F2 | Bare `except:` | 8 | all in `compat/pace/` | none; reported (F2) |
-| F3 | `TODO`/`FIXME`/`XXX`/`HACK` markers | 52 | 47 in live code, 5 in `compat/pace/`; none links an issue | none; reported (F3) |
-| F4 | Star imports | 3 + 1 | 3 in `compat/pace/`, 1 in a notebook | none; reported (F4) |
-| F5 | `compat/pace/` is imported by nothing outside itself | 17 files, 4,399 lines | `tensorpotential/compat/pace/` | none; removal candidate (F5) |
+| F1 | Latent `NameError` (`rankmax` instead of the parameter `ranksmax`) | 1 | `compat/pace/potentials/ace.py:975` | none; out of scope (`compat/pace/`) |
+| F2 | Bare `except:` | 8 | all in `compat/pace/` | none; out of scope (`compat/pace/`) |
+| F3 | `TODO`/`FIXME`/`XXX`/`HACK` markers | 52 | 47 in live code, 5 in `compat/pace/`; none links an issue | none; the 5 in `compat/pace/` are out of scope |
+| F4 | Star imports | 3 + 1 | 3 in `compat/pace/`, 1 in a notebook | none; the 3 in `compat/pace/` are out of scope |
+| F5 | `compat/pace/` is imported by nothing outside itself | 17 files, 4,399 lines | `tensorpotential/compat/pace/` | none; out of scope, no change allowed (F5) |
 
 ### F1. `rankmax` NameError
 
@@ -63,7 +65,7 @@ Evidence (all on the current tree):
 - It **is shipped**: `setup.py` uses `find_packages(include=["tensorpotential", "tensorpotential.*"])`, so the wheel contains it, and `import tensorpotential.compat.pace` and each of its modules import without error today (TensorFlow is imported, no other package is needed).
 - It has no coverage: no test exercises it.
 
-Conclusion: a removal candidate, **not done** (D5(b), and M0.5's scope). It would satisfy gates 2 and 5 of the removal protocol below; gates 1 (a replacement is default), 3 (an exact deletion set) and 4 (no tests to replace) are for the owner to decide, together with whether a user of the legacy PACE-fitting workflow exists whom the maintainers want to hear first (a question for upstream, not for the fork).
+Conclusion: **out of scope, no change allowed** (owner decision of 2026-10-01, on top of D5(b)). The evidence above is recorded only so that nobody has to re-derive it; it is not a proposal to remove the package, and no retirement issue is planned.
 
 ## 2. Class E register (disabled wiring of documented or user-visible options)
 
@@ -111,7 +113,7 @@ Consequence of M0.3 for later syncs (an expectation, not yet observed because up
 
 ### 3.2 Removal protocol for any future retirement of code
 
-Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy code; applies to deleting a module, a class, an option or a package (for example `compat/pace/`, or a class-E item above). A comment-only deletion follows M0.2 and M0.3 instead (triage table, AST manifest equal).
+Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy code; applies to deleting a module, a class, an option or a package (for example a class-E item above; **never `compat/pace/`**, which is out of scope). A comment-only deletion follows M0.2 and M0.3 instead (triage table, AST manifest equal).
 
 1. **The replacement is the default and its parity is green.** A retirement names what replaces the code and shows the comparison (suite outcome equal to `baselines/`, oracle snapshot within tolerance when numerics are touched) before the deletion, never in the same commit.
 2. **Nothing live imports the code.** Evidence is an import-resolution check (every `import` / `from` in the tree resolves after the change) and an import smoke (`python -W always -c "import <every module>"`), plus the dynamic routes of this repository: `importlib.import_module` calls, `tpmodel.__getattr__` and `instructions.__getattr__` (saved `model.yaml` files import classes by name through them, so a class deletion is a model-format break), console scripts of `pyproject.toml`, and entry points.
@@ -119,14 +121,15 @@ Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy
 4. **Every removed test has a named successor**, or a stated reason that none is needed; the junit comparison against `baselines/outcomes_pd2.json` explains each missing id.
 5. **A dependents sweep for everything shipped in the wheel**: `find_packages` and `package_data` in `setup.py`, `[project.scripts]`, the documentation (`docs/`), `examples/` and notebooks, the Docker and CI files, and users' saved models (the persisted-API gotcha: a constructor argument or default is part of every saved model).
 6. **Persisted formats and public options get a deprecation step** (an actionable error or warning naming the replacement) before they disappear; nothing falls back silently.
-7. One concern per PR, the owner decides, and `compat/pace/` stays untouched until a retirement PR names it.
+7. One concern per PR and the owner decides. `compat/pace/` is outside this protocol: no change is allowed to it.
 
 ## 4. Decisions this report needs from the owner
 
-1. **`compat/pace/`**: keep untouched (the default), or open a retirement issue following 3.2? The evidence is in F5.
-2. **Class E**: five decisions (LoRA, Gaussian `normalized`, `stress_units` in `grace_preprocess`, `grace_utils aux_model --aux`, the two disabled integration tests); a model-format break is involved only in the Gaussian one.
-3. **Upstream issues (U10)**: whether to report F1 and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
+1. **Class E**: five decisions (LoRA, Gaussian `normalized`, `stress_units` in `grace_preprocess`, `grace_utils aux_model --aux`, the two disabled integration tests); a model-format break is involved only in the Gaussian one.
+2. **Upstream issues (U10)**: whether to report F1 (reporting does not change the code) and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
 
 ## Provenance
 
 Counts re-measured on the tree named at the top; the F1 reproduction was run with the project environment. Compared with the issue text: star imports are 3 in `.py` files (4 with the notebook), everything else (1 `NameError`, 8 bare `except`, 52 markers, the unimported package) matches.
+
+Decided after the first draft: `compat/pace/` is out of scope with no change allowed (owner, 2026-10-01); the draft's open question about retiring it is withdrawn.
