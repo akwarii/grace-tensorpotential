@@ -256,7 +256,10 @@ def test_a_drop_prints_the_record_command_and_passes_unless_asked(
     assert _run(project, "check") == 0
     out = capsys.readouterr().out
     assert "dropped: ruff legacy/mod.py ERA001: 1 -> 0" in out
-    assert "python tools/lint_ratchet.py record --baseline" in out
+    assert (
+        "python tools/lint_ratchet.py record --baseline baselines/lint_ratchet.json"
+        in out
+    )
     assert _run(project, "check", "--fail-on-drop") == 1
 
 

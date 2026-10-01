@@ -215,8 +215,11 @@ def check(root: Path, baseline: Path, *, fail_on_drop: bool = False) -> int:
     ]
     if drops:
         report += [f"dropped: {d}" for d in drops]
+        shown = (
+            baseline.relative_to(root) if baseline.is_relative_to(root) else baseline
+        )
         report.append(
-            f"record the lower baseline with: python tools/lint_ratchet.py record --baseline {baseline}"
+            f"record the lower baseline with: python tools/lint_ratchet.py record --baseline {shown}"
         )
     sys.stdout.write("\n".join(report) + ("\n" if report else "lint ratchet: ok\n"))
     failed = problems or rises or now["strict"] or (fail_on_drop and drops)
