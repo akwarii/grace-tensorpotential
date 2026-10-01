@@ -99,9 +99,6 @@
   "tensorpotential/uq/cli/build/thresholds.py": {
    "ERA001": 1
   },
-  "tests/conftest.py": {
-   "E402": 9
-  },
   "tests/test_calculator.py": {
    "E702": 6,
    "ERA001": 2
