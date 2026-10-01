@@ -86,7 +86,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - `functions/`: Clebsch-Gordan generation and coupling tables (`couplings.py`), radial functions, activations.
 - `data/`: dataframes and TF datasets (`databuilder.py`, `process_df.py`), neighbour lists (matscipy by default), streaming.
 - `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `gracemaker`, `grace_preprocess`, `grace_predict`, ...
-- `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty. `compat/pace/`: legacy, untested, do not touch.
+- `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty. `compat/pace/`: legacy, untested, **out of scope: no change is allowed to it** (owner, 2026-10-01), whatever the issue; report findings, never fix or remove them.
 - The PyTorch backend is being added in `tensorpotential/torch_backend/` with TF-free shared code in `tensorpotential/core/` (not created yet); both must import without
   TensorFlow (enforced by an import contract), and the TF extractor lives outside them.
 - `tests/` (run from the repository root), `baselines/` and `tools/` (untouched-tree baselines and the tools that compare against them), `docs/`.
@@ -123,6 +123,11 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   `feat:`, `fix:`, `refactor:`, `test:`, `docs:` or `chore:`, test commits before the change they protect, never on `torch-backend` or `master`). Push a work branch to the fork only when told
   to push or to open the PR. **Opening a pull request needs an explicit instruction from the user, and so does merging one** (the user merges). Nothing is ever pushed to, or opened against,
   the upstream `ICAMS` repositories without an explicit go for that unit; the `upstream` remote has its push URL disabled.
+- **Several agents may work at the same time, so each works in its own git worktree, and removes it when its pull request is merged.** Create it from the integration branch,
+  `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then run `git branch --unset-upstream` in it (git sets the upstream to `torch-backend`, and a plain push would
+  update that branch). Never switch branches in, or run a branch-changing command on, a tree that another agent or the user is using. One agent per issue: `board.py` rewrites the whole issue body
+  when it ticks a box, so two agents on the same issue overwrite each other. After the merge, and once `board.py done` has run: `git worktree remove ../<repository>-<id>` (without `--force`; if it
+  refuses, the tree holds uncommitted work, so report it) and `git branch -d <branch>`. Leave the remote branch unless the user says to delete it.
 - Ask before any download (file, source, size) and before any outward action (creating or closing issues, PRs, repository settings).
   Development dependencies (test, coverage, parallelism, lint, typing, mutation tools) may be added to the `dev` group; runtime dependencies are decisions.
 - New issues (only on the user's go) start from `.github/ISSUE_TEMPLATE/milestone.md`; see "Creating an issue" in the `grace-torch-ticket` skill.
