@@ -6,7 +6,7 @@ from tensorpotential.potentials.presets import FS
 from tensorpotential.export import export_to_yaml
 
 
-def test_export_to_yaml():
+def test_export_to_yaml(tmp_path):
     np.random.seed(1)
     tf.random.set_seed(1)
 
@@ -23,9 +23,10 @@ def test_export_to_yaml():
     for _, ins in fs_ins.items():
         ins.build(tf.float64)
 
-    export_to_yaml(fs_ins, "test_export_to_yaml.yaml")
+    out_file = tmp_path / "test_export_to_yaml.yaml"
+    export_to_yaml(fs_ins, str(out_file))
 
-    with open("test_export_to_yaml.yaml") as f:
+    with open(out_file) as f:
         pot_yaml = yaml.load(f, yaml.SafeLoader)
 
     print(f"pot_yaml.keys={pot_yaml.keys()}")

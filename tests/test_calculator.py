@@ -1,5 +1,5 @@
 import os
-import shutil
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -19,6 +19,11 @@ from tensorpotential.data.databuilder import GeometricalDataBuilder
 from tensorpotential.instructions import load_instructions
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+HERE = Path(__file__).parent.resolve()
+MODEL_GRACE_YAML = str(HERE / "model_grace.yaml")
+SAVED_MODEL = str(HERE / "test_calculator_model")
+SAVED_MODEL_CUSTOM_CUTOFF = str(HERE / "test_model_custom_cutoff")
 
 
 
@@ -236,8 +241,8 @@ def test_dense_padding_manager_hot_shape_promotion():
     assert on.n_compiles <= off.n_compiles * 1.3
 
 
-def test_calculator_model():
-    ins = load_instructions("model_grace.yaml")
+def test_calculator_model(tmp_path):
+    ins = load_instructions(MODEL_GRACE_YAML)
     for instr in ins:
         if hasattr(instr, "inv_avg_n_neigh"):
             setattr(instr, "inv_avg_n_neigh", 1 / 30.0)
@@ -259,10 +264,10 @@ def test_calculator_model():
     print(st0_num - st0)
     assert np.allclose(st0, st0_num, atol=1e-4)
 
-    shutil.rmtree("./test_calculator_model_tmp", ignore_errors=True)
-    model.save_model("./test_calculator_model_tmp")
+    saved_model = str(tmp_path / "saved_model")
+    model.save_model(saved_model)
 
-    calc1 = TPCalculator(model="./test_calculator_model_tmp")
+    calc1 = TPCalculator(model=saved_model)
 
     np.random.seed(322)
     s = bulk("W", cubic=True) * (2, 2, 2)
@@ -281,15 +286,14 @@ def test_calculator_model():
     print(f0 - f1)
     assert np.allclose(f0, f1, atol=1e-7)
     assert np.allclose(st0, st1)
-    shutil.rmtree("./test_calculator_model_tmp", ignore_errors=True)
 
 
 def test_calculator_with_fake_neighbors():
     calc = TPCalculator(
-        model="./test_calculator_model", pad_neighbors_fraction=0.25, pad_atoms_number=1
+        model=SAVED_MODEL, pad_neighbors_fraction=0.25, pad_atoms_number=1
     )
     calc1 = TPCalculator(
-        model="./test_calculator_model",
+        model=SAVED_MODEL,
         pad_neighbors_fraction=None,
         pad_atoms_number=None,
     )
@@ -320,7 +324,7 @@ def test_calculator_with_fake_neighbors():
 
 def test_dynamic_padding():
     calc = TPCalculator(
-        model="./test_calculator_model",
+        model=SAVED_MODEL,
         pad_neighbors_fraction=0.25,
         pad_atoms_number=1,
         debug_padding_verbose=3,
@@ -357,7 +361,7 @@ def test_dynamic_padding():
 
 def test_dynamic_padding_reducing():
     calc = TPCalculator(
-        model="./test_calculator_model", pad_neighbors_fraction=0.25, pad_atoms_number=5
+        model=SAVED_MODEL, pad_neighbors_fraction=0.25, pad_atoms_number=5
     )
 
     assert len(calc.padding_manager.padding_bounds) == 0
@@ -380,7 +384,7 @@ def test_dynamic_padding_reducing():
 
 def test_dynamic_padding_reducing_limit():
     calc = TPCalculator(
-        model="./test_calculator_model",
+        model=SAVED_MODEL,
         pad_neighbors_fraction=0.25,
         pad_atoms_number=5,
         max_number_reduction_recompilation=0,
@@ -406,12 +410,12 @@ def test_dynamic_padding_reducing_limit():
 
 def test_calculator_with_fake_atoms():
     calc = TPCalculator(
-        model="./test_calculator_model",
+        model=SAVED_MODEL,
         pad_neighbors_fraction=0.25,
         pad_atoms_number=10,
     )
     calc1 = TPCalculator(
-        model="./test_calculator_model",
+        model=SAVED_MODEL,
     )
     np.random.seed(322)
     s = bulk("W", cubic=True) * (2, 2, 2)
@@ -440,7 +444,7 @@ def test_calculator_with_fake_atoms():
 
 
 def test_ensemble_calculator_model():
-    ins = load_instructions("model_grace.yaml")
+    ins = load_instructions(MODEL_GRACE_YAML)
     for instr in ins:
         if hasattr(instr, "inv_avg_n_neigh"):
             setattr(instr, "inv_avg_n_neigh", 1 / 30.0)
@@ -472,7 +476,7 @@ def test_ensemble_calculator_model():
 
 def test_calculator_min_dist():
     calc = TPCalculator(
-        model="./test_calculator_model",
+        model=SAVED_MODEL,
         pad_neighbors_fraction=0.25,
         min_dist=1.0,
     )
@@ -490,7 +494,7 @@ def test_calculator_min_dist():
 
 def test_calculator_model_with_custom_cutoff():
     calc = TPCalculator(
-        model="./test_model_custom_cutoff",
+        model=SAVED_MODEL_CUSTOM_CUTOFF,
         pad_neighbors_fraction=0.25,
         min_dist=1.0,
     )
@@ -571,7 +575,7 @@ def test_padding_manager():
 
     data = {k: v for k, v in data.items()}
 
-    ins = load_instructions("model_grace.yaml")
+    ins = load_instructions(MODEL_GRACE_YAML)
     model = TPModel(ins)
     model.build(float64)
 
@@ -627,7 +631,7 @@ def test_padding_manager_no_padding():
 
     data = {k: v for k, v in data.items()}
 
-    ins = load_instructions("model_grace.yaml")
+    ins = load_instructions(MODEL_GRACE_YAML)
     model = TPModel(ins)
     model.build(float64)
 

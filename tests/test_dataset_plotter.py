@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 
 import pytest
@@ -10,19 +9,21 @@ from tensorpotential.data.dataset_plotter import (
     UnitTransformTuple,
 )
 
+DATA_DIR = Path(__file__).parent.resolve() / "data"
+
 
 @pytest.fixture
 def load_datasets():
-    train_path = "./data/MoNbTaW_train50.pkl.gz"
-    test_path = "./data/MoNbTaW_test50.pkl.gz"
+    train_path = DATA_DIR / "MoNbTaW_train50.pkl.gz"
+    test_path = DATA_DIR / "MoNbTaW_test50.pkl.gz"
 
     ds_dict = {"train": pd.read_pickle(train_path), "test": pd.read_pickle(test_path)}
     return ds_dict
 
 
 @pytest.fixture
-def output_dir():
-    out_dir = Path(".") / "hists"
+def output_dir(tmp_path):
+    out_dir = tmp_path / "hists"
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -45,5 +46,3 @@ def test_plot_creation(load_datasets, output_dir):
     for target in targets:
         plot_file = output_dir / f"{target}.png"
         assert plot_file.exists(), f"Plot file {plot_file} was not created"
-
-    shutil.rmtree(output_dir)
