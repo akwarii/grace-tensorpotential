@@ -274,6 +274,11 @@ def project_fields(number: str) -> dict[str, dict]:
     return {f["name"]: f for f in fields}
 
 
+def item_key(field_name: str) -> str:
+    """The key `gh project item-list` uses for a field: only the first letter is lower-cased ("PR" -> "pR")."""
+    return field_name[:1].lower() + field_name[1:]
+
+
 def set_text_field(proj: str, item: str, field: str, text: str) -> None:
     """Write (or, for an empty text, clear) a text cell of the project table."""
     ids = ["-f", f"project={proj}", "-f", f"item={item}", "-f", f"field={field}"]
@@ -328,8 +333,8 @@ def refresh_links(strict: bool = True) -> int:
     written = 0
     for item_id, (blocked, prs) in link_columns(info, sts, pull_requests()).items():
         for name, key, value in (
-            (BLOCKED_FIELD, BLOCKED_FIELD.lower(), blocked),
-            (PR_FIELD, PR_FIELD.lower(), prs),
+            (BLOCKED_FIELD, item_key(BLOCKED_FIELD), blocked),
+            (PR_FIELD, item_key(PR_FIELD), prs),
         ):
             if items[item_id].get(key, "") != value:
                 set_text_field(proj, items[item_id]["id"], fields[name]["id"], value)

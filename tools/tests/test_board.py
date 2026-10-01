@@ -201,7 +201,7 @@ class FakeGH:
                     }
                     for column in ("Blocked by", "PR"):
                         if (key, column) in self.text:
-                            item[column.lower()] = self.text[key, column]
+                            item[column[:1].lower() + column[1:]] = self.text[key, column]
                     items.append(item)
             return json.dumps({"items": items})
         if head == ("api", "graphql"):
@@ -790,6 +790,11 @@ def test_cmd_sanitise_reads_a_file(fake, capsys, tmp_path):
 def columns(fake):
     fake.text_fields = True
     return fake
+
+
+def test_item_key_lowercases_only_the_first_letter():
+    assert board.item_key("PR") == "pR"
+    assert board.item_key("Blocked by") == "blocked by"
 
 
 def test_pr_label_states():

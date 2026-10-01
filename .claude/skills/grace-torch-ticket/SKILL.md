@@ -52,6 +52,12 @@ your change makes stale **in the same task**, not later, and run `python tools/b
 issue numbers, appendices without a reference issue, old counts and second-person wording. Fix every `STALE` finding, also the ones you did not cause, and
 sanitise as you go (the helper does it for what it posts).
 
+## The project table
+
+The table view shows Status, Stage, Priority, **Blocked by** (dependencies that are not Done), **PR** (pull requests whose description has `Refs #<issue>`, with their state), the parent gate and the
+gate's sub-issue progress. GitHub's own "Linked pull requests" column stays empty on purpose: it only fills for closing keywords, which this fork does not use. `board.py status` and `board.py done`
+refresh the two text columns by themselves; after anything else that changes them (a PR opened or closed, an issue created) run `python tools/board.py refresh` (it writes only the cells that changed).
+
 ## Keep the Definition of Done current
 
 The issue body ends with a **Definition of Done** checklist. **Every time you finish a task that belongs to the issue, tick the boxes it satisfies**, with the
@@ -92,7 +98,7 @@ base:   torch-backend              (the integration branch on the fork; never ma
 New issues are created only when the user says so. Start from the fork's template, `.github/ISSUE_TEMPLATE/milestone.md` (fork only, never on a `pr/U*` branch): the same sections as the
 existing milestone issues plus **Out of scope** (binding) and **Decisions it depends on** (the decided outcomes inlined, so the issue needs no other reading), and the Definition of
 Done with the merged-PR box. The `Depends on` line names issue numbers (add the native "blocked by" relations), the Context lines carry the estimate and where it runs, and the text is
-sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority, Days, Kind), and run `python tools/board.py lint` afterwards.
+sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority, Days, Kind), make it a sub-issue of the gate of its stage (stage 0 `GATE-CLEAN`, 1 `GATE-SPEC`, 2 to 4 `GATE-MODEL`, 5 and 6 `GATE-EQUIV`, 7 `GATE-SIM`; stage 8 and follow-ups created after their gate have no parent, so the gate's progress does not move once it is closed), and run `python tools/board.py refresh` and `python tools/board.py lint` afterwards.
 
 ## Writing the PR summary
 
