@@ -140,9 +140,9 @@ Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy
 1. **Class E**: decided (2.1); the follow-up work is tracked in LORA1, DATA1, CLEAN5 and TEST5 (2.1).
 2. **Upstream issues (U10)**: whether to report F1 (reporting does not change the code) and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
 
-## 5. Parallel test execution (TEST3)
+## 5. Parallel test execution (TEST2)
 
-Measured on 2026-10-01 on the TEST3 branch (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20, pytest-xdist 3.8.0). Every run is the full suite from the repository root on a **read-only bind mount** of the tree (`unshare -rm`, then `mount --bind` and `mount -o remount,ro,bind`; `/tmp` stays writable), `--dist load`, with `tests/test_structured_grid.py` and `tests/test_foundation_model_regression.py` ignored as in `baselines/`. Each worker gets `cores / N` TensorFlow and OpenMP threads (root `conftest.py`, `tests/thread_budget.py`). The serial reference is the 32 min 19 s measured on 2026-10-01 (`baselines/outcomes_pd2.json` holds the outcomes). The machine was not idle: other applications held 9 to 11 GB before each run.
+Measured on 2026-10-01 on the TEST2 branch (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20, pytest-xdist 3.8.0). Every run is the full suite from the repository root on a **read-only bind mount** of the tree (`unshare -rm`, then `mount --bind` and `mount -o remount,ro,bind`; `/tmp` stays writable), `--dist load`, with `tests/test_structured_grid.py` and `tests/test_foundation_model_regression.py` ignored as in `baselines/`. Each worker gets `cores / N` TensorFlow and OpenMP threads (root `conftest.py`, `tests/thread_budget.py`). The serial reference is the 32 min 19 s measured on 2026-10-01 (`baselines/outcomes_pd2.json` holds the outcomes). The machine was not idle: other applications held 9 to 11 GB before each run.
 
 | N | threads per worker | wall time | single-process peak RSS | peak system memory above start | outcome per test id vs `outcomes_pd2.json` |
 |---:|---:|---:|---:|---:|---|
