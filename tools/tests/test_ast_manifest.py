@@ -166,3 +166,71 @@ def test_cli_check_against_rev_sees_committed_change(repo):
     _git(repo, "commit", "-qam", "edit")
     assert am.main(["check", str(out), "--root", str(repo), "--rev", "HEAD"]) == 1
     assert am.main(["check", str(out), "--root", str(repo), "--rev", "base"]) == 0
+
+
+def _commit_files(repo, files):
+    for path, text in files.items():
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "more")
+
+
+FORK_FILES = {
+    "tools/helper.py": "h = 1\n",
+    "tensorpotential/core/plans.py": "p = 1\n",
+    "tests_torch/test_x.py": "t = 1\n",
+}
+
+
+def test_fork_only_paths_are_excluded_by_default(repo):
+    _commit_files(repo, {**FORK_FILES, "tools_extra.py": "e = 1\n"})
+    assert am.tracked_python_files(repo) == ["b.py", "pkg/a.py", "tools_extra.py"]
+    # a prefix is a directory prefix: tools_extra.py is not under tools/
+    assert set(am.build_manifest(repo)) == {"b.py", "pkg/a.py", "tools_extra.py"}
+
+
+def test_exclude_argument_overrides_the_default_list(repo):
+    _commit_files(repo, FORK_FILES)
+    assert "tools/helper.py" in am.tracked_python_files(repo, exclude=())
+    assert am.tracked_python_files(repo, exclude=("pkg/",)) == [
+        "b.py",
+        "tensorpotential/core/plans.py",
+        "tests_torch/test_x.py",
+        "tools/helper.py",
+    ]
+    assert "tools/helper.py" in am.tracked_python_files(repo, "HEAD", exclude=())
+    assert "tools/helper.py" not in am.tracked_python_files(repo, "HEAD")
+
+
+def test_default_excludes_are_the_prefixes_of_the_upstream_guard():
+    import check_pr_branch
+
+    assert am.DEFAULT_EXCLUDES is check_pr_branch.FORBIDDEN_PREFIXES
+    assert {"tools/", "baselines/", "tests_torch/"} <= set(am.DEFAULT_EXCLUDES)
+
+
+def test_cli_check_ignores_added_fork_files_but_not_library_files(repo, capsys):
+    out = repo / "m.json"
+    am.main(["write", str(out), "--root", str(repo)])
+    _commit_files(repo, FORK_FILES)
+    assert am.main(["check", str(out), "--root", str(repo)]) == 0
+
+    _commit_files(repo, {"pkg/new.py": "n = 1\n"})
+    assert am.main(["check", str(out), "--root", str(repo)]) == 1
+    assert "added: pkg/new.py" in capsys.readouterr().out
+    # the extra prefix hides it
+    args = ["check", str(out), "--root", str(repo), "--exclude", "pkg/new"]
+    assert am.main(args) == 0
+
+
+def test_cli_check_ignores_fork_files_present_in_the_baseline(repo):
+    _commit_files(repo, FORK_FILES)
+    out = repo / "m.json"
+    # a baseline written by hand with a fork-only file in it
+    manifest = am.build_manifest(repo, exclude=())
+    assert "tools/helper.py" in manifest
+    out.write_text(json.dumps(manifest))
+    (repo / "tools" / "helper.py").unlink()
+    assert am.main(["check", str(out), "--root", str(repo)]) == 0

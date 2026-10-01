@@ -13,7 +13,7 @@ The torch backend is measured against TensorFlow numbers that are committed or r
 
 | File | What | Check |
 |---|---|---|
-| `ast_manifest.json` | sha256 of the AST of each tracked `.py` file (165) | `python tools/ast_manifest.py check baselines/ast_manifest.json` |
+| `ast_manifest.json` | sha256 of the AST of each tracked `.py` file (165; fork-only paths ignored) | `python tools/ast_manifest.py check baselines/ast_manifest.json` |
 | `outcomes_pd2.json`, `outcomes_pd3.json` (+ junit) | per-test outcomes of the full suite on pandas 2.3.3 and 3.0.3 | `python tools/junit_outcomes.py summarize junit.xml new.json --log pytest.log`, then `compare` |
 | `oracle_snapshot.npz` (git-ignored, 52 MB), `.meta.json` | TF float64 numerics of the three test yamls, 369 arrays | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
 

@@ -9,7 +9,11 @@ Usage::
 
     python tools/ast_manifest.py write baselines/ast_manifest.json [--rev REV]
     python tools/ast_manifest.py check baselines/ast_manifest.json \
-        [--rev REV] [--normalised]
+        [--rev REV] [--normalised] [--exclude PREFIX ...]
+
+Fork-only paths (``tools/``, ``baselines/``, ``tests_torch/``, ``tensorpotential/core/``
+and the other prefixes of ``check_pr_branch.py``) are always ignored, so the manifest of
+the untouched tree stays comparable as the fork adds files; ``--exclude`` adds prefixes.
 
 ``check`` exits with status 1 when a file was added, removed or changed. Without
 ``--rev`` the files are read from the working tree; with ``--rev`` they are read from
@@ -25,6 +29,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+
+from check_pr_branch import FORBIDDEN_PREFIXES
+
+# Fork-only paths are never part of the comparison: a baseline of the untouched
+# tree must not flag the files the fork adds. One list, shared with check_pr_branch.
+DEFAULT_EXCLUDES = FORBIDDEN_PREFIXES
 
 SYNTAX_ERROR = "SYNTAX_ERROR"
 
@@ -94,21 +104,33 @@ def _git(args: list[str], cwd: Path) -> str:
     return result.stdout
 
 
-def tracked_python_files(root: Path, rev: str | None = None) -> list[str]:
-    """Sorted paths of the tracked ``.py`` files, in the working tree or at ``rev``."""
+def tracked_python_files(
+    root: Path, rev: str | None = None, exclude: tuple[str, ...] = DEFAULT_EXCLUDES
+) -> list[str]:
+    """Sorted tracked ``.py`` paths, in the working tree or at ``rev``.
+
+    Paths starting with one of the ``exclude`` prefixes are left out.
+    """
     if rev is None:
         listing = _git(["ls-files", "*.py"], root)
     else:
         listing = _git(["ls-tree", "-r", "--name-only", rev], root)
-    return sorted(p for p in listing.splitlines() if p.endswith(".py"))
+    return sorted(
+        p
+        for p in listing.splitlines()
+        if p.endswith(".py") and not p.startswith(exclude)
+    )
 
 
 def build_manifest(
-    root: Path, rev: str | None = None, normalised: bool = False
+    root: Path,
+    rev: str | None = None,
+    normalised: bool = False,
+    exclude: tuple[str, ...] = DEFAULT_EXCLUDES,
 ) -> dict[str, str]:
-    """Map every tracked ``.py`` path to the hash of its AST."""
+    """Map every tracked ``.py`` path (minus ``exclude`` prefixes) to its AST hash."""
     manifest = {}
-    for path in tracked_python_files(root, rev):
+    for path in tracked_python_files(root, rev, exclude):
         if rev is None:
             source = (root / path).read_text(encoding="utf-8")
         else:
@@ -140,6 +162,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="ignore docstrings and annotations as well as comments",
     )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="PREFIX",
+        help="also ignore paths starting with PREFIX (repeatable); the fork-only "
+        "prefixes of check_pr_branch.py are always ignored",
+    )
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="repository root")
     return parser.parse_args(argv)
 
@@ -147,7 +177,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """Run the ``write`` or ``check`` command; return the process exit status."""
     args = _parse_args(argv)
-    actual = build_manifest(args.root, args.rev, args.normalised)
+    exclude = (*DEFAULT_EXCLUDES, *args.exclude)
+    actual = build_manifest(args.root, args.rev, args.normalised, exclude)
     if args.command == "write":
         args.manifest.parent.mkdir(parents=True, exist_ok=True)
         args.manifest.write_text(json.dumps(actual, indent=1, sort_keys=True) + "\n")
@@ -156,7 +187,11 @@ def main(argv: list[str] | None = None) -> int:
             f"{len(actual)} files written to {args.manifest}; syntax errors: {broken}\n"
         )
         return 0
-    expected = json.loads(args.manifest.read_text())
+    expected = {
+        path: digest
+        for path, digest in json.loads(args.manifest.read_text()).items()
+        if not path.startswith(exclude)
+    }
     diff = diff_manifests(expected, actual)
     for kind, paths in diff.items():
         for path in paths:

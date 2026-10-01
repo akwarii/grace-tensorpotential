@@ -5,7 +5,7 @@ numpy 2.5.3, ASE 3.29.0, Python 3.12.3). Stage 0 must leave all of this unchange
 
 | File | What | Check against it |
 |---|---|---|
-| `ast_manifest.json` | sha256 of the AST of each of the 165 tracked `.py` files | `python tools/ast_manifest.py check baselines/ast_manifest.json` |
+| `ast_manifest.json` | sha256 of the AST of each of the 165 tracked `.py` files of the untouched tree; fork-only paths (the prefixes of `tools/check_pr_branch.py`: `tools/`, `tests_torch/`, `tensorpotential/core/`, ...) are ignored in `check`, `--exclude PREFIX` adds more | `python tools/ast_manifest.py check baselines/ast_manifest.json` |
 | `junit_pd2.xml`, `outcomes_pd2.json` | full suite, pandas 2.3.3 | see below |
 | `junit_pd3.xml`, `outcomes_pd3.json` | full suite, pandas 3.0.3 | see below |
 | `oracle_snapshot.npz` (git-ignored, 52 MB) and `oracle_snapshot.meta.json` | TensorFlow numerics of the three test yamls | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
