@@ -61,7 +61,6 @@ def assert_tp_var(tensor, meta_data_df, check=True):
         print(h, ii)
         x = tensor[:, ii]
         x2 = np.mean(x**2)
-        # var = np.var(x)
         print("<x**2>=", x2, np.var(x))
         if check:
             assert np.abs(x2 - 1.0) < 1e-5
@@ -79,13 +78,10 @@ def test_radial_basis():
     assert baza.shape == (10, nfunc)
 
     nfunc = 10
-    # fake_bonds = np.random.normal(0, rcut, size=(100, 1))
-    # print(baza, np.var(baza, axis=1))
     fake_bonds = np.linspace(0, rcut, 100).reshape(-1, 1)
     basis = RadialBasis(
         bonds="fake_bonds",
         basis_type="Gaussian",
-        # basis_type="Cheb",
         nfunc=nfunc,
         rcut=rcut,
         p=16,
@@ -94,15 +90,12 @@ def test_radial_basis():
     )
     basis.build(float64)
     baza = basis.frwrd({"fake_bonds": fake_bonds})
-    # plt.plot(fake_bonds, baza)
-    # plt.show()
     print(np.var(baza, axis=0))
     assert baza.shape == (100, nfunc)
     print("=================================")
 
     nfunc = 10
     fake_bonds = np.linspace(0, rcut, 100).reshape(-1, 1)
-    # fake_bonds = np.random.uniform(0, rcut, size=(1000, 1))
     basis = RadialBasis(
         bonds="fake_bonds",
         basis_type="Cheb",
@@ -112,8 +105,6 @@ def test_radial_basis():
     )
     basis.build(float64)
     baza = basis.frwrd({"fake_bonds": fake_bonds})
-    # plt.plot(fake_bonds, baza)
-    # plt.show()
     assert baza.shape == (100, nfunc)
 
 
@@ -142,13 +133,11 @@ def test_mlp_function():
     n_rad_max = 22
     lmax = 2
 
-    # fake_bonds = np.linspace(0, rcut, 100).reshape(-1, 1)
     fake_bonds = np.random.uniform(0, rcut, size=(100_000, 1))
     data = {"fake_bonds": fake_bonds}
     basis = RadialBasis(
         name="base",
         bonds="fake_bonds",
-        # basis_type="Cheb",
         basis_type="RadSinBessel",
         p=5,
         nfunc=nfunc,
@@ -170,9 +159,7 @@ def test_mlp_function():
 
     data = rfunc(data)
     rf = data[rfunc.name].numpy()[:, :, [0, 1, 4]]
-    # print(rf)
     print(np.var(rf, axis=0))
-    # assert rf.shape == (10, n_rad_max, int((lmax + 1) ** 2))
 
 
 def test_bond_cut():
@@ -264,8 +251,6 @@ def test_bond_cut():
         mini = np.min((mui, muj))
         maxi = np.max((mui, muj))
         k = (inv_map[mini], inv_map[maxi])
-        # curr_cut = cutoff_dict.get(k, default_cut)
-        # k = f'{inv_map[mini]}{inv_map[maxi]}'
         curr_cut = cut_d.get(k, default_cut)
         print(f"({inv_map[mui]}, {inv_map[muj]}), [{curr_cut}] : {dd}, {bi}")
         assert bi != 0
@@ -343,7 +328,6 @@ def test_zbl(do_plot=False):
     d_ij = BondLength()
     zbl = ZBLPotential(
         bonds=d_ij,
-        # cutoff=rcut,
         cutoff={
             "Al": 1.0,
             "AlH": 3.5,
@@ -359,7 +343,6 @@ def test_zbl(do_plot=False):
     model.build(float64)
     calc = TPCalculator(model=model, cutoff=6)
     at = bulk("Al", cubic=True) * (2, 2, 2)
-    # at.rattle(stdev=0.01)
     at.calc = calc
     print(at.get_potential_energy())
 
@@ -411,7 +394,6 @@ def test_bond_spherical_harmonics():
 
 
 def test_product_function():
-    # size = 2
     size = 22
     lmax = 2
     fake_projections = np.random.normal(0, 1, size=(size, 3))
@@ -433,13 +415,9 @@ def test_product_function():
         Lmax=1,
         is_left_right_equal=True,
         keep_parity=[[0, 1], [1, -1], [1, 1], [2, -1], [2, 1]],
-        # keep_parity=[[2, -1], [2, 1]],
     )
     print_full(p.coupling_meta_data)
     print("-" * 200)
-    # p.build(float64)
-    # aa = p.frwrd(inpt_data)
-    # print(aa, aa.shape)
     pp = ProductFunction(
         left=p,
         right=Y,
@@ -465,7 +443,6 @@ def test_product_function():
     l1 = np.array(p.coupling_meta_data["l1"]).reshape(1, -1)
     l2 = np.array(p.coupling_meta_data["l2"]).reshape(1, -1)
     l_arr = np.array(p.coupling_meta_data["l"]).reshape(1, -1)
-    # print(np.concatenate([l_arr, l1, l2], axis=0).reshape(1, -1), len(l_arr))
     lll = np.ravel_multi_index(
         np.concatenate([l_arr, l1, l2], axis=0),
         [np.max(l_arr) + 1, np.max(l1) + 1, np.max(l2) + 1],
@@ -539,12 +516,7 @@ def test_avg_sg():
     c.rattle(stdev=0.1)
     ind_i, ind_j, bond_vector = neighbor_list("ijD", c, cutoff=cutoff)
     _, nn = np.unique(ind_i, return_counts=True)
-    # size = 10
     lmax = 4
-    # np.random.seed(322)
-    # fake_neighbors = np.random.normal(0, 3, size=(size, 3))
-    # fake_center = np.array([0, 0, 0]).reshape(1, -1)
-    # fake_bonds = fake_neighbors - fake_center
     tensor_dict = {
         constants.BOND_VECTOR: bond_vector,
         constants.BOND_IND_I: ind_i,
@@ -589,12 +561,7 @@ def test_fc_func():
     c.rattle(stdev=0.1)
     ind_i, ind_j, bond_vector = neighbor_list("ijD", c, cutoff=cutoff)
     _, nn = np.unique(ind_i, return_counts=True)
-    # size = 10
     lmax = 4
-    # np.random.seed(322)
-    # fake_neighbors = np.random.normal(0, 3, size=(size, 3))
-    # fake_center = np.array([0, 0, 0]).reshape(1, -1)
-    # fake_bonds = fake_neighbors - fake_center
     tensor_dict = {
         constants.BOND_VECTOR: bond_vector,
         constants.BOND_IND_I: ind_i,
@@ -621,11 +588,9 @@ def test_fc_func():
         name="AA",
         lmax=lmax,
         Lmax=1,
-        # keep_parity=[[0, 1], [1, -1], [1, 1], [2, 1], [2, -1], [3, 1], [3, -1]],
         keep_parity=[[0, 1], [1, -1], [2, 1], [3, -1]],
     )
     p.build(float64)
-    # print_full(p.coupling_meta_data)
     tensor_dict = p(tensor_dict)
     print(tensor_dict[p.name].numpy().shape, "P_SHAPE!!!!!!!!!!!")
     p_p = FCRight2Left(left=Y, right=p, n_out=1, name="p_p", norm_out=True)
@@ -731,7 +696,6 @@ def test_invar_collect():
     input_vectors = input_vectors / np.linalg.norm(input_vectors, axis=1, keepdims=True)
     assert np.allclose(rot.apply(input_vectors[0]), input_vectors[1])
     print("input_vectors=", input_vectors)
-    # input_vectors = rot.apply(input_vectors)
 
     Y = SphericalHarmonic(vhat="input_vectors", lmax=lmax, name="Y")
     Y.build(float64)
@@ -800,7 +764,6 @@ def test_rot_invar(norm):
     lmax_bond = 5
     n_rad_base = 8
     n_rad_max_bond = 5
-    # n_rad_max_out = 6
     cutoff_rad = 6.0
 
     np.random.seed(322)
@@ -820,7 +783,6 @@ def test_rot_invar(norm):
     indj = [1, 2, 0, 2, 0, 1, 4, 5, 3, 5, 3, 4]
     indi = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
     atomic_mu_i = [0, 1, 0, 0, 1, 0]
-    # muj = [0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0]
     muj = np.take(atomic_mu_i, indj, axis=0)
     rj = np.take(coord_2, indj, axis=0)
     ri = np.take(coord_2, indi, axis=0)
@@ -1072,12 +1034,9 @@ def test_LORA_FCRight2Left():
     c = bulk("C", "diamond", cubic=True)
     c.rattle(stdev=0.1)
     ind_i, ind_j, bond_vector = neighbor_list("ijD", c, cutoff=cutoff)
-    # size = 10
     lmax = 4
     n_out = 23
     np.random.seed(322)
-    # fake_neighbors = np.random.normal(0, 3, size=(size, 3))
-    # fake_center = np.array([0, 0, 0]).reshape(1, -1)
     tensor_dict = {
         constants.BOND_VECTOR: bond_vector,
         constants.BOND_IND_I: ind_i,
@@ -1096,8 +1055,6 @@ def test_LORA_FCRight2Left():
     Y.build(float64)
     Y.n_out = n_out
     tensor_dict = Y(tensor_dict)
-    #
-    # tensor_dict[Y.name] =  tensor_dict[Y.name][:, tf.newaxis, :]
     tensor_dict[Y.name] = tf.repeat(
         tensor_dict[Y.name][:, tf.newaxis, :], repeats=n_out, axis=1
     )
@@ -1407,7 +1364,6 @@ def test_rot_invar_2l(full_par):
     lmax_bond = 5
     n_rad_base = 8
     n_rad_max_bond = 5
-    # n_rad_max_out = 6
     cutoff_rad = 6.0
 
     np.random.seed(322)
@@ -1427,7 +1383,6 @@ def test_rot_invar_2l(full_par):
     indj = [1, 2, 0, 2, 0, 1, 4, 5, 3, 5, 3, 4]
     indi = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
     atomic_mu_i = [0, 1, 0, 0, 1, 0]
-    # muj = [0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0]
     muj = np.take(atomic_mu_i, indj, axis=0)
     rj = np.take(coord_2, indj, axis=0)
     ri = np.take(coord_2, indi, axis=0)
@@ -1443,11 +1398,7 @@ def test_rot_invar_2l(full_par):
     ###########################################################################################
     with InstructionManager() as instructor:
         d_ij = BondLength()
-        # d_ij.build(float64)
-        # inpt_dict = d_ij(inpt_dict)
         rhat = ScaledBondVector(bond_length=d_ij)
-        # rhat.build(float64)
-        # inpt_dict = rhat(inpt_dict)
         g_k = RadialBasis(
             bonds=d_ij,
             basis_type="SBessel",
@@ -1455,26 +1406,18 @@ def test_rot_invar_2l(full_par):
             rcut=cutoff_rad,
             p=5,
         )
-        # g_k.build(float64)
-        # inpt_dict = g_k(inpt_dict)
 
         R_nl = MLPRadialFunction(
             n_rad_max=n_rad_max_bond, lmax=lmax_bond, basis=g_k, name="R"
         )
-        # R_nl.build(float64)
-        # inpt_dict = R_nl(inpt_dict)
 
         Y = SphericalHarmonic(vhat=rhat, lmax=lmax_bond, name="Y")
-        # Y.build(float64)
-        # inpt_dict = Y(inpt_dict)
 
         z = ScalarChemicalEmbedding(
             element_map={"H": 0, "C": 1},
             embedding_size=54,
             name="Z",
         )
-        # z.build(float64)
-        # inpt_dict = z(inpt_dict)
 
         A = SingleParticleBasisFunctionScalarInd(
             radial=R_nl,
@@ -1482,9 +1425,6 @@ def test_rot_invar_2l(full_par):
             indicator=z,
             name="A",
         )
-        # A.build(float64)
-        # A.lin_transform.build(float64)
-        # inpt_dict = A(inpt_dict)
 
         AA = ProductFunction(
             left=A,
@@ -1494,8 +1434,6 @@ def test_rot_invar_2l(full_par):
             Lmax=lmax_bond,
             normalize=True,
         )
-        # AA.build(float64)
-        # inpt_dict = AA(inpt_dict)
 
         AAA = ProductFunction(
             left=AA,
@@ -1505,8 +1443,6 @@ def test_rot_invar_2l(full_par):
             Lmax=lmax_bond,
             normalize=True,
         )
-        # AAA.build(float64)
-        # inpt_dict = AAA(inpt_dict)
         instr_reduce_n = FunctionReduceN(
             instructions=[A, AA, AAA],
             name="E",
@@ -1516,8 +1452,6 @@ def test_rot_invar_2l(full_par):
             number_of_atom_types=2,
             allowed_l_p=Parity.REAL_PARITY,
         )
-        # I_l.build(float64)
-        # inpt_dict = I_l(inpt_dict)
         R1_nl = MLPRadialFunction(
             n_rad_max=n_rad_max_bond,
             lmax=lmax_bond,
@@ -1590,7 +1524,6 @@ def test_rot_invar_2l(full_par):
             instructions=[B, BB, BBB],
             name="E2",
             ls_max=[0, 0, 0],
-            # n_in=n_rad_max_bond,
             n_out=n_rad_max_bond,
             is_central_atom_type_dependent=True,
             number_of_atom_types=2,

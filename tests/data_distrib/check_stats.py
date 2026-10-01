@@ -61,8 +61,6 @@ for b in dds:
     tot_nneigh += n_neigh_real
     tot_nstruct += n_struct
 
-    # print(b["true_energy"])
-    # break
 
 print(f"{b_count=}")
 print(f"{tot_nstruct=}")

@@ -62,8 +62,6 @@ def test_compute_distributed_data_and_distrib_fit():
         check=True,
         shell=True,
         env=current_env,
-        # stderr=sys.stderr,
-        # stdout=sys.stdout,
     )
 
     test_metrics_path = prefix / DATA_DISTRIB / "seed" / "1" / "test_metrics.yaml"
@@ -95,4 +93,3 @@ def test_compute_distributed_data_and_distrib_fit():
         env=tf_config_env,
     )
     assert os.path.isfile(test_metrics_path)
-    # shutil.rmtree(seed_path)
