@@ -117,7 +117,7 @@ Rules for the text:
 
 - Run the Verify commands of the issue and go through the Definition of Done checklist in its body (every box ticked or marked not applicable): exit criterion met, touched units at 90% coverage **before** the
   change, new code covered with both test layers, `ruff`/`ty` clean on new code, import contracts green, docstrings, no commented-out code, single concern.
-- Run the tests that can catch a behaviour change (from `tests/`): the full suite with `-n 4 --dist load`, compared with `baselines/` through
+- Run the tests that can catch a behaviour change (from the repository root): the full suite with `-n 4 --dist load`, compared with `baselines/` through
   `tools/junit_outcomes.py compare`. Skipped suites are named, not reported as clean.
 - **A GPU- or HPC-marked issue needs that hardware.** State what ran where; never report GPU or real-weight results from a local CPU run.
 - **An issue is resolved only once its PR is merged into `torch-backend` on the fork** (the user merges). **Done** then requires the exit criterion to be met: `python tools/board.py done M0.2 "Verify output and numbers"` checks that no box is open, comments the
