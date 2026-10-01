@@ -719,8 +719,7 @@ def filled_pr_body(fake, capsys, ident="SAFE1"):
     text = text.replace("| | | |", "| tests | `pytest tools` | 40 passed |")
     for heading, content in (
         ("Unexpected findings", "none"),
-        ("Review focus", "the comparison tolerances"),
-        ("Risks and rollback", "revert the pull request"),
+        ("Review focus", "the comparison tolerances; revert the pull request to undo"),
     ):
         text = re.sub(
             rf"## {heading}\n\n", f"## {heading}\n\n{content}\n\n", text, count=1

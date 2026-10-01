@@ -21,8 +21,8 @@ stray `#N`, `@mentions`, or links into other repositories. Delete every comment 
 - Estimate: <n> focused days
 - Priority: <P0-P3> (score <n>); slack <n> days; <on|off> the critical path
 - Runs on: <local | HPC | GPU | user>
-- Needs from outside the repository: <the owner's go, a download (name, source, size), HPC, GPU, or nothing>
-- Upstream unit(s): <U-number, or none> (prepared locally as `pr/U*` branches; nothing is sent to ICAMS without a per-unit go)
+- Needs from outside the repository: <the owner's go, a download (name, source, size), HPC, GPU>   (omit the line if nothing)
+- Upstream unit(s): <U-number>   (omit the line if none; prepared locally as `pr/U*` branches, nothing is sent to ICAMS without a per-unit go)
 
 ## Work
 
@@ -44,13 +44,11 @@ stray `#N`, `@mentions`, or links into other repositories. Delete every comment 
 
 Tick each box as soon as a task of this issue satisfies it, with the evidence (`python tools/board.py check <id> <n> --note ...`); mark a box that cannot apply with `na` and a reason.
 
-- [ ] Exit criterion met, `Verify` output pasted in the PR
-- [ ] Every modified function or class was at 90% coverage or more **before** the change (tests committed first); `tools/check_touched_coverage.py` output pasted
-- [ ] New code covered at 90% or more, with logic tests and, where physics applies, tests on physical values from an independent oracle; planted mutants caught
-- [ ] `ruff` strict and `ty` clean on new code; legacy ratchet not risen; import-linter contracts green
-- [ ] Public API has docstrings; no commented-out code, no `print`, no TODO without an issue link; error messages actionable and tested
-- [ ] Diff is one concern within the size budget (about 400 lines without fixtures)
-- [ ] Release notes updated if user-visible; divergence ledger row if an upstream file changed
+- [ ] Exit criterion met (`Verify` output in the PR)
+- [ ] Every modified function or class was at 90% coverage or more **before** the change (tests committed first)
+- [ ] New code covered at 90% or more with logic tests and, where physics applies, physical-value tests from an independent oracle; planted mutants caught
+- [ ] Clean on new code: `ruff` strict, `ty`, import contracts, docstrings, no commented-out code, no `print`, no TODO without an issue link
+- [ ] One concern within the size budget (about 400 lines without fixtures); release notes or divergence-ledger row if it applies
 - [ ] A pull request referencing this issue (`Refs #<this issue>`) is merged into `torch-backend` (the issue is resolved only then; `board.py done` checks it and ticks this box)
 
 ---

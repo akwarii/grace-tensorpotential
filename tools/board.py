@@ -630,9 +630,7 @@ PR_SECTIONS = [
     "Evidence",
     "Unexpected findings",
     "Review focus",
-    "Risks and rollback",
     "Definition of Done",
-    "Checklist",
 ]
 
 

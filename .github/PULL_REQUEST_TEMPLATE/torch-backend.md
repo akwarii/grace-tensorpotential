@@ -32,19 +32,8 @@ Refs #<issue number>
 
 ## Review focus
 
-<!-- Where a reviewer should look hardest: the risky unit, the assertion that matters, the tolerance used. -->
-
-## Risks and rollback
-
-<!-- What could go wrong, and how to undo it (usually: revert this PR). -->
+<!-- Where a reviewer should look hardest (the risky unit, the assertion that matters, the tolerance used), what could go wrong, and how to undo it (usually: revert this PR). -->
 
 ## Definition of Done
 
 <!-- Copy the checklist of the issue; tick only what is ticked on the issue. -->
-
-## Checklist
-
-- [ ] Text sanitised (`python tools/board.py sanitise`): no personal data, local paths, e-mail addresses, stray `#N`, `@mentions` or links into other repositories
-- [ ] No fork-only path is meant for an upstream branch (`python tools/check_pr_branch.py` on `pr/U*` branches)
-- [ ] The diff is one concern and within the size budget (about 400 lines without fixtures), or the reason is stated above
-- [ ] The user reviews and merges
