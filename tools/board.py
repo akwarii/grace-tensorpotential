@@ -19,6 +19,7 @@ usage (from anywhere inside the repository):
                                                     integration branch of the fork (--waive-pr only when the user said so, e.g. for a gate)
     python tools/board.py pr-body ID                 print a pull-request description for ID from the fork's template, pre-filled (Refs, exit criterion, DoD state)
     python tools/board.py pr-check ID FILE          check a pull-request description against the rules (Refs #N, no Closes, sections filled, comments removed, sanitised)
+    python tools/board.py refresh                   write the "Blocked by" and "PR" columns of the project table (only the cells that changed)
     python tools/board.py lint                      find stale text in the issues (removed files, unknown ids, missing appendices, old counts, second person)
     python tools/board.py sanitise [FILE]           print FILE (or stdin) made safe for a public tracker; use it for any PR or issue text you write yourself
 
@@ -48,6 +49,8 @@ OWNER = REPO.split("/")[0]
 PROJECT_TITLE = "GRACE torch backend"
 STATUSES = ["Todo", "In Progress", "PR Open", "Done"]
 DOD_HEADING = "## Definition of Done"
+BLOCKED_FIELD = "Blocked by"  # text columns of the project table, written by `refresh`
+PR_FIELD = "PR"
 LEGACY_LINE = re.compile(r"^- Legacy id: (\S+)[ \t]*\n?", re.M)
 LEGACY_ID = re.compile(r"(?<![\w.])(?:M\d+\.\d+(?!\d)|G\d(?!\w))")
 
@@ -254,6 +257,92 @@ def set_status(item_id: str, status: str) -> None:
     print(f"{item_id}: Status -> {status}")
 
 
+SET_TEXT = (
+    "mutation($project: ID!, $item: ID!, $field: ID!, $text: String!) { updateProjectV2ItemFieldValue("
+    "input: {projectId: $project, itemId: $item, fieldId: $field, value: {text: $text}}) { clientMutationId } }"
+)
+CLEAR_FIELD = (
+    "mutation($project: ID!, $item: ID!, $field: ID!) { clearProjectV2ItemFieldValue("
+    "input: {projectId: $project, itemId: $item, fieldId: $field}) { clientMutationId } }"
+)
+
+
+def project_fields(number: str) -> dict[str, dict]:
+    fields = json.loads(
+        gh("project", "field-list", number, "--owner", OWNER, "--format", "json")
+    )["fields"]
+    return {f["name"]: f for f in fields}
+
+
+def item_key(field_name: str) -> str:
+    """The key `gh project item-list` uses for a field: only the first letter is lower-cased ("PR" -> "pR")."""
+    return field_name[:1].lower() + field_name[1:]
+
+
+def set_text_field(proj: str, item: str, field: str, text: str) -> None:
+    """Write (or, for an empty text, clear) a text cell of the project table."""
+    ids = ["-f", f"project={proj}", "-f", f"item={item}", "-f", f"field={field}"]
+    if text:
+        gh("api", "graphql", "-f", f"query={SET_TEXT}", *ids, "-f", f"text={text}")
+    else:
+        gh("api", "graphql", "-f", f"query={CLEAR_FIELD}", *ids)
+
+
+def pr_label(pr: dict) -> str:
+    if pr["mergedAt"]:
+        state = "merged"
+    elif pr["state"] == "OPEN":
+        state = "draft" if pr.get("isDraft") else "open"
+    else:
+        state = "closed"
+    return f"#{pr['number']} {state}"
+
+
+def link_columns(
+    info: dict, statuses_: dict[str, str], prs: list[dict]
+) -> dict[str, tuple[str, str]]:
+    """item id -> (open blockers, pull requests that reference it with `Refs #N`)."""
+    out = {}
+    for item_id, v in info.items():
+        if item_id not in statuses_:
+            continue
+        blocked = [d for d in v["needs"] if statuses_.get(d) != "Done"]
+        ref = re.compile(rf"\bRefs #{v['number']}(?!\d)")
+        mine = sorted(
+            (p for p in prs if ref.search(p["title"] + "\n" + (p["body"] or ""))),
+            key=lambda p: p["number"],
+        )
+        out[item_id] = (", ".join(blocked), ", ".join(pr_label(p) for p in mine))
+    return out
+
+
+def refresh_links(strict: bool = True) -> int:
+    """Write the Blocked by and PR columns for every item whose cell is out of date; returns the number of cells written."""
+    number, proj, _ = project()
+    fields = project_fields(number)
+    missing = [n for n in (BLOCKED_FIELD, PR_FIELD) if n not in fields]
+    if missing:
+        msg = f"project has no text column {missing}; create it (Text field) first"
+        if strict:
+            sys.exit(msg)
+        print(f"[refresh skipped: {msg}]", file=sys.stderr)
+        return 0
+    items = board_items(number)
+    info = issues()
+    sts = {k: v.get("status", "Todo") for k, v in items.items()}
+    written = 0
+    for item_id, (blocked, prs) in link_columns(info, sts, pull_requests()).items():
+        for name, key, value in (
+            (BLOCKED_FIELD, item_key(BLOCKED_FIELD), blocked),
+            (PR_FIELD, item_key(PR_FIELD), prs),
+        ):
+            if items[item_id].get(key, "") != value:
+                set_text_field(proj, items[item_id]["id"], fields[name]["id"], value)
+                written += 1
+    print(f"refresh: {written} cell(s) written")
+    return written
+
+
 def pull_requests(state: str = "all") -> list[dict]:
     return json.loads(
         gh(
@@ -266,7 +355,7 @@ def pull_requests(state: str = "all") -> list[dict]:
             "--limit",
             "300",
             "--json",
-            "number,title,body,baseRefName,mergedAt,state,url",
+            "number,title,body,baseRefName,mergedAt,state,url,isDraft",
         )
     )
 
@@ -444,6 +533,7 @@ def cmd_status(a) -> None:
                 f"No open pull request references #{info[i]['number']}. Open one (description: `Refs #{info[i]['number']}`) before setting PR Open."
             )
     set_status(i, a.status)
+    refresh_links(strict=False)
 
 
 def cmd_dod(a) -> None:
@@ -523,6 +613,11 @@ def cmd_done(a) -> None:
     set_status(i, "Done")
     gh("issue", "close", str(number), "--repo", REPO)
     print(f"{i} closed")
+    refresh_links(strict=False)
+
+
+def cmd_refresh(_a) -> None:
+    refresh_links()
 
 
 def cmd_sanitise(a) -> None:
@@ -597,6 +692,12 @@ def cmd_lint(_a) -> None:
                     )
         if DOD_HEADING in body and "merged into `torch-backend`" not in body:
             hard.append(f"{head}: Definition of Done lacks the merged-PR box")
+        for dep in v["needs"]:
+            a, b = re.fullmatch(r"([A-Z]+)(\d+)", dep), re.fullmatch(r"([A-Z]+)(\d+)", k)
+            if a and b and a[1] == b[1] and int(a[2]) > int(b[2]):
+                soft.append(
+                    f"{head}: depends on {dep}, which has a higher number in the same theme (numbers follow the dependency order)"
+                )
         if re.search(r"\b(?:76|79|82|85) (?:milestone|issues)\b", body):
             soft.append(f"{head}: an old issue or milestone count")
         if (
@@ -738,6 +839,7 @@ def main() -> None:
     s.add_argument("reason")
     s.set_defaults(fn=cmd_na)
     sub.add_parser("lint").set_defaults(fn=cmd_lint)
+    sub.add_parser("refresh").set_defaults(fn=cmd_refresh)
     s = sub.add_parser("pr-body")
     s.add_argument("id")
     s.set_defaults(fn=cmd_pr_body)

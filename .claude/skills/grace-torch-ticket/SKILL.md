@@ -12,8 +12,7 @@ the fork. Run it from the repository root.
 
 An issue id is a theme and a number, written as in the issue title: `SAFE1`, `CLEAN1`-`CLEAN4`, `DEPS1`, `TOOL1`, `AGENT1`, `QUAL1`-`QUAL2`, `CPU1`, `TEST1`-`TEST4` (Stage 0);
 `BOARD`, `SPEC`, `CORE`, `FIX`, `CI` (Stage 1); `TORCH`, `SH`, `RAD`, `DENSE`, `PLAN`, `ORACLE`, `NBR` (Stage 2); `TWIN`, `EXEC` (Stage 3); `MODEL` (4); `IO` (5); `EQUIV` (6);
-`SIM`, `DOC` (7); `PERF` (8); gates `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV`, `GATE-SIM`. Numbers restart in each theme; order comes from the dependency graph, not
-from the number. The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches
+`SIM`, `DOC` (7); `PERF` (8); gates `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV`, `GATE-SIM`. Numbers restart in each theme and follow the dependency order: an issue never depends on a higher number of its own theme (`lint` reminds you). A new issue takes the next free number, and an insertion in the middle renumbers the later ones only when nobody is working on them. The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches
 and pull requests keep using it, and `lint` reports it in issue text. Write the new id everywhere new.
 
 ## Session ritual
@@ -51,6 +50,11 @@ Issues go stale as the work moves: a file is renamed, a command changes, a count
 your change makes stale **in the same task**, not later, and run `python tools/board.py lint` before you finish; it reports removed files, unknown ids and
 issue numbers, appendices without a reference issue, old counts and second-person wording. Fix every `STALE` finding, also the ones you did not cause, and
 sanitise as you go (the helper does it for what it posts).
+
+## The project table
+
+The table view shows Status, Stage, Priority, **Blocked by** (dependencies that are not Done), **PR** (pull requests whose description has `Refs #<issue>`, with their state). GitHub's own "Linked pull requests" column stays empty: tested on this fork, neither a closing keyword (`Closes #N`) nor a linked branch links a pull request whose base is not the default branch (`master`), and our pull requests target `torch-backend`; hence the PR column. `board.py status` and `board.py done`
+refresh the two text columns by themselves; after anything else that changes them (a PR opened or closed, an issue created) run `python tools/board.py refresh` (it writes only the cells that changed).
 
 ## Keep the Definition of Done current
 
@@ -92,7 +96,7 @@ base:   torch-backend              (the integration branch on the fork; never ma
 New issues are created only when the user says so. Start from the fork's template, `.github/ISSUE_TEMPLATE/milestone.md` (fork only, never on a `pr/U*` branch): the same sections as the
 existing milestone issues plus **Out of scope** (binding) and **Decisions it depends on** (the decided outcomes inlined, so the issue needs no other reading), and the Definition of
 Done with the merged-PR box. The `Depends on` line names issue numbers (add the native "blocked by" relations), the Context lines carry the estimate and where it runs, and the text is
-sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority, Days, Kind), and run `python tools/board.py lint` afterwards.
+sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority, Days, Kind), and run `python tools/board.py refresh` and `python tools/board.py lint` afterwards.
 
 ## Writing the PR summary
 
