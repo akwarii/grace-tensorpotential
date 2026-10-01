@@ -1,0 +1,29 @@
+# Strict rule set for new code (D13, Appendix L). Nested config: it applies to every file below
+# this directory and adds to the legacy E, F set of the root pyproject.toml.
+extend = "../pyproject.toml"
+line-length = 88
+target-version = "py310"
+
+[lint]
+extend-select = [
+    "I", "UP", "B", "SIM", "C4", "RUF", "PD", "NPY", "PIE", "PLE", "PLW", "PERF", "RET", "PTH",
+    "T20", "ERA", "W",
+    "C90",     # complexity
+    "PLR0911", "PLR0912", "PLR0913", "PLR0915",  # returns, branches, arguments, statements
+    "D",       # numpy convention, public API
+    "BLE", "TRY", "S", "ARG", "A",
+    "TD", "FIX",  # a TODO must link an issue
+]
+# N806, N803, E741: physics names (l, L, R, ...). PLR2004: physics code has constants.
+extend-ignore = ["N806", "N803", "E741", "PLR2004", "D", "S101"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pylint]
+max-args = 6
+max-branches = 12
+max-statements = 50
+
+[lint.pydocstyle]
+convention = "numpy"
