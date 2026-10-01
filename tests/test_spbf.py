@@ -12,17 +12,11 @@ from tensorflow import float64
 
 from tensorpotential.instructions import (
     BondLength,
-    FunctionReduce,
     FunctionReduceN,
-    InstructionManager,
     ProductFunction,
     ScalarChemicalEmbedding,
     ScaledBondVector,
-    SingleParticleBasisFunctionScalarInd,
-    SingleParticleBasisFunctionEquivariantInd,
     SphericalHarmonic,
-    RadialBasis,
-    MLPRadialFunction_v2,
     SPBF,
 )
 from tensorpotential import constants

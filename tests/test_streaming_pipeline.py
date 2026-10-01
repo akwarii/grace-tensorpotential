@@ -189,7 +189,7 @@ class TestElasticBatchIterator:
                 buckets=shared_buckets,
                 growth_fraction=0.1,
             )
-            batches = list(elastic)
+            list(elastic)
             shared_buckets = elastic.buckets
 
         # After second iteration, buckets should be stable (no new ones added)

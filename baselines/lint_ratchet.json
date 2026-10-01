@@ -103,18 +103,11 @@
    "E702": 6,
    "ERA001": 2
   },
-  "tests/test_databuilder.py": {
-   "F401": 1
-  },
   "tests/test_export.py": {
    "ERA001": 1
   },
   "tests/test_fm_shift_auto.py": {
    "ERA001": 2
-  },
-  "tests/test_instructions.py": {
-   "F401": 3,
-   "F811": 6
   },
   "tests/test_integration_test.py": {
    "ERA001": 21
@@ -122,19 +115,8 @@
   "tests/test_loss_piecewise_linear.py": {
    "ERA001": 1
   },
-  "tests/test_spbf.py": {
-   "F401": 6
-  },
-  "tests/test_spbf_layout_opt.py": {
-   "F401": 5
-  },
-  "tests/test_streaming_pipeline.py": {
-   "F841": 1
-  },
   "tests/test_structured_grid.py": {
-   "E402": 1,
-   "F401": 7,
-   "F841": 2
+   "E402": 1
   },
   "tests/test_uq_thresholds.py": {
    "ERA001": 1

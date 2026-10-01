@@ -762,11 +762,8 @@ def test_grid_product_function_full_mode_mixed_input_rot_equivar(param_dtype, at
     np.random.seed(13)
     tf.random.set_seed(13)
     from tensorpotential.instructions.compute import (
-        BondLength, ScaledBondVector, SphericalHarmonic,
-        ScalarChemicalEmbedding, RadialBasis, MLPRadialFunction,
         SingleParticleBasisFunctionScalarInd,
     )
-    from scipy.spatial.transform import Rotation as _Rotation
     # Reuse the cluster + image setup from _build_grid_equivar_test_data.
     inpt_dict, A, d_ij, rhat, Y, z, lmax_bond, n_rad_max, rot = (
         _build_grid_equivar_test_data(dtype=param_dtype)
@@ -814,8 +811,6 @@ def test_grid_product_function_full_mode_mixed_input_rot_equivar(param_dtype, at
     B_tensor = inpt_dict[B.name].numpy()
     # Build the concatenated tensor in mix_cmd row order
     rows = []
-    nA = len(A.coupling_meta_data)
-    nB = len(B.coupling_meta_data)
     # Map (l, m, hist_clean, source) -> source row index
     A_index = {}
     for idx, row in A.coupling_meta_data.iterrows():

@@ -26,17 +26,12 @@ from tensorpotential.instructions import (
     FunctionReduce,
     GeneralProductFunction,
     ProductFunction,
-    ScalarChemicalEmbedding,
     SingleParticleBasisFunctionScalarInd,
     SingleParticleBasisFunctionEquivariantInd,
     RadialBasis,
     MLPRadialFunction_v2,
     SPBF,
-    BondLength,
-    ScaledBondVector,
-    SphericalHarmonic,
 )
-from tensorpotential import constants
 from tensorpotential.utils import Parity
 
 try:
