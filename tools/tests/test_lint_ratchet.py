@@ -9,6 +9,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -321,10 +322,10 @@ def test_versions_command_passes_when_everything_agrees(
 # --- consistency of the committed configuration ------------------------------------------------
 
 
-def _tomllib():
-    import tomllib
-
-    return tomllib
+def _tomllib() -> ModuleType:
+    return pytest.importorskip(
+        "tomllib"
+    )  # Python 3.11+; the supported floor of the tools is 3.10
 
 
 NEW_RULE_FILES = [
