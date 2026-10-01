@@ -1,6 +1,6 @@
 ---
 name: grace-torch-ticket
-description: Take a board issue (milestone M<stage>.<n> or gate G<n>) of the fork from Todo to Done - the session ritual, the board helper commands, recording unexpected findings, the PR into torch-backend, and the review gate. Use when starting, working on, or wrapping up any issue of the project board, and whenever you find something the issue did not predict.
+description: Take a board issue (a milestone such as CLEAN1 or TEST2, or a gate such as GATE-CLEAN) of the fork from Todo to Done - the session ritual, the board helper commands, recording unexpected findings, the PR into torch-backend, and the review gate. Use when starting, working on, or wrapping up any issue of the project board, and whenever you find something the issue did not predict.
 ---
 
 # grace-torch-ticket
@@ -8,14 +8,22 @@ description: Take a board issue (milestone M<stage>.<n> or gate G<n>) of the for
 Procedure for one issue. The rules it depends on are in `grace-torch`; read that first. The board helper is `tools/board.py`; it can only touch
 the fork. Run it from the repository root.
 
+## Ids
+
+An issue id is a theme and a number, written as in the issue title: `SAFE1`, `CLEAN1`-`CLEAN4`, `DEPS1`, `TOOL1`, `AGENT1`, `QUAL1`-`QUAL2`, `CPU1`, `TEST1`-`TEST4` (Stage 0);
+`BOARD`, `SPEC`, `CORE`, `FIX`, `CI` (Stage 1); `TORCH`, `SH`, `RAD`, `DENSE`, `PLAN`, `ORACLE`, `NBR` (Stage 2); `TWIN`, `EXEC` (Stage 3); `MODEL` (4); `IO` (5); `EQUIV` (6);
+`SIM`, `DOC` (7); `PERF` (8); gates `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV`, `GATE-SIM`. Numbers restart in each theme; order comes from the dependency graph, not
+from the number. The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches
+and pull requests keep using it, and `lint` reports it in issue text. Write the new id everywhere new.
+
 ## Session ritual
 
 1. **Pick.** `python tools/board.py next` lists issues whose hard dependencies are Done, best first. Take the one the user names if they name one.
-2. **Read the context.** `python tools/board.py context M0.2` prints the issue, its comments, and the comments of its hard dependencies. Earlier
+2. **Read the context.** `python tools/board.py context CLEAN1` prints the issue, its comments, and the comments of its hard dependencies. Earlier
    agents recorded what surprised them there. Then read the files the issue names.
 3. **Restate the exit criterion in your own words before writing any code.** If restating exposes an ambiguity, raise it on the issue
    (`finding`), not in the implementation.
-4. **Start.** `python tools/board.py start M0.2` moves Status from **Todo to In Progress** and comments. It refuses when a hard dependency is not Done;
+4. **Start.** `python tools/board.py start CLEAN1` moves Status from **Todo to In Progress** and comments. It refuses when a hard dependency is not Done;
    say so and stop rather than building on unfinished work (`--force` only if the user said so).
 
 ## Record unexpected findings at once
@@ -25,7 +33,7 @@ otherwise, a bug found on the way, a number that varies, a dependency that is mi
 in a final summary; a later agent will start from the issue.
 
 ```bash
-python tools/board.py finding M0.2 "what you saw; the command and the numbers; what it changes for later work" --also M1.9 G0
+python tools/board.py finding CLEAN1 "what you saw; the command and the numbers; what it changes for later work" --also FIX2 GATE-CLEAN
 ```
 
 Give the evidence (command, output, numbers), not only the conclusion, and name the later issues it affects with `--also`. Routine progress is not a
@@ -50,10 +58,10 @@ The issue body ends with a **Definition of Done** checklist. **Every time you fi
 evidence; do not leave the ticking to the end.
 
 ```bash
-python tools/board.py dod M0.2                                   # numbered checklist
-python tools/board.py check M0.2 1 4 --note "command and result"  # tick boxes 1 and 4, comment the evidence
-python tools/board.py na M0.2 7 "why it does not apply"           # a box that cannot apply is marked, never left blank
-python tools/board.py uncheck M0.2 4                              # if a later change invalidates it
+python tools/board.py dod CLEAN1                                   # numbered checklist
+python tools/board.py check CLEAN1 1 4 --note "command and result"  # tick boxes 1 and 4, comment the evidence
+python tools/board.py na CLEAN1 7 "why it does not apply"           # a box that cannot apply is marked, never left blank
+python tools/board.py uncheck CLEAN1 4                              # if a later change invalidates it
 ```
 
 Only tick what you verified in this session. `done` refuses while a box is open (`--waive "reason"` records an explicit exception on the issue).
@@ -61,14 +69,16 @@ Only tick what you verified in this session. `done` refuses while a box is open 
 ## One issue, one PR
 
 ```
-branch: <stage-id>-<slug>          e.g. m0-2-triage-table
+branch: <id>-<slug>                e.g. clean1-triage-table   (the id in lower case)
 base:   torch-backend              (the integration branch on the fork; never master, never ICAMS)
 ```
 
 - Open a draft PR only when the user tells you to; committing on the work branch and preparing and checking the description beforehand are allowed, merging is never yours. Its description contains `Refs #<issue number>` (not `Closes`: the issue is closed by `board.py done` after the merge) and the Verify
-  output and per-unit coverage. Then `python tools/board.py status M0.2 "PR Open"` (it refuses unless an open PR references the issue). Make sure your `torch-backend` is current first.
-- When you create the PR branch with `git worktree add -b <branch> <dir> origin/torch-backend`, run `git branch --unset-upstream` in it: git sets the upstream to `origin/torch-backend`,
-  and a plain `git push` would then try to update the integration branch itself instead of the PR branch.
+  output and per-unit coverage. Then `python tools/board.py status CLEAN1 "PR Open"` (it refuses unless an open PR references the issue). Make sure your `torch-backend` is current first.
+- **Work in your own worktree** (other agents may be running): `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` in it: git sets the upstream
+  to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. Do not use a tree that is not yours, and do not put two agents on one
+  issue (`board.py` rewrites the whole issue body when it ticks a box). **When the PR is merged** and `board.py done` has run, remove it: `git worktree remove ../<repository>-<id>` (no `--force`; a refusal
+  means uncommitted work, so report it), `git branch -d <branch>`; the remote branch stays unless the user says to delete it. `git worktree list` shows what is still around.
 - **The issue's scope is binding.** If it turns out bigger than its estimate, propose a split with a finding. Do not expand silently and do not fold in
   an unrelated fix you noticed. A tolerance change, regenerating a golden reference, or reformatting existing files is never part of a feature PR.
 - **Units that could be offered upstream** (non-breaking, not about PyTorch, no new dependency) are cut from `upstream/master` as `pr/U<n>-<slug>` so the
@@ -89,10 +99,10 @@ sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority,
 Pull requests into `torch-backend` use the fork's template, `.github/PULL_REQUEST_TEMPLATE/torch-backend.md`. Open one only when the user tells you to (preparing the description earlier is fine).
 
 ```bash
-python tools/board.py pr-body M0.2 > body.md      # template pre-filled: Refs, the exit criterion, the Definition of Done state
+python tools/board.py pr-body CLEAN1 > body.md      # template pre-filled: Refs, the exit criterion, the Definition of Done state
 # fill the sections, delete the comments
-python tools/board.py pr-check M0.2 body.md       # must report 0 problems
-gh pr create --repo akwarii/grace-tensorpotential --base torch-backend --draft --title "M0.2 — <issue title>" --body-file body.md
+python tools/board.py pr-check CLEAN1 body.md       # must report 0 problems
+gh pr create --repo akwarii/grace-tensorpotential --base torch-backend --draft --title "CLEAN1 — <issue title>" --body-file body.md
 ```
 
 Rules for the text:
@@ -120,5 +130,5 @@ Rules for the text:
 - Run the tests that can catch a behaviour change (from the repository root): the full suite with `-n 4 --dist load`, compared with `baselines/` through
   `tools/junit_outcomes.py compare`. Skipped suites are named, not reported as clean.
 - **A GPU- or HPC-marked issue needs that hardware.** State what ran where; never report GPU or real-weight results from a local CPU run.
-- **An issue is resolved only once its PR is merged into `torch-backend` on the fork** (the user merges). **Done** then requires the exit criterion to be met: `python tools/board.py done M0.2 "Verify output and numbers"` checks that no box is open, comments the
+- **An issue is resolved only once its PR is merged into `torch-backend` on the fork** (the user merges). **Done** then requires the exit criterion to be met: `python tools/board.py done CLEAN1 "Verify output and numbers"` checks that no box is open, comments the
   evidence, sets Done and closes the issue. A gate is closed only when its pass criterion is met.

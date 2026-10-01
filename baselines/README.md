@@ -1,7 +1,7 @@
-# Baselines of the untouched tree (M0.1)
+# Baselines of the untouched tree (SAFE1)
 
 Taken on 2026-09-30 from tag `pre-cleanup` (`cc1bb38`, upstream 0.6.1) on this machine (CPU, TensorFlow 2.20.0,
-numpy 2.5.3, ASE 3.29.0, Python 3.12.3). Stage 0 must leave all of this unchanged (gate G0).
+numpy 2.5.3, ASE 3.29.0, Python 3.12.3). Stage 0 must leave all of this unchanged (gate GATE-CLEAN).
 
 | File | What | Check against it |
 |---|---|---|
@@ -15,7 +15,7 @@ manifest covers 165.
 
 ## Suite baselines
 
-Run from inside `tests/` (the untouched tree depends on the working directory; since M0.9 the suite gives the same
+Run from inside `tests/` (the untouched tree depends on the working directory; since TEST1 the suite gives the same
 outcomes from the repository root, where the paths of the `--ignore` options below read `tests/<file>`), on a `git archive` copy of the tag, in a network-less
 namespace (`unshare -rn`), with `--ignore=test_structured_grid.py` (imports the non-existent `tensorpotential.experimental`)
 and `--ignore=test_foundation_model_regression.py` (needs foundation weights, HPC only), `-rxX`, pytest 9.1.1 as an overlay.
@@ -27,7 +27,7 @@ and `--ignore=test_foundation_model_regression.py` (needs foundation weights, HP
 
 The 27 failures on 3.0.3 are the `np.array_split(<DataFrame>)` break of `data/databuilder.py` (26 `IndexError`s in
 `test_integration_test` (19), `test_databuilder` (5), `test_bucketing_heuristic`, `test_gen_tensor_integration`) plus
-`test_distrib`, whose shell script runs `grace_preprocess`; M0.6 fixes them. `test_construct_batches_multiple_db` is an
+`test_distrib`, whose shell script runs `grace_preprocess`; DEPS1 fixes them. `test_construct_batches_multiple_db` is an
 XPASS on 2.3.3 and an XFAIL on 3.0.3. The six skips: three need the trained model `MoNbTaW-GRACE/seed/42` (not in the
 repository), two are marked "skip custom model" and one "Deprecated due to new API". The two XFAILs of
 `test_activate_reduce_*` are unconditional `xfail` marks (no reason given) and occur on both versions. Times are
