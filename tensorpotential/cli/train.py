@@ -491,7 +491,6 @@ def train_adam(
         if lr_scheduler is not None:
             callbacks.append(lr_scheduler)
         callback_list = CallbackList(callbacks)
-    # callback_list.on_train_begin()
 
     if group_similar_batches and strategy.num_replicas_in_sync > 1:
         n_group = strategy.num_replicas_in_sync

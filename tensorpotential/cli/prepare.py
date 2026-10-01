@@ -179,7 +179,6 @@ def convert_to_tensors_for_model(tp, train_data, test_data, strategy):
             train_batches.append(converted_batch)
             if (it + 1) % 100 == 0:
                 gc.collect()
-    # train_batches = tuple(train_batches)
     test_batches = None
     if test_data is not None:
         test_batches = []
@@ -198,7 +197,6 @@ def convert_to_tensors_for_model(tp, train_data, test_data, strategy):
                 if (it + 1) % 100 == 0:
                     gc.collect()
 
-        # test_batches = tuple(test_batches)
     return train_batches, test_batches
 
 
@@ -323,7 +321,6 @@ def build_loss_function(fit_config):
     extras = None
     if extra_loss_componens is not None:
         extras = []
-        # mod = importlib.import_module("tensorpotential.experimental.extra_losses")
         try:
             from tensorpotential.experimental import extra_losses
         except ModuleNotFoundError:
