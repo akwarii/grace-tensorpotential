@@ -57,9 +57,19 @@ count of mock uses before and after when you change a test file.
 
 ## Speed
 
-- Run the suite from the repository root (`pytest tests`; it also passes from inside `tests/`). Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 min instead of 32 min on 14 cores with the identical outcome.
-  Choose the worker count from memory (TF processes are large); `tests/conftest.py` gives each worker `cores / N` threads (`tests/thread_budget.py`, overridable by setting `TF_NUM_INTRAOP_THREADS`, `TF_NUM_INTEROP_THREADS` or `OMP_NUM_THREADS`).
+- Run the suite from the repository root (`pytest tests`; it also passes from inside `tests/`). Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 to 12 min instead of 32 min on 14 cores with the identical outcome (`--dist worksteal` was not faster).
+  Choose the worker count from memory (TF processes are large); the root `conftest.py` gives each worker `cores / N` threads before TensorFlow is first imported (`tests/thread_budget.py`; it must stay out of `tests/conftest.py`, where it would add E402 findings; overridable by setting `TF_NUM_INTRAOP_THREADS`, `TF_NUM_INTEROP_THREADS` or `OMP_NUM_THREADS`).
 - Tests must be safe in parallel: `tmp_path` or a per-worker directory for every file written, no test reads another test's output, no fixed ports.
+- **Check that nothing writes into the source tree** by running the suite on a read-only mount, not with `chmod -R a-w` (that makes `shutil.copy` and `copytree` copies read-only too, so tests that copy a fixture and edit it fail for the wrong reason):
+
+  ```bash
+  mkdir -p "$COPY"; git ls-files -co --exclude-standard -z | xargs -0 -I{} cp --parents {} "$COPY"/     # a copy of the tree, outside the repository
+  mkdir -p "$MNT"; unshare -rm bash -c "mount --bind $COPY $MNT && mount -o remount,ro,bind $MNT && cd $MNT && \
+      PATH=/path/to/.venv/bin:\$PATH PYTHONDONTWRITEBYTECODE=1 python -m pytest tests -q -n 4 -p no:cacheprovider"
+  ```
+
+  `/tmp` stays writable, so `tmp_path` works; `PATH` must hold the venv's `bin` (the tests call `gracemaker` and `grace_preprocess`); the copy is imported, not the editable install. Do not run `uv sync` for this (see the worktree rule in `CLAUDE.md`).
+- Wall times on this machine vary by up to 30% between identical runs (summed test time of the same tests: 1,392 s to 1,826 s), so compare timings only between runs made back to back with nothing else running, and say how many runs a number comes from. A test that only makes sense under xdist (it checks the worker environment) skips serially by design; mention that when comparing counts with a serial run.
 - Share real expensive objects (built models, prepared data, trained tiny models) through module- or session-scoped fixtures when tests only read them,
   with a check that they are not mutated. Merge training runs that differ only in what is asserted afterwards, keeping every assertion. Reduce work
   only where the assertion does not depend on it, and list each cut; never relax a tolerance for speed.
