@@ -332,7 +332,6 @@ def test_construct_batches_dense_layout_and_stats():
 
 
 def test_construct_batches_dense_matches_segment_real_counts():
-    import numpy as np
     from ase.build import bulk
 
     structs = [bulk("Cu", "fcc", a=3.6, cubic=True) * (2, 2, 2) for _ in range(3)]
