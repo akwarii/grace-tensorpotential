@@ -1,0 +1,295 @@
+{
+ "ruff": {
+  "examples/grace/visualize_metrics.ipynb": {
+   "F403": 1,
+   "F405": 3,
+   "F821": 2
+  },
+  "setup.py": {
+   "ERA001": 7
+  },
+  "tensorpotential/cli/gracemaker.py": {
+   "ERA001": 13
+  },
+  "tensorpotential/cli/train.py": {
+   "ERA001": 2
+  },
+  "tensorpotential/compat/pace/__init__.py": {
+   "F401": 6
+  },
+  "tensorpotential/compat/pace/fit.py": {
+   "E722": 3,
+   "ERA001": 14,
+   "F403": 1,
+   "F405": 5,
+   "F841": 1
+  },
+  "tensorpotential/compat/pace/fitmetrics.py": {
+   "E722": 1,
+   "ERA001": 1
+  },
+  "tensorpotential/compat/pace/functions/__init__.py": {
+   "F401": 2
+  },
+  "tensorpotential/compat/pace/functions/spherical_harmonics.py": {
+   "ERA001": 3,
+   "F841": 1
+  },
+  "tensorpotential/compat/pace/potentials/__init__.py": {
+   "F401": 1
+  },
+  "tensorpotential/compat/pace/potentials/ace.py": {
+   "ERA001": 4,
+   "F821": 1
+  },
+  "tensorpotential/compat/pace/tensorpot.py": {
+   "F403": 1,
+   "F405": 35,
+   "F841": 1
+  },
+  "tensorpotential/compat/pace/utils/tensorcalc.py": {
+   "E722": 1
+  },
+  "tensorpotential/compat/pace/utils/utilities.py": {
+   "E722": 3,
+   "ERA001": 1,
+   "F403": 1,
+   "F405": 25,
+   "F841": 1
+  },
+  "tensorpotential/extra/gen_tensor/ewald.py": {
+   "ERA001": 7
+  },
+  "tensorpotential/extra/gen_tensor/wizard.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/functions/couplings.py": {
+   "ERA001": 9
+  },
+  "tensorpotential/functions/nn.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/functions/radial.py": {
+   "ERA001": 9
+  },
+  "tensorpotential/instructions/compute.py": {
+   "ERA001": 8
+  },
+  "tensorpotential/loss.py": {
+   "ERA001": 9
+  },
+  "tensorpotential/potentials/presets.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/scripts/_kokkos_export.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/scripts/grace_preprocess.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/scripts/grace_utils.py": {
+   "ERA001": 7
+  },
+  "tensorpotential/tensorpot.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/tpmodel.py": {
+   "ERA001": 1
+  },
+  "tensorpotential/uq/cli/build/thresholds.py": {
+   "ERA001": 1
+  },
+  "tests/test_calculator.py": {
+   "E702": 6,
+   "ERA001": 2
+  },
+  "tests/test_databuilder.py": {
+   "F401": 1
+  },
+  "tests/test_export.py": {
+   "ERA001": 1
+  },
+  "tests/test_fm_shift_auto.py": {
+   "ERA001": 2
+  },
+  "tests/test_instructions.py": {
+   "F401": 3,
+   "F811": 6
+  },
+  "tests/test_integration_test.py": {
+   "ERA001": 21
+  },
+  "tests/test_loss_piecewise_linear.py": {
+   "ERA001": 1
+  },
+  "tests/test_spbf.py": {
+   "F401": 6
+  },
+  "tests/test_spbf_layout_opt.py": {
+   "F401": 5
+  },
+  "tests/test_streaming_pipeline.py": {
+   "F841": 1
+  },
+  "tests/test_structured_grid.py": {
+   "E402": 1,
+   "F401": 7,
+   "F841": 2
+  },
+  "tests/test_uq_thresholds.py": {
+   "ERA001": 1
+  }
+ },
+ "ty": {
+  "examples/grace/visualize_metrics.ipynb": {
+   "unresolved-reference": 3
+  },
+  "tensorpotential/calculator/asecalculator.py": {
+   "not-subscriptable": 2
+  },
+  "tensorpotential/calculator/foundation_models.py": {
+   "no-matching-overload": 1
+  },
+  "tensorpotential/cli/data.py": {
+   "invalid-assignment": 2,
+   "invalid-return-type": 1
+  },
+  "tensorpotential/cli/train.py": {
+   "not-iterable": 1
+  },
+  "tensorpotential/cli/train_callbacks.py": {
+   "invalid-assignment": 3
+  },
+  "tensorpotential/cli/wizard.py": {
+   "invalid-assignment": 2
+  },
+  "tensorpotential/compat/pace/fit.py": {
+   "invalid-assignment": 10
+  },
+  "tensorpotential/compat/pace/potentials/ace.py": {
+   "invalid-assignment": 1,
+   "not-subscriptable": 4,
+   "unknown-argument": 1,
+   "unresolved-reference": 1
+  },
+  "tensorpotential/data/databuilder.py": {
+   "invalid-assignment": 2,
+   "no-matching-overload": 1
+  },
+  "tensorpotential/data/dataset_plotter.py": {
+   "invalid-return-type": 1,
+   "no-matching-overload": 1,
+   "not-iterable": 1
+  },
+  "tensorpotential/data/dense_nbr.py": {
+   "not-subscriptable": 1
+  },
+  "tensorpotential/export.py": {
+   "invalid-assignment": 2,
+   "not-iterable": 1
+  },
+  "tensorpotential/extra/gen_tensor/loss.py": {
+   "invalid-method-override": 1
+  },
+  "tensorpotential/extra/gen_tensor/metrics.py": {
+   "not-subscriptable": 1
+  },
+  "tensorpotential/extra/gen_tensor/wizard.py": {
+   "invalid-assignment": 1
+  },
+  "tensorpotential/functions/couplings.py": {
+   "not-iterable": 4,
+   "unresolved-reference": 1
+  },
+  "tensorpotential/functions/nn.py": {
+   "invalid-return-type": 1,
+   "invalid-type-form": 1
+  },
+  "tensorpotential/instructions/base.py": {
+   "invalid-type-arguments": 1,
+   "invalid-type-form": 3,
+   "no-matching-overload": 1,
+   "not-iterable": 3
+  },
+  "tensorpotential/instructions/compute.py": {
+   "call-non-callable": 3,
+   "invalid-type-form": 2,
+   "no-matching-overload": 2,
+   "not-iterable": 2
+  },
+  "tensorpotential/instructions/output.py": {
+   "not-subscriptable": 2
+  },
+  "tensorpotential/loss.py": {
+   "invalid-method-override": 20
+  },
+  "tensorpotential/metrics.py": {
+   "invalid-type-form": 1,
+   "not-subscriptable": 3
+  },
+  "tensorpotential/scripts/grace_models.py": {
+   "no-matching-overload": 2
+  },
+  "tensorpotential/tensorpot.py": {
+   "invalid-type-form": 1,
+   "missing-argument": 3,
+   "no-matching-overload": 3
+  },
+  "tensorpotential/tpmodel.py": {
+   "invalid-type-form": 1
+  },
+  "tensorpotential/uq/artifact_builder.py": {
+   "invalid-assignment": 1,
+   "not-subscriptable": 1
+  },
+  "tensorpotential/uq/cli/_common.py": {
+   "invalid-return-type": 1
+  },
+  "tensorpotential/uq/cli/build/master.py": {
+   "no-matching-overload": 2
+  },
+  "tensorpotential/uq/cli/info.py": {
+   "not-subscriptable": 1
+  },
+  "tensorpotential/uq/cli/predict.py": {
+   "invalid-return-type": 1
+  },
+  "tensorpotential/uq/cli/select.py": {
+   "no-matching-overload": 1
+  },
+  "tensorpotential/utils.py": {
+   "invalid-method-override": 1,
+   "not-subscriptable": 1
+  },
+  "tests/MoNbTaW-CUSTOM/model.py": {
+   "invalid-method-override": 1
+  },
+  "tests/test_calculator.py": {
+   "missing-argument": 2
+  },
+  "tests/test_graph_split.py": {
+   "missing-argument": 1
+  },
+  "tests/test_instructions.py": {
+   "not-iterable": 6,
+   "not-subscriptable": 4
+  },
+  "tests/test_origin_sidecar.py": {
+   "not-subscriptable": 5
+  },
+  "tests/test_uq_cli.py": {
+   "call-non-callable": 2
+  },
+  "tests/test_uq_features.py": {
+   "not-subscriptable": 3
+  },
+  "tests/test_uq_integration.py": {
+   "missing-argument": 1,
+   "not-subscriptable": 3
+  }
+ },
+ "versions": {
+  "ruff": "0.16.7",
+  "ty": "0.0.84"
+ }
+}

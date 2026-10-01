@@ -17,17 +17,20 @@ user and an issue disagree, ask.
 
 ```bash
 # Environment (creates .venv from uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
-uv sync
+uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty
 
 # Tests: run from the repository root (they do not depend on the working directory and write nothing into the tree)
-uv run --frozen --no-sync --with pytest --with pytest-xdist pytest tests -q -n 4 --dist load \
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
-uv run --frozen --no-sync --with pytest pytest tests/test_instructions.py -vv      # one file, serial
+uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
 
-# Lint / format / types (versions pinned: ruff 0.16.7; ty is pre-1.0)
-uvx ruff@0.16.7 check path/to/file.py
-uvx ruff@0.16.7 format --preview path/to/new_file.py      # NEW files only, never reformat existing files
-uv tool run ty check path/to/new_package
+# Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
+uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
+uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
+uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
+uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise
+uv run --frozen --no-sync python tools/lint_ratchet.py record   # after a drop: records the lower baseline (a rise needs --allow-rise)
+prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Compare against the untouched-tree baselines (see baselines/README.md)
 python tools/ast_manifest.py check baselines/ast_manifest.json
@@ -47,8 +50,8 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
   is an issue whose job is to change legacy code (clean-up, code quality, deduplication, packaging, performance): it says what may change and how,
   and the coverage and comparison rules below then govern the change. Do not widen the change beyond what the issue names.
 - New packages get the strict ruff set (I, UP, B, SIM, C4, RUF, PD, NPY, PIE, PLE, PLW, PERF, RET, PTH, T20, ERA, W and the
-  complexity, docstring, exception and security families) through a nested `ruff.toml` **inside the new package only**, never in `tensorpotential/`
-  itself (a nested config applies to every file below its directory).
+  complexity, docstring, exception and security families) through the **single ruff configuration in `pyproject.toml`** (no `ruff.toml` anywhere: the strict families are
+  selected for the whole repository and switched off by `per-file-ignores` for everything outside the new packages, which are listed there and in `tools/lint_ratchet.py`).
 - Docstrings on new public API use the numpy convention. No commented-out code, no `print` in library code (use `logging.getLogger(__name__)`),
   no bare `except`, no `TODO` without an issue link, no mutable or shared default arguments.
 - Small functions (complexity at most 10, at most 6 arguments). Prefer pure functions and frozen dataclasses for specifications. Errors are
@@ -104,6 +107,8 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   be read by pandas 2.
 - TF numerics are not bit-reproducible across processes: some float64 intermediates (`large_base`: `YI`, `B`, `BB`, ...) differ by about one ulp
   between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
+- A worktree has no `.venv` (git-ignored): link `.venv` and `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable `tensorpotential`
+  install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout). `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
 - Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
   `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
 - The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.

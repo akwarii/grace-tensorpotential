@@ -51,9 +51,75 @@ grace_utils = "tensorpotential.scripts.grace_utils:main"
 grace_uq = "tensorpotential.scripts.grace_uq:main"
 grace_dashboard = "tensorpotential.scripts.grace_dashboard:main"
 
+[tool.ruff]
+# One ruff configuration for the whole repository (D13). The strict set of the new packages is selected
+# below and switched off for everything else by per-file-ignores, so legacy code is checked as before
+# (E, F, plus ERA001 which tools/lint_ratchet.py keeps from rising). Add a new package to the NEW_PACKAGES
+# glob and to NEW_PACKAGES in tools/lint_ratchet.py.
+per-file-target-version = { "{tensorpotential/torch_backend,tensorpotential/core,tests_torch}/**" = "py310" }
+
 [tool.ruff.lint]
-select = ["E", "F"]
+select = [
+    "E", "F",
+    "I", "UP", "B", "SIM", "C4", "RUF", "PD", "NPY", "PIE", "PLE", "PLW", "PERF", "RET", "PTH",
+    "T20", "ERA", "W",
+    "C90",     # complexity
+    "PLR0911", "PLR0912", "PLR0913", "PLR0915",  # returns, branches, arguments, statements
+    "D",       # numpy convention, public API
+    "BLE", "TRY", "S", "ARG", "A",
+    "TD", "FIX",  # a TODO must link an issue
+]
 # E501: line length is handled by the formatter, not enforced here.
-# E741: `l` is the angular-momentum quantum number throughout the codebase
-# (spherical harmonics, lmax, ...); it is a deliberate, standard physics name.
-ignore = ["E501", "E741"]
+# E741, N806, N803: `l` is the angular-momentum quantum number throughout the codebase
+# (spherical harmonics, lmax, ...); physics names are deliberate. PLR2004: physics code has constants.
+ignore = ["E501", "E741", "N806", "N803", "PLR2004"]
+
+[tool.ruff.lint.per-file-ignores]
+# Everything outside the new packages: the strict families are off (E, F and ERA001 stay on).
+"!{tensorpotential/torch_backend,tensorpotential/core,tests_torch}/**" = [
+    "I", "UP", "B", "SIM", "C4", "RUF", "PD", "NPY", "PIE", "PLE", "PLW", "PERF", "RET", "PTH",
+    "T20", "W", "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "D", "BLE", "TRY", "S", "ARG",
+    "A", "TD", "FIX",
+]
+# New tests: no docstrings, plain asserts.
+"tests_torch/**" = ["D", "S101"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-branches = 12
+max-statements = 50
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "ruff==0.16.7",
+    "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
+]
+
+# Lint and type ratchet (D13). tools/lint_ratchet.py keeps the legacy ruff and ty counts from rising
+# (baselines/lint_ratchet.json); the new packages must have no finding.
+[tool.ty.environment]
+python = "./.venv"
+
+[[tool.ty.overrides]]
+include = ["tensorpotential/**", "tests/**"]
+exclude = ["tensorpotential/torch_backend/**", "tensorpotential/core/**"]
+
+[tool.ty.overrides.rules]
+invalid-parameter-default = "ignore"
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+unsupported-operator = "ignore"
+
+[tool.coverage.run]
+branch = true
+source = ["tensorpotential"]
+# fail_under is set per package in CI (M2.1)
