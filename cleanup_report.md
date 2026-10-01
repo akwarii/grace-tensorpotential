@@ -151,6 +151,8 @@ Measured on 2026-10-01 and 2026-10-02 on the TEST2 branch (CPU, 14 cores, 30 GB,
 | 4 (run 2) | 3 | 11 min 38 s | 6.7 GB | 16.1 GB | identical |
 | 4 (run 3) | 3 | 11 min 54 s | 6.6 GB | 16.9 GB | identical |
 | 4 (run 4, idle machine) | 3 | 9 min 37 s | 6.7 GB | 17.9 GB | identical |
+| 4 (run 5, idle machine) | 3 | 10 min 25 s | 6.6 GB | 17.2 GB | identical |
+| 4 (run 6, idle machine) | 3 | 11 min 53 s | 5.8 GB | 16.4 GB | identical |
 | 4, `--dist worksteal` (idle machine) | 3 | 10 min 18 s | 6.7 GB | 20.1 GB | identical |
 | 6 | 2 | 10 min 08 s | 5.5 GB | 18.3 GB | identical |
 | 8 | 1 | 13 min 09 s | 5.0 GB | 19.5 GB | identical |
@@ -159,7 +161,7 @@ Every run: 709 passed, 6 skipped, 2 xfailed, 1 xpassed, 0 failed (710 passed in 
 
 Reading of the numbers:
 
-- **The target of a third of the serial time (10 min 46 s) is met by N = 4 on an idle machine (9 min 37 s; 9 min 58 s in the run before the restart) and by N = 6 (10 min 08 s, with other applications running).** The three consecutive N = 4 runs made while other applications held 9 to 11 GB took 11 min 38 s to 11 min 54 s, one minute above the target, so the target depends on the machine being quiet. Only these two N = 4 runs were made on an idle machine, not three in a row.
+- **The target of a third of the serial time (10 min 46 s) is not met reliably at N = 4.** Three consecutive runs on a machine with nothing else running took 9 min 37 s, 10 min 25 s and 11 min 53 s (the last is 1 min 07 s above the target); a run before the restart took 9 min 58 s, and three runs made with other applications running took 11 min 38 s to 11 min 54 s. The spread is in the tests, not in the scheduling: the summed test time of the three idle runs was 1,392 s, 1,826 s and 1,556 s for the same tests (the longest, `test_compute_distributed_data_and_distrib_fit`, took 205 s, 246 s and 243 s), so the machine itself varies by up to 30% from run to run; the cause (clock speed, memory pressure, background processes) was not isolated. N = 6 took 10 min 08 s once (other applications running); it was not repeated.
 - N = 8 is slower than N = 6. At N = 8 the system came within 1.5 GB of the 30 GB (peak 28.7 GB used, which includes about 9 GB of other applications), so memory pressure is the probable cause; not verified.
 - Per-test durations were not analysed for these runs. The earlier profile (28 tests of 20 s or more hold 1,517 s of 1,939 s; the two longest take 243 s and 189 s) means the wall time cannot fall below about 4 min whatever N is.
 - Memory: a worker is large (the single largest process peaked at 5 to 10 GB); N = 6 is the highest count that leaves headroom on this machine.
@@ -168,7 +170,7 @@ Reading of the numbers:
 
 **`--dist worksteal` against `load`** (N = 4, back to back on an idle machine, same tree): `worksteal` 10 min 18 s, `load` 9 min 37 s, identical outcomes. One pair of runs, so a 41 s difference is not conclusive, but `worksteal` is not faster, and `--dist load` stays the documented option.
 
-**Not measured** (open points of the exit criterion): coverage for the full suite, including the three excluded files (they are the longest tests and the only ones that start subprocesses); the effect of the thread budget alone (the default of all threads per worker was not timed on the read-only mount). The earlier timings were taken while other work ran on the machine, so differences of a minute are within the noise.
+**Not measured:** coverage for the full suite, including the three excluded files (they are the longest tests and the only ones that start subprocesses). By decision of the owner (2026-10-02) the exit criterion of TEST2 is limited to the subset above, and TEST3 checks the full suite once when it records its coverage baseline; the effect of the thread budget alone (the default of all threads per worker was not timed on the read-only mount). The earlier timings were taken while other work ran on the machine, so differences of a minute are within the noise.
 
 **Write audit.** The first read-only run found one write into the working directory: `test_graph_split.py::TestGraphSplitSaveReload::test_split_model_save_reload` saved `temp_saved_model_test` there (now `tmp_path`). `chmod -R a-w` is not a valid way to make the tree read-only for this check: `shutil.copy` and `copytree` propagate the mode and then fail on the copy; a read-only bind mount does not.
 
