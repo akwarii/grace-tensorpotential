@@ -26,7 +26,8 @@ Everything this script posts is sanitised first (the repository is public): bare
 code spans, links to other repositories' issues and pull requests, absolute local paths and e-mail addresses are neutralised, and the private terms
 listed in `<git-dir>/board-private-terms.txt` (lines `term => replacement`, never committed) are replaced. A notice says what was changed.
 
-ID is a milestone or gate id such as M0.2 or G0 (or Decisions). The target repository is the fork below (override with the environment
+ID is a milestone or gate id such as CLEAN1 or GATE-CLEAN (or Decisions); the legacy ids of the first numbering (M0.2, G0, ...) are still accepted
+and resolve to the new id (each issue carries a `- Legacy id:` line). The target repository is the fork below (override with the environment
 variable BOARD_REPO); any ICAMS repository is refused. The project is found by its title.
 """
 
@@ -47,6 +48,8 @@ OWNER = REPO.split("/")[0]
 PROJECT_TITLE = "GRACE torch backend"
 STATUSES = ["Todo", "In Progress", "PR Open", "Done"]
 DOD_HEADING = "## Definition of Done"
+LEGACY_LINE = re.compile(r"^- Legacy id: (\S+)[ \t]*\n?", re.M)
+LEGACY_ID = re.compile(r"(?<![\w.])(?:M\d+\.\d+(?!\d)|G\d(?!\w))")
 
 if REPO.lower().startswith("icams/"):
     sys.exit("refusing to act on an ICAMS repository")
@@ -169,16 +172,30 @@ def issues() -> dict[str, dict]:
             else []
         )
         s = re.search(r"Priority: P\d \(score (\d+)\)", x["body"])
+        legacy = LEGACY_LINE.search(x["body"])
         out[by_num[x["number"]]] = {
             **x,
             "needs": needs,
             "score": int(s.group(1)) if s else 0,
+            "legacy": legacy.group(1) if legacy else None,
         }
     return out
 
 
 def resolve(item_id: str, known: dict[str, dict]) -> str:
+    """The id of the issue named by `item_id` (case-insensitive); a legacy id (M0.2, G0, ...) resolves to its new id."""
     wanted = next((k for k in known if k.lower() == item_id.lower()), None)
+    if wanted is None:
+        wanted = next(
+            (
+                k
+                for k, v in known.items()
+                if (v.get("legacy") or "").lower() == item_id.lower()
+            ),
+            None,
+        )
+        if wanted is not None:
+            print(f"[{item_id} is now {wanted}]", file=sys.stderr)
     if wanted is None:
         sys.exit(
             f"unknown id {item_id}; known examples: {', '.join(sorted(known)[:8])} ..."
@@ -524,6 +541,18 @@ REMOVED = (
 )
 
 
+def id_reference_pattern(ids: set[str]) -> re.Pattern:
+    """Pattern for references to ids of the current scheme (PREFIX1 .. PREFIX99, GATE-NAME), built from the prefixes in use.
+
+    One or two digits only: ruff codes (SIM102, PERF401, FIX001) share some prefixes but have three.
+    """
+    prefixes = sorted({m.group(0) for k in ids if (m := re.match(r"[A-Z]+(?=\d)", k))})
+    parts = [r"GATE-[A-Z]+\b"]
+    if prefixes:
+        parts.append(rf"(?:{'|'.join(prefixes)})\d{{1,2}}(?!\d)")
+    return re.compile(rf"(?<!\w)(?:{'|'.join(parts)})")
+
+
 def cmd_lint(_a) -> None:
     """Report stale text in issue bodies. Hard findings should be fixed in the same task that made them stale."""
     info = issues()
@@ -531,13 +560,21 @@ def cmd_lint(_a) -> None:
     appendices = {k.split()[1] for k in ids if k.startswith("Appendix ")}
     hard: list[str] = []
     soft: list[str] = []
+    legacy = {v["legacy"]: k for k, v in info.items() if v.get("legacy")}
+    new_ref = id_reference_pattern(ids)
     for k, v in info.items():
         body = v["body"]
         head = f"{k} (#{v['number']})"
+        text = LEGACY_LINE.sub("", body)
         for token in REMOVED:
             if token in body:
                 hard.append(f"{head}: mentions removed `{token}`")
-        for ref in set(re.findall(r"\b(?:M\d+\.\d+|G\d)\b", body)):
+        for ref in set(LEGACY_ID.findall(text)):
+            if ref in legacy:
+                hard.append(f"{head}: uses the legacy id {ref}; write {legacy[ref]}")
+            else:
+                hard.append(f"{head}: refers to unknown id {ref}")
+        for ref in set(new_ref.findall(text)):
             if ref not in ids:
                 hard.append(f"{head}: refers to unknown id {ref}")
         for a in set(re.findall(r"Appendix ([A-L])\b", body)):
