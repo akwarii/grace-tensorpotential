@@ -15,7 +15,8 @@ manifest covers 165.
 
 ## Suite baselines
 
-Run from inside `tests/` (several tests use relative paths), on a `git archive` copy of the tag, in a network-less
+Run from inside `tests/` (the untouched tree depends on the working directory; since M0.9 the suite gives the same
+outcomes from the repository root, where the paths of the `--ignore` options below read `tests/<file>`), on a `git archive` copy of the tag, in a network-less
 namespace (`unshare -rn`), with `--ignore=test_structured_grid.py` (imports the non-existent `tensorpotential.experimental`)
 and `--ignore=test_foundation_model_regression.py` (needs foundation weights, HPC only), `-rxX`, pytest 9.1.1 as an overlay.
 

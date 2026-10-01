@@ -17,7 +17,7 @@ The torch backend is measured against TensorFlow numbers that are committed or r
 | `outcomes_pd2.json`, `outcomes_pd3.json` (+ junit) | per-test outcomes of the full suite on pandas 2.3.3 and 3.0.3 | `python tools/junit_outcomes.py summarize junit.xml new.json --log pytest.log`, then `compare` |
 | `oracle_snapshot.npz` (git-ignored, 52 MB), `.meta.json` | TF float64 numerics of the three test yamls, 369 arrays | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
 
-Use the same `--ignore` list as the baseline (`test_structured_grid.py`, `test_foundation_model_regression.py`) when comparing counts: an unfiltered run
+Use the same `--ignore` list as the baseline (`tests/test_structured_grid.py`, `tests/test_foundation_model_regression.py`) when comparing counts: an unfiltered run
 reports more skips. Pass the pytest log to `summarize`, otherwise an XPASS reads as a pass.
 
 Golden fixtures for the twins (TF-generated, random weights, fp64 and fp32, every instruction output, index tables, energies, forces, virial, stress, a manifest of

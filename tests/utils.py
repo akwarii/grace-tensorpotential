@@ -1,5 +1,6 @@
 import os
 import shutil
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -70,11 +71,6 @@ def print_full(x):
 
 
 test_location_folder = Path(__file__).parent.resolve()
-keep_only = [
-    "input.yaml",
-    "model.py",
-]
-keep_only_after = keep_only + ["log.txt"]
 
 
 def general_integration_test(
@@ -90,31 +86,17 @@ def general_integration_test(
     abs=None,
     top_folder=None,
 ):
-    print(f"Current folder: {os.getcwd()}")
     many_runs = many_runs or [[input]]
     ref_n_epochs = ref_n_epochs + len(many_runs) * ref_n_init_epoch
-    if top_folder is not None:
-        prefix = top_folder
-    else:
-        prefix = test_location_folder
+    prefix = test_location_folder if top_folder is None else top_folder
     path = str(prefix / folder)
-    inp_fname = ""
-    for arg in many_runs:
-        inp_fname = inp_fname + "_" + arg[0].split(".")[0]
-    tmp_path = str(prefix / ("tmp__" + folder + "_" + inp_fname))
 
-    print(f"Temp path: {tmp_path}")
-    if os.path.isdir(tmp_path):
-        shutil.rmtree(tmp_path)
+    with isolated_run_dir(prefix / "data") as tmp_path, change_directory(tmp_path):
+        for arg in many_runs:
+            src, dst = os.path.join(path, arg[0]), os.path.join(tmp_path, arg[0])
+            print(f"Copying {src} to {dst}")
+            shutil.copy(src, dst)
 
-    os.makedirs(tmp_path, exist_ok=True)
-
-    for arg in many_runs:
-        src, dst = os.path.join(path, arg[0]), os.path.join(tmp_path, arg[0])
-        print(f"Copying {src} to {dst}")
-        shutil.copy(src, dst)
-
-    with change_directory(tmp_path):
         for inp in many_runs:
             main(inp)
         train_metrics = load_metrics(f"seed/{seed}/train_metrics.yaml")
@@ -146,10 +128,28 @@ def general_integration_test(
             abs=abs,
         )
 
-        if os.path.isdir(tmp_path):
-            shutil.rmtree(tmp_path)
 
-    clean_folder_except(path=path, keep_only=keep_only_after)
+@contextmanager
+def isolated_run_dir(data_dir):
+    """
+    Context manager yielding an empty scratch directory for one training run.
+
+    The input files of the integration tests refer to their data as
+    ``../data/<file>``. The scratch directory is therefore created next to a
+    ``data`` symlink to ``data_dir``, so those relative paths resolve while
+    nothing is written into the source tree. The whole tree is removed on exit,
+    also when the test fails.
+
+    Parameters:
+        data_dir (Path): The folder holding the datasets (``tests/data``).
+    """
+    with tempfile.TemporaryDirectory(prefix="grace_test_") as root:
+        Path(root, "data").symlink_to(
+            Path(data_dir).resolve(), target_is_directory=True
+        )
+        run_dir = Path(root, "run")
+        run_dir.mkdir()
+        yield run_dir
 
 
 @contextmanager
@@ -169,37 +169,6 @@ def change_directory(new_path):
     finally:
         # Change back to the original directory
         os.chdir(original_path)
-
-
-def clean_folder_except(path, keep_only):
-    """
-    Removes all files and folders in the specified folder except for those whose names are in the keep_only list.
-
-    Parameters:
-        path (str): The path to the folder to clean.
-        keep_only (list): A list of file and folder names to keep.
-    """
-    # Iterate over all files and folders in the specified folder
-    for item in os.listdir(path):
-        item_path = os.path.join(path, item)
-
-        # Check if the item should be kept
-        if "model" in item and ".py" in item:
-            continue
-        elif "input" in item and ".yaml" in item:
-            continue
-        elif item not in keep_only:
-            # Check if the item is a file or a symbolic link
-            if (
-                os.path.isfile(item_path)
-                or os.path.islink(item_path)
-                and not item_path.startswith("input")
-            ):
-                # Remove the file
-                os.remove(item_path)
-            elif os.path.isdir(item_path):
-                # Remove the folder and its contents
-                shutil.rmtree(item_path)
 
 
 def _compare_metrics(

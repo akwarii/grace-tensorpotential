@@ -57,7 +57,7 @@ count of mock uses before and after when you change a test file.
 
 ## Speed
 
-- Run the suite from inside `tests/`. Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 min instead of 32 min on 14 cores with the identical outcome.
+- Run the suite from the repository root (`pytest tests`; it also passes from inside `tests/`). Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 min instead of 32 min on 14 cores with the identical outcome.
   Choose the worker count from memory (TF processes are large) and give each worker `cores / N` threads.
 - Tests must be safe in parallel: `tmp_path` or a per-worker directory for every file written, no test reads another test's output, no fixed ports.
 - Share real expensive objects (built models, prepared data, trained tiny models) through module- or session-scoped fixtures when tests only read them,

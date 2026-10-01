@@ -19,11 +19,10 @@ user and an issue disagree, ask.
 # Environment (creates .venv from uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
 uv sync
 
-# Tests: ALWAYS run from inside tests/ (several tests use relative paths)
-cd tests
-uv run --frozen --no-sync --with pytest --with pytest-xdist pytest -q -n 4 --dist load \
-    --ignore=test_structured_grid.py --ignore=test_foundation_model_regression.py
-uv run --frozen --no-sync --with pytest pytest test_instructions.py -vv      # one file, serial
+# Tests: run from the repository root (they do not depend on the working directory and write nothing into the tree)
+uv run --frozen --no-sync --with pytest --with pytest-xdist pytest tests -q -n 4 --dist load \
+    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
+uv run --frozen --no-sync --with pytest pytest tests/test_instructions.py -vv      # one file, serial
 
 # Lint / format / types (versions pinned: ruff 0.16.7; ty is pre-1.0)
 uvx ruff@0.16.7 check path/to/file.py
@@ -36,8 +35,9 @@ python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json
 ```
 
 The full suite takes about 32 minutes serially and about 10 minutes with `-n 4` (14 cores, 30 GB). Two test files are not part of a normal
-run: `test_structured_grid.py` cannot be imported on public master (it imports the non-existent `tensorpotential.experimental`), and
-`test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
+run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; it is ignored above only so that
+counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
+A test writes only into `tmp_path` (or a scratch directory), never into the working directory or the source tree; `git status` is clean after a run.
 
 ## Code style
 
@@ -86,7 +86,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty. `compat/pace/`: legacy, untested, do not touch.
 - The PyTorch backend is being added in `tensorpotential/torch_backend/` with TF-free shared code in `tensorpotential/core/` (not created yet); both must import without
   TensorFlow (enforced by an import contract), and the TF extractor lives outside them.
-- `tests/` (run from inside it), `baselines/` and `tools/` (untouched-tree baselines and the tools that compare against them), `docs/`.
+- `tests/` (run from the repository root), `baselines/` and `tools/` (untouched-tree baselines and the tools that compare against them), `docs/`.
 
 ## Key dependencies
 

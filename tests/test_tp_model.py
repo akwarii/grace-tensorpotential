@@ -11,7 +11,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import logging
 
 import tensorflow as tf
-import shutil
 
 from tensorpotential.utils import convert_model_reduce_elements
 from tensorpotential.tensorpot import TensorPotential
@@ -155,10 +154,8 @@ def test_set_trainable_variables():
     assert len(Z.trainable_variables) == 0
 
 
-def test_convert_model_reduce_elements():
-    TEST_PATH = "test_checkpoints"
-    if os.path.isdir(TEST_PATH):
-        shutil.rmtree(TEST_PATH)
+def test_convert_model_reduce_elements(tmp_path):
+    TEST_PATH = str(tmp_path / "test_checkpoints")
     os.makedirs(TEST_PATH, exist_ok=True)
 
     float_dtype = tf.float64
@@ -245,8 +242,6 @@ def test_convert_model_reduce_elements():
     at2.calc = calc2
     with pytest.raises(AssertionError):
         e2 = at2.get_potential_energy()
-
-    shutil.rmtree(TEST_PATH)
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .utils import isolated_run_dir
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
@@ -16,17 +18,30 @@ DATA_DISTRIB = "data_distrib"
 
 
 def test_compute_distributed_data_and_distrib_fit():
-    tf_dataset_path = prefix / DATA_DISTRIB / TF_DATASET
+    # The scripts read ../data/<file> and write tf_dataset/ and seed/ next to
+    # them, so they run on a copy of the folder in a scratch directory.
+    with isolated_run_dir(prefix / "data") as work:
+        shutil.copytree(
+            prefix / DATA_DISTRIB,
+            work,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(TF_DATASET, "seed", "__pycache__"),
+        )
+        _compute_distributed_data_and_distrib_fit(work)
+
+
+def _compute_distributed_data_and_distrib_fit(work):
+    tf_dataset_path = work / TF_DATASET
     if os.path.isdir(tf_dataset_path):
         shutil.rmtree(tf_dataset_path)
 
     tf_dataset_stats_json_path = (
-        prefix / DATA_DISTRIB / TF_DATASET / "stage3" / "stats.json"
+        work / TF_DATASET / "stage3" / "stats.json"
     )
 
     assert not os.path.isfile(tf_dataset_stats_json_path)
     script_name = "compute_distributed_data.sh"
-    subprocess.run(["bash", script_name], cwd=str(prefix / DATA_DISTRIB), check=True)
+    subprocess.run(["bash", script_name], cwd=str(work), check=True)
     assert os.path.isfile(tf_dataset_stats_json_path)
 
     with open(tf_dataset_stats_json_path, "r") as f:
@@ -46,7 +61,7 @@ def test_compute_distributed_data_and_distrib_fit():
     assert stats["total_num_structures"] == 50
     assert stats["total_num_of_batches"] == 14
 
-    seed_path = prefix / DATA_DISTRIB / "seed"
+    seed_path = work / "seed"
     if os.path.isdir(seed_path):
         shutil.rmtree(seed_path)
     assert not os.path.isdir(seed_path)
@@ -58,13 +73,13 @@ def test_compute_distributed_data_and_distrib_fit():
 
     subprocess.run(
         "gracemaker -m",
-        cwd=str(prefix / DATA_DISTRIB),
+        cwd=str(work),
         check=True,
         shell=True,
         env=current_env,
     )
 
-    test_metrics_path = prefix / DATA_DISTRIB / "seed" / "1" / "test_metrics.yaml"
+    test_metrics_path = work / "seed" / "1" / "test_metrics.yaml"
     assert os.path.isfile(test_metrics_path)
 
     # Regression (scripts/gracemaker.py): an externally-supplied TF_CONFIG -- as
@@ -87,7 +102,7 @@ def test_compute_distributed_data_and_distrib_fit():
     )
     subprocess.run(
         "gracemaker -m",
-        cwd=str(prefix / DATA_DISTRIB),
+        cwd=str(work),
         check=True,
         shell=True,
         env=tf_config_env,
