@@ -1,6 +1,6 @@
 # Triage of commented-out code (M0.2)
 
-Status: **draft for review**. No source file was edited; this table is the input of M0.3 (removal) and, through the register below, of M0.5.
+Status: **decisions recorded; awaiting sign-off in the pull request**. No source file was edited; this table is the input of M0.3 (removal) and, through the register below, of M0.5.
 
 ## How the table was made
 
@@ -8,7 +8,7 @@ Status: **draft for review**. No source file was edited; this table is the input
 - **Block.** A maximal run of adjacent comment-only lines flagged by either detector. Every ERA001 line belongs to exactly one block (771 lines in 258 blocks, 607 of them ERA001). Column `ERA` is `<ERA001 lines>/<lines>`; `0/n` means the AST census alone found it.
 - **Id.** First 8 hex digits of SHA-256 over `<path>\n<the block's lines, each stripped, joined by \n>\n<n>`, where `n` counts earlier identical blocks in the same file (0 for almost all). It does not depend on line numbers, so it survives the shifts caused by earlier removals; the line range is only a locator for the current tree.
 - **Kinds.** **A** dead code (superseded line, leftover, debug print); **B** archival data; **C** explanatory pseudo-code or detector false positive (formula, label, shape note, section banner); **D** disabled alternative with a reason nearby (a `TODO`, an inline reason or a label saying why); **E** disabled wiring of a documented or user-visible option, cross-checked against docs, tests and console scripts.
-- **Actions.** `delete` for A and B, `keep` for C, D and E (the default of the issue). Kind A rows inside `compat/pace/` are `keep` because that package is excluded from every edit. A note that starts with `review:` marks a delete whose deleted text carries numerics or behaviour (not just a leftover) and deserves a second look during sign-off.
+- **Actions.** `delete` for A and B, `keep` for C, D and E (the default of the issue). Kind A rows inside `compat/pace/` are `keep` because that package is excluded from every edit. A note that starts with `review:` marks a delete whose deleted text carries numerics or behaviour (not just a leftover); the owner looked at these rows and confirmed the deletion.
 
 ## Summary
 
@@ -25,12 +25,13 @@ Status: **draft for review**. No source file was edited; this table is the input
 - `delete`: 169 blocks, 550 lines. `keep`: 89 blocks, 221 lines, of which 25 blocks in `compat/pace/`.
 - 12 delete rows carry `review:`; 12 rows are class E (register below).
 
-## For sign-off
+## Decisions
 
-1. **Provenance comments (exit criterion).** Two tables are deleted (`2232b95c`, `7590fbab`, `tensorpotential/utils.py`). The live `DEFAULT_CUTOFF_1L` equals the deleted 1L table floored at 5.0 A for all 87 elements (checked), so M0.3 keeps a one-line comment saying so, replacing `# equilibrium nn-dist + 3 A, crop(4,8).round(1)`. The live `DEFAULT_CUTOFF_2L` does **not** follow from the deleted 2L table (the differences are 0.1 to 1.5 A, 58 of 87 exactly +0.5 A); the deleted table therefore explains nothing live, and the line above it (`nn-dist + 1.75 A`) goes with it. Decision for you: keep the deleted 2L table in git history only, or keep a comment saying the live values are an independent choice.
-2. **Mixed blocks.** None is split: a block is deleted or kept whole. Where a kept explanatory line sat inside a deleted block the block was classified by the dominant content; the only mixed case is `ba33c8d9` (an `exp(-i k.r)` note on the second line), kept whole as class D.
-3. **compat/pace/** (rows with `keep`, kind A): untouched by the scope of the issue; M0.3 step 5 depends on decision D5.
-4. **Test blocks of class E** (two commented-out integration tests with numeric references) need a decision, not a deletion: complete them (re-baseline on the HPC or locally) or retire them.
+1. **Provenance comments.** Two tables are deleted (`2232b95c`, `7590fbab`, `tensorpotential/utils.py`). The live `DEFAULT_CUTOFF_1L` equals the deleted 1L table floored at 5.0 A for all 87 elements (checked), so M0.3 replaces `# equilibrium nn-dist + 3 A, crop(4,8).round(1)` with one line saying so. The live `DEFAULT_CUTOFF_2L` does not follow from the deleted 2L table (differences of 0.1 to 1.5 A; 58 of 87 exactly +0.5 A). **Decision (owner): the 2L table is kept in git history only.** M0.3 replaces the line above it (`nn-dist + 1.75 A`) with a comment that gives the commit before the removal, so the table can be recovered with `git show <commit>:tensorpotential/utils.py`; the same pointer may be added to the 1L comment. M0.3 fills in the hash.
+2. **`review:` rows.** **Decision (owner): all 12 are deleted** like the other `delete` rows.
+3. **Mixed blocks.** None is split: a block is deleted or kept whole. The only mixed case is `ba33c8d9` (an `exp(-i k.r)` note on the second line), kept whole as class D.
+4. **compat/pace/** (rows with `keep`, kind A): untouched by the scope of the issue; M0.3 step 5 depends on decision D5.
+5. **Test blocks of class E** (two commented-out integration tests with numeric references) need a decision, not a deletion: complete them (re-baseline on the HPC or locally) or retire them.
 
 ## Class E register (retire or complete)
 
