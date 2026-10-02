@@ -340,6 +340,7 @@ class TestGraphSplitIntegration:
 class TestGraphSplitSaveReload:
     """Tests for saving and reloading models with aux_compute."""
 
+    @pytest.mark.slow
     def test_split_model_save_reload(
         self,
         grace_2layer_config,

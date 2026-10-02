@@ -6,6 +6,8 @@ import socket
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from .utils import isolated_run_dir
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -25,6 +27,7 @@ TF_DATASET = "tf_dataset"
 DATA_DISTRIB = "data_distrib"
 
 
+@pytest.mark.slow
 def test_compute_distributed_data_and_distrib_fit():
     # The scripts read ../data/<file> and write tf_dataset/ and seed/ next to
     # them, so they run on a copy of the folder in a scratch directory.

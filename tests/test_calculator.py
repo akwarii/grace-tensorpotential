@@ -27,6 +27,7 @@ SAVED_MODEL_CUSTOM_CUTOFF = str(HERE / "test_model_custom_cutoff")
 
 
 
+@pytest.mark.slow
 def test_savedmodel_dual_dense_signature(tmp_path):
     """A dense_nbr model exports ONE SavedModel with two interchangeable signatures
     sharing weights: `compute` (segment_sum) and `compute_dense` (dense reshape). They
