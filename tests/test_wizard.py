@@ -103,29 +103,25 @@ def test_apply_state_adam():
     assert "maxcor" not in result
 
 
-def test_apply_state_lbfgsb():
+def _assert_apply_state_bfgs_family(optimizer):
+    """A (L-)BFGS state writes its optimizer and ``maxcor`` and no Adam-specific content."""
     s = _make_state(
-        optimizer="L-BFGS-B",
+        optimizer=optimizer,
         bfgs_maxcor=100,
     )
     result = _apply_state(s, _MINIMAL_TEMPLATE)
-    assert "optimizer: L-BFGS-B" in result
+    assert f"optimizer: {optimizer}" in result
     assert "maxcor" in result
-    # No Adam-specific content
     assert "scheduler:" not in result
     assert "learning_rate:" not in result
+
+
+def test_apply_state_lbfgsb():
+    _assert_apply_state_bfgs_family("L-BFGS-B")
 
 
 def test_apply_state_bfgs():
-    s = _make_state(
-        optimizer="BFGS",
-        bfgs_maxcor=100,
-    )
-    result = _apply_state(s, _MINIMAL_TEMPLATE)
-    assert "optimizer: BFGS" in result
-    assert "maxcor" in result
-    assert "scheduler:" not in result
-    assert "learning_rate:" not in result
+    _assert_apply_state_bfgs_family("BFGS")
 
 
 def test_apply_state_adam_with_switch():
@@ -225,36 +221,30 @@ def test_section_optimizer_grace_defaults_adam(monkeypatch, silence_output):
     assert s.optimizer == "Adam"
 
 
-def test_section_loss_no_switch_for_bfgs(monkeypatch, silence_output):
-    """For BFGS optimizer, switch prompt is skipped and use_switch forced False."""
-    # Patch _ask_confirm to always return True — if the switch prompt is NOT skipped,
-    # use_switch would be True; we verify it stays False for BFGS.
+def _use_switch_after_section_loss(monkeypatch, optimizer):
+    """``use_switch`` after ``_section_loss`` when every prompt takes its default and the switch confirm says yes."""
     monkeypatch.setattr(wizard, "_ask_select", lambda msg, choices, default=None: default)
     monkeypatch.setattr(wizard, "_ask_text", lambda msg, default=None: default)
     monkeypatch.setattr(wizard, "_ask_confirm", lambda msg, default=True: True)
-    s = _make_state(optimizer="BFGS")
+    s = _make_state(optimizer=optimizer)
     s = _section_loss(s)
-    assert s.use_switch is False
+    return s.use_switch
+
+
+def test_section_loss_no_switch_for_bfgs(monkeypatch, silence_output):
+    """For BFGS optimizer, switch prompt is skipped and use_switch forced False."""
+    # _ask_confirm always returns True — if the switch prompt is NOT skipped,
+    # use_switch would be True; we verify it stays False for BFGS.
+    assert _use_switch_after_section_loss(monkeypatch, "BFGS") is False
 
 
 def test_section_loss_no_switch_for_lbfgsb(monkeypatch, silence_output):
-    monkeypatch.setattr(wizard, "_ask_select", lambda msg, choices, default=None: default)
-    monkeypatch.setattr(wizard, "_ask_text", lambda msg, default=None: default)
-    monkeypatch.setattr(wizard, "_ask_confirm", lambda msg, default=True: True)
-    s = _make_state(optimizer="L-BFGS-B")
-    s = _section_loss(s)
-    assert s.use_switch is False
+    assert _use_switch_after_section_loss(monkeypatch, "L-BFGS-B") is False
 
 
 def test_section_loss_switch_allowed_for_adam(monkeypatch, silence_output):
     """For Adam, the switch prompt is asked and respected."""
-    monkeypatch.setattr(wizard, "_ask_select", lambda msg, choices, default=None: default)
-    monkeypatch.setattr(wizard, "_ask_text", lambda msg, default=None: default)
-    # Return True for the switch confirm
-    monkeypatch.setattr(wizard, "_ask_confirm", lambda msg, default=True: True)
-    s = _make_state(optimizer="Adam")
-    s = _section_loss(s)
-    assert s.use_switch is True
+    assert _use_switch_after_section_loss(monkeypatch, "Adam") is True
 
 
 def test_section_weighting_bfgs_scratch_defaults(monkeypatch, silence_output):
@@ -413,27 +403,26 @@ def test_pure_smax_models_not_in_tree():
         )
 
 
-def test_ask_foundation_model_smax_1l(monkeypatch, silence_output):
-    """Selecting 1L → SMAX-OMAT → large returns the expected model."""
-    selections = iter(["1L", "SMAX-OMAT", "large"])
+def _ask_foundation_model_selecting(monkeypatch, *answers):
+    """Result of ``_ask_foundation_model`` when the successive prompts are answered with ``answers``."""
+    selections = iter(answers)
     monkeypatch.setattr(
         wizard,
         "_ask_select",
         lambda msg, choices, default=None: next(selections),
     )
-    result = wizard._ask_foundation_model()
+    return wizard._ask_foundation_model()
+
+
+def test_ask_foundation_model_smax_1l(monkeypatch, silence_output):
+    """Selecting 1L → SMAX-OMAT → large returns the expected model."""
+    result = _ask_foundation_model_selecting(monkeypatch, "1L", "SMAX-OMAT", "large")
     assert result == "GRACE-1L-SMAX-OMAT-large"
 
 
 def test_ask_foundation_model_smax_2l_medium(monkeypatch, silence_output):
     """Selecting 2L → SMAX-OMAT → medium returns GRACE-2L-SMAX-OMAT-medium."""
-    selections = iter(["2L", "SMAX-OMAT", "medium"])
-    monkeypatch.setattr(
-        wizard,
-        "_ask_select",
-        lambda msg, choices, default=None: next(selections),
-    )
-    result = wizard._ask_foundation_model()
+    result = _ask_foundation_model_selecting(monkeypatch, "2L", "SMAX-OMAT", "medium")
     assert result == "GRACE-2L-SMAX-OMAT-medium"
 
 
@@ -463,25 +452,13 @@ def test_3l_models_in_tree():
 
 def test_ask_foundation_model_3l_oam(monkeypatch, silence_output):
     """Selecting 3L -> OAM returns the ft-AM model (single size/variant, auto-picked)."""
-    selections = iter(["3L", "OAM"])
-    monkeypatch.setattr(
-        wizard,
-        "_ask_select",
-        lambda msg, choices, default=None: next(selections),
-    )
-    result = wizard._ask_foundation_model()
+    result = _ask_foundation_model_selecting(monkeypatch, "3L", "OAM")
     assert result == "GRACE-3L-OMAT-large-ft-AM"
 
 
 def test_ask_foundation_model_3l_omat(monkeypatch, silence_output):
     """Selecting 3L -> OMAT returns the base model."""
-    selections = iter(["3L", "OMAT"])
-    monkeypatch.setattr(
-        wizard,
-        "_ask_select",
-        lambda msg, choices, default=None: next(selections),
-    )
-    result = wizard._ask_foundation_model()
+    result = _ask_foundation_model_selecting(monkeypatch, "3L", "OMAT")
     assert result == "GRACE-3L-OMAT-large"
 
 
@@ -548,25 +525,29 @@ def test_apply_state_frozen_fs_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_maybe_ask_fp64_variant_chooses_fp64(monkeypatch):
-    """A model with a -fp64 sibling: choosing FP64 appends the suffix."""
+def _maybe_ask_fp64_variant_answering(monkeypatch, answer):
+    """Result of ``_maybe_ask_fp64_variant`` for a model with a -fp64 sibling when the prompt gets ``answer``."""
     monkeypatch.setattr(
         wizard,
         "_ask_select",
-        lambda msg, choices, default=None: "FP64 (full precision — for older/full-precision workflows)",
+        lambda msg, choices, default=None: answer,
     )
-    out = wizard._maybe_ask_fp64_variant("GRACE-2L-OMAT-large-base")
+    return wizard._maybe_ask_fp64_variant("GRACE-2L-OMAT-large-base")
+
+
+def test_maybe_ask_fp64_variant_chooses_fp64(monkeypatch):
+    """A model with a -fp64 sibling: choosing FP64 appends the suffix."""
+    out = _maybe_ask_fp64_variant_answering(
+        monkeypatch, "FP64 (full precision — for older/full-precision workflows)"
+    )
     assert out == "GRACE-2L-OMAT-large-base-fp64"
 
 
 def test_maybe_ask_fp64_variant_chooses_fp32(monkeypatch):
     """A model with a -fp64 sibling: choosing FP32 keeps the bare name."""
-    monkeypatch.setattr(
-        wizard,
-        "_ask_select",
-        lambda msg, choices, default=None: "FP32 (default, recommended — faster, half memory)",
+    out = _maybe_ask_fp64_variant_answering(
+        monkeypatch, "FP32 (default, recommended — faster, half memory)"
     )
-    out = wizard._maybe_ask_fp64_variant("GRACE-2L-OMAT-large-base")
     assert out == "GRACE-2L-OMAT-large-base"
 
 
