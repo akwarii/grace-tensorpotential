@@ -11,6 +11,7 @@ numpy 2.5.3, ASE 3.29.0, Python 3.12.3). Stage 0 must leave all of this unchange
 | `oracle_snapshot.npz` (git-ignored, 52 MB) and `oracle_snapshot.meta.json` | TensorFlow numerics of the three test yamls | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
 | `lint_ratchet.json` | ruff (E, F, ERA001) and ty findings of legacy code per file and rule, with the tool versions (TOOL1); the strict packages have no baseline | `python tools/lint_ratchet.py check` |
 | `coverage_baseline.json` | executed and total statements plus branches of each of the 115 library files from a full-suite run with branch coverage on `torch-backend` **with** the TEST3 tests (not the untouched tree; 56.16% in all, coverage.py 7.16.2) | `python tools/coverage_ratchet.py check cov.json` (`cov.json` from `pytest tests -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json`); `record` refuses a fall unless `--allow-fall` |
+| `clone_baseline.json` | groups, functions and redundant lines of the duplicated functions (8 lines or more; identical bodies, and bodies equal after abstracting identifiers) of `tensorpotential/` without `compat/pace/` and of `tests/` (QUAL2); the totals of a tree may not rise | `python tools/check_clones.py check` |
 
 The plan said 183 `.py` files; `git ls-files '*.py'` gives 165 (243 tracked files in total, as the plan also says), so the
 manifest covers 165.
