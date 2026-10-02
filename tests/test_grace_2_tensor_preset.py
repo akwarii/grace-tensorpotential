@@ -11,6 +11,7 @@ finite difference of the energy.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -261,7 +262,8 @@ def rotation() -> np.ndarray:
 
 
 def predict(model: TPModel, atoms: Atoms) -> dict:
-    return {k: v.numpy() for k, v in model.compute(structure_data(atoms)).items()}
+    compute: Any = model.compute  # attached to the model by build()
+    return {k: v.numpy() for k, v in compute(structure_data(atoms)).items()}
 
 
 def assert_close(actual, expected, tol) -> None:

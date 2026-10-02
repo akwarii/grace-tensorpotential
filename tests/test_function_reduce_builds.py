@@ -16,6 +16,7 @@ Wigner matrices: ``out(R x) = D(R) out(x)``, block by block in ``l``.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -285,7 +286,7 @@ def test_function_reduce_n_output_norm_counts_the_contributing_instructions():
     expected = np.concatenate([
         [c**-0.5] * (2 * l + 1) for c, (l, _) in zip(counts, ALLOWED)
     ])
-    np.testing.assert_allclose(red.norm_map, expected, rtol=1e-12)
+    np.testing.assert_allclose(np.asarray(red.norm_map), expected, rtol=1e-12)
     red.build(tf.float64)
     assert red.norm_map.shape.as_list() == [9, 1, 1]
     np.testing.assert_allclose(red.norm_map.numpy().ravel(), expected, rtol=1e-12)
@@ -416,8 +417,11 @@ def collector(**kwargs) -> ConcreteCollectInvarBasis:
 
 def test_collect_invar_basis_is_abstract_as_shipped():
     y, aa = make_inputs()
+    shipped: Any = (
+        CollectInvarBasis  # the abstract class itself; typed loosely on purpose
+    )
     with pytest.raises(TypeError, match="upd_init_args_new_elements"):
-        CollectInvarBasis(instructions=[y, aa], name="C", ls_max=0)
+        shipped(instructions=[y, aa], name="C", ls_max=0)
 
 
 @pytest.mark.parametrize("dtype", [tf.float32, tf.float64])
