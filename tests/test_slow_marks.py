@@ -9,6 +9,7 @@ import pytest
 
 from .slow_marks import (
     SLOW_LIST,
+    deal_slow_first,
     load_slow_ids,
     missing_ids,
 )
@@ -107,3 +108,72 @@ def test_missing_ids_finds_files_functions_methods_and_classes(tmp_path: Path) -
 
 def test_every_listed_slow_test_exists() -> None:
     assert missing_ids(load_slow_ids(SLOW_LIST), REPO_ROOT) == []
+
+
+class _Item:
+    """The one attribute of a collected test that the ordering reads."""
+
+    def __init__(self, nodeid: str) -> None:
+        self.nodeid = nodeid
+
+    def __repr__(self) -> str:
+        return self.nodeid
+
+
+def _items(n_fast: int, slow: list[str]) -> list[_Item]:
+    fast = [_Item(f"tests/f.py::fast{i}") for i in range(n_fast)]
+    # slow tests sit at the end of the collection, as they do alphabetically in places
+    return [*fast, *(_Item(s) for s in slow)]
+
+
+SLOW = [
+    "tests/s.py::a",
+    "tests/s.py::b",
+    "tests/s.py::c",
+    "tests/s.py::d",
+    "tests/s.py::e",
+]
+
+
+def test_dealing_puts_the_longest_tests_first_one_per_worker() -> None:
+    items = _items(40, SLOW[::-1] + ["tests/s.py::p[1]", "tests/s.py::p[2]"])
+    ordered = deal_slow_first(items, [*SLOW, "tests/s.py::p"], workers=3)
+    chunk = max(len(items) // 4 // 3, 2)  # the xdist first-block size: 5
+    heads = [ordered[k * chunk] for k in range(3)]
+    assert [h.nodeid for h in heads] == [
+        "tests/s.py::a",
+        "tests/s.py::b",
+        "tests/s.py::c",
+    ]
+    # worker 0 also gets the 4th slow test (d), worker 1 the 5th (e), right after its head
+    assert ordered[1].nodeid == "tests/s.py::d"
+    assert ordered[chunk + 1].nodeid == "tests/s.py::e"
+
+
+def test_dealing_keeps_every_test_once_and_the_order_of_the_others() -> None:
+    items = _items(40, SLOW)
+    ordered = deal_slow_first(items, SLOW, workers=4)
+    assert sorted(i.nodeid for i in ordered) == sorted(i.nodeid for i in items)
+    others = [i.nodeid for i in ordered if "tests/s.py" not in i.nodeid]
+    assert others == [i.nodeid for i in items if "tests/s.py" not in i.nodeid]
+
+
+def test_dealing_is_the_identity_without_workers_or_without_slow_tests() -> None:
+    items = _items(10, SLOW)
+    assert deal_slow_first(items, SLOW, workers=1) == items
+    assert deal_slow_first(items, SLOW, workers=0) == items
+    plain = _items(10, [])
+    assert deal_slow_first(plain, SLOW, workers=4) == plain
+
+
+def test_dealing_a_block_of_slow_tests_longer_than_the_chunk_is_kept_whole() -> None:
+    items = _items(
+        3, SLOW
+    )  # chunk = max(8 // 4 // 2, 2) = 2, one worker gets 3 slow tests
+    ordered = deal_slow_first(items, SLOW, workers=2)
+    assert [i.nodeid for i in ordered[:3]] == [
+        "tests/s.py::a",
+        "tests/s.py::c",
+        "tests/s.py::e",
+    ]
+    assert sorted(i.nodeid for i in ordered) == sorted(i.nodeid for i in items)

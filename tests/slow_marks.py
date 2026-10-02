@@ -12,9 +12,22 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, TypeVar
 
 import pytest
+
+
+class _HasNodeId(Protocol):
+    nodeid: str
+
+
+T = TypeVar("T", bound=_HasNodeId)
+
+
+def _base_id(item: _HasNodeId) -> str:
+    """The node id of ``item`` without a ``[...]`` parametrization suffix."""
+    return item.nodeid.split("[", 1)[0]
+
 
 SLOW_LIST = Path(__file__).with_name("slow_tests.txt")
 """One ``tests/<file>.py::<test>`` per line, longest first; ``#`` starts a comment."""
@@ -69,7 +82,7 @@ def apply_slow_marks(items: Iterable[Any], slow_ids: Iterable[str]) -> int:
     listed = set(slow_ids)
     marked = 0
     for item in items:
-        if item.nodeid.split("[", 1)[0] in listed:
+        if _base_id(item) in listed:
             item.add_marker(pytest.mark.slow)
             marked += 1
     return marked
@@ -117,3 +130,56 @@ def missing_ids(slow_ids: Iterable[str], root: Path) -> list[str]:
         if not _defines(tree.body, names):
             missing.append(node_id)
     return missing
+
+
+def _first_chunk_size(n_items: int, workers: int) -> int:
+    """Size of the first block of tests that ``pytest-xdist --dist load`` hands to each worker."""
+    return max(n_items // 4 // workers, 2)
+
+
+def deal_slow_first(
+    items: Sequence[T], slow_ids: Sequence[str], workers: int
+) -> list[T]:
+    """Reorder ``items`` so that each worker's first block starts with its share of slow tests.
+
+    ``--dist load`` sends the collected list to the workers in blocks, the first
+    block to the first worker and so on, and a worker runs its block in order. The
+    slow tests are therefore dealt round-robin (longest first, as listed) over the
+    first ``workers`` blocks, each followed by ordinary tests up to the block size;
+    the rest keeps its order. Without this the longest test may only start when
+    every other worker is nearly done. The block size is the formula of
+    pytest-xdist; if it changes, the order is merely less effective.
+
+    Parameters
+    ----------
+    items : sequence
+        The collected tests (anything with a ``nodeid``).
+    slow_ids : sequence of str
+        Node ids from :func:`load_slow_ids`, longest first.
+    workers : int
+        Number of xdist workers; at most 1 leaves the order unchanged.
+
+    Returns
+    -------
+    list
+        The same items, reordered.
+    """
+    if workers <= 1:
+        return list(items)
+    rank = {node_id: i for i, node_id in enumerate(slow_ids)}
+    slow = sorted(
+        (it for it in items if _base_id(it) in rank), key=lambda it: rank[_base_id(it)]
+    )
+    rest = iter([it for it in items if _base_id(it) not in rank])
+    chunk = _first_chunk_size(len(items), workers)
+    ordered: list[T] = []
+    for worker in range(workers):
+        block = slow[worker::workers]
+        ordered.extend(block)
+        for _ in range(max(chunk - len(block), 0)):
+            nxt = next(rest, None)
+            if nxt is None:
+                break
+            ordered.append(nxt)
+    ordered.extend(rest)
+    return ordered
