@@ -81,7 +81,9 @@ def test_the_hook_reorders_in_every_xdist_worker_and_not_in_a_serial_run(
     body += [f"def test_fast{i}(): ..." for i in range(12)]
     body += [f"@pytest.mark.slow\ndef test_slow{i}(): ..." for i in range(2)]
     (tmp_path / "test_x.py").write_text("\n".join(body) + "\n")
-    env = dict(os.environ, PYTHONPATH=str(REPO_ROOT))
+    # the nested sessions must not inherit the variables of an xdist worker running this test
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
+    env["PYTHONPATH"] = str(REPO_ROOT)
 
     def run(*args: str) -> None:
         result = subprocess.run(
