@@ -25,8 +25,8 @@
    "total": 0
   },
   "tensorpotential/cli/data.py": {
-   "covered": 474,
-   "total": 985
+   "covered": 465,
+   "total": 972
   },
   "tensorpotential/cli/distribute.py": {
    "covered": 0,
@@ -224,6 +224,10 @@
    "covered": 0,
    "total": 18
   },
+  "tensorpotential/formatting.py": {
+   "covered": 17,
+   "total": 17
+  },
   "tensorpotential/functions/__init__.py": {
    "covered": 0,
    "total": 0
@@ -309,12 +313,12 @@
    "total": 1321
   },
   "tensorpotential/scripts/df2extxyz.py": {
-   "covered": 0,
-   "total": 73
+   "covered": 13,
+   "total": 59
   },
   "tensorpotential/scripts/extxyz2df.py": {
-   "covered": 0,
-   "total": 43
+   "covered": 11,
+   "total": 30
   },
   "tensorpotential/scripts/grace_collect.py": {
    "covered": 0,
@@ -334,7 +338,7 @@
   },
   "tensorpotential/scripts/grace_preprocess.py": {
    "covered": 0,
-   "total": 525
+   "total": 511
   },
   "tensorpotential/scripts/grace_uq.py": {
    "covered": 24,

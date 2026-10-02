@@ -274,16 +274,6 @@ def get_batch_dtypes(databuilders_list):
     return batch_dtypes
 
 
-def sizeof_fmt(file_name_or_size, suffix="B"):
-    if isinstance(file_name_or_size, str):
-        file_name_or_size = os.path.getsize(file_name_or_size)
-    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
-        if abs(file_name_or_size) < 1024.0:
-            return "%3.1f%s%s" % (file_name_or_size, unit, suffix)
-        file_name_or_size /= 1024.0
-    return "%.1f%s%s" % (file_name_or_size, "Yi", suffix)
-
-
 # Function to yield dict[str->numpy array], that defines each structure
 def databuilder_generator(dataframes_rows, databuilders_list):
     for row_id, row in dataframes_rows:

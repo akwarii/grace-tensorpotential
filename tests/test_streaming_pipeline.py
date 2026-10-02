@@ -108,25 +108,27 @@ class TestMultiBinMetricBatcher:
         assert any(len(b) == 1 for b in batches)
 
 
+def _structure_gen(train_df, data_builders):
+    """Yield one data dict per row of ``train_df``, filled by every builder."""
+    for row_idx in range(len(train_df)):
+        row = train_df.iloc[row_idx]
+        data_dict = {}
+        for builder in data_builders:
+            data_dict.update(
+                builder.extract_from_row(
+                    row, **{tc.DATA_STRUCTURE_ID: train_df.index[row_idx]}
+                )
+            )
+        yield data_dict
+
+
 class TestElasticBatchIterator:
     def test_produces_padded_batches(self, train_df, data_builders):
-        def structure_gen():
-            for row_idx in range(len(train_df)):
-                row = train_df.iloc[row_idx]
-                data_dict = {}
-                for builder in data_builders:
-                    data_dict.update(
-                    builder.extract_from_row(
-                        row, **{tc.DATA_STRUCTURE_ID: train_df.index[row_idx]}
-                    )
-                )
-                yield data_dict
-
         batcher = MultiBinMetricBatcher(
             num_bins=3, target_metric=2000, metric_strategy="neighbours"
         )
         elastic = ElasticBatchIterator(
-            structure_iter=structure_gen(),
+            structure_iter=_structure_gen(train_df, data_builders),
             batcher=batcher,
             data_builders=data_builders,
             buckets=[],
@@ -167,23 +169,11 @@ class TestElasticBatchIterator:
 
         for iteration in range(2):
 
-            def structure_gen():
-                for row_idx in range(len(train_df)):
-                    row = train_df.iloc[row_idx]
-                    data_dict = {}
-                    for builder in data_builders:
-                        data_dict.update(
-                    builder.extract_from_row(
-                        row, **{tc.DATA_STRUCTURE_ID: train_df.index[row_idx]}
-                    )
-                )
-                    yield data_dict
-
             batcher = MultiBinMetricBatcher(
                 num_bins=3, target_metric=2000, metric_strategy="neighbours"
             )
             elastic = ElasticBatchIterator(
-                structure_iter=structure_gen(),
+                structure_iter=_structure_gen(train_df, data_builders),
                 batcher=batcher,
                 data_builders=data_builders,
                 buckets=shared_buckets,

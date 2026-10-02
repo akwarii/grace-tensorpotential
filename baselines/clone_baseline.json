@@ -1,0 +1,29 @@
+{
+ "counts": {
+  "library": {
+   "identical": {
+    "functions": 10,
+    "groups": 4,
+    "redundant_lines": 88
+   },
+   "renamed": {
+    "functions": 14,
+    "groups": 5,
+    "redundant_lines": 114
+   }
+  },
+  "tests": {
+   "identical": {
+    "functions": 0,
+    "groups": 0,
+    "redundant_lines": 0
+   },
+   "renamed": {
+    "functions": 0,
+    "groups": 0,
+    "redundant_lines": 0
+   }
+  }
+ },
+ "min_lines": 8
+}

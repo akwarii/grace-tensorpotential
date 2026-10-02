@@ -82,15 +82,15 @@ def _build_loss(use_l2_norm: bool):
     return loss
 
 
-def test_force_loss_componentwise_known_residuals():
-    # 3 atoms with deliberately one residual in each region
+def _force_loss_value(use_l2_norm: bool) -> float:
+    """Loss of 3 atoms whose x-residuals 0.05, 0.3 and 1.0 sit in the three regions."""
     f_true = tf.constant([[0.0, 0.0, 0.0]] * 3, dtype=tf.float64)
     f_pred = tf.constant(
         [[0.05, 0.0, 0.0], [0.3, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=tf.float64
     )
     f_weight = tf.ones((3, 1), dtype=tf.float64)
 
-    loss = _build_loss(use_l2_norm=False)
+    loss = _build_loss(use_l2_norm=use_l2_norm)
     out = loss.compute_loss_component(
         input_data={
             constants.DATA_REFERENCE_FORCES: f_true,
@@ -98,32 +98,23 @@ def test_force_loss_componentwise_known_residuals():
         },
         predictions={constants.PREDICT_FORCES: f_pred},
     )
+    return float(out.numpy())
+
+
+def test_force_loss_componentwise_known_residuals():
+    # 3 atoms with deliberately one residual in each region
     # per-element loss: 0.05 (region 1) + 0.12 (region 2) + 0.145 (region 3)
     # plus 6 zero-residual entries -> contribute 0
     # divide by sum(f_weight) * 3 = 3 * 3 = 9
     expected = (0.05 + 0.12 + 0.145) / 9.0
-    assert float(out.numpy()) == pytest.approx(expected, rel=1e-10)
+    assert _force_loss_value(use_l2_norm=False) == pytest.approx(expected, rel=1e-10)
 
 
 def test_force_loss_l2_norm_known_residuals():
-    f_true = tf.constant([[0.0, 0.0, 0.0]] * 3, dtype=tf.float64)
     # residuals chosen so ||delta||_2 lands in each region
-    f_pred = tf.constant(
-        [[0.05, 0.0, 0.0], [0.3, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=tf.float64
-    )
-    f_weight = tf.ones((3, 1), dtype=tf.float64)
-
-    loss = _build_loss(use_l2_norm=True)
-    out = loss.compute_loss_component(
-        input_data={
-            constants.DATA_REFERENCE_FORCES: f_true,
-            constants.DATA_FORCE_WEIGHTS: f_weight,
-        },
-        predictions={constants.PREDICT_FORCES: f_pred},
-    )
     # one piecewise value per atom; divide by sum(f_weight) = 3 (no x3)
     expected = (0.05 + 0.12 + 0.145) / 3.0
-    assert float(out.numpy()) == pytest.approx(expected, rel=1e-6)
+    assert _force_loss_value(use_l2_norm=True) == pytest.approx(expected, rel=1e-6)
 
 
 def test_invalid_thresholds_raise():
@@ -239,10 +230,8 @@ def _build_stress_loss(use_frobenius_norm: bool):
     return loss
 
 
-def test_stress_loss_componentwise_known_residuals():
-    # 3 structures, virial deliberately spans all 3 piecewise regions when
-    # divided by volume=1.0. Residual placed in the first Voigt component;
-    # other 5 components are zero.
+def _stress_loss_value(use_frobenius_norm: bool) -> float:
+    """Loss of 3 structures whose virial residuals 0.05, 0.30 and 1.00 (volume 1) sit in the three regions."""
     v_true = tf.zeros((3, 6), dtype=tf.float64)
     v_pred = tf.constant(
         [
@@ -255,7 +244,7 @@ def test_stress_loss_componentwise_known_residuals():
     v_weight = tf.ones((3, 1), dtype=tf.float64)
     volume = tf.ones((3, 1), dtype=tf.float64)
 
-    loss = _build_stress_loss(use_frobenius_norm=False)
+    loss = _build_stress_loss(use_frobenius_norm=use_frobenius_norm)
     out = loss.compute_loss_component(
         input_data={
             constants.DATA_REFERENCE_VIRIAL: v_true,
@@ -264,40 +253,26 @@ def test_stress_loss_componentwise_known_residuals():
         },
         predictions={constants.PREDICT_VIRIAL: v_pred},
     )
+    return float(out.numpy())
+
+
+def test_stress_loss_componentwise_known_residuals():
+    # 3 structures, virial deliberately spans all 3 piecewise regions when
+    # divided by volume=1.0. Residual placed in the first Voigt component;
+    # other 5 components are zero.
     # piecewise values per nonzero residual: 0.05, 0.12, 0.145
     # plus 15 zero residuals contributing 0
     # divisor = sum(weight) * 6 = 3 * 6 = 18
     expected = (0.05 + 0.12 + 0.145) / 18.0
-    assert float(out.numpy()) == pytest.approx(expected, rel=1e-10)
+    assert _stress_loss_value(use_frobenius_norm=False) == pytest.approx(expected, rel=1e-10)
 
 
 def test_stress_loss_frobenius_norm_known_residuals():
     # Same residual magnitudes as above, but Frobenius reduces each row to a
     # single per-structure scalar |x|.
-    v_true = tf.zeros((3, 6), dtype=tf.float64)
-    v_pred = tf.constant(
-        [
-            [0.05, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.30, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [1.00, 0.0, 0.0, 0.0, 0.0, 0.0],
-        ],
-        dtype=tf.float64,
-    )
-    v_weight = tf.ones((3, 1), dtype=tf.float64)
-    volume = tf.ones((3, 1), dtype=tf.float64)
-
-    loss = _build_stress_loss(use_frobenius_norm=True)
-    out = loss.compute_loss_component(
-        input_data={
-            constants.DATA_REFERENCE_VIRIAL: v_true,
-            constants.DATA_VIRIAL_WEIGHTS: v_weight,
-            constants.DATA_VOLUME: volume,
-        },
-        predictions={constants.PREDICT_VIRIAL: v_pred},
-    )
     # one piecewise value per structure; divisor = sum(weight) = 3 (no x6)
     expected = (0.05 + 0.12 + 0.145) / 3.0
-    assert float(out.numpy()) == pytest.approx(expected, rel=1e-6)
+    assert _stress_loss_value(use_frobenius_norm=True) == pytest.approx(expected, rel=1e-6)
 
 
 def test_stress_loss_volume_division():

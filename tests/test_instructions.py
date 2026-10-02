@@ -2337,8 +2337,8 @@ def test_general_product_function_rot_equivar(mode, param_dtype):
 # ============================================================================
 
 
-def _build_equivariant_rms_norm_test_data(param_dtype):
-    """Helper: build AA equivariant data for EquivariantRMSNorm tests."""
+def _build_aa_equivariant_test_data(param_dtype):
+    """Helper: build AA equivariant data for the EquivariantRMSNorm and EquivariantGate tests."""
     inpt_dict, A, lmax_bond, n_rad_max = _build_general_product_test_data(
         dtype=param_dtype
     )
@@ -2361,27 +2361,32 @@ def _build_equivariant_rms_norm_test_data(param_dtype):
     return inpt_dict, AA, lmax_bond, n_rad_max
 
 
-@pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
-@pytest.mark.parametrize("init", ["zeros", "ones"])
-def test_equivariant_rms_norm_shape(param_dtype, init):
-    """Output shape matches input shape."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
-        param_dtype
-    )
+def _assert_output_shape_matches_input(param_dtype, make_layer):
+    """Apply ``make_layer(AA)`` to the AA test data and check it keeps the shape of AA."""
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(param_dtype)
 
-    norm = EquivariantRMSNorm(input=AA, name="AA_norm", init=init)
-    norm.build(param_dtype)
-    inpt_dict = norm(inpt_dict)
+    layer = make_layer(AA)
+    layer.build(param_dtype)
+    inpt_dict = layer(inpt_dict)
 
-    out = inpt_dict[norm.name]
+    out = inpt_dict[layer.name]
     aa_out = inpt_dict[AA.name]
     assert out.shape == aa_out.shape, f"Shape mismatch: {out.shape} vs {aa_out.shape}"
 
 
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
+@pytest.mark.parametrize("init", ["zeros", "ones"])
+def test_equivariant_rms_norm_shape(param_dtype, init):
+    """Output shape matches input shape."""
+    _assert_output_shape_matches_input(
+        param_dtype, lambda AA: EquivariantRMSNorm(input=AA, name="AA_norm", init=init)
+    )
+
+
+@pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_variance(param_dtype):
     """With init='ones', output should have bounded variance."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2400,7 +2405,7 @@ def test_equivariant_rms_norm_variance(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_gradient(param_dtype):
     """Gradients flow to both input and affine_weight."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2424,7 +2429,7 @@ def test_equivariant_rms_norm_rot_equivar(param_dtype):
     For each (L, hist, parity) output group, the (2L+1) m-components must
     transform under the Wigner D-matrix: out(Rx) = D^L(R) @ out(x).
     """
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2476,7 +2481,7 @@ def test_equivariant_rms_norm_rot_equivar(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_split_norm_rot_equivar(param_dtype):
     """EquivariantRMSNorm with split_norm=True preserves equivariance."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2523,7 +2528,7 @@ def test_equivariant_rms_norm_split_norm_rot_equivar(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_split_norm_independent(param_dtype):
     """With split_norm, l=0 and l>0 should be normalized independently."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2571,7 +2576,7 @@ def test_equivariant_rms_norm_rot_invar_l0(param_dtype):
     is identity, so orig and rotated values must match directly without any
     matrix multiplication error from D.
     """
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2599,7 +2604,7 @@ def test_equivariant_rms_norm_rot_invar_l0(param_dtype):
     )
 
 
-def _build_equivariant_rms_norm_test_data_with_padding(param_dtype):
+def _build_aa_equivariant_test_data_with_padding(param_dtype):
     """Build test data with 3 real atoms + 3 rotated + 2 padding atoms.
 
     Padding atoms have bonds far beyond cutoff, so their features are zero.
@@ -2701,7 +2706,7 @@ def _build_equivariant_rms_norm_test_data_with_padding(param_dtype):
 @pytest.mark.parametrize("center_l0", [False, True])
 def test_equivariant_rms_norm_padding_zeros(param_dtype, center_l0):
     """Padding atoms (index >= n_at_b_real) must remain exactly zero."""
-    inpt_dict, AA, n_real, n_total = _build_equivariant_rms_norm_test_data_with_padding(
+    inpt_dict, AA, n_real, n_total = _build_aa_equivariant_test_data_with_padding(
         param_dtype
     )
 
@@ -2724,7 +2729,7 @@ def test_equivariant_rms_norm_padding_zeros(param_dtype, center_l0):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_l0_only_shape(param_dtype):
     """normalize_l0_only=True: output shape matches input shape."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2742,7 +2747,7 @@ def test_equivariant_rms_norm_l0_only_shape(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_l0_only_higher_l_unchanged(param_dtype):
     """normalize_l0_only=True: l>0 channels must be identical to the input."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2769,7 +2774,7 @@ def test_equivariant_rms_norm_l0_only_higher_l_unchanged(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_l0_only_l0_normalized(param_dtype):
     """normalize_l0_only=True: l=0 channels must differ from raw input (are normalized)."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2795,7 +2800,7 @@ def test_equivariant_rms_norm_l0_only_l0_normalized(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_l0_only_rot_equivar(param_dtype):
     """normalize_l0_only=True: rotational equivariance is preserved for all channels."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_rms_norm_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -2838,7 +2843,7 @@ def test_equivariant_rms_norm_l0_only_rot_equivar(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_rms_norm_l0_only_padding_zeros(param_dtype):
     """normalize_l0_only=True: padding atoms remain exactly zero."""
-    inpt_dict, AA, n_real, n_total = _build_equivariant_rms_norm_test_data_with_padding(
+    inpt_dict, AA, n_real, n_total = _build_aa_equivariant_test_data_with_padding(
         param_dtype
     )
 
@@ -2862,42 +2867,14 @@ def test_equivariant_rms_norm_l0_only_padding_zeros(param_dtype):
 # ===========================================================================
 
 
-def _build_equivariant_gate_test_data(param_dtype):
-    """Helper: build AA equivariant data for EquivariantGate tests."""
-    inpt_dict, A, lmax_bond, n_rad_max = _build_general_product_test_data(
-        dtype=param_dtype
-    )
-    inpt_dict[constants.N_ATOMS_BATCH_REAL] = tf.constant(6, dtype=tf.int32)
-
-    AA = GeneralProductFunction(
-        left=A,
-        right=A,
-        name="AA",
-        lmax=lmax_bond,
-        Lmax=lmax_bond,
-        mode="cp_l",
-        rank=n_rad_max,
-        use_S=False,
-        normalize=True,
-    )
-    AA.build(param_dtype)
-    inpt_dict = AA(inpt_dict)
-    return inpt_dict, AA, lmax_bond, n_rad_max
-
-
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 @pytest.mark.parametrize("hidden_dim", [None, 8])
 def test_equivariant_gate_shape(param_dtype, hidden_dim):
     """Output shape matches input shape."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(param_dtype)
-
-    gate = EquivariantGate(input=AA, name="AA_gate", hidden_dim=hidden_dim)
-    gate.build(param_dtype)
-    inpt_dict = gate(inpt_dict)
-
-    out = inpt_dict[gate.name]
-    aa_out = inpt_dict[AA.name]
-    assert out.shape == aa_out.shape, f"Shape mismatch: {out.shape} vs {aa_out.shape}"
+    _assert_output_shape_matches_input(
+        param_dtype,
+        lambda AA: EquivariantGate(input=AA, name="AA_gate", hidden_dim=hidden_dim),
+    )
 
 
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
@@ -2908,7 +2885,7 @@ def test_equivariant_gate_rot_equivar(param_dtype, hidden_dim):
     For each (L, hist, parity) output group, the (2L+1) m-components must
     transform under the Wigner D-matrix: out(Rx) = D^L(R) @ out(x).
     """
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(param_dtype)
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(param_dtype)
 
     # Recreate the same rotation used in _build_general_product_test_data
     axis = np.array([1, 1, 3])
@@ -3019,7 +2996,7 @@ def test_equivariant_gate_rot_invar(param_dtype, hidden_dim):
 @pytest.mark.parametrize("hidden_dim", [None, 8])
 def test_equivariant_gate_gradient(param_dtype, hidden_dim):
     """Gradients flow through the gate to both input and gate weights."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(param_dtype)
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(param_dtype)
 
     gate = EquivariantGate(input=AA, name="AA_gate", hidden_dim=hidden_dim)
     gate.build(param_dtype)
@@ -3044,7 +3021,7 @@ def test_equivariant_gate_gradient(param_dtype, hidden_dim):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_gate_output_bounded(param_dtype):
     """Gate values are in (0, 1) so output magnitude <= input magnitude."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(param_dtype)
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(param_dtype)
 
     gate = EquivariantGate(input=AA, name="AA_gate")
     gate.build(param_dtype)
@@ -3061,7 +3038,7 @@ def test_equivariant_gate_output_bounded(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_gate_zero_input(param_dtype):
     """Zero input produces zero output regardless of gate weights."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(param_dtype)
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(param_dtype)
 
     gate = EquivariantGate(input=AA, name="AA_gate", use_bias=True)
     gate.build(param_dtype)
@@ -3080,7 +3057,7 @@ def test_equivariant_gate_zero_input(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_gate_coupling_metadata_preserved(param_dtype):
     """Gate preserves coupling_meta_data from input instruction."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(param_dtype)
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(param_dtype)
 
     gate = EquivariantGate(input=AA, name="AA_gate")
     assert gate.coupling_meta_data.equals(
@@ -3094,7 +3071,7 @@ def test_equivariant_gate_coupling_metadata_preserved(param_dtype):
 @pytest.mark.parametrize("hidden_dim", [None, 8])
 def test_equivariant_gate_mix_channels_rot_equivar(param_dtype, hidden_dim):
     """EquivariantGate with mix_channels preserves rotational equivariance."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -3142,7 +3119,7 @@ def test_equivariant_gate_mix_channels_rot_equivar(param_dtype, hidden_dim):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_gate_mix_channels_shape(param_dtype):
     """mix_channels does not change output shape."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 
@@ -3158,7 +3135,7 @@ def test_equivariant_gate_mix_channels_shape(param_dtype):
 @pytest.mark.parametrize("param_dtype", [tf.float32, tf.float64])
 def test_equivariant_gate_mix_channels_gradient(param_dtype):
     """Gradients flow through mix_weight and mix_weight_back."""
-    inpt_dict, AA, lmax_bond, n_rad_max = _build_equivariant_gate_test_data(
+    inpt_dict, AA, lmax_bond, n_rad_max = _build_aa_equivariant_test_data(
         param_dtype
     )
 

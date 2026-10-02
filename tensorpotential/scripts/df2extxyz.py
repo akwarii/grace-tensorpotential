@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 import argparse
 import logging
-import os
 
 import pandas as pd
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
+from tensorpotential.formatting import sizeof_fmt
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
@@ -45,16 +45,6 @@ def build_parser():
         "-o", "--output", help="output file name", type=str, default=None
     )
     return parser
-
-
-def sizeof_fmt(file_name_or_size, suffix="B"):
-    if isinstance(file_name_or_size, str):
-        file_name_or_size = os.path.getsize(file_name_or_size)
-    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
-        if abs(file_name_or_size) < 1024.0:
-            return "%3.1f%s%s" % (file_name_or_size, unit, suffix)
-        file_name_or_size /= 1024.0
-    return "%.1f%s%s" % (file_name_or_size, "Yi", suffix)
 
 
 def main(args=None):

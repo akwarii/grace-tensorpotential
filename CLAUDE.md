@@ -43,6 +43,7 @@ python tools/coverage_ratchet.py check cov.json            # no file may cover a
 # Compare against the untouched-tree baselines (see baselines/README.md)
 python tools/ast_manifest.py check baselines/ast_manifest.json
 python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json
+python tools/check_clones.py check                  # duplicated functions may not increase (baselines/clone_baseline.json)
 ```
 
 The full suite takes about 32 minutes serially and about 10 minutes with `-n 4` (14 cores, 30 GB). Two test files are not part of a normal
@@ -120,6 +121,8 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` in code, tests, docs and notebooks, `__cls__` strings,
   every module in a fresh interpreter, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
 - `test_graph_split.py` writes `temp_saved_model_test/` into the working directory and removes it at the end; a killed run leaves it behind (untracked), delete it before committing.
+- A coverage run writes `.coverage*` into the working directory; another `--cov` run started in the same directory while a full-suite run is going (even of a tool test) is combined into its report (`tools/check_clones.py` appeared in a library report that way). Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
+- A new worktree has no `uv.lock` (it is git-excluded): copy it from another tree, then `uv sync --frozen --offline`.
 - Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
   `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
 - The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.
