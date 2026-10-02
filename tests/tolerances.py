@@ -27,3 +27,13 @@ COVARIANCE_F64 = Tolerance(rtol=1e-9, atol=1e-9)
 # Forces against a central finite difference of the energy in float64: step 1e-4 A gives a
 # truncation error of order step**2 times the third derivative, about 1e-8 for the test cluster.
 FINITE_DIFFERENCE_F64 = Tolerance(rtol=1e-6, atol=1e-7)
+
+
+def sample_std_rtol(n_samples: int, n_sigma: float = 5.0) -> float:
+    """Relative tolerance for the sample standard deviation of ``n_samples`` normal draws.
+
+    The standard error of a sample standard deviation is ``1 / sqrt(2 n)`` of the true value,
+    so a bound of ``n_sigma`` standard errors fails a correct initialiser only about once in
+    ``1.7e6`` runs for 5 sigma; with a fixed seed the outcome is deterministic anyway.
+    """
+    return n_sigma / (2.0 * n_samples) ** 0.5
