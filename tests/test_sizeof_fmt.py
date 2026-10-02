@@ -91,7 +91,7 @@ def test_the_shared_module_imports_neither_tensorflow_nor_the_package():
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             imported.add((node.module or "").split(".")[0])
-    assert imported == {"__future__", "os"}
+    assert imported == {"__future__", "pathlib"}
 
 
 @pytest.mark.parametrize("power", range(9))

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 _BINARY_PREFIXES = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi")
 
@@ -24,7 +24,7 @@ def sizeof_fmt(file_name_or_size: str | float, suffix: str = "B") -> str:
         sizes of 1024**8 or more stay in ``Yi``.
     """
     if isinstance(file_name_or_size, str):
-        file_name_or_size = os.path.getsize(file_name_or_size)
+        file_name_or_size = Path(file_name_or_size).stat().st_size
     for unit in _BINARY_PREFIXES:
         if abs(file_name_or_size) < 1024.0:
             return f"{file_name_or_size:3.1f}{unit}{suffix}"
