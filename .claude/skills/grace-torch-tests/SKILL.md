@@ -10,8 +10,10 @@ description: How to test changes in this repository - the 90% coverage rule for 
 A function, method or class you are about to **modify** must already be covered at **90% or more**, branches included, by the existing suite. Unit =
 a def or method (a class body counts when a class attribute changes). Coverage = (statements + branches executed) / (statements + branches).
 
-1. Measure the unit on the unmodified code (branch coverage; `pytest --cov=tensorpotential --cov-branch -n 4`, per-function numbers through
-   `tools/check_touched_coverage.py` when it exists, otherwise from the coverage JSON).
+1. Measure the unit on the unmodified code (branch coverage; `pytest --cov=tensorpotential --cov-branch --cov-report=json:cov.json -n 4`, then
+   `python tools/check_touched_coverage.py --coverage cov.json --unit path/to/file.py::Class.method`; without `--unit` it checks every unit a diff against
+   `--base` touches). A unit counts as touched when its AST differs after dropping comments, docstrings and annotations; a nested def is its own unit and
+   module-level statements are not gated. A file that no test imports counts as 0%.
 2. Below 90%: write **characterization tests first**, check that they pass on the code before the change (the `pre-cleanup` tag or the parent commit),
    commit them separately as `test:`.
 3. Make the change. Re-run the check; it must report 90% or more for every touched unit.
