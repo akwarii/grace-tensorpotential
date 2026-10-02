@@ -320,7 +320,6 @@ def import_results(tmp_path_factory):
     )
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("module_name", package_modules())
 def test_module_imports_in_fresh_subprocess(module_name, import_results):
     returncode = import_results[module_name]["returncode"]
