@@ -1,0 +1,465 @@
+{
+ "files": {
+  "tensorpotential/__init__.py": {
+   "covered": 32,
+   "total": 55
+  },
+  "tensorpotential/calculator/__init__.py": {
+   "covered": 4,
+   "total": 4
+  },
+  "tensorpotential/calculator/asecalculator.py": {
+   "covered": 732,
+   "total": 845
+  },
+  "tensorpotential/calculator/bulk.py": {
+   "covered": 70,
+   "total": 70
+  },
+  "tensorpotential/calculator/foundation_models.py": {
+   "covered": 154,
+   "total": 298
+  },
+  "tensorpotential/cli/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/cli/data.py": {
+   "covered": 474,
+   "total": 985
+  },
+  "tensorpotential/cli/distribute.py": {
+   "covered": 0,
+   "total": 21
+  },
+  "tensorpotential/cli/gracemaker.py": {
+   "covered": 267,
+   "total": 428
+  },
+  "tensorpotential/cli/metrics.py": {
+   "covered": 101,
+   "total": 122
+  },
+  "tensorpotential/cli/prepare.py": {
+   "covered": 199,
+   "total": 244
+  },
+  "tensorpotential/cli/train.py": {
+   "covered": 481,
+   "total": 743
+  },
+  "tensorpotential/cli/train_callbacks.py": {
+   "covered": 204,
+   "total": 238
+  },
+  "tensorpotential/cli/wizard.py": {
+   "covered": 418,
+   "total": 719
+  },
+  "tensorpotential/compat/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/compat/pace/__init__.py": {
+   "covered": 0,
+   "total": 8
+  },
+  "tensorpotential/compat/pace/_version.py": {
+   "covered": 0,
+   "total": 514
+  },
+  "tensorpotential/compat/pace/constants.py": {
+   "covered": 0,
+   "total": 8
+  },
+  "tensorpotential/compat/pace/fit.py": {
+   "covered": 0,
+   "total": 547
+  },
+  "tensorpotential/compat/pace/fitmetrics.py": {
+   "covered": 0,
+   "total": 110
+  },
+  "tensorpotential/compat/pace/functions/__init__.py": {
+   "covered": 0,
+   "total": 2
+  },
+  "tensorpotential/compat/pace/functions/radial_functions.py": {
+   "covered": 0,
+   "total": 101
+  },
+  "tensorpotential/compat/pace/functions/spherical_harmonics.py": {
+   "covered": 0,
+   "total": 227
+  },
+  "tensorpotential/compat/pace/potentials/__init__.py": {
+   "covered": 0,
+   "total": 1
+  },
+  "tensorpotential/compat/pace/potentials/ace.py": {
+   "covered": 0,
+   "total": 652
+  },
+  "tensorpotential/compat/pace/tensorpot.py": {
+   "covered": 0,
+   "total": 246
+  },
+  "tensorpotential/compat/pace/utils/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/compat/pace/utils/neighborlist.py": {
+   "covered": 0,
+   "total": 26
+  },
+  "tensorpotential/compat/pace/utils/symbols.py": {
+   "covered": 0,
+   "total": 1
+  },
+  "tensorpotential/compat/pace/utils/tensorcalc.py": {
+   "covered": 0,
+   "total": 69
+  },
+  "tensorpotential/compat/pace/utils/utilities.py": {
+   "covered": 0,
+   "total": 244
+  },
+  "tensorpotential/constants.py": {
+   "covered": 57,
+   "total": 57
+  },
+  "tensorpotential/data/__init__.py": {
+   "covered": 2,
+   "total": 2
+  },
+  "tensorpotential/data/databuilder.py": {
+   "covered": 617,
+   "total": 734
+  },
+  "tensorpotential/data/dataset_plotter.py": {
+   "covered": 100,
+   "total": 105
+  },
+  "tensorpotential/data/dense_nbr.py": {
+   "covered": 233,
+   "total": 247
+  },
+  "tensorpotential/data/process_df.py": {
+   "covered": 122,
+   "total": 164
+  },
+  "tensorpotential/data/shards.py": {
+   "covered": 6,
+   "total": 14
+  },
+  "tensorpotential/data/streaming.py": {
+   "covered": 401,
+   "total": 509
+  },
+  "tensorpotential/data/symbols.py": {
+   "covered": 0,
+   "total": 1
+  },
+  "tensorpotential/data/tpatoms.py": {
+   "covered": 6,
+   "total": 7
+  },
+  "tensorpotential/data/weighting.py": {
+   "covered": 116,
+   "total": 209
+  },
+  "tensorpotential/export.py": {
+   "covered": 184,
+   "total": 189
+  },
+  "tensorpotential/extra/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/extra/extra_data_builders.py": {
+   "covered": 2,
+   "total": 2
+  },
+  "tensorpotential/extra/extra_losses.py": {
+   "covered": 2,
+   "total": 2
+  },
+  "tensorpotential/extra/gen_tensor/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/extra/gen_tensor/constants.py": {
+   "covered": 9,
+   "total": 9
+  },
+  "tensorpotential/extra/gen_tensor/databuilder.py": {
+   "covered": 98,
+   "total": 125
+  },
+  "tensorpotential/extra/gen_tensor/ewald.py": {
+   "covered": 0,
+   "total": 51
+  },
+  "tensorpotential/extra/gen_tensor/loss.py": {
+   "covered": 25,
+   "total": 28
+  },
+  "tensorpotential/extra/gen_tensor/metrics.py": {
+   "covered": 10,
+   "total": 18
+  },
+  "tensorpotential/extra/gen_tensor/model.py": {
+   "covered": 269,
+   "total": 308
+  },
+  "tensorpotential/extra/gen_tensor/wizard.py": {
+   "covered": 365,
+   "total": 609
+  },
+  "tensorpotential/extra/model_computes.py": {
+   "covered": 2,
+   "total": 2
+  },
+  "tensorpotential/extra/presets.py": {
+   "covered": 0,
+   "total": 18
+  },
+  "tensorpotential/functions/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/functions/couplings.py": {
+   "covered": 236,
+   "total": 404
+  },
+  "tensorpotential/functions/lora.py": {
+   "covered": 62,
+   "total": 71
+  },
+  "tensorpotential/functions/nn.py": {
+   "covered": 261,
+   "total": 333
+  },
+  "tensorpotential/functions/radial.py": {
+   "covered": 165,
+   "total": 196
+  },
+  "tensorpotential/functions/spherical_harmonics.py": {
+   "covered": 151,
+   "total": 234
+  },
+  "tensorpotential/instructions/__init__.py": {
+   "covered": 18,
+   "total": 19
+  },
+  "tensorpotential/instructions/base.py": {
+   "covered": 453,
+   "total": 525
+  },
+  "tensorpotential/instructions/compute.py": {
+   "covered": 2596,
+   "total": 3218
+  },
+  "tensorpotential/instructions/instruction_graph_utils.py": {
+   "covered": 238,
+   "total": 258
+  },
+  "tensorpotential/instructions/output.py": {
+   "covered": 461,
+   "total": 601
+  },
+  "tensorpotential/loss.py": {
+   "covered": 278,
+   "total": 591
+  },
+  "tensorpotential/metadata_utils.py": {
+   "covered": 32,
+   "total": 44
+  },
+  "tensorpotential/metrics.py": {
+   "covered": 46,
+   "total": 75
+  },
+  "tensorpotential/poly.py": {
+   "covered": 156,
+   "total": 209
+  },
+  "tensorpotential/potentials/__init__.py": {
+   "covered": 34,
+   "total": 38
+  },
+  "tensorpotential/potentials/presets.py": {
+   "covered": 310,
+   "total": 437
+  },
+  "tensorpotential/potentials/registry.py": {
+   "covered": 13,
+   "total": 13
+  },
+  "tensorpotential/resources/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/scripts/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/scripts/_kokkos_export.py": {
+   "covered": 716,
+   "total": 1321
+  },
+  "tensorpotential/scripts/df2extxyz.py": {
+   "covered": 0,
+   "total": 73
+  },
+  "tensorpotential/scripts/extxyz2df.py": {
+   "covered": 0,
+   "total": 43
+  },
+  "tensorpotential/scripts/grace_collect.py": {
+   "covered": 0,
+   "total": 258
+  },
+  "tensorpotential/scripts/grace_dashboard.py": {
+   "covered": 0,
+   "total": 384
+  },
+  "tensorpotential/scripts/grace_models.py": {
+   "covered": 84,
+   "total": 445
+  },
+  "tensorpotential/scripts/grace_predict.py": {
+   "covered": 0,
+   "total": 61
+  },
+  "tensorpotential/scripts/grace_preprocess.py": {
+   "covered": 0,
+   "total": 525
+  },
+  "tensorpotential/scripts/grace_uq.py": {
+   "covered": 24,
+   "total": 32
+  },
+  "tensorpotential/scripts/grace_utils.py": {
+   "covered": 124,
+   "total": 403
+  },
+  "tensorpotential/scripts/gracemaker.py": {
+   "covered": 41,
+   "total": 85
+  },
+  "tensorpotential/tensorpot.py": {
+   "covered": 268,
+   "total": 509
+  },
+  "tensorpotential/tpmodel.py": {
+   "covered": 523,
+   "total": 810
+  },
+  "tensorpotential/uq/__init__.py": {
+   "covered": 5,
+   "total": 5
+  },
+  "tensorpotential/uq/artifact_builder.py": {
+   "covered": 429,
+   "total": 524
+  },
+  "tensorpotential/uq/cli/__init__.py": {
+   "covered": 0,
+   "total": 0
+  },
+  "tensorpotential/uq/cli/_common.py": {
+   "covered": 184,
+   "total": 331
+  },
+  "tensorpotential/uq/cli/build/__init__.py": {
+   "covered": 13,
+   "total": 15
+  },
+  "tensorpotential/uq/cli/build/__main__.py": {
+   "covered": 0,
+   "total": 5
+  },
+  "tensorpotential/uq/cli/build/cli_args.py": {
+   "covered": 19,
+   "total": 21
+  },
+  "tensorpotential/uq/cli/build/clusters.py": {
+   "covered": 164,
+   "total": 188
+  },
+  "tensorpotential/uq/cli/build/data_resolve.py": {
+   "covered": 104,
+   "total": 155
+  },
+  "tensorpotential/uq/cli/build/master.py": {
+   "covered": 67,
+   "total": 642
+  },
+  "tensorpotential/uq/cli/build/paths.py": {
+   "covered": 10,
+   "total": 30
+  },
+  "tensorpotential/uq/cli/build/streaming.py": {
+   "covered": 12,
+   "total": 46
+  },
+  "tensorpotential/uq/cli/build/thresholds.py": {
+   "covered": 167,
+   "total": 297
+  },
+  "tensorpotential/uq/cli/build/workers.py": {
+   "covered": 18,
+   "total": 203
+  },
+  "tensorpotential/uq/cli/diagnostics.py": {
+   "covered": 286,
+   "total": 307
+  },
+  "tensorpotential/uq/cli/info.py": {
+   "covered": 202,
+   "total": 377
+  },
+  "tensorpotential/uq/cli/predict.py": {
+   "covered": 45,
+   "total": 250
+  },
+  "tensorpotential/uq/cli/select.py": {
+   "covered": 293,
+   "total": 587
+  },
+  "tensorpotential/uq/cli/strategies.py": {
+   "covered": 101,
+   "total": 120
+  },
+  "tensorpotential/uq/compute.py": {
+   "covered": 23,
+   "total": 90
+  },
+  "tensorpotential/uq/constants.py": {
+   "covered": 53,
+   "total": 55
+  },
+  "tensorpotential/uq/factories.py": {
+   "covered": 155,
+   "total": 179
+  },
+  "tensorpotential/uq/feature_extraction.py": {
+   "covered": 147,
+   "total": 254
+  },
+  "tensorpotential/uq/gmmuq.py": {
+   "covered": 196,
+   "total": 234
+  },
+  "tensorpotential/uq/instructions.py": {
+   "covered": 75,
+   "total": 110
+  },
+  "tensorpotential/utils.py": {
+   "covered": 231,
+   "total": 405
+  }
+ },
+ "tool": "coverage.py 7.16.2"
+}

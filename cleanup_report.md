@@ -174,6 +174,88 @@ Reading of the numbers:
 
 **Write audit.** The first read-only run found one write into the working directory: `test_graph_split.py::TestGraphSplitSaveReload::test_split_model_save_reload` saved `temp_saved_model_test` there (now `tmp_path`). `chmod -R a-w` is not a valid way to make the tree read-only for this check: `shutil.copy` and `copytree` propagate the mode and then fail on the copy; a read-only bind mount does not.
 
+## 6. Coverage gate and characterization tests (TEST3)
+
+Measured on 2026-10-02 on the TEST3 branch (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20, coverage.py 7.16.2). The library (`tensorpotential/`) is not changed by this issue: it adds two tools, a tolerance table, six test files and the baseline.
+
+**Tools.** `tools/check_touched_coverage.py` reads a coverage.py JSON report (branch mode) and prints one line per unit, `(statements + branches executed) / (statements + branches)`, exit status 1 under 90%. A unit is a `def`, a method or a class body; a nested `def` is its own unit; module-level statements are not gated. A unit is touched when it is new or its AST differs from the base after dropping comments, docstrings and annotations (the normalised mode of `ast_manifest.py`). A file no test imports counts as 0%. `--unit path::Qualname` names units whatever the diff says. `tools/coverage_ratchet.py record|check` keeps `baselines/coverage_baseline.json` (executed and total statements plus branches per file, 115 files, 56.16% in all) from falling.
+
+**Units of work item (c), before and after.** "Before" is the full suite at `3d8e4ad`; "after" is the full suite with the new tests (`pytest tests -n 4 --dist load --cov=tensorpotential --cov-branch`); "new tests alone" is the new test file of the unit run by itself.
+
+| Unit | Before | New tests alone | After |
+|---|---:|---:|---:|
+| `estimate_n_buckets` | 73.9% | 100% | 100% |
+| `extract_const_shift_scale` | 60.0% | 100% | 100% |
+| `grace_2` | 61.2% | 100% | 100% |
+| `TPCalculator.__init__` | 84.6% | 98.2% | 100% |
+| `FunctionReduce.build` | 71.0% | 100% | 100% |
+| `FunctionReduceN.build` | 60.4% | 100% | 100% |
+| `CollectInvarBasis.build` | 85.7% | 100% | 100% |
+| `FunctionReduceParticular.build` | 88.5% | 100% | 100% |
+
+`TensorPotential._set_default_loss_specs` is dropped from the list (owner, 2026-10-02): it exists only in `compat/pace/`, which no issue may change. The new tests pass on the tag `pre-cleanup` (184 passed, library of the tag) and on HEAD. The full suite with the new tests: 1025 passed, 6 skipped, 2 xfailed, 1 xpassed, 0 failed in 12 min 13 s with `-n 4`; `tools/junit_outcomes.py compare` against `baselines/outcomes_pd2.json` shows no changed or removed test, only added ones (the 184 tests of this issue and those of earlier issues).
+
+**Test layers.** Logic: branches, errors, shapes, options. Physics, from oracles that do not call the unit: hand-counted histories, weight columns and output-norm maps from the coupling selection rules (including the exchange symmetry that removes odd `L` for `l1 == l2`); initialisers against their stated standard deviation with a sampling bound; rotation of the built reducers with real Wigner matrices; for `grace_2`, `R T R^T` covariance of the rank-2 output, translation, permutation, energy invariance and finite-difference forces on the real float64 model; for the calculator, isolated-atom energies beyond the extracted cutoff, per-pair cutoffs, rigid-motion invariance and finite-difference forces. All tolerances come from `tests/tolerances.py`. Mock-like uses: three `monkeypatch.setitem(sys.modules, ...)` in `test_calculator_init.py`, each standing in for a package that is absent from this tree (`tensorpotential.experimental`, the `gen_tensor` data builders), with a comment; one stub subclass of `CollectInvarBasis` (see below).
+
+**Planted mutants** (hand-written, applied in a scratch copy of the library, the test file of the unit run with `-x`): 41 mutants, all caught, none survived.
+
+| Unit | Id | Kind | Mutation | Result |
+|---|---|---|---|---|
+| `estimate_n_buckets` | EN1 | logic | `overhead <= budget` becomes `<` | caught |
+| | EN2 | logic | `total_real_neigh == 0` becomes `!= 0` | caught |
+| | EN3 | physics | bucket padded to its mean instead of its largest batch | caught |
+| | EN4 | physics | overhead `- 1.0` becomes `- 0.9` | caught |
+| | EN5 | logic | fall-through returns 1 instead of `min(batches, 32)` | caught |
+| `extract_const_shift_scale` | XS1 | logic | `not isinstance(shift, (float, int))` inverted | caught |
+| | XS2 | logic | shift map no longer flattened | caught |
+| | XS3 | physics | scale and shift swapped in the result | caught |
+| | XS4 | logic | `ConstantScaleShiftTarget` lookup inverted | caught |
+| `grace_2` | G21 | logic | `max_order > 2` becomes `>= 2` | caught |
+| | G22 | logic | rank guard `< 3` becomes `<= 3` | caught |
+| | G23 | physics | `scale=constant_out_scale` becomes `1.0` | caught |
+| | G24 | physics | parity of the rank-1 reduction `-1` becomes `+1` | caught |
+| | G25 | physics | second-layer product `Lmax=3` becomes `2` (dropped terms) | caught |
+| `TPCalculator.__init__` | TC1 | logic | `"uniform"` removed from the accepted modes | caught |
+| | TC2 | logic | ensemble data-key check inverted | caught |
+| | TC3 | physics | ensemble cutoff `max` becomes `min` | caught |
+| | TC4 | physics | ensemble pair-cutoff matrix `max` becomes `min` | caught |
+| | TC5 | physics | calculator cutoff from the matrix `max` becomes `min` | caught |
+| | TC6 | physics | pair-cutoff keys built with the elements swapped | caught |
+| | TC7 | logic | geometry builder always segment-sum (`dense_nbr=False`) | caught |
+| | TC8 | logic | ensemble engine capability `and` becomes `or` | caught |
+| | TC9 | logic | cutoff-mismatch message disabled | caught |
+| `FunctionReduce.build` | FR1 | logic | atom-type axis dropped from the weight shape | caught |
+| | FR2 | physics | initial standard deviation `sqrt(2/(n_in w))` becomes `sqrt(1/(n_in w))` | caught |
+| | FR3 | logic | `is_built` guard removed | caught |
+| | FR4 | physics | `1/n_instr` constant becomes `n_instr` | caught |
+| | FR5 | physics | output rows of the scatter table reversed (breaks equivariance) | caught |
+| `FunctionReduceN.build` | FN1 | physics | norm `scale/sqrt(n_in)` becomes `scale*sqrt(n_in)` | caught |
+| | FN2 | physics | unnormalised init `1/sqrt(n_in)` becomes `1/n_in` | caught |
+| | FN3 | physics | uniform init lower bound `-s` becomes `0` | caught |
+| | FN4 | logic | output-norm map reshaped `[-1, 1]` instead of `[-1, 1, 1]` | caught |
+| | FN5 | logic | LoRA branch disabled | caught |
+| | FN6 | physics | contribution count `+= 1` becomes `+= 2` (output-norm map) | caught |
+| `CollectInvarBasis.build` | CI1 | logic | `is_built` guard inverted | caught |
+| | CI2 | physics | recorded dtype always `float32` | caught |
+| | CI3 | logic | `max(ls_max) == 0` assertion weakened to `>= 0` | caught |
+| `FunctionReduceParticular.build` | FP1 | logic | `out_norm` branch inverted | caught |
+| | FP2 | physics | `norm = 1/sqrt(n_in)` becomes `1/n_in` | caught |
+| | FP3 | physics | initial standard deviation `1.0` becomes `0.5` | caught |
+| | FP4 | physics | contribution count `+= 1` becomes `+= 2` | caught |
+
+The two tools have their own tests: `check_touched_coverage.py` 36 tests, 99% branch coverage, 23 mutants caught; `coverage_ratchet.py` 15 tests, 98%, 12 of 13 mutants caught (the survivor, `<` against `<=` on the fall test, is equivalent behind the `1e-9` float slack).
+
+**The gate turns red on an untested edit.** On a scratch branch cut from this one, `extrapolate_series` (`scripts/grace_dashboard.py`, never executed by the suite) got one changed constant and `estimate_n_buckets` got a comment-only edit; against the full-suite report of `3d8e4ad`:
+
+```
+FAIL   0.0%  tensorpotential/scripts/grace_dashboard.py::extrapolate_series  (0/42, L233-L278)
+1 unit(s) checked, 1 under 90%, 0 problem(s)        (exit status 1; the comment-only edit is exempt)
+```
+
+**Edits moved here from QUAL1 (work item (d)).** Five QUAL1(c,d) sites sit in units the suite never executes, so by the coverage rule they are not edited and are reported: `scripts/grace_dashboard.py::extract_n_params` (silent `except` at line 108, 0.0%, 0/18), `scripts/grace_dashboard.py::extrapolate_series` (line 272, 0.0%, 0/42), `uq/cli/build/master.py::run_master` (lines 152 and 615, 0.3%, 1/361) and `scripts/grace_collect.py::main` (the `map(lambda ...)` at line 252, 0.0%, 0/108). The other QUAL1 sites are in units now at 100% or already above 90% (`extract_const_shift_scale`, `TPCalculator.__init__`, `compute_compositions` 93.8%, `ElasticBatchIterator.__next__` 94.4%, `get_preset` 100%).
+
+**What the numbers do not cover.** Subprocess coverage (`gracemaker` started by tests) is collected in no run. **Serial against parallel, full suite** (the check TEST2 left to this issue): the same tree run serially (1024 passed, 7 skipped, 2 xfailed, 1 xpassed, 31 min 40 s) and with `-n 4 --dist load` (1025 passed, 6 skipped, 12 min 13 s) gives identical per-file coverage for all 115 files, including `test_integration_test`, `test_distrib` and `test_uq_integration` (largest difference 0.0 percentage points; 56.16% in both); the one outcome that differs is the xdist-only thread-budget test, skipped serially by design. Units not in the list keep their own coverage; the global figure is 56.16% (it was 55.28% at `3d8e4ad`). Findings: the Appendix E table dump is not in the repository, so the table oracles are derived by hand; `CollectInvarBasis` cannot be instantiated as shipped (abstract `upd_init_args_new_elements` missing); `estimate_n_buckets` fails on pandas 3 and emits a `FutureWarning` from `np.array_split` on pandas 2.3.3 (its tests are marked xfail on pandas 3, reason DEPS1).
+
 ## Provenance
 
 Counts re-measured on the tree named at the top; the F1 reproduction was run with the project environment. Compared with the issue text: star imports are 3 in `.py` files (4 with the notebook), everything else (1 `NameError`, 8 bare `except`, 52 markers, the unimported package) matches.
