@@ -72,7 +72,7 @@ def test_savedmodel_dual_dense_signature(tmp_path):
     assert np.allclose(f_seg, f_den, atol=1e-6, rtol=0)
 
 
-def test_calculator_dense_reshape_parity():
+def test_calculator_dense_reshape_parity(cu_two_layer):
     """Dense RESHAPE mode (dense_nbr='reshape', per-atom-uniform bond layout) through
     the calculator matches the segment_sum baseline E/F. The calculator auto-detects
     reshape from the model's instructions and reorders bonds in get_data."""
@@ -88,7 +88,9 @@ def test_calculator_dense_reshape_parity():
         m.decorate_compute_function(input_signature_float_dtype=tf.float64)
         return TPCalculator(model=m, mode="uniform" if dn else "diverse")
 
-    c_base, c_reshape = mk(False), mk("reshape")
+    # the segment_sum baseline is the shared model; the "reshape" spelling is built here
+    c_base = TPCalculator(model=cu_two_layer(False), mode="diverse")
+    c_reshape = mk("reshape")
     assert c_base.dense_reshape is False
     assert c_reshape.dense_reshape is True
 
@@ -110,21 +112,13 @@ def test_calculator_dense_reshape_parity():
     assert nb % nat == 0, f"{nb} bonds not a multiple of {nat} atoms"
 
 
-def test_calculator_mode_resolution_and_tight_padding():
+def test_calculator_mode_resolution_and_tight_padding(cu_two_layer):
     """`mode` selects the engine: 'uniform'->dense (tight initial padding), 'diverse'->segment_sum.
     When the model can't run the requested engine it falls back to the available one; an unknown
     mode raises."""
     import pytest
-    from tensorpotential.potentials.presets import GRACE_2LAYER_v2_25
 
-    def mk(dense):
-        tf.random.set_seed(7); np.random.seed(7)
-        ins = GRACE_2LAYER_v2_25(element_map={"Cu": 0}, rcut=6.0, dense_nbr=dense).get_instructions()
-        m = TPModel(ins); m.build(tf.float64)
-        m.decorate_compute_function(input_signature_float_dtype=tf.float64)
-        return m
-
-    dense_model, seg_model = mk(True), mk(False)
+    dense_model, seg_model = cu_two_layer(True), cu_two_layer(False)
 
     # uniform -> dense, with TIGHT initial padding (small step, no floor64 / geometric ladder)
     c = TPCalculator(model=dense_model, mode="uniform")

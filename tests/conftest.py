@@ -10,6 +10,7 @@ from tensorpotential.uq.artifact_builder import GMMUQArtifactBuilder
 from tensorpotential.uq.feature_extraction import setup_feature_calculator, extract_features_bulk
 from tensorpotential.uq.factories import make_basis_rp_spec
 from tensorpotential.instructions import save_instructions_dict
+from tests.shared_models import CuTwoLayerModels, weights_fingerprint
 
 @pytest.fixture(scope="session")
 def uq_setup(tmp_path_factory):
@@ -79,7 +80,8 @@ def uq_setup(tmp_path_factory):
         **make_basis_rp_spec(model_yaml, rp_dim=RP_DIM),
     )
     
-    return {
+    setup = {
+        "calc": calc,
         "artifact_path": artifact_path,
         "model_yaml": model_yaml,
         "checkpoint": checkpoint,
@@ -90,3 +92,19 @@ def uq_setup(tmp_path_factory):
         "element_indices": element_indices,
         "feature_spec": feature_spec,
     }
+    # ``calc`` is the float64 feature calculator the extraction tests also need; they
+    # share it (it is only read) and the weights are checked unchanged at the end.
+    before = weights_fingerprint(calc.models[0])
+    yield setup
+    assert weights_fingerprint(calc.models[0]) == before, "a test changed the shared UQ calculator"
+
+
+@pytest.fixture(scope="session")
+def cu_two_layer():
+    """Callable ``cu_two_layer(dense)`` returning a shared, read-only Cu 2-layer model.
+
+    Checked unchanged when the session ends.
+    """
+    shared = CuTwoLayerModels()
+    yield shared.get
+    assert not shared.changed(), "a test changed a shared Cu 2-layer model"

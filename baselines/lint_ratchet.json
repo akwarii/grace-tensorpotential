@@ -100,7 +100,7 @@
    "ERA001": 1
   },
   "tests/test_calculator.py": {
-   "E702": 6,
+   "E702": 4,
    "ERA001": 2
   },
   "tests/test_export.py": {

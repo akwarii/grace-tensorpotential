@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 import tensorflow as tf
 from tensorpotential.uq.gmmuq import GMMUQModel, _MISSING_ELEM_INV_COV_DIAG
-from tensorpotential.uq.feature_extraction import setup_feature_calculator
 
 def test_gmm_model_init(uq_setup):
     """Test GMMUQModel loading and metadata inspection."""
@@ -131,11 +130,7 @@ def test_gmm_eval_from_atoms(uq_setup):
     artifact_path = uq_setup["artifact_path"]
     model = GMMUQModel(artifact_path)
 
-    calc = setup_feature_calculator(
-        uq_setup["model_yaml"],
-        uq_setup["checkpoint"],
-        feature_spec=uq_setup["feature_spec"],
-    )
+    calc = uq_setup["calc"]
     atoms = uq_setup["atoms"][:2]
 
     sigma, total, cluster_assign = model.eval_from_atoms(
