@@ -256,6 +256,46 @@ FAIL   0.0%  tensorpotential/scripts/grace_dashboard.py::extrapolate_series  (0/
 
 **What the numbers do not cover.** Subprocess coverage (`gracemaker` started by tests) is collected in no run. **Serial against parallel, full suite** (the check TEST2 left to this issue): the same tree run serially (1024 passed, 7 skipped, 2 xfailed, 1 xpassed, 31 min 40 s) and with `-n 4 --dist load` (1025 passed, 6 skipped, 12 min 13 s) gives identical per-file coverage for all 115 files, including `test_integration_test`, `test_distrib` and `test_uq_integration` (largest difference 0.0 percentage points; 56.16% in both); the one outcome that differs is the xdist-only thread-budget test, skipped serially by design. Units not in the list keep their own coverage; the global figure is 56.16% (it was 55.28% at `3d8e4ad`). Findings: the Appendix E table dump is not in the repository, so the table oracles are derived by hand; `CollectInvarBasis` cannot be instantiated as shipped (abstract `upd_init_args_new_elements` missing); `estimate_n_buckets` fails on pandas 3 and emits a `FutureWarning` from `np.array_split` on pandas 2.3.3 (its tests are marked xfail on pandas 3, reason DEPS1).
 
+## 7. Deduplication (QUAL2)
+
+Measured on 2026-10-02 on the QUAL2 branch (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20) against `torch-backend` at `b8a0104`.
+
+**Tool.** `tools/check_clones.py` (`check`, `record`, `list`) finds *clone groups*: functions of 8 lines or more (from `def` to the last line) whose bodies, without the docstring and the signature, have the same AST. A group is **identical** when the bodies are equal, **renamed** when they become equal after abstracting every identifier (variables, attributes, arguments, keywords, nested names; in `tests/` also the constant values, which is what `pytest.mark.parametrize` abstracts). A body that is only `pass` or `...` is a stub and never counts. `tensorpotential/` is scanned without `compat/pace/`. The check is function-level, so a clone inside a large function is not seen. The ratchet sums both kinds per tree and lets none of groups, functions and redundant lines (lines of all members but the largest) rise above `baselines/clone_baseline.json`. The tool has 34 tests (99% branch coverage) and 20 planted mutants, all caught.
+
+| Tree | Kind | Groups before | Functions before | Redundant lines before | Groups after | Functions after | Redundant lines after |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `tensorpotential/` | identical | 5 | 14 | 112 | 4 | 10 | 88 |
+| `tensorpotential/` | renamed | 5 | 14 | 114 | 5 | 14 | 114 |
+| `tests/` | identical | 3 | 6 | 40 | 0 | 0 | 0 |
+| `tests/` | renamed | 11 | 28 | 486 | 0 | 0 | 0 |
+
+The numbers of the issue text (library 6 identical groups / 16 functions and 9 renamed groups / 26 functions; tests 3 and 13 groups) came from a throw-away script that was not kept; the identical-body counts agree except for two stubs (`IDatasetPlotter.plot` and `TPAtomsDataContainer.__init__`, bodies `pass` behind long signatures, which the issue called "plain attribute assignments"), the renamed counts cannot be reproduced exactly. All groups the issue names are found.
+
+**Library groups.**
+
+| Group | Decision | Reason |
+|---|---|---|
+| `sizeof_fmt` in `cli/data.py`, `scripts/df2extxyz.py`, `scripts/extxyz2df.py`, `scripts/grace_preprocess.py` | **merged** (upstream unit U13) | one function in the new TF-free module `tensorpotential/formatting.py`; three modules import it, the copy in `grace_preprocess.py` had no caller and is deleted; output identical (new tests: 236 cases, 100% line and branch coverage of the module, 9 of 9 planted mutants caught); no script gained a TensorFlow import |
+| `loss.py`: `WeightedOffsetEnergyHuberLoss`, `WeightedHuberEnergyPerAtomLoss`, `WeightedHuberVirialLoss` (identical); six `Weighted{SSE,MAE}*Loss` constructors and the two `WeightedPiecewiseLinear{Force,Stress}Loss` constructors (renamed) | report only | each constructor restates the signature of its parent with its own defaults and forwards it; these are public API, and `capture_init_args` writes the defaults into saved `model.yaml` files, so merging them would change existing models |
+| `instructions/output.py`: `TrainableShiftTarget.__init__`, `TrainableShiftTarget_v2.__init__` against `WeightedSSEForceLoss.__init__` and `HuberLoss.__init__` (renamed) | report only | new in this table: short constructors (a signature, a `super().__init__` call and one assignment) of unrelated classes that happen to have the same shape; public constructors with persisted defaults |
+| `FunctionReduce.drop_unused` / `FunctionReduceN.drop_unused`, `simplify_collected_tensors` (same two), `prepare_variables_for_selected_elements` (`FunctionReduce`, `FunctionReduceN`, `FunctionReduceParticular`) in `instructions/compute.py` | report only | merging needs a shared base or helper in the classes CPU1 edits, and these methods are 3 to 14% covered, so the characterisation tests would cost more than half a day |
+| `TensorPotential.distributed_train_step` / `distributed_test_step` | report only | distributed code that cannot be executed on this machine |
+
+**Test groups (work item (c)).** All 14 test groups are folded; the test ids are unchanged (the folded tests stay as thin functions that call a shared helper, so the id of every test and its outcome in `baselines/outcomes_pd2.json` stay as they were).
+
+| Group | Fold |
+|---|---|
+| six `test_MoNbTaW_LINEAR_lr_*`, `test_MoNbTaW_LINEAR_virial`/`_stress`, `test_MoNbTaW_FS_ef_switch`/`_HEA25`, `test_MoNbTaW_GRACE_1L`/`_bond_cutoff_and_zbl` (`test_integration_test.py`) | the reference metrics move unchanged into one table `REFERENCE`; each test calls `_run_reference(key)` |
+| force and stress loss pairs (`test_loss_piecewise_linear.py`) | `_force_loss_value`, `_stress_loss_value`; the expected values and tolerances stay in the tests |
+| `_build_equivariant_rms_norm_test_data` / `_build_equivariant_gate_test_data`, and the two shape tests (`test_instructions.py`) | one `_build_aa_equivariant_test_data` and `_assert_output_shape_matches_input` |
+| the two `build` closures of the `cp_lL` lm-first tests (`test_spbf_layout_opt.py`) | `_cp_lL_builder` |
+| the two `structure_gen` closures (`test_streaming_pipeline.py`) | `_structure_gen` |
+| five wizard pairs (`test_wizard.py`) | helpers `_assert_apply_state_bfgs_family`, `_use_switch_after_section_loss`, `_ask_foundation_model_selecting`, `_maybe_ask_fp64_variant_answering` |
+
+Checks: the collected test ids are identical before and after (1,271 ids; `pytest --collect-only`, sorted, `diff` empty). For the integration tests, whose bodies are data, a scratch script imported the old and the new module with `general_integration_test` replaced by a recorder and compared the keyword arguments of the 22 calls: equal for all; the same script reports a difference when one number is changed in the table. Seven library mutants (two in `piecewise_linear`, four in `cli/wizard.py`, one in `_ask_foundation_model`) were run against the old and the new `test_loss_piecewise_linear.py` and `test_wizard.py`: the same tests fail in both for each of them (six caught by both; the seventh, `models_in_size[0]` to `[-1]`, survives both: an existing gap, not changed here).
+
+**Full suite.** `pytest tests -n 4 --dist load --cov=tensorpotential --cov-branch` from the repository root, `test_structured_grid.py` and `test_foundation_model_regression.py` ignored as in `baselines/`: 1262 passed, 6 skipped, 2 xfailed, 1 xpassed, 0 failed in 23 min 4 s (the machine ran other work, and coverage is on). `tools/junit_outcomes.py compare baselines/outcomes_pd2.json` reports no changed and no removed test, only 576 added ones (those of the earlier issues and the 236 of `test_sizeof_fmt.py`). Per-file coverage against `baselines/coverage_baseline.json`: identical for 111 of the 115 files; the four that differ are the four edited by the `sizeof_fmt` merge. `cli/data.py` falls from 48.12% to 47.84% (474/985 to 465/972) because nine covered statements and branches of the function moved to `formatting.py` (17 of 17 covered) together with four uncovered ones; `df2extxyz.py`, `extxyz2df.py` rise because `test_sizeof_fmt.py` now imports them; `grace_preprocess.py` loses the dead copy. The baseline was re-recorded with `--allow-fall` for that relocation (116 files, 56.34%; it was 56.16%). Library units are otherwise untouched: `ast_manifest.py check` lists the same files as before plus the four. A concurrent `--cov` run of the tool tests wrote `tools/check_clones.py` into the combined data of this run; it was removed from the report before recording. Pandas 3 was not run (the changes touch no DataFrame code).
+
 ## Provenance
 
 Counts re-measured on the tree named at the top; the F1 reproduction was run with the project environment. Compared with the issue text: star imports are 3 in `.py` files (4 with the notebook), everything else (1 `NameError`, 8 bare `except`, 52 markers, the unimported package) matches.
