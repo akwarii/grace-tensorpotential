@@ -50,6 +50,27 @@ def test_function_length_is_counted_from_def_to_last_line(tmp_path):
     ]
 
 
+@pytest.mark.parametrize("stub", ["pass", "...", "pass\n    ..."])
+def test_a_stub_with_a_long_signature_is_not_a_clone(tmp_path, stub):
+    signature = "def f(\n" + "    a,\n" * 8 + "):\n"
+    src = signature + f"    {stub}\n"
+    root = project(tmp_path, {"a.py": src, "b.py": src.replace("def f", "def g")}, {})
+    assert cc.functions(root, cc.TREES[0]) == []
+
+
+def test_a_body_that_only_starts_with_pass_is_still_a_clone(tmp_path):
+    src = "def f(a):\n    pass\n" + "    a = a + 1\n" * 6
+    root = project(tmp_path, {"a.py": src, "b.py": src.replace("def f", "def g")}, {})
+    (group,) = lib_groups(root)
+    assert (group.kind, len(group.members)) == ("identical", 2)
+
+
+def test_a_docstring_only_function_is_not_a_clone(tmp_path):
+    src = "def f(\n" + "    a,\n" * 8 + '):\n    """Only a docstring."""\n'
+    root = project(tmp_path, {"a.py": src, "b.py": src.replace("def f", "def g")}, {})
+    assert cc.functions(root, cc.TREES[0]) == []
+
+
 def test_docstring_counts_as_a_line_but_not_as_body(tmp_path):
     root = project(
         tmp_path, {"a.py": func("f", 8, doc="one"), "b.py": func("g", 8, doc="two")}, {}

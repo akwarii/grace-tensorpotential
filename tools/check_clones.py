@@ -1,7 +1,9 @@
 """No-increase ratchet on duplicated functions (QUAL2).
 
 A *clone group* is a set of two or more functions of ``MIN_LINES`` lines or more whose bodies (the
-docstring and the signature are ignored) have the same AST. The group is **identical** when the
+docstring and the signature are ignored) have the same AST. A body that is only ``pass`` or ``...``
+is a stub, not duplicated logic, and is never counted (a long signature would otherwise make two
+abstract methods a clone). The group is **identical** when the
 bodies are equal, and **renamed** when they become equal once every identifier is abstracted
 (variable, attribute, argument, keyword and nested function names; in the test tree also the constant
 values, which is what ``pytest.mark.parametrize`` abstracts). ``compat/pace`` is excluded from the
@@ -130,6 +132,19 @@ def _without_docstring(body: list[ast.stmt]) -> list[ast.stmt]:
     return body[1:] if is_doc else body
 
 
+def _is_stub(body: list[ast.stmt]) -> bool:
+    """Whether ``body`` is only ``pass`` or ``...``."""
+    return all(
+        isinstance(s, ast.Pass)
+        or (
+            isinstance(s, ast.Expr)
+            and isinstance(s.value, ast.Constant)
+            and s.value.value is Ellipsis
+        )
+        for s in body
+    )
+
+
 def _dump(body: list[ast.stmt], abstract: _Abstract | None = None) -> str:
     return "\n".join(
         ast.dump(abstract.visit(copy.deepcopy(s)) if abstract else s) for s in body
@@ -149,7 +164,7 @@ class _Collector(ast.NodeVisitor):
     def _function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         lines = (node.end_lineno or node.lineno) - node.lineno + 1
         body = _without_docstring(node.body)
-        if lines >= self.min_lines and body:
+        if lines >= self.min_lines and body and not _is_stub(body):
             where = f"{self.rel}:{node.lineno}:{'.'.join([*self.scope, node.name])}"
             self.found.append(
                 Func(where, lines, _dump(body), _dump(body, self.abstract))

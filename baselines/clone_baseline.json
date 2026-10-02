@@ -2,9 +2,9 @@
  "counts": {
   "library": {
    "identical": {
-    "functions": 12,
-    "groups": 5,
-    "redundant_lines": 101
+    "functions": 10,
+    "groups": 4,
+    "redundant_lines": 88
    },
    "renamed": {
     "functions": 14,
