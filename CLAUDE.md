@@ -24,6 +24,8 @@ uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xd
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load -m "not slow" \
+    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast development loop, about 4 minutes (TEST4)
 
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
@@ -46,7 +48,7 @@ python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json
 python tools/check_clones.py check                  # duplicated functions may not increase (baselines/clone_baseline.json)
 ```
 
-The full suite takes about 32 minutes serially and about 10 minutes with `-n 4` (14 cores, 30 GB). Two test files are not part of a normal
+The full suite takes about 20 minutes serially and about 8 minutes with `-n 4` (14 cores, 30 GB; idle machine, 1,277 tests, see `cleanup_report.md` section 8). Two test files are not part of a normal
 run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; it is ignored above only so that
 counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
 A test writes only into `tmp_path` (or a scratch directory), never into the working directory or the source tree; `git status` is clean after a run.
@@ -79,7 +81,9 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 - Tolerances come from one named table (`tests/tolerances.py`; `numpy.isclose` semantics: `atol + rtol*|reference|`); never inline a number, never widen a tolerance to
   make a test pass.
 - Tests must not depend on the working directory or on each other's output: use `tmp_path`, per-worker directories, fixed seeds, no network.
-- Markers: `slow` (30 s or more), `gpu`, `hpc`, `tf`; unavailable capabilities skip locally but fail in CI jobs that require them.
+- Markers: `slow` (30 s or more; registered in `pytest.ini`; the tests are listed in `tests/slow_tests.txt` and marked by the root `conftest.py`, so edit the list when you fold, rename or add a test of that size), `gpu`, `hpc`, `tf` (these three are not registered yet); unavailable capabilities skip locally but fail in CI jobs that require them. Nothing is skipped by default; `-m "not slow"` is the fast loop.
+- A model, calculator or result built once and used by several tests is read-only for them: fingerprint it when it is built and compare when its scope ends (`tests/shared_models.py`: `weights_fingerprint`, `CuTwoLayerModels`). A test that saves, trains or edits a model builds its own.
+- Timings: wall-clock figures are comparable only between runs made back to back on a machine with no other test run (another agent's suite in a second worktree about doubled the time of the same tests); under `-n N` the tests themselves run slower (about 38% at N = 4), so compare wall time to wall time and summed test times to summed test times.
 - Random-weight models only; real or foundation-model weights are HPC-only.
 
 ## Architecture
@@ -119,7 +123,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - A worktree has no `.venv` (git-ignored): link `.venv` and `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable `tensorpotential`
   install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout). `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
 - `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` in code, tests, docs and notebooks, `__cls__` strings,
-  every module in a fresh interpreter, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
+  every module imported on its own in a fork of one interpreter that has imported the package, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
 - `test_graph_split.py` writes `temp_saved_model_test/` into the working directory and removes it at the end; a killed run leaves it behind (untracked), delete it before committing.
 - A coverage run writes `.coverage*` into the working directory; another `--cov` run started in the same directory while a full-suite run is going (even of a tool test) is combined into its report (`tools/check_clones.py` appeared in a library report that way). Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
 - A new worktree has no `uv.lock` (it is git-excluded): copy it from another tree, then `uv sync --frozen --offline`.
