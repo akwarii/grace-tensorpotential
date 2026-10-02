@@ -33,6 +33,13 @@ uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty
 uv run --frozen --no-sync python tools/lint_ratchet.py record   # after a drop: records the lower baseline (a rise needs --allow-rise)
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
+# Coverage gate (TEST3): a full run with branch coverage takes about 21 minutes with -n 4
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json \
+    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
+python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend]  # every def/method/class body the diff touches: 90%
+python tools/check_touched_coverage.py --coverage cov.json --unit path/to/file.py::Class.method   # name a unit whatever the diff says
+python tools/coverage_ratchet.py check cov.json            # no file may cover a smaller share than baselines/coverage_baseline.json
+
 # Compare against the untouched-tree baselines (see baselines/README.md)
 python tools/ast_manifest.py check baselines/ast_manifest.json
 python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json
@@ -68,7 +75,7 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
   hand-computed numbers. A refactor may change the logic and the physics tests must still pass.
 - Prefer real objects to mocks. A mock, stub or `monkeypatch` is acceptable at an external boundary (network, clock, absent hardware) with a
   comment saying what it replaces; never for the unit under test or for a numeric or physical path.
-- Tolerances come from one named table (`numpy.isclose` semantics: `atol + rtol*|reference|`); never inline a number, never widen a tolerance to
+- Tolerances come from one named table (`tests/tolerances.py`; `numpy.isclose` semantics: `atol + rtol*|reference|`); never inline a number, never widen a tolerance to
   make a test pass.
 - Tests must not depend on the working directory or on each other's output: use `tmp_path`, per-worker directories, fixed seeds, no network.
 - Markers: `slow` (30 s or more), `gpu`, `hpc`, `tf`; unavailable capabilities skip locally but fail in CI jobs that require them.
@@ -116,6 +123,11 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
   `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
 - The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.
+- A git worktree has no `.venv`: run with the main checkout's interpreter and `PYTHONPATH=$PWD` (print `tensorpotential.__file__` once, because the
+  editable install otherwise resolves to the main tree), and give `ty` the environment with `--python <main>/.venv`. `--cov=<dotted module path>` failed once at
+  conftest import with an ImportError (cause not isolated); use `--cov=tensorpotential`.
+- `CollectInvarBasis` cannot be instantiated as shipped (it lacks the abstract `upd_init_args_new_elements`); `tests/test_spbf_layout_opt.py` and
+  `tests/test_function_reduce_builds.py` subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
 - `FCRight2Left.build` draws random numbers for `w_right` even with `init_vars="zeros"`; `compat/pace` has a latent `NameError` (`rankmax`).
 - Stage-style work (cleanup, packaging, torch backend) is tracked as issues on the fork's board; use the skills in `.claude/skills/` for the
   procedure (`grace-torch`, `grace-torch-ticket`, `grace-torch-tests`, `grace-torch-goldens`, `grace-torch-numerics`).
