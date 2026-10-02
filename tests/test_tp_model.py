@@ -520,3 +520,13 @@ def test_extract_basis_functions_GRACE_2LAYER_latest():
 
     assert projs1.shape[1] == 168
     assert projs2.shape[1] == 256
+
+
+def test_repr_numbers_the_instructions_in_file_order(cu_two_layer):
+    # TensorFlow formats repr(model) in its "retraced too often" warning, which used to be
+    # the only thing that ever ran __repr__; this pins it without depending on that warning.
+    model = cu_two_layer(False)
+    lines = repr(model).split("\n")
+    names = list(model.instructions)
+    assert len(lines) == len(names) > 10
+    assert lines == [f"{i + 1}. {name!r}" for i, name in enumerate(names)]
