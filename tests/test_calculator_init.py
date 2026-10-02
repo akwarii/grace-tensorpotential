@@ -261,6 +261,22 @@ def test_ensemble_of_matching_models_keeps_every_member():
     )  # only a single SavedModel carries UQ signatures
 
 
+def test_ensemble_cutoff_is_the_largest_of_its_members():
+    calc = TPCalculator(model=[one_layer(rcut=3.0), one_layer(rcut=4.5)])
+    assert calc.cutoff == 4.5  # every member must see all of its neighbours
+
+
+def test_ensemble_pair_cutoffs_are_the_elementwise_maximum():
+    first = {("Al", "Al"): 2.0, ("Al", "Li"): 3.0, ("Li", "Li"): 2.5}
+    second = {("Al", "Al"): 2.5, ("Al", "Li"): 2.0, ("Li", "Li"): 2.75}
+    calc = TPCalculator(
+        model=[one_layer(cutoff_dict=first), one_layer(cutoff_dict=second)]
+    )
+    got = {tuple(map(str, k)): float(v) for k, v in calc.cutoff_dict.items()}
+    assert got == {("Al", "Al"): 2.5, ("Al", "Li"): 3.0, ("Li", "Li"): 2.75}
+    assert calc.cutoff == 3.0
+
+
 def test_ensemble_of_a_dense_and_a_segment_sum_model_has_no_common_engine():
     with pytest.raises(ValueError, match="neither a segment_sum nor a dense"):
         TPCalculator(model=[two_layer(dense=True), two_layer(dense=False)])
