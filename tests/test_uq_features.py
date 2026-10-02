@@ -9,6 +9,7 @@ from tensorpotential.uq.feature_extraction import (
     extract_features,
     extract_features_bulk,
     batch_feature_chunks,
+    setup_feature_calculator,
 )
 from tensorpotential.uq import constants as uqc
 
@@ -44,7 +45,11 @@ def test_feature_buffer():
 
 def test_extract_features(uq_setup):
     """Test feature extraction generators with a mocked-checkpoint model."""
-    calc = uq_setup["calc"]
+    calc = setup_feature_calculator(
+        uq_setup["model_yaml"],
+        uq_setup["checkpoint"],
+        feature_spec=uq_setup["feature_spec"],
+    )
     atoms = uq_setup["atoms"][:3]
 
     # 1. extract_features generator
