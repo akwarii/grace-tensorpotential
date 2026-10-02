@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorpotential.utils import get_dtype_by_name
+from tensorpotential.formatting import sizeof_fmt
 from tqdm import tqdm
 
 
@@ -75,16 +76,6 @@ TESTING_SET_FNAME = "test_set.pkl.gz"
 class MyInputContext:
     input_pipeline_id: int
     num_input_pipelines: int
-
-
-def sizeof_fmt(file_name_or_size, suffix="B"):
-    if isinstance(file_name_or_size, str):
-        file_name_or_size = os.path.getsize(file_name_or_size)
-    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
-        if abs(file_name_or_size) < 1024.0:
-            return "%3.1f%s%s" % (file_name_or_size, unit, suffix)
-        file_name_or_size /= 1024.0
-    return "%.1f%s%s" % (file_name_or_size, "Yi", suffix)
 
 
 def load_dataframe(filename: str, compression: str = "infer") -> pd.DataFrame:

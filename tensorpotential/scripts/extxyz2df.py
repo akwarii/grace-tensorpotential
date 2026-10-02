@@ -3,22 +3,13 @@
 import os
 import argparse
 from tensorpotential.cli.data import load_extxyz
+from tensorpotential.formatting import sizeof_fmt
 
 import logging
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
 logger = logging.getLogger()
-
-
-def sizeof_fmt(file_name_or_size, suffix="B"):
-    if isinstance(file_name_or_size, str):
-        file_name_or_size = os.path.getsize(file_name_or_size)
-    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
-        if abs(file_name_or_size) < 1024.0:
-            return "%3.1f%s%s" % (file_name_or_size, unit, suffix)
-        file_name_or_size /= 1024.0
-    return "%.1f%s%s" % (file_name_or_size, "Yi", suffix)
 
 
 

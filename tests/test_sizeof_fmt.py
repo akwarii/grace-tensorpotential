@@ -6,16 +6,18 @@ The expected strings are worked out by hand from the rule "divide by 1024 until 
 
 from __future__ import annotations
 
+import ast
 import importlib
+from pathlib import Path
 
 import pytest
 
-# Modules that define or import the formatter; all of them must give the same strings.
+# Modules that import the formatter (grace_preprocess had a copy that nothing called; it was deleted); all of them must give the same strings.
 MODULES = (
+    "tensorpotential.formatting",
     "tensorpotential.cli.data",
     "tensorpotential.scripts.df2extxyz",
     "tensorpotential.scripts.extxyz2df",
-    "tensorpotential.scripts.grace_preprocess",
 )
 
 
@@ -71,3 +73,30 @@ def test_a_path_gives_the_size_of_the_file(sizeof_fmt, tmp_path, nbytes, expecte
 def test_a_missing_file_raises(sizeof_fmt, tmp_path):
     with pytest.raises(FileNotFoundError):
         sizeof_fmt(str(tmp_path / "absent.bin"))
+
+
+@pytest.mark.parametrize("module", MODULES[1:])
+def test_the_modules_share_one_function(module):
+    shared = importlib.import_module("tensorpotential.formatting").sizeof_fmt
+    assert importlib.import_module(module).sizeof_fmt is shared
+
+
+def test_the_shared_module_imports_neither_tensorflow_nor_the_package():
+    source = Path(
+        importlib.import_module("tensorpotential.formatting").__file__
+    ).read_text()
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.add((node.module or "").split(".")[0])
+    assert imported == {"__future__", "os"}
+
+
+@pytest.mark.parametrize("power", range(9))
+@pytest.mark.parametrize("mantissa", [1, 3, 512, 1023])
+def test_mantissa_times_a_power_of_1024(sizeof_fmt, mantissa, power):
+    # Built from the prefix table, not from the function's loop: m * 1024**k prints "m.0" + prefix[k].
+    prefixes = ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi", "Yi"]
+    assert sizeof_fmt(mantissa * 1024**power) == f"{mantissa}.0{prefixes[power]}B"
