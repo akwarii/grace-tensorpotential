@@ -7,6 +7,486 @@ from .utils import general_integration_test
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
+def _run_reference(key):
+    """Run ``general_integration_test`` with the reference case ``REFERENCE[key]``."""
+    case = dict(REFERENCE[key])
+    general_integration_test(case.pop("folder"), **case)
+
+
+# Reference metrics (train and test) of the training runs below, keyed by test; each entry holds the
+# keyword arguments of ``general_integration_test`` for that run.
+REFERENCE = {
+    "FS_ef_switch": dict(
+        folder="MoNbTaW-FS",
+        train_ref_metrics={
+            "total_loss/train": 1283.309721631395,
+            "mae/depa": 11.261418809117348,
+            "mae/de": 204.20554332220198,
+            "rmse/depa": 11.291774340897046,
+            "rmse/de": 245.7912684590068,
+            "mae/f_comp": 0.1376806732116039,
+            "rmse/f_comp": 0.28754206603531807,
+            "loss_component/energy/train": 127.5041677657409,
+            "loss_component/forces/train": 0.8268043973985921,
+            "total_time/train/per_atom": 0.0015550825736009638,
+            "epoch": 2.0,
+            "step": 4.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        test_ref_metrics={
+            "total_loss/test": 1137.1809919717696,
+            "loss_component/energy/test": 56.19842265190726,
+            "loss_component/forces/test": 0.6606269466812211,
+            "mae/depa": 10.57101419220454,
+            "mae/de": 181.58979220799398,
+            "rmse/depa": 10.601737843571424,
+            "rmse/de": 210.25317269622653,
+            "mae/f_comp": 0.21857830694723623,
+            "rmse/f_comp": 0.3634905629259778,
+            "total_time/test/per_atom": 0.0006433775853913496,
+            "epoch": 2.0,
+            "step": 4.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        ref_n_epochs=2,
+        input="input_3fs.yaml",
+    ),
+    "FS_HEA25": dict(
+        folder="MoNbTaW-FS",
+        train_ref_metrics={
+            "total_loss/train": 581.5534751745465,
+            "mae/depa": 10.739649613140577,
+            "mae/de": 196.52119331558274,
+            "rmse/depa": 10.782895329970144,
+            "rmse/de": 237.9337723113288,
+            "mae/f_comp": 0.1724362134187124,
+            "rmse/f_comp": 0.3156870991082631,
+            "loss_component/energy/train": 58.135415848545975,
+            "loss_component/forces/train": 0.01993166890867807,
+            "total_time/train/per_atom": 0.0010472961357268302,
+            "epoch": 2.0,
+            "step": 4.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        test_ref_metrics={
+            "total_loss/test": 409.51920438125717,
+            "loss_component/energy/test": 20.451786558664878,
+            "loss_component/forces/test": 0.02417366039797987,
+            "mae/depa": 8.526122075021103,
+            "mae/de": 158.97279990400733,
+            "rmse/depa": 9.044730301930484,
+            "rmse/de": 196.2829846977232,
+            "mae/f_comp": 0.2937491503426102,
+            "rmse/f_comp": 0.4916671678888054,
+            "total_time/test/per_atom": 0.000425660255474641,
+            "epoch": 2.0,
+            "step": 4.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        ref_n_epochs=2,
+        input="input_hea25.yaml",
+    ),
+    "GRACE_1L": dict(
+        folder="MoNbTaW-GRACE",
+        train_ref_metrics={
+            "total_loss/train": 345.5336329056141,
+            "mae/depa": 7.6192843030291915,
+            "mae/de": 129.52078670915165,
+            "rmse/depa": 8.306117089036361,
+            "rmse/de": 152.52526433630103,
+            "mae/f_comp": 0.26202633476635917,
+            "rmse/f_comp": 0.5365293196577281,
+            "loss_component/energy/train": 34.495790548390936,
+            "loss_component/forces/train": 0.057572742170476934,
+            "total_time/train/per_atom": 0.0007821729807841147,
+            "epoch": 3.0,
+            "step": 6.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        test_ref_metrics={
+            "total_loss/test": 447.8039699570137,
+            "loss_component/energy/test": 22.267759335305374,
+            "loss_component/forces/test": 0.1224391625453122,
+            "mae/depa": 8.246730120475002,
+            "mae/de": 165.763145619602,
+            "rmse/depa": 9.43774535263701,
+            "rmse/de": 290.2922406552409,
+            "mae/f_comp": 0.4581693282089552,
+            "rmse/f_comp": 1.106522311321883,
+            "total_time/test/per_atom": 8.065275341162787e-05,
+            "epoch": 3.0,
+            "step": 6.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        ref_n_epochs=3,
+        input="input_1L.yaml",
+    ),
+    "GRACE_1L_bond_cutoff_and_zbl": dict(
+        folder="MoNbTaW-GRACE",
+        train_ref_metrics={
+            "total_loss/train": 583.6855389756331,
+            "mae/depa": 10.69183436918944,
+            "mae/de": 189.52295360848183,
+            "rmse/depa": 10.778362261725583,
+            "rmse/de": 224.03369469819543,
+            "mae/f_comp": 0.6092810786075135,
+            "rmse/f_comp": 1.187449735921898,
+            "loss_component/energy/train": 58.08654652249511,
+            "loss_component/forces/train": 0.2820073750681972,
+            "total_time/train/per_atom": 0.0007587777502561474,
+            "epoch": 3.0,
+            "step": 6.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        test_ref_metrics={
+            "total_loss/test": 313.4725750535386,
+            "loss_component/energy/test": 15.54412114237623,
+            "loss_component/forces/test": 0.12950761030069927,
+            "mae/depa": 7.330329464281588,
+            "mae/de": 105.18572783830102,
+            "rmse/depa": 7.885206691615948,
+            "rmse/de": 117.30802609943532,
+            "mae/f_comp": 0.6577695850252212,
+            "rmse/f_comp": 1.138014104924448,
+            "total_time/test/per_atom": 6.386162918608854e-05,
+            "epoch": 3.0,
+            "step": 6.0,
+            "lr_epoch_begin": 0.10000000149011612,
+            "lr_epoch_end": 0.10000000149011612,
+        },
+        ref_n_epochs=3,
+        input="input_1L_bond_cutoff.yaml",
+    ),
+    "LINEAR_virial": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 1742.3514462572605,
+            "mae/depa": 11.5597502346071,
+            "mae/de": 209.48641236901435,
+            "rmse/depa": 11.58640414584,
+            "rmse/de": 251.95193205133964,
+            "mae/f_comp": 0.1644396989054902,
+            "rmse/f_comp": 0.4519461720105321,
+            "mae/virial": 4.12256334233479,
+            "rmse/virial": 12.35348797979645,
+            "mae/stress": 0.017233325080393946,
+            "rmse/stress": 0.05068364947952008,
+            "loss_component/energy/train": 26.26789436916456,
+            "loss_component/forces/train": 0.2260717123111281,
+            "loss_component/virial/train": 321.9763231699764,
+            "total_time/train/per_atom": 0.0014206461972840455,
+            "epoch": 2.0,
+            "per_group_metrics.low.mae/depa": 11.559750234607101,
+            "per_group_metrics.low.mae/de": 209.4864123690144,
+            "per_group_metrics.low.rmse/depa": 11.58640414584,
+            "per_group_metrics.low.rmse/de": 251.95193205133964,
+            "per_group_metrics.low.mae/f_comp": 0.16443969890549018,
+            "per_group_metrics.low.rmse/f_comp": 0.45194617201053217,
+            "per_group_metrics.low.mae/virial": 4.122563342334789,
+            "per_group_metrics.low.rmse/virial": 12.353487979796451,
+            "per_group_metrics.low.mae/stress": 0.01723332508039395,
+            "per_group_metrics.low.rmse/stress": 0.05068364947952008,
+            "per_group_metrics.low.num_struct": 20.0,
+            "per_group_metrics.low.num_atoms": 368.0,
+        },
+        test_ref_metrics={
+            "total_loss/test": 7075.598752398175,
+            "loss_component/energy/test": 25.19492180212521,
+            "loss_component/forces/test": 0.17863108665898098,
+            "loss_component/virial/test": 1389.746197590851,
+            "mae/depa": 11.377418651882675,
+            "mae/de": 195.3906089054755,
+            "rmse/depa": 11.398449558985346,
+            "rmse/de": 226.14675604180803,
+            "mae/f_comp": 0.13514946927451418,
+            "rmse/f_comp": 0.31350754449591917,
+            "mae/virial": 6.080039555905703,
+            "rmse/virial": 24.615980133826667,
+            "mae/stress": 0.012683964679508586,
+            "rmse/stress": 0.03476244786555596,
+            "total_time/test/per_atom": 0.00056493255063234,
+            "epoch": 2.0,
+            "per_group_metrics.low.mae/depa": 11.377418651882675,
+            "per_group_metrics.low.mae/de": 195.39060890547552,
+            "per_group_metrics.low.rmse/depa": 11.398449558985346,
+            "per_group_metrics.low.rmse/de": 226.14675604180806,
+            "per_group_metrics.low.mae/f_comp": 0.13514946927451418,
+            "per_group_metrics.low.rmse/f_comp": 0.3135075444959192,
+            "per_group_metrics.low.mae/virial": 6.080039555905702,
+            "per_group_metrics.low.rmse/virial": 24.615980133826667,
+            "per_group_metrics.low.mae/stress": 0.012683964679508587,
+            "per_group_metrics.low.rmse/stress": 0.034762447865555955,
+            "per_group_metrics.low.num_struct": 20.0,
+            "per_group_metrics.low.num_atoms": 340.0,
+        },
+        ref_n_epochs=2,
+        many_runs=[
+                ["input_virial.yaml"],
+            ],
+    ),
+    "LINEAR_stress": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 131.97210000819922,
+            "mae/depa": 11.540672028320568,
+            "mae/de": 209.24771219789167,
+            "rmse/depa": 11.566807757502756,
+            "rmse/de": 251.74213133851165,
+            "mae/f_comp": 0.16254466290942887,
+            "rmse/f_comp": 0.4529714182432533,
+            "mae/virial": 4.164536607700274,
+            "rmse/virial": 12.80981019537614,
+            "mae/stress": 0.017164910564212925,
+            "rmse/stress": 0.05083792683247277,
+            "loss_component/energy/train": 26.185959511796842,
+            "loss_component/forces/train": 0.20732644415973583,
+            "loss_component/stress/train": 0.0011340456832679316,
+            "total_time/train/per_atom": 0.0023203688855890346,
+            "epoch": 2.0,
+            "per_group_metrics.low.mae/depa": 11.540672028320568,
+            "per_group_metrics.low.mae/de": 209.24771219789173,
+            "per_group_metrics.low.rmse/depa": 11.566807757502756,
+            "per_group_metrics.low.rmse/de": 251.74213133851163,
+            "per_group_metrics.low.mae/f_comp": 0.1625446629094289,
+            "per_group_metrics.low.rmse/f_comp": 0.4529714182432533,
+            "per_group_metrics.low.mae/virial": 4.164536607700274,
+            "per_group_metrics.low.rmse/virial": 12.80981019537614,
+            "per_group_metrics.low.mae/stress": 0.01716491056421293,
+            "per_group_metrics.low.rmse/stress": 0.05083792683247277,
+            "per_group_metrics.low.num_struct": 20.0,
+            "per_group_metrics.low.num_atoms": 368.0,
+        },
+        test_ref_metrics={
+            "total_loss/test": 126.3803807969523,
+            "loss_component/energy/test": 25.096730548575085,
+            "loss_component/forces/test": 0.17747603509189552,
+            "loss_component/stress/test": 0.0018695757234850185,
+            "mae/depa": 11.355009399558622,
+            "mae/de": 194.99995148412958,
+            "rmse/depa": 11.376266315516474,
+            "rmse/de": 225.6282627442871,
+            "mae/f_comp": 0.1354932587127582,
+            "rmse/f_comp": 0.313071730860987,
+            "mae/virial": 6.090745331788203,
+            "rmse/virial": 24.62483584472683,
+            "mae/stress": 0.012755479612133414,
+            "rmse/stress": 0.03485980665068875,
+            "total_time/test/per_atom": 0.0009524628643275184,
+            "epoch": 2.0,
+            "per_group_metrics.low.mae/depa": 11.355009399558623,
+            "per_group_metrics.low.mae/de": 194.9999514841296,
+            "per_group_metrics.low.rmse/depa": 11.376266315516474,
+            "per_group_metrics.low.rmse/de": 225.6282627442871,
+            "per_group_metrics.low.mae/f_comp": 0.1354932587127582,
+            "per_group_metrics.low.rmse/f_comp": 0.31307173086098694,
+            "per_group_metrics.low.mae/virial": 6.090745331788202,
+            "per_group_metrics.low.rmse/virial": 24.624835844726828,
+            "per_group_metrics.low.mae/stress": 0.01275547961213341,
+            "per_group_metrics.low.rmse/stress": 0.03485980665068875,
+            "per_group_metrics.low.num_struct": 20.0,
+            "per_group_metrics.low.num_atoms": 340.0,
+        },
+        ref_n_epochs=2,
+        many_runs=[
+                ["input_stress.yaml"],
+            ],
+    ),
+    "lr_reduce_on_plateau": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 86388.96089855464,
+            "mae/depa": 293.91999064125366,
+            "mae/de": 587.8399812825073,
+            "rmse/depa": 293.91999064125366,
+            "rmse/de": 587.8399812825073,
+            "mae/f_comp": 1.709743457922741e-14,
+            "rmse/f_comp": 2.5537382093454438e-14,
+            "loss_component/energy/train": 17277.792179710927,
+            "loss_component/forces/train": 6.521578841870874e-28,
+            "total_time/train/per_atom": 0.003750124989892356,
+            "epoch": 5,
+        },
+        test_ref_metrics={
+            "total_loss/test": 1078.717976030194,
+            "loss_component/energy/test": 34.13630846923014,
+            "loss_component/forces/test": 19.799590332279568,
+            "mae/depa": 18.419813604139947,
+            "mae/de": 318.0004536704866,
+            "rmse/depa": 23.75680161302725,
+            "rmse/de": 417.32888026700016,
+            "mae/f_comp": 1.9076265481110548,
+            "rmse/f_comp": 6.903826426461479,
+            "total_time/test/per_atom": 0.0008932093492380762,
+            "epoch": 5,
+        },
+        ref_n_epochs=5,
+        input="input_lr_reduce_on_plateau.yaml",
+    ),
+    "lr_reduce_on_plateau_new_api": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 86388.96089855464,
+            "mae/depa": 293.91999064125366,
+            "mae/de": 587.8399812825073,
+            "rmse/depa": 293.91999064125366,
+            "rmse/de": 587.8399812825073,
+            "mae/f_comp": 1.709743457922741e-14,
+            "rmse/f_comp": 2.5537382093454438e-14,
+            "loss_component/energy/train": 17277.792179710927,
+            "loss_component/forces/train": 6.521578841870874e-28,
+            "total_time/train/per_atom": 0.003750124989892356,
+            "epoch": 5,
+        },
+        test_ref_metrics={
+            "total_loss/test": 1078.717976030194,
+            "loss_component/energy/test": 34.13630846923014,
+            "loss_component/forces/test": 19.799590332279568,
+            "mae/depa": 18.419813604139947,
+            "mae/de": 318.0004536704866,
+            "rmse/depa": 23.75680161302725,
+            "rmse/de": 417.32888026700016,
+            "mae/f_comp": 1.9076265481110548,
+            "rmse/f_comp": 6.903826426461479,
+            "total_time/test/per_atom": 0.0008932093492380762,
+            "epoch": 5,
+        },
+        ref_n_epochs=5,
+        input="input_lr_reduce_on_plateau_new_api.yaml",
+    ),
+    "lr_exponential_decay": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 200.99824377262027,
+            "mae/depa": 14.177384941258394,
+            "mae/de": 28.354769882516788,
+            "rmse/depa": 14.177384941258394,
+            "rmse/de": 28.354769882516788,
+            "mae/f_comp": 6.649773324577761e-18,
+            "rmse/f_comp": 1.2327526502681117e-17,
+            "loss_component/energy/train": 40.199648754524056,
+            "loss_component/forces/train": 1.5196790967430533e-34,
+            "total_time/train/per_atom": 0.010084604498842964,
+            "epoch": 5,
+        },
+        test_ref_metrics={
+            "total_loss/test": 130.34017323870668,
+            "loss_component/energy/test": 6.480867512123688,
+            "loss_component/forces/test": 0.03614114981164616,
+            "mae/depa": 11.378284122938348,
+            "mae/de": 204.70260740817477,
+            "rmse/depa": 11.406753808776225,
+            "rmse/de": 249.11856906998474,
+            "mae/f_comp": 0.20539834351378242,
+            "rmse/f_comp": 0.4236164600096448,
+            "total_time/test/per_atom": 0.0009967192804823271,
+            "epoch": 5,
+        },
+        ref_n_epochs=5,
+        input="input_lr_exponential_decay.yaml",
+    ),
+    "lr_cosine_decay": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 90.97337294606098,
+            "mae/depa": 9.537996275217399,
+            "mae/de": 19.075992550434798,
+            "rmse/depa": 9.537996275217399,
+            "rmse/de": 19.075992550434798,
+            "mae/f_comp": 5.66676335485757e-17,
+            "rmse/f_comp": 8.017350677993573e-17,
+            "loss_component/energy/train": 18.194674589212195,
+            "loss_component/forces/train": 6.4277911893924e-33,
+            "total_time/train/per_atom": 0.0067948545001854654,
+            "epoch": 5,
+        },
+        test_ref_metrics={
+            "total_loss/test": 120.97643764549225,
+            "loss_component/energy/test": 5.849987864107047,
+            "loss_component/forces/test": 0.1988340181675662,
+            "mae/depa": 10.707245647052012,
+            "mae/de": 194.0414184477568,
+            "rmse/depa": 10.863451339096327,
+            "rmse/de": 246.01613710092678,
+            "mae/f_comp": 0.3786722186496125,
+            "rmse/f_comp": 0.8020594648553879,
+            "total_time/test/per_atom": 0.0010997455199588848,
+            "epoch": 5,
+        },
+        ref_n_epochs=5,
+        input="input_lr_cosine_decay.yaml",
+    ),
+    "lr_linear_decay": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 4.161953987445907,
+            "mae/depa": 2.040086759783982,
+            "mae/de": 4.080173519567964,
+            "rmse/depa": 2.040086759783982,
+            "rmse/de": 4.080173519567964,
+            "mae/f_comp": 4.440892098500626e-16,
+            "rmse/f_comp": 5.733167046599011e-16,
+            "loss_component/energy/train": 0.8323907974891814,
+            "loss_component/forces/train": 3.286920438420883e-31,
+            "total_time/train/per_atom": 0.006057833499653498,
+            "epoch": 5,
+        },
+        test_ref_metrics={
+            "total_loss/test": 214.44839673423044,
+            "loss_component/energy/test": 5.615171197827999,
+            "loss_component/forces/test": 5.107248638883526,
+            "mae/depa": 10.560843996749204,
+            "mae/de": 192.61692842216544,
+            "rmse/depa": 10.74257307074689,
+            "rmse/de": 243.20408234470116,
+            "mae/f_comp": 1.0145503408016143,
+            "rmse/f_comp": 3.309602211253348,
+            "total_time/test/per_atom": 0.000914615483371843,
+            "epoch": 5,
+        },
+        ref_n_epochs=5,
+        input="input_lr_linear_decay.yaml",
+    ),
+    "lr_linear_decay_no_warmup": dict(
+        folder="MoNbTaW-LINEAR",
+        train_ref_metrics={
+            "total_loss/train": 11.30631065652632,
+            "mae/depa": 3.362485785327028,
+            "mae/de": 6.724971570654056,
+            "rmse/depa": 3.362485785327028,
+            "rmse/de": 6.724971570654056,
+            "mae/f_comp": 3.3306690738754696e-16,
+            "rmse/f_comp": 5.623501550354407e-16,
+            "loss_component/energy/train": 2.261262131305264,
+            "loss_component/forces/train": 3.1623769686838413e-31,
+            "total_time/train/per_atom": 0.004507999999987078,
+            "epoch": 2,
+        },
+        test_ref_metrics={
+            "total_loss/test": 116.24667463281212,
+            "loss_component/energy/test": 5.380090753095851,
+            "loss_component/forces/test": 0.4322429785447546,
+            "mae/depa": 10.366235830664959,
+            "mae/de": 188.84269955885392,
+            "rmse/depa": 10.48768658808825,
+            "rmse/de": 239.54270092148286,
+            "mae/f_comp": 0.46060556364186217,
+            "rmse/f_comp": 1.1016298206069393,
+            "total_time/test/per_atom": 0.0008858609090927435,
+            "epoch": 2,
+        },
+        ref_n_epochs=2,
+        input="input_lr_linear_decay_no_warmup.yaml",
+    ),
+}
+
+
 
 
 def test_ETHANOL_LINEAR():
@@ -236,93 +716,11 @@ def test_MoNbTaW_LINEAR_LBFGS():
 
 
 def test_MoNbTaW_FS_ef_switch():
-
-    train_ref_metrics = {
-        "total_loss/train": 1283.309721631395,
-        "mae/depa": 11.261418809117348,
-        "mae/de": 204.20554332220198,
-        "rmse/depa": 11.291774340897046,
-        "rmse/de": 245.7912684590068,
-        "mae/f_comp": 0.1376806732116039,
-        "rmse/f_comp": 0.28754206603531807,
-        "loss_component/energy/train": 127.5041677657409,
-        "loss_component/forces/train": 0.8268043973985921,
-        "total_time/train/per_atom": 0.0015550825736009638,
-        "epoch": 2.0,
-        "step": 4.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 1137.1809919717696,
-        "loss_component/energy/test": 56.19842265190726,
-        "loss_component/forces/test": 0.6606269466812211,
-        "mae/depa": 10.57101419220454,
-        "mae/de": 181.58979220799398,
-        "rmse/depa": 10.601737843571424,
-        "rmse/de": 210.25317269622653,
-        "mae/f_comp": 0.21857830694723623,
-        "rmse/f_comp": 0.3634905629259778,
-        "total_time/test/per_atom": 0.0006433775853913496,
-        "epoch": 2.0,
-        "step": 4.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    general_integration_test(
-        "MoNbTaW-FS",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-        input="input_3fs.yaml",
-    )
+    _run_reference("FS_ef_switch")
 
 
 def test_MoNbTaW_FS_HEA25():
-
-    train_ref_metrics = {
-        "total_loss/train": 581.5534751745465,
-        "mae/depa": 10.739649613140577,
-        "mae/de": 196.52119331558274,
-        "rmse/depa": 10.782895329970144,
-        "rmse/de": 237.9337723113288,
-        "mae/f_comp": 0.1724362134187124,
-        "rmse/f_comp": 0.3156870991082631,
-        "loss_component/energy/train": 58.135415848545975,
-        "loss_component/forces/train": 0.01993166890867807,
-        "total_time/train/per_atom": 0.0010472961357268302,
-        "epoch": 2.0,
-        "step": 4.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 409.51920438125717,
-        "loss_component/energy/test": 20.451786558664878,
-        "loss_component/forces/test": 0.02417366039797987,
-        "mae/depa": 8.526122075021103,
-        "mae/de": 158.97279990400733,
-        "rmse/depa": 9.044730301930484,
-        "rmse/de": 196.2829846977232,
-        "mae/f_comp": 0.2937491503426102,
-        "rmse/f_comp": 0.4916671678888054,
-        "total_time/test/per_atom": 0.000425660255474641,
-        "epoch": 2.0,
-        "step": 4.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    general_integration_test(
-        "MoNbTaW-FS",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-        input="input_hea25.yaml",
-    )
+    _run_reference("FS_HEA25")
 
 
 # def test_MoNbTaW_MLP_switch_ef_lr_reduction_early_stop():
@@ -364,92 +762,11 @@ def test_MoNbTaW_FS_HEA25():
 
 
 def test_MoNbTaW_GRACE_1L():
-    train_ref_metrics = {
-        "total_loss/train": 345.5336329056141,
-        "mae/depa": 7.6192843030291915,
-        "mae/de": 129.52078670915165,
-        "rmse/depa": 8.306117089036361,
-        "rmse/de": 152.52526433630103,
-        "mae/f_comp": 0.26202633476635917,
-        "rmse/f_comp": 0.5365293196577281,
-        "loss_component/energy/train": 34.495790548390936,
-        "loss_component/forces/train": 0.057572742170476934,
-        "total_time/train/per_atom": 0.0007821729807841147,
-        "epoch": 3.0,
-        "step": 6.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 447.8039699570137,
-        "loss_component/energy/test": 22.267759335305374,
-        "loss_component/forces/test": 0.1224391625453122,
-        "mae/depa": 8.246730120475002,
-        "mae/de": 165.763145619602,
-        "rmse/depa": 9.43774535263701,
-        "rmse/de": 290.2922406552409,
-        "mae/f_comp": 0.4581693282089552,
-        "rmse/f_comp": 1.106522311321883,
-        "total_time/test/per_atom": 8.065275341162787e-05,
-        "epoch": 3.0,
-        "step": 6.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    general_integration_test(
-        "MoNbTaW-GRACE",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=3,
-        input="input_1L.yaml",
-    )
+    _run_reference("GRACE_1L")
 
 
 def test_MoNbTaW_GRACE_1L_bond_cutoff_and_zbl():
-
-    train_ref_metrics = {
-        "total_loss/train": 583.6855389756331,
-        "mae/depa": 10.69183436918944,
-        "mae/de": 189.52295360848183,
-        "rmse/depa": 10.778362261725583,
-        "rmse/de": 224.03369469819543,
-        "mae/f_comp": 0.6092810786075135,
-        "rmse/f_comp": 1.187449735921898,
-        "loss_component/energy/train": 58.08654652249511,
-        "loss_component/forces/train": 0.2820073750681972,
-        "total_time/train/per_atom": 0.0007587777502561474,
-        "epoch": 3.0,
-        "step": 6.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 313.4725750535386,
-        "loss_component/energy/test": 15.54412114237623,
-        "loss_component/forces/test": 0.12950761030069927,
-        "mae/depa": 7.330329464281588,
-        "mae/de": 105.18572783830102,
-        "rmse/depa": 7.885206691615948,
-        "rmse/de": 117.30802609943532,
-        "mae/f_comp": 0.6577695850252212,
-        "rmse/f_comp": 1.138014104924448,
-        "total_time/test/per_atom": 6.386162918608854e-05,
-        "epoch": 3.0,
-        "step": 6.0,
-        "lr_epoch_begin": 0.10000000149011612,
-        "lr_epoch_end": 0.10000000149011612,
-    }
-
-    general_integration_test(
-        "MoNbTaW-GRACE",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=3,
-        input="input_1L_bond_cutoff.yaml",
-    )
+    _run_reference("GRACE_1L_bond_cutoff_and_zbl")
 
 
 def test_MoNbTaW_GRACE_2L():
@@ -666,153 +983,11 @@ def test_MoNbTaW_FS_restart():
 
 
 def test_MoNbTaW_LINEAR_virial():
-
-    train_ref_metrics = {
-        "total_loss/train": 1742.3514462572605,
-        "mae/depa": 11.5597502346071,
-        "mae/de": 209.48641236901435,
-        "rmse/depa": 11.58640414584,
-        "rmse/de": 251.95193205133964,
-        "mae/f_comp": 0.1644396989054902,
-        "rmse/f_comp": 0.4519461720105321,
-        "mae/virial": 4.12256334233479,
-        "rmse/virial": 12.35348797979645,
-        "mae/stress": 0.017233325080393946,
-        "rmse/stress": 0.05068364947952008,
-        "loss_component/energy/train": 26.26789436916456,
-        "loss_component/forces/train": 0.2260717123111281,
-        "loss_component/virial/train": 321.9763231699764,
-        "total_time/train/per_atom": 0.0014206461972840455,
-        "epoch": 2.0,
-        "per_group_metrics.low.mae/depa": 11.559750234607101,
-        "per_group_metrics.low.mae/de": 209.4864123690144,
-        "per_group_metrics.low.rmse/depa": 11.58640414584,
-        "per_group_metrics.low.rmse/de": 251.95193205133964,
-        "per_group_metrics.low.mae/f_comp": 0.16443969890549018,
-        "per_group_metrics.low.rmse/f_comp": 0.45194617201053217,
-        "per_group_metrics.low.mae/virial": 4.122563342334789,
-        "per_group_metrics.low.rmse/virial": 12.353487979796451,
-        "per_group_metrics.low.mae/stress": 0.01723332508039395,
-        "per_group_metrics.low.rmse/stress": 0.05068364947952008,
-        "per_group_metrics.low.num_struct": 20.0,
-        "per_group_metrics.low.num_atoms": 368.0,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 7075.598752398175,
-        "loss_component/energy/test": 25.19492180212521,
-        "loss_component/forces/test": 0.17863108665898098,
-        "loss_component/virial/test": 1389.746197590851,
-        "mae/depa": 11.377418651882675,
-        "mae/de": 195.3906089054755,
-        "rmse/depa": 11.398449558985346,
-        "rmse/de": 226.14675604180803,
-        "mae/f_comp": 0.13514946927451418,
-        "rmse/f_comp": 0.31350754449591917,
-        "mae/virial": 6.080039555905703,
-        "rmse/virial": 24.615980133826667,
-        "mae/stress": 0.012683964679508586,
-        "rmse/stress": 0.03476244786555596,
-        "total_time/test/per_atom": 0.00056493255063234,
-        "epoch": 2.0,
-        "per_group_metrics.low.mae/depa": 11.377418651882675,
-        "per_group_metrics.low.mae/de": 195.39060890547552,
-        "per_group_metrics.low.rmse/depa": 11.398449558985346,
-        "per_group_metrics.low.rmse/de": 226.14675604180806,
-        "per_group_metrics.low.mae/f_comp": 0.13514946927451418,
-        "per_group_metrics.low.rmse/f_comp": 0.3135075444959192,
-        "per_group_metrics.low.mae/virial": 6.080039555905702,
-        "per_group_metrics.low.rmse/virial": 24.615980133826667,
-        "per_group_metrics.low.mae/stress": 0.012683964679508587,
-        "per_group_metrics.low.rmse/stress": 0.034762447865555955,
-        "per_group_metrics.low.num_struct": 20.0,
-        "per_group_metrics.low.num_atoms": 340.0,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-        many_runs=[
-            ["input_virial.yaml"],
-        ],
-    )
+    _run_reference("LINEAR_virial")
 
 
 def test_MoNbTaW_LINEAR_stress():
-
-    train_ref_metrics = {
-        "total_loss/train": 131.97210000819922,
-        "mae/depa": 11.540672028320568,
-        "mae/de": 209.24771219789167,
-        "rmse/depa": 11.566807757502756,
-        "rmse/de": 251.74213133851165,
-        "mae/f_comp": 0.16254466290942887,
-        "rmse/f_comp": 0.4529714182432533,
-        "mae/virial": 4.164536607700274,
-        "rmse/virial": 12.80981019537614,
-        "mae/stress": 0.017164910564212925,
-        "rmse/stress": 0.05083792683247277,
-        "loss_component/energy/train": 26.185959511796842,
-        "loss_component/forces/train": 0.20732644415973583,
-        "loss_component/stress/train": 0.0011340456832679316,
-        "total_time/train/per_atom": 0.0023203688855890346,
-        "epoch": 2.0,
-        "per_group_metrics.low.mae/depa": 11.540672028320568,
-        "per_group_metrics.low.mae/de": 209.24771219789173,
-        "per_group_metrics.low.rmse/depa": 11.566807757502756,
-        "per_group_metrics.low.rmse/de": 251.74213133851163,
-        "per_group_metrics.low.mae/f_comp": 0.1625446629094289,
-        "per_group_metrics.low.rmse/f_comp": 0.4529714182432533,
-        "per_group_metrics.low.mae/virial": 4.164536607700274,
-        "per_group_metrics.low.rmse/virial": 12.80981019537614,
-        "per_group_metrics.low.mae/stress": 0.01716491056421293,
-        "per_group_metrics.low.rmse/stress": 0.05083792683247277,
-        "per_group_metrics.low.num_struct": 20.0,
-        "per_group_metrics.low.num_atoms": 368.0,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 126.3803807969523,
-        "loss_component/energy/test": 25.096730548575085,
-        "loss_component/forces/test": 0.17747603509189552,
-        "loss_component/stress/test": 0.0018695757234850185,
-        "mae/depa": 11.355009399558622,
-        "mae/de": 194.99995148412958,
-        "rmse/depa": 11.376266315516474,
-        "rmse/de": 225.6282627442871,
-        "mae/f_comp": 0.1354932587127582,
-        "rmse/f_comp": 0.313071730860987,
-        "mae/virial": 6.090745331788203,
-        "rmse/virial": 24.62483584472683,
-        "mae/stress": 0.012755479612133414,
-        "rmse/stress": 0.03485980665068875,
-        "total_time/test/per_atom": 0.0009524628643275184,
-        "epoch": 2.0,
-        "per_group_metrics.low.mae/depa": 11.355009399558623,
-        "per_group_metrics.low.mae/de": 194.9999514841296,
-        "per_group_metrics.low.rmse/depa": 11.376266315516474,
-        "per_group_metrics.low.rmse/de": 225.6282627442871,
-        "per_group_metrics.low.mae/f_comp": 0.1354932587127582,
-        "per_group_metrics.low.rmse/f_comp": 0.31307173086098694,
-        "per_group_metrics.low.mae/virial": 6.090745331788202,
-        "per_group_metrics.low.rmse/virial": 24.624835844726828,
-        "per_group_metrics.low.mae/stress": 0.01275547961213341,
-        "per_group_metrics.low.rmse/stress": 0.03485980665068875,
-        "per_group_metrics.low.num_struct": 20.0,
-        "per_group_metrics.low.num_atoms": 340.0,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-        many_runs=[
-            ["input_stress.yaml"],
-        ],
-    )
+    _run_reference("LINEAR_stress")
 
 
 def test_MoNbTaW_LINEAR_f32():
@@ -858,228 +1033,24 @@ def test_MoNbTaW_LINEAR_f32():
 
 @pytest.mark.skip(reason="Deprecated due to new API")
 def test_MoNbTaW_LINEAR_lr_reduce_on_plateau():
-    train_ref_metrics = {
-        "total_loss/train": 86388.96089855464,
-        "mae/depa": 293.91999064125366,
-        "mae/de": 587.8399812825073,
-        "rmse/depa": 293.91999064125366,
-        "rmse/de": 587.8399812825073,
-        "mae/f_comp": 1.709743457922741e-14,
-        "rmse/f_comp": 2.5537382093454438e-14,
-        "loss_component/energy/train": 17277.792179710927,
-        "loss_component/forces/train": 6.521578841870874e-28,
-        "total_time/train/per_atom": 0.003750124989892356,
-        "epoch": 5,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 1078.717976030194,
-        "loss_component/energy/test": 34.13630846923014,
-        "loss_component/forces/test": 19.799590332279568,
-        "mae/depa": 18.419813604139947,
-        "mae/de": 318.0004536704866,
-        "rmse/depa": 23.75680161302725,
-        "rmse/de": 417.32888026700016,
-        "mae/f_comp": 1.9076265481110548,
-        "rmse/f_comp": 6.903826426461479,
-        "total_time/test/per_atom": 0.0008932093492380762,
-        "epoch": 5,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=5,
-        input="input_lr_reduce_on_plateau.yaml",
-    )
+    _run_reference("lr_reduce_on_plateau")
 
 
 def test_MoNbTaW_LINEAR_lr_reduce_on_plateau_new_api():
-    train_ref_metrics = {
-        "total_loss/train": 86388.96089855464,
-        "mae/depa": 293.91999064125366,
-        "mae/de": 587.8399812825073,
-        "rmse/depa": 293.91999064125366,
-        "rmse/de": 587.8399812825073,
-        "mae/f_comp": 1.709743457922741e-14,
-        "rmse/f_comp": 2.5537382093454438e-14,
-        "loss_component/energy/train": 17277.792179710927,
-        "loss_component/forces/train": 6.521578841870874e-28,
-        "total_time/train/per_atom": 0.003750124989892356,
-        "epoch": 5,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 1078.717976030194,
-        "loss_component/energy/test": 34.13630846923014,
-        "loss_component/forces/test": 19.799590332279568,
-        "mae/depa": 18.419813604139947,
-        "mae/de": 318.0004536704866,
-        "rmse/depa": 23.75680161302725,
-        "rmse/de": 417.32888026700016,
-        "mae/f_comp": 1.9076265481110548,
-        "rmse/f_comp": 6.903826426461479,
-        "total_time/test/per_atom": 0.0008932093492380762,
-        "epoch": 5,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=5,
-        input="input_lr_reduce_on_plateau_new_api.yaml",
-    )
+    _run_reference("lr_reduce_on_plateau_new_api")
 
 
 def test_MoNbTaW_LINEAR_lr_exponential_decay():
-    train_ref_metrics = {
-        "total_loss/train": 200.99824377262027,
-        "mae/depa": 14.177384941258394,
-        "mae/de": 28.354769882516788,
-        "rmse/depa": 14.177384941258394,
-        "rmse/de": 28.354769882516788,
-        "mae/f_comp": 6.649773324577761e-18,
-        "rmse/f_comp": 1.2327526502681117e-17,
-        "loss_component/energy/train": 40.199648754524056,
-        "loss_component/forces/train": 1.5196790967430533e-34,
-        "total_time/train/per_atom": 0.010084604498842964,
-        "epoch": 5,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 130.34017323870668,
-        "loss_component/energy/test": 6.480867512123688,
-        "loss_component/forces/test": 0.03614114981164616,
-        "mae/depa": 11.378284122938348,
-        "mae/de": 204.70260740817477,
-        "rmse/depa": 11.406753808776225,
-        "rmse/de": 249.11856906998474,
-        "mae/f_comp": 0.20539834351378242,
-        "rmse/f_comp": 0.4236164600096448,
-        "total_time/test/per_atom": 0.0009967192804823271,
-        "epoch": 5,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=5,
-        input="input_lr_exponential_decay.yaml",
-    )
+    _run_reference("lr_exponential_decay")
 
 
 def test_MoNbTaW_LINEAR_lr_cosine_decay():
-    train_ref_metrics = {
-        "total_loss/train": 90.97337294606098,
-        "mae/depa": 9.537996275217399,
-        "mae/de": 19.075992550434798,
-        "rmse/depa": 9.537996275217399,
-        "rmse/de": 19.075992550434798,
-        "mae/f_comp": 5.66676335485757e-17,
-        "rmse/f_comp": 8.017350677993573e-17,
-        "loss_component/energy/train": 18.194674589212195,
-        "loss_component/forces/train": 6.4277911893924e-33,
-        "total_time/train/per_atom": 0.0067948545001854654,
-        "epoch": 5,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 120.97643764549225,
-        "loss_component/energy/test": 5.849987864107047,
-        "loss_component/forces/test": 0.1988340181675662,
-        "mae/depa": 10.707245647052012,
-        "mae/de": 194.0414184477568,
-        "rmse/depa": 10.863451339096327,
-        "rmse/de": 246.01613710092678,
-        "mae/f_comp": 0.3786722186496125,
-        "rmse/f_comp": 0.8020594648553879,
-        "total_time/test/per_atom": 0.0010997455199588848,
-        "epoch": 5,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=5,
-        input="input_lr_cosine_decay.yaml",
-    )
+    _run_reference("lr_cosine_decay")
 
 
 def test_MoNbTaW_LINEAR_lr_linear_decay():
-    train_ref_metrics = {
-        "total_loss/train": 4.161953987445907,
-        "mae/depa": 2.040086759783982,
-        "mae/de": 4.080173519567964,
-        "rmse/depa": 2.040086759783982,
-        "rmse/de": 4.080173519567964,
-        "mae/f_comp": 4.440892098500626e-16,
-        "rmse/f_comp": 5.733167046599011e-16,
-        "loss_component/energy/train": 0.8323907974891814,
-        "loss_component/forces/train": 3.286920438420883e-31,
-        "total_time/train/per_atom": 0.006057833499653498,
-        "epoch": 5,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 214.44839673423044,
-        "loss_component/energy/test": 5.615171197827999,
-        "loss_component/forces/test": 5.107248638883526,
-        "mae/depa": 10.560843996749204,
-        "mae/de": 192.61692842216544,
-        "rmse/depa": 10.74257307074689,
-        "rmse/de": 243.20408234470116,
-        "mae/f_comp": 1.0145503408016143,
-        "rmse/f_comp": 3.309602211253348,
-        "total_time/test/per_atom": 0.000914615483371843,
-        "epoch": 5,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=5,
-        input="input_lr_linear_decay.yaml",
-    )
+    _run_reference("lr_linear_decay")
 
 
 def test_MoNbTaW_LINEAR_lr_linear_decay_no_warmup():
-    train_ref_metrics = {
-        "total_loss/train": 11.30631065652632,
-        "mae/depa": 3.362485785327028,
-        "mae/de": 6.724971570654056,
-        "rmse/depa": 3.362485785327028,
-        "rmse/de": 6.724971570654056,
-        "mae/f_comp": 3.3306690738754696e-16,
-        "rmse/f_comp": 5.623501550354407e-16,
-        "loss_component/energy/train": 2.261262131305264,
-        "loss_component/forces/train": 3.1623769686838413e-31,
-        "total_time/train/per_atom": 0.004507999999987078,
-        "epoch": 2,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 116.24667463281212,
-        "loss_component/energy/test": 5.380090753095851,
-        "loss_component/forces/test": 0.4322429785447546,
-        "mae/depa": 10.366235830664959,
-        "mae/de": 188.84269955885392,
-        "rmse/depa": 10.48768658808825,
-        "rmse/de": 239.54270092148286,
-        "mae/f_comp": 0.46060556364186217,
-        "rmse/f_comp": 1.1016298206069393,
-        "total_time/test/per_atom": 0.0008858609090927435,
-        "epoch": 2,
-    }
-
-    general_integration_test(
-        "MoNbTaW-LINEAR",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-        input="input_lr_linear_decay_no_warmup.yaml",
-    )
+    _run_reference("lr_linear_decay_no_warmup")
