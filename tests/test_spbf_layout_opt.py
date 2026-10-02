@@ -357,10 +357,8 @@ def test_cpll_compact_matches_naive():
     )
 
 
-def test_lmfirst_general_product_cp_lL():
-    """lm_first cp_lL must match the standard layout (the compact projection is
-    the only path), forward + first-order grad, transpose-aligned."""
-    inpt = _make_input_dict()
+def _cp_lL_builder(inpt):
+    """``build(lm_first)`` for ``_lmfirst_parity``: the cp_lL GeneralProductFunction chain."""
 
     def build(lm_first):
         i, A = _spbf_producer(dict(inpt), lmax=3, rcut=6.0, lm_first=lm_first)
@@ -370,22 +368,19 @@ def test_lmfirst_general_product_cp_lL():
             lm_first=lm_first)
         AA.build(float64)
         return i, A, AA
-    _assert_fwd_grad(*_lmfirst_parity(build))
+
+    return build
+
+
+def test_lmfirst_general_product_cp_lL():
+    """lm_first cp_lL must match the standard layout (the compact projection is
+    the only path), forward + first-order grad, transpose-aligned."""
+    _assert_fwd_grad(*_lmfirst_parity(_cp_lL_builder(_make_input_dict())))
 
 
 def test_lmfirst_general_product_cp_lL_double_backward():
     """Second-derivative cross-layout parity for cp_lL (force training)."""
-    inpt = _make_input_dict()
-
-    def build(lm_first):
-        i, A = _spbf_producer(dict(inpt), lmax=3, rcut=6.0, lm_first=lm_first)
-        AA = GeneralProductFunction(
-            left=A, right=A, name="AA", lmax=3, Lmax=3, rank=4, mode="cp_lL",
-            keep_parity=Parity.REAL_PARITY, is_left_right_equal=True,
-            lm_first=lm_first)
-        AA.build(float64)
-        return i, A, AA
-    (_, h_a), (_, h_b) = _lmfirst_parity(build, double=True)
+    (_, h_a), (_, h_b) = _lmfirst_parity(_cp_lL_builder(_make_input_dict()), double=True)
     assert np.max(np.abs(h_a)) > 0, "double-backward trivially zero; test vacuous"
     assert np.allclose(h_a, h_b, atol=1e-8, rtol=0), (
         f"2nd grad differs, max {np.max(np.abs(h_a - h_b))}"
