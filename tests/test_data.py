@@ -88,7 +88,9 @@ def make_args(
 
 
 def saved(tmp_path, name="training_set.pkl.gz") -> pd.DataFrame:
-    return pd.read_pickle(tmp_path / "seed" / str(SEED) / name)
+    out = pd.read_pickle(tmp_path / "seed" / str(SEED) / name)
+    assert isinstance(out, pd.DataFrame)
+    return out
 
 
 @pytest.fixture
