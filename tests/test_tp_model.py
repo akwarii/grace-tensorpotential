@@ -1,4 +1,6 @@
+import json
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -14,9 +16,20 @@ import tensorflow as tf
 
 from tensorpotential.utils import convert_model_reduce_elements
 from tensorpotential.tensorpot import TensorPotential
-from tensorpotential.tpmodel import TPModel, ExtractBasisFunctions
+from tensorpotential.tpmodel import (
+    ExtractBasisFunctions,
+    TPModel,
+    _get_bond_cutoff_map,
+    _get_cutoff,
+    _get_element_map,
+    extract_cutoff_and_elements,
+    extract_cutoff_dict,
+    extract_cutoff_matrix,
+    load_model_metadata,
+)
 
-from tensorpotential.potentials import get_preset
+from tensorpotential.potentials import get_preset, presets
+from tests.tolerances import FLOAT64_ARITHMETIC
 from tensorpotential.instructions import (
     load_instructions,
     save_instructions_dict,
@@ -581,3 +594,386 @@ def test_tpmodel_function_arguments_default_to_none():
         None,
     ]
 
+
+
+# --------------------------------------------------------- cutoffs, element maps and saved-model metadata
+# Hand-computed oracle: GRACE_1LAYER_v1_24 with ``cutoff_dict={"CuCu": 3, "ZnZn": 4, "CuZn": 5}`` and
+# ``symmetric_bond`` cutoffs has the pair-cutoff matrix [[3, 5], [5, 4]] in element-index order (Cu = 0, Zn = 1),
+# and a pair that the dict does not name gets the default cutoff ``rcut``.
+
+CU_ZN_CUTOFFS = {"CuCu": 3.0, "ZnZn": 4.0, "CuZn": 5.0}
+CU_ZN_DICT = {("Cu", "Cu"): 3.0, ("Cu", "Zn"): 5.0, ("Zn", "Cu"): 5.0, ("Zn", "Zn"): 4.0}
+CU_ZN_MATRIX = [[3.0, 5.0], [5.0, 4.0]]
+
+
+def _bond_cutoff_model(element_map=None, cutoff_dict=None, rcut=6.0, **kwargs) -> TPModel:
+    """A built float64 1-layer model whose radial basis has one cutoff per element pair."""
+    instructions = presets.GRACE_1LAYER_v1_24(
+        element_map=element_map or {"Cu": 0, "Zn": 1},
+        cutoff_dict=CU_ZN_CUTOFFS if cutoff_dict is None else cutoff_dict,
+        rcut=rcut,
+        lmax=1,
+        n_rad_max=4,
+        embedding_size=4,
+        n_mlp_dens=2,
+        **kwargs,
+    ).get_instructions()
+    model = TPModel(instructions)
+    model.build(tf.float64)
+    return model
+
+
+def _linear_model(rcut=4.5) -> TPModel:
+    """A built float64 LINEAR model with one cutoff for all pairs."""
+    instructions = presets.LINEAR(
+        element_map={"Cu": 0, "Zn": 1}, rcut=rcut, lmax=1, n_rad_max=4, embedding_size=4
+    ).get_instructions()
+    model = TPModel(instructions)
+    model.build(tf.float64)
+    return model
+
+
+def _saved_metadata(path: str) -> dict:
+    """``load_model_metadata`` of a directory that must have a metadata file."""
+    metadata = load_model_metadata(path)
+    assert metadata is not None
+    return metadata
+
+
+@pytest.fixture(scope="module")
+def saved_bond_model(tmp_path_factory):
+    """(path of the SavedModel, the model it was saved from): saving takes seconds, so once per module."""
+    model = _bond_cutoff_model()
+    path = str(tmp_path_factory.mktemp("saved") / "bond_model")
+    model.save_model(path)
+    return path, model
+
+
+@pytest.fixture(scope="module")
+def saved_linear_model(tmp_path_factory):
+    model = _linear_model()
+    path = str(tmp_path_factory.mktemp("saved") / "linear_model")
+    model.save_model(path)
+    return path, model
+
+
+# -------------------------------------------------------------------------------------------- _get_cutoff
+
+
+def test_get_cutoff_prefers_the_method_of_the_instruction():
+    # ``SimpleNamespace`` stands for a restored SavedModel object or an instruction with every attribute set
+    both = SimpleNamespace(get_cutoff=lambda: 3.25, rc=tf.constant(9.0, tf.float64))
+
+    assert _get_cutoff(both) == 3.25
+
+
+def test_get_cutoff_method_returning_none_is_not_replaced_by_the_attribute():
+    instruction = SimpleNamespace(get_cutoff=lambda: None, rc=tf.constant(9.0, tf.float64))
+
+    assert _get_cutoff(instruction) is None
+
+
+def test_get_cutoff_non_callable_attribute_falls_back_to_rc():
+    instruction = SimpleNamespace(get_cutoff=2.0, rc=tf.constant(4.5, tf.float64))
+
+    assert _get_cutoff(instruction) == 4.5
+
+
+def test_get_cutoff_reads_rc_as_a_python_float():
+    cutoff = _get_cutoff(SimpleNamespace(rc=tf.Variable(4.5, dtype=tf.float64)))
+
+    assert cutoff == 4.5
+    assert type(cutoff) is float
+
+
+def test_get_cutoff_legacy_radial_basis_stores_the_cutoff_in_basis_function():
+    legacy = SimpleNamespace(basis_function=SimpleNamespace(rc=tf.constant(3.5, tf.float64)))
+
+    assert _get_cutoff(legacy) == 3.5
+
+
+def test_get_cutoff_rc_wins_over_the_legacy_location():
+    instruction = SimpleNamespace(
+        rc=tf.constant(4.0, tf.float64), basis_function=SimpleNamespace(rc=tf.constant(3.5, tf.float64))
+    )
+
+    assert _get_cutoff(instruction) == 4.0
+
+
+@pytest.mark.parametrize(
+    "instruction", [SimpleNamespace(), SimpleNamespace(basis_function=SimpleNamespace()), object()]
+)
+def test_get_cutoff_without_any_cutoff_is_none(instruction):
+    assert _get_cutoff(instruction) is None
+
+
+def test_get_cutoff_of_real_instructions_of_a_built_model():
+    model = _linear_model(rcut=4.5)
+
+    cutoffs = {name: _get_cutoff(ins) for name, ins in model.instructions.items()}
+
+    assert cutoffs["RadialBasis"] == 4.5
+    assert cutoffs["R"] is None  # the radial function has no cutoff of its own
+    assert max(c for c in cutoffs.values() if c is not None) == 4.5
+
+
+def test_get_cutoff_of_a_restored_saved_model_reads_rc(saved_linear_model):
+    path, _ = saved_linear_model
+    restored = tf.saved_model.load(path)
+
+    assert _get_cutoff(restored.instructions["RadialBasis"]) == 4.5
+    assert _get_cutoff(restored.instructions["R"]) is None
+
+
+def test_get_cutoff_of_a_restored_bond_cutoff_instruction_is_none(saved_bond_model):
+    # PINNED: a restored BondSpecificRadialBasisFunction has bond_cutoff_map and no rc, so the scalar cutoff of a
+    # restored bond-cutoff model is 0 (the maximum over no value); the calculator uses the matrix instead
+    path, _ = saved_bond_model
+    restored = tf.saved_model.load(path)
+
+    assert _get_cutoff(restored.instructions["BondSpecificRadialBasisFunction"]) is None
+    assert extract_cutoff_and_elements(restored.instructions)[0] == 0.0
+
+
+# ----------------------------------------------------------------------- element map and bond cutoff map
+
+
+def test_get_element_map_of_a_real_instruction_and_of_a_restored_one(saved_bond_model):
+    path, model = saved_bond_model
+    restored = tf.saved_model.load(path)
+
+    for ins in (model.instructions["Z"], restored.instructions["Z"]):
+        element_map = _get_element_map(ins)
+        assert element_map is not None
+        symbols, index = element_map
+        assert list(symbols) == ["Cu", "Zn"]
+        assert list(index) == [0, 1]
+    assert _get_element_map(model.instructions["R"]) is None
+    assert _get_element_map(SimpleNamespace()) is None
+
+
+def test_get_bond_cutoff_map_is_the_flat_column_of_the_matrix(saved_bond_model):
+    path, model = saved_bond_model
+    restored = tf.saved_model.load(path)
+    expected = np.array(CU_ZN_MATRIX).reshape(-1, 1)
+
+    np.testing.assert_array_equal(_get_bond_cutoff_map(model.instructions["BondSpecificRadialBasisFunction"]), expected)
+    np.testing.assert_array_equal(
+        _get_bond_cutoff_map(restored.instructions["BondSpecificRadialBasisFunction"]), expected
+    )
+    assert _get_bond_cutoff_map(model.instructions["R"]) is None
+    assert _get_bond_cutoff_map(SimpleNamespace()) is None
+
+
+# ------------------------------------------------------------------- extract_cutoff_and_elements / matrix
+
+
+def test_extract_cutoff_and_elements_takes_the_largest_cutoff_and_the_last_element_map():
+    first = SimpleNamespace(get_cutoff=lambda: 3.0, get_element_map=lambda: (np.array(["A"]), np.array([0])))
+    second = SimpleNamespace(get_cutoff=lambda: 5.5, get_element_map=lambda: (np.array(["B"]), np.array([7])))
+    third = SimpleNamespace(get_cutoff=lambda: 4.0)
+
+    cutoff, symbols, index = extract_cutoff_and_elements({"a": first, "b": second, "c": third})
+
+    assert cutoff == 5.5
+    assert list(symbols) == ["B"]
+    assert list(index) == [7]
+
+
+def test_extract_cutoff_and_elements_of_nothing_has_cutoff_zero_and_no_elements():
+    cutoff, symbols, index = extract_cutoff_and_elements([SimpleNamespace()])
+
+    assert (cutoff, symbols, index) == (0.0, None, None)
+
+
+def test_extract_cutoff_matrix_is_the_elementwise_maximum_reshaped_to_a_square():
+    one = SimpleNamespace(get_bond_cutoff_map=lambda: np.array([[1.0], [5.0], [2.0], [4.0]]))
+    two = SimpleNamespace(get_bond_cutoff_map=lambda: np.array([[3.0], [2.0], [2.5], [1.0]]))
+
+    matrix = extract_cutoff_matrix([one, SimpleNamespace(), two])
+
+    np.testing.assert_array_equal(matrix, [[3.0, 5.0], [2.5, 4.0]])
+
+
+def test_extract_cutoff_matrix_without_bond_cutoffs_is_none():
+    assert extract_cutoff_matrix(_linear_model().instructions) is None
+
+
+def test_extract_cutoff_matrix_that_is_not_square_fails_an_assertion():
+    three = SimpleNamespace(get_bond_cutoff_map=lambda: np.ones((3, 1)))
+
+    with pytest.raises(AssertionError):
+        extract_cutoff_matrix([three])
+
+
+# ---------------------------------------------------------------------------------- extract_cutoff_dict
+
+
+def test_extract_cutoff_dict_of_a_model_with_pair_cutoffs():
+    model = _bond_cutoff_model()
+
+    assert extract_cutoff_dict(model.instructions) == CU_ZN_DICT
+    assert extract_cutoff_dict(list(model.instructions.values())) == CU_ZN_DICT
+    np.testing.assert_array_equal(extract_cutoff_matrix(model.instructions), CU_ZN_MATRIX)
+
+
+def test_extract_cutoff_dict_fills_unnamed_pairs_with_the_default_cutoff():
+    model = _bond_cutoff_model(
+        element_map={"Al": 0, "Cu": 1, "Zn": 2}, cutoff_dict={"AlAl": 2.0, "CuZn": 3.0}, rcut=4.0
+    )
+    matrix = [[2.0, 4.0, 4.0], [4.0, 4.0, 3.0], [4.0, 3.0, 4.0]]
+    symbols = ["Al", "Cu", "Zn"]
+
+    result = extract_cutoff_dict(model.instructions)
+
+    assert result == {(a, b): matrix[i][j] for i, a in enumerate(symbols) for j, b in enumerate(symbols)}
+    assert len(result) == 9
+
+
+def test_extract_cutoff_dict_values_are_python_floats_and_keys_are_str_pairs():
+    result = extract_cutoff_dict(_bond_cutoff_model().instructions)
+
+    assert all(type(k[0]) is str and type(k[1]) is str for k in result)
+    assert all(type(v) is float for v in result.values())
+
+
+def test_extract_cutoff_dict_without_bond_cutoffs_is_none():
+    assert extract_cutoff_dict(_linear_model().instructions) is None
+
+
+def test_extract_cutoff_dict_without_an_element_map_is_none():
+    model = _bond_cutoff_model()
+    only_the_radial_basis = [model.instructions["BondSpecificRadialBasisFunction"]]
+
+    assert extract_cutoff_matrix(only_the_radial_basis) is not None
+    assert extract_cutoff_dict(only_the_radial_basis) is None
+
+
+def test_extract_cutoff_dict_of_a_restored_saved_model_equals_the_original(saved_bond_model):
+    path, _ = saved_bond_model
+
+    assert extract_cutoff_dict(tf.saved_model.load(path).instructions) == CU_ZN_DICT
+
+
+def test_extract_cutoff_dict_labels_rows_by_dict_order_not_by_element_index():
+    # PINNED, not endorsed (TEST8 finding): with the same indices (Cu = 0, Zn = 1) but the element map written
+    # Zn first, the symbols are listed in insertion order, so Cu-Cu and Zn-Zn swap (the matrix is still in index order)
+    model = _bond_cutoff_model(element_map={"Zn": 1, "Cu": 0})
+
+    np.testing.assert_array_equal(extract_cutoff_matrix(model.instructions), CU_ZN_MATRIX)
+    assert extract_cutoff_dict(model.instructions) == {
+        ("Zn", "Zn"): 3.0,
+        ("Zn", "Cu"): 5.0,
+        ("Cu", "Zn"): 5.0,
+        ("Cu", "Cu"): 4.0,
+    }
+
+
+# ------------------------------------------------------------------------ load_model_metadata, save_model
+
+
+def test_load_model_metadata_of_a_saved_model_directory():
+    path = os.path.join(os.path.dirname(__file__), "test_calculator_model")
+
+    assert load_model_metadata(path) == {"chemical_symbols": ["Mo", "Nb", "Ta", "W"], "cutoff": 6.0}
+
+
+def test_load_model_metadata_without_the_file_is_none(tmp_path):
+    assert load_model_metadata(str(tmp_path)) is None
+    assert load_model_metadata(str(tmp_path / "missing")) is None
+
+
+def test_load_model_metadata_of_something_that_is_not_a_str_is_none(tmp_path):
+    # PINNED: a pathlib.Path is not a str, so a directory given as a Path has no metadata either
+    (tmp_path / "metadata.yaml").write_text("cutoff: 5.0\n")
+
+    assert load_model_metadata(str(tmp_path)) == {"cutoff": 5.0}
+    assert load_model_metadata(tmp_path) is None
+    assert load_model_metadata(None) is None
+    assert load_model_metadata(_linear_model()) is None
+
+
+def test_save_model_writes_symbols_cutoff_and_the_pair_cutoff_matrix(saved_bond_model):
+    path, _ = saved_bond_model
+
+    metadata = load_model_metadata(path)
+
+    assert metadata == {"chemical_symbols": ["Cu", "Zn"], "cutoff": 5.0, "cutoff_matrix": CU_ZN_MATRIX}
+
+
+def test_save_model_json_metadata_equals_the_yaml_metadata(saved_bond_model):
+    path, _ = saved_bond_model
+
+    with open(os.path.join(path, "metadata.json")) as f:
+        as_json = json.load(f)
+
+    assert as_json == load_model_metadata(path)
+
+
+def test_save_model_without_pair_cutoffs_has_no_matrix_and_the_scalar_cutoff(saved_linear_model):
+    path, _ = saved_linear_model
+
+    assert load_model_metadata(path) == {"chemical_symbols": ["Cu", "Zn"], "cutoff": 4.5}
+
+
+def test_save_model_lists_the_symbols_in_element_index_order(tmp_path):
+    # the element map is written Zn first; the saved symbols follow the indices (Cu = 0, Zn = 1) and the matrix too
+    model = _bond_cutoff_model(element_map={"Zn": 1, "Cu": 0})
+    path = str(tmp_path / "model")
+
+    model.save_model(path)
+
+    metadata = _saved_metadata(path)
+    assert metadata["chemical_symbols"] == ["Cu", "Zn"]
+    assert metadata["cutoff_matrix"] == CU_ZN_MATRIX
+    assert metadata["cutoff"] == 5.0
+
+
+def test_save_model_without_a_cutoff_matrix_uses_the_largest_instruction_cutoff(tmp_path):
+    model = _linear_model(rcut=3.75)
+    path = str(tmp_path / "model")
+
+    model.save_model(path)
+
+    assert _saved_metadata(path)["cutoff"] == 3.75
+
+
+def test_save_model_has_no_uq_key_without_a_uq_model(saved_bond_model):
+    path, _ = saved_bond_model
+
+    assert "has_uq" not in load_model_metadata(path)
+    assert "parallel_communication" not in load_model_metadata(path)
+
+
+def test_save_model_refuses_a_uq_model_without_thresholds(tmp_path):
+    # ``SimpleNamespace`` stands for a GMM artifact: the check reads one attribute and runs before anything is saved
+    model = _linear_model()
+
+    with pytest.raises(ValueError, match="interp_thresholds must be set before exporting to SavedModel"):
+        model.save_model(str(tmp_path / "model"), gmm_uq_model=SimpleNamespace(interp_thresholds=None))
+
+    assert not (tmp_path / "model").exists()
+
+
+def test_save_model_refuses_a_uq_model_that_is_not_a_basis_rp_artifact(tmp_path):
+    model = _linear_model()
+    artifact = SimpleNamespace(interp_thresholds=[1.0], extra_data={})
+
+    with pytest.raises(ValueError, match="SavedModel export requires a basis-RP UQ artifact"):
+        model.save_model(str(tmp_path / "model"), gmm_uq_model=artifact)
+
+    assert not (tmp_path / "model").exists()
+
+
+def test_saved_model_reloads_with_the_same_energy(saved_bond_model):
+    # physical value: the saved and reloaded model is the same function as the model it was saved from
+    path, model = saved_bond_model
+    atoms = Atoms("CuZnCu", positions=[[0, 0, 0], [0, 0, 2.3], [1.9, 0.3, 4.0]], pbc=False)
+    atoms.calc = TPCalculator(model=model)
+    expected = atoms.get_potential_energy()
+    reloaded = Atoms(atoms)
+    reloaded.calc = TPCalculator(model=path)
+
+    assert reloaded.get_potential_energy() == pytest.approx(
+        expected, rel=FLOAT64_ARITHMETIC.rtol, abs=FLOAT64_ARITHMETIC.atol
+    )
