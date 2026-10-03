@@ -25,6 +25,7 @@ import tensorflow as tf
 from tensorflow.python.trackable.data_structures import ListWrapper
 
 from tensorpotential import __version__
+from tensorpotential.poly import Monomial, Polynomial, get_symbol, normalize_poly
 
 
 # arg-type for TPInstruction.summary()
@@ -421,6 +422,71 @@ class ElementsReduceInstructionMixin(ABC):
     @abstractmethod
     def upd_init_args_new_elements(self, new_element_map):
         raise NotImplementedError()
+
+
+class PerElementReduceMixin(ElementsReduceInstructionMixin):
+    """Element selection for the instructions that keep ``reducing_<name>`` weights per central atom type."""
+
+    def prepare_variables_for_selected_elements(self, index_to_select):
+        if self.is_central_atom_type_dependent:
+            reducing_tensor_names = [s for s in dir(self) if s.startswith("reducing_")]
+            new_tensors = {}
+            for tn in reducing_tensor_names:
+                var = getattr(self, tn)
+                new_tensors[tn] = tf.Variable(tf.gather(var, index_to_select, axis=0))
+
+            return new_tensors
+
+
+class SimplifyingReduceMixin(PerElementReduceMixin):
+    """``simplify=True`` support of the reducers that collect from coupling instructions (``self.instructions``,
+    ``self.ls_max``, ``self.allowed_l_p``)."""
+
+    def simplify_collected_tensors(self):
+        collector_dict = {}
+
+        A_ins_dict = {ins.name: ins for ins in self.instructions}
+        for instr, instr_lmax in zip(self.instructions, self.ls_max):
+            instruction_collection = instr.collect_functions(
+                max_l=instr_lmax, l_p_list=self.allowed_l_p
+            )
+            col_index = instruction_collection["func_collect_ind"]
+            collector_dict[instr.name] = instruction_collection
+            for ind in col_index:
+                get_symbol(instr.name, ind, A_ins_dict)
+
+    def drop_unused(self):
+        ZERO = Polynomial([Monomial(0)])
+        incl_hist_list = []
+        excl_hist_list = []
+        for A_ins in self.instructions:
+            cmd = A_ins.coupling_meta_data
+            if "cg_list" in cmd:
+                cmd["n_op"] = cmd["cg_list"].map(len)
+                cmd_clean = cmd[cmd["symbol"] != ZERO]
+                cmd_clean["symbol"] = cmd_clean["symbol"].map(normalize_poly)
+
+                cmd_clean = (
+                    cmd_clean.dropna(subset=["symbol"])
+                    .sort_values("n_op")
+                    .drop_duplicates("symbol", keep="first")
+                )
+                cmd_clean = cmd_clean.sort_index()
+                incl_hist_list += [h for h in cmd_clean["hist"]]
+                excl_hist_list += [
+                    h for h in cmd["hist"] if h not in cmd_clean["hist"].values
+                ]
+        incl_hist_list = sorted(set(incl_hist_list))
+        excl_hist_list = sorted(set(excl_hist_list))
+        excl_hist_list = [e for e in excl_hist_list if e not in incl_hist_list]
+        logging.info(f"Following exclusion hist list was discovered: {excl_hist_list}")
+
+        # re-initialize collectable instructions with new drop_list
+        for inst in self.instructions:
+            # duck typing
+            if hasattr(inst, "history_drop_list") and hasattr(inst, "init_coupling"):
+                inst.history_drop_list = list(inst.history_drop_list) + excl_hist_list
+                inst.init_coupling()
 
 
 class TPEquivariantInstruction(TPInstruction):
