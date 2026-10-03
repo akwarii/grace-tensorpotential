@@ -130,7 +130,7 @@ def _np_linmlp(
     scale: np.ndarray | None,
     n_real: int,
     activation: str | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[Any, Any, Any]:
     """Forward pass of ``LinMLPOut2ScalarTarget`` from ``[atoms, n_out]`` scalar features.
 
     Returns the output, the linear part ``[atoms, 1]`` and the last hidden layer.
@@ -209,7 +209,7 @@ def _readout_data(
     features: Sequence[np.ndarray],
     n_real: int = N_REAL,
     dtype: tf.DType = tf.float64,
-) -> dict[str, tf.Tensor]:
+) -> dict[str, Any]:
     """Input dictionary of a readout: the target, the origins and the two atom counts."""
     n_total = features[0].shape[0]
     data = {
@@ -242,7 +242,7 @@ def _shift_batch(
     n_real: int,
     dtype: tf.DType = tf.float64,
     local_mu: Sequence[int] | None = None,
-) -> dict[str, tf.Tensor]:
+) -> dict[str, Any]:
     """Input dictionary of a shift instruction; ``target`` is ``[atoms, 1]`` (or a scalar)."""
     data = {
         "energy": tf.constant(target, dtype),

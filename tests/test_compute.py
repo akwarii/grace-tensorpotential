@@ -1757,7 +1757,9 @@ def test_scalar_chemical_embedding_stores_the_element_map():
     assert not z.lora
     assert z.element_map_symbols.numpy().tolist() == [b"H", b"C", b"N", b"O"]
     assert z.element_map_index.numpy().tolist() == [0, 1, 2, 3]
-    symbols, index = z.get_element_map()
+    element_map = z.get_element_map()
+    assert element_map is not None
+    symbols, index = element_map
     assert symbols.tolist() == ["H", "C", "N", "O"]
     assert symbols.dtype.kind == "U"
     assert index.tolist() == [0, 1, 2, 3]
@@ -1769,7 +1771,9 @@ def test_scalar_chemical_embedding_element_map_keeps_the_index_values():
     z = ScalarChemicalEmbedding(
         name="Z", element_map={"Fe": 2, "Ni": 0, "Cr": 1}, embedding_size=2
     )
-    symbols, index = z.get_element_map()
+    element_map = z.get_element_map()
+    assert element_map is not None
+    symbols, index = element_map
     assert symbols.tolist() == ["Fe", "Ni", "Cr"]
     assert index.tolist() == [2, 0, 1]
     assert z.number_of_elements == 3

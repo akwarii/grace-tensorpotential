@@ -143,7 +143,11 @@ def test_zero_initialised_layer_gives_a_non_trivial_output_once_seeded():
     seed_trainable_variables(layer)
     out = layer.frwrd(dict(data)).numpy()
     # only_nonlin: first channel passes through, the others are RMS-normalised with the seeded scale
+    x_np = np.asarray(x.numpy())
     np.testing.assert_allclose(
-        out[:, 0, :], x.numpy()[:, 0, :], **FLOAT64_ARITHMETIC._asdict()
+        out[:, 0, :],
+        x_np[:, 0, :],
+        rtol=FLOAT64_ARITHMETIC.rtol,
+        atol=FLOAT64_ARITHMETIC.atol,
     )
     assert np.all(out[:, 1:, :] != 0.0)
