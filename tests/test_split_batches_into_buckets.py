@@ -11,10 +11,14 @@ from tensorpotential.data.databuilder import split_batches_into_buckets
 
 def _table(n: int) -> pd.DataFrame:
     # non-default index so that label preservation is observable
-    return pd.DataFrame({"n_neighbours": np.arange(n)[::-1] * 10}, index=np.arange(n) + 100)
+    return pd.DataFrame(
+        {"n_neighbours": np.arange(n)[::-1] * 10}, index=np.arange(n) + 100
+    )
 
 
-@pytest.mark.parametrize(("n_rows", "n_buckets"), [(10, 3), (7, 7), (8, 1), (5, 4), (12, 5)])
+@pytest.mark.parametrize(
+    ("n_rows", "n_buckets"), [(10, 3), (7, 7), (8, 1), (5, 4), (12, 5)]
+)
 def test_sizes_follow_array_split_rule(n_rows: int, n_buckets: int) -> None:
     # hand rule: the first n_rows % n_buckets chunks hold one extra row
     base, extra = divmod(n_rows, n_buckets)
