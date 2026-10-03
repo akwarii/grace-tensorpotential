@@ -73,6 +73,7 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 
 - A function or class you **modify** must already be covered at 90% or more (line and branch). Below that, write characterization tests
   first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
+- **A test goes in the file named after the source module it covers** (`tests/test_<module>.py` for `tensorpotential/<...>/<module>.py`, for example `tests/test_tp_model.py` for `tpmodel.py`, `tests/test_process_df.py` for `data/process_df.py`); `tests/` stays flat. Do not group tests by the issue or the kind of change that added them, and do not move existing test files unless an issue says so (owner, 2026-10-03).
 - Tests have two layers: **logic** (branches, errors, shapes, edge cases) and **physical values** from an oracle that does not call the unit
   under test: finite-difference forces and stress, rotation/translation/permutation invariance, extensivity, sympy or scipy references,
   hand-computed numbers. A refactor may change the logic and the physics tests must still pass.
