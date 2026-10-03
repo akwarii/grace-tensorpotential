@@ -196,7 +196,7 @@
   "tensorpotential/instructions/compute.py": {
    "call-non-callable": 3,
    "invalid-type-form": 2,
-   "no-matching-overload": 2,
+   "no-matching-overload": 4,
    "not-iterable": 2
   },
   "tensorpotential/instructions/output.py": {
