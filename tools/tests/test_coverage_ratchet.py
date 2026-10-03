@@ -66,7 +66,7 @@ def test_falls_lists_only_files_that_lost_share():
     better = cr.counts_from_report(
         report({"a.py": (9, 10, 3, 4), "b.py": (5, 5, 0, 0)})
     )
-    assert cr.falls(base, worse) == ["fell: a.py 78.57% -> 71.43%"]
+    assert cr.falls(base, worse) == ["fell: a.py 78.57% -> 71.43%, uncovered 3 -> 4"]
     assert cr.falls(base, better) == []
     assert cr.falls(base, base) == []
 
@@ -82,7 +82,116 @@ def test_share_not_count_decides():
     # removing covered lines while the rest stays equally covered is not a fall
     base = {"a.py": {"covered": 80, "total": 100}}
     assert cr.falls(base, {"a.py": {"covered": 40, "total": 50}}) == []
-    assert cr.falls(base, {"a.py": {"covered": 30, "total": 50}})
+    # 25 of 50 leaves 25 uncovered against 20: lower share and more untested code
+    assert cr.falls(base, {"a.py": {"covered": 25, "total": 50}})
+
+
+def test_a_fall_that_adds_uncovered_code_is_listed():
+    base = {"a.py": {"covered": 80, "total": 100}}
+    assert cr.falls(base, {"a.py": {"covered": 70, "total": 100}})
+
+
+def test_a_rise_that_adds_uncovered_code_is_not_listed():
+    # 85% of 200 leaves 30 uncovered against 20, but the share went up
+    base = {"a.py": {"covered": 80, "total": 100}}
+    assert cr.falls(base, {"a.py": {"covered": 170, "total": 200}}) == []
+
+
+def test_unchanged_counts_are_not_listed():
+    base = {"a.py": {"covered": 80, "total": 100}, "e.py": {"covered": 0, "total": 0}}
+    assert cr.falls(base, dict(base)) == []
+
+
+# instructions/compute.py of CPU1: 2596 of 3218 covered, then 2581 of 3202
+CPU1_BASE = {"compute.py": {"covered": 2596, "total": 3218}}
+CPU1_NOW = {"compute.py": {"covered": 2581, "total": 3202}}
+
+
+def test_cpu1_numbers_pass_although_the_share_fell():
+    assert cr.percent(CPU1_NOW["compute.py"]) < cr.percent(CPU1_BASE["compute.py"])
+    assert cr.uncovered(CPU1_BASE["compute.py"]) == 622
+    assert cr.uncovered(CPU1_NOW["compute.py"]) == 621
+    assert cr.falls(CPU1_BASE, CPU1_NOW) == []
+
+
+def test_cpu1_numbers_with_one_more_uncovered_line_fail():
+    now = {"compute.py": {"covered": 2580, "total": 3202}}  # 622 uncovered, as before
+    assert cr.falls(CPU1_BASE, now) == []
+    now = {"compute.py": {"covered": 2579, "total": 3202}}  # 623 uncovered
+    assert cr.falls(CPU1_BASE, now) == [
+        "fell: compute.py 80.67% -> 80.54%, uncovered 622 -> 623"
+    ]
+
+
+def test_equal_uncovered_count_with_a_lower_share_passes():
+    base = {"a.py": {"covered": 80, "total": 100}}
+    assert cr.falls(base, {"a.py": {"covered": 60, "total": 80}}) == []
+
+
+def test_tolerance_still_absorbs_a_small_fall_that_adds_uncovered_code():
+    base = {"a.py": {"covered": 100, "total": 100}}
+    now = {"a.py": {"covered": 99, "total": 100}}
+    assert cr.falls(base, now) and cr.falls(base, now, tolerance=1.0) == []
+
+
+def test_uncovered_is_total_minus_covered():
+    assert cr.uncovered({"covered": 11, "total": 14}) == 3
+    assert cr.uncovered({"covered": 0, "total": 0}) == 0
+
+
+def record_baseline(tmp_path: Path, data: dict) -> Path:
+    baseline = tmp_path / "base.json"
+    cr.main([
+        "record",
+        str(write(tmp_path, "c0.json", data)),
+        "--baseline",
+        str(baseline),
+    ])
+    return baseline
+
+
+def test_check_accepts_a_refactor_that_lowers_the_share_and_the_uncovered_count(
+    tmp_path, capsys
+):
+    baseline = record_baseline(tmp_path, report({"a.py": (80, 100, 0, 0)}))
+    capsys.readouterr()
+    refactored = write(tmp_path, "c1.json", report({"a.py": (40, 50, 0, 0)}))
+    assert cr.main(["check", str(refactored), "--baseline", str(baseline)]) == 0
+    refactored = write(tmp_path, "c2.json", report({"a.py": (66, 85, 0, 0)}))
+    assert cr.main(["check", str(refactored), "--baseline", str(baseline)]) == 0
+    assert "0 fell" in capsys.readouterr().out
+
+
+def test_record_writes_a_lower_share_when_the_uncovered_count_fell(tmp_path):
+    baseline = record_baseline(tmp_path, report({"a.py": (80, 100, 0, 0)}))
+    refactored = write(tmp_path, "c1.json", report({"a.py": (66, 85, 0, 0)}))
+    assert cr.main(["record", str(refactored), "--baseline", str(baseline)]) == 0
+    assert json.loads(baseline.read_text())["files"]["a.py"] == {
+        "covered": 66,
+        "total": 85,
+    }
+
+
+def test_the_new_baseline_ratchets_the_uncovered_count_down(tmp_path):
+    baseline = record_baseline(tmp_path, report({"a.py": (80, 100, 0, 0)}))
+    cr.main([
+        "record",
+        str(write(tmp_path, "c1.json", report({"a.py": (66, 85, 0, 0)}))),
+        "--baseline",
+        str(baseline),
+    ])  # 19 uncovered now
+    worse = write(tmp_path, "c2.json", report({"a.py": (60, 80, 0, 0)}))  # 20 uncovered
+    assert cr.main(["check", str(worse), "--baseline", str(baseline)]) == 1
+
+
+def test_record_refuses_a_lower_share_with_more_uncovered_code(tmp_path, capsys):
+    baseline = record_baseline(tmp_path, report({"a.py": (80, 100, 0, 0)}))
+    before = baseline.read_text()
+    worse = write(tmp_path, "c1.json", report({"a.py": (70, 100, 0, 0)}))
+    capsys.readouterr()
+    assert cr.main(["record", str(worse), "--baseline", str(baseline)]) == 1
+    assert "uncovered 20 -> 30" in capsys.readouterr().out
+    assert baseline.read_text() == before
 
 
 def test_record_then_check_round_trip(tmp_path, capsys):
