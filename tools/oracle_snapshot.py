@@ -268,8 +268,6 @@ def build_spec_model(spec: ModelSpec, seed: int = SEED):
     """Build the model that ``spec`` describes."""
     if spec.source.startswith(PRESET_PREFIX):
         instructions = preset_instructions(spec.source[len(PRESET_PREFIX) :])
-        if spec.option is not None:
-            instructions = with_layout_option(instructions, spec.option)
         return build_from_instructions(instructions, seed, spec.dtype)
     return build_model(TESTS / spec.source, seed, spec.dtype, spec.option)
 
