@@ -384,6 +384,32 @@ The last row is the only place that stands in for something the rule discourages
 
 **What the numbers do not cover.** One `-n 4` run per configuration (the three-consecutive-runs clause was not repeated); the `--slow-first` comparison is one pair, and the timings of the first table were taken at `69f6265`, before the list was replaced by explicit marks (item 5: the final commit equals it within 7 s in an A/B on a slower machine state, its absolute time was measured once more on 2026-10-03 on a quiet machine, mean load from other processes 0.26 cores: 9 min 54 s (593.73 s, 1275 passed, 6 skipped, 2 xfailed, 1 xpassed, no changed or removed test id against the baseline). That is 114 s above the 8 min 00 s of the day before for the same tests, and the earlier commit also took 9 min 28 s in the A/B of that day, so the machine itself ran slower on 2026-10-03; absolute `-n 4` times are comparable only within one session, and the 51% ratio of the first table (a back-to-back pair) is the figure that carries; pandas 3 was not run (no test or library change depends on it); nothing was run on GPU or HPC. The fixture of the import gate runs once per xdist worker (about 30 s each), so it costs more at `-n 8`. The coverage run of the final tree took 12 min 27 s with `-n 4` (QUAL2 recorded 23 min 4 s, with other work on the machine).
 
+## 9. pandas 3 readiness (DEPS1)
+
+Measured on 2026-10-03 on the DEPS1 branch (cut from `91103a8`), CPU, Python 3.12.3, `pytest -n 4 --dist load` with the two ignores of `baselines/README.md`. pandas 2.3.3 is the project environment, pandas 3.0.3 is a second environment built offline from the same lock (`baselines/README.md`).
+
+**Change.** The two `np.array_split(<DataFrame>, n)` calls of `data/databuilder.py` (in `estimate_n_buckets` and `split_batches_into_buckets`) go through one private helper, `_split_rows`, that splits the row positions and takes `df.iloc[ix]`; the chunks are the same as before (sizes and row labels pinned by `tests/test_split_batches_into_buckets.py`, written first and green on the old code). The blanket `FutureWarning` and `DeprecationWarning` filters of `scripts/grace_predict.py` are replaced by one filter for the `DeprecationWarning` that ASE raises through NumPy 2.5 (`Setting the shape on a NumPy array`, 3 per two structures); with every filter removed and `-W always`, that was the only warning of a `grace_predict` run, and no pandas warning occurred.
+
+| Run | passed | failed | skipped | xfailed | xpassed |
+|---|---:|---:|---:|---:|---:|
+| pandas 2.3.3 | 1282 | 0 | 6 | 2 | 1 |
+| pandas 3.0.3 | 1282 (1281 in the full run, `test_distrib` re-run, see below) | 0 | 6 | 2 | 1 |
+| pandas 2.3.3, `PANDAS_COPY_ON_WRITE=warn` | 1282 | 0 | 6 | 2 | 1 |
+| pandas 2.3.3, `-W error::FutureWarning -W error::DeprecationWarning` | 1183 | 66 (+33 errors) | 6 | 2 | 1 |
+
+`test_distrib` failed in the first pandas 3 run with exit status 127: the test starts `grace_preprocess` by name and the environment's `bin` was not on `PATH` (the interpreter was called by path). With `PATH` set it passes (1 passed, 1 min 54 s). The 27 failures of the pandas 3 baseline (`outcomes_pd3.json`) are all gone, 26 through the fix and the 27th (`test_distrib`) through the same fix in stage 3.
+
+**Triage of the warn-mode runs.**
+
+- `PANDAS_COPY_ON_WRITE=warn`: no test fails and the log holds no pandas warning (0 occurrences of "pandas", `ChainedAssignment` or `SettingWithCopy`); the library does not rely on chained assignment or on views of a frame.
+- `-W error`: all 100 error lines are `DeprecationWarning`s from outside pandas, none from pandas: 93 NumPy 2.5 "Setting the shape on a NumPy array" (raised in `ase/atoms.py`), 5 "`__array__` implementation doesn't accept a copy keyword" (`instructions/compute.py:477-514`, TensorFlow tensors passed to `np.array`), 2 `importlib.resources.open_text` (`cli/wizard.py:1043`). They affect NumPy 2.5 readiness, not pandas 3, and are not fixed here.
+- pandas 3.0.3 emits one warning of its own in the whole suite: `Pandas4Warning` for `pd.concat(..., copy=False)` at `cli/data.py:957` (inside `load_and_prepare_datasets`, a 550-line function; `cli/data.py` is covered 48% in `baselines/coverage_baseline.json`, so it may not be modified before characterization tests exist). `Pandas4Warning` derives from `DeprecationWarning`, not from `FutureWarning`. Reported on the issue as a finding, not fixed here.
+- `FutureWarning`: the only ones left on pandas 2.3.3 are ASE's `FiniteDifferenceCalculator` notices in `tests/test_calculator.py`; none comes from pandas. The 48 `DataFrame.swapaxes` warnings of `estimate_n_buckets` are gone.
+
+**Pipeline.** `grace_preprocess` stages 1 to 4 on `tests/data/MoNbTaW_train50.pkl.gz` (strategy `neighbours`, batch 400, 3 buckets, cutoff 5) give the same stage 2 table hash, the same 46 stage 3 batches (hash of every tensor of every batch) and the same `stats.json` on pandas 2.3.3 and 3.0.3.
+
+**What this does not cover.** `grace_collect` and `gracemaker` data loading on real user datasets were not run with pandas 3 beyond what the suite exercises; `df2extxyz` ran on both versions with `-W error::FutureWarning`; a pickle written by pandas 3 cannot be read by pandas 2 (unchanged); the pin `pandas<3` is not relaxed here (decision D11, the relaxation belongs to the packaging issues); nothing ran on GPU or HPC.
+
 ## Provenance
 
 Counts re-measured on the tree named at the top; the F1 reproduction was run with the project environment. Compared with the issue text: star imports are 3 in `.py` files (4 with the notebook), everything else (1 `NameError`, 8 bare `except`, 52 markers, the unimported package) matches.
