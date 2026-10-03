@@ -47,6 +47,11 @@ def test_seeded_values_matrices_are_scaled_and_vectors_centred_on_one():
     assert np.all(osn.seeded_values("never zero", (64,)) != 0)
 
 
+def _save_npz(path, arrays: dict) -> None:
+    """``np.savez`` for keys that are not identifiers (the stub types ``**kwds`` as a flag)."""
+    np.savez(path, **arrays)
+
+
 def _snap(**arrays):
     return {k: np.asarray(v, dtype=float) for k, v in arrays.items()}
 
@@ -136,8 +141,15 @@ def test_cli_write_saves_a_real_snapshot_with_metadata(tmp_path, capsys):
     _require_tensorflow()
     out = tmp_path / "sub" / "snap.npz"
     args = [
-        "write", str(out), "--yamls", "model_grace.yaml", "--n-structures", "1",
-        "--groups", "base", "--no-edge",
+        "write",
+        str(out),
+        "--yamls",
+        "model_grace.yaml",
+        "--n-structures",
+        "1",
+        "--groups",
+        "base",
+        "--no-edge",
     ]
     assert osn.main(args) == 0
     with np.load(out) as saved:
@@ -324,7 +336,7 @@ def test_snapshot_specs_rejects_an_unknown_group():
 def test_model_spec_is_immutable():
     spec = osn.ModelSpec("a", "b.yaml")
     with pytest.raises(AttributeError):
-        spec.label = "c"  # ty: ignore[invalid-assignment]
+        spec.label = "c"
 
 
 def test_precision_rows_are_named_and_select_by_label():
@@ -351,7 +363,10 @@ def test_tolerance_row_is_chosen_per_key_from_the_table_given():
     assert osn.scale_rtol_for_key("m/s0/x", rows) == 1e-9
     noise = 1e-5  # between the two rows
     a = _snap(**{"m.f32/s0/x": [1.0, 2.0], "m/s0/x": [1.0, 2.0]})
-    b = _snap(**{"m.f32/s0/x": [1.0, 2.0 + 2 * noise], "m/s0/x": [1.0, 2.0 + 2 * noise]})
+    b = _snap(**{
+        "m.f32/s0/x": [1.0, 2.0 + 2 * noise],
+        "m/s0/x": [1.0, 2.0 + 2 * noise],
+    })
 
     def by_key(key):
         return osn.scale_rtol_for_key(key, rows)
@@ -403,7 +418,11 @@ def test_repeat_spread_takes_the_maximum_over_cases_and_keeps_the_worst_key():
 def test_repeat_spread_ignores_meta_and_keys_missing_from_a_repeat():
     meta = np.array(json.dumps({}))
     runs = [
-        {osn.META_KEY: meta, "m/s0/energy": np.array([1.0]), "m/s0/only_first": np.array([1.0])},
+        {
+            osn.META_KEY: meta,
+            "m/s0/energy": np.array([1.0]),
+            "m/s0/only_first": np.array([1.0]),
+        },
         {osn.META_KEY: meta, "m/s0/energy": np.array([1.0])},
     ]
     assert set(osn.repeat_spread(runs)) == {"float64/energy"}
@@ -423,7 +442,7 @@ def test_cli_spread_prints_the_report(tmp_path, capsys):
     paths = []
     for index, value in enumerate((1.0, 1.0, 1.5)):
         path = tmp_path / f"run{index}.npz"
-        np.savez(path, **{"m.f32/s0/energy": np.array([value])})
+        _save_npz(path, {"m.f32/s0/energy": np.array([value])})
         paths.append(str(path))
     assert osn.main(["spread", *paths]) == 0
     report = json.loads(capsys.readouterr().out)
@@ -432,11 +451,19 @@ def test_cli_spread_prints_the_report(tmp_path, capsys):
 
 def test_cli_compare_uses_the_float32_row_for_float32_keys(tmp_path):
     first, second = tmp_path / "a.npz", tmp_path / "b.npz"
-    np.savez(first, **{"m.f32/s0/x": np.array([1.0, 1.0]), "m/s0/x": np.array([1.0, 1.0])})
+    _save_npz(
+        first, {"m.f32/s0/x": np.array([1.0, 1.0]), "m/s0/x": np.array([1.0, 1.0])}
+    )
     noise = 1e-14  # inside the float64 row, outside the exact float32 row
-    np.savez(second, **{"m.f32/s0/x": np.array([1.0, 1.0]), "m/s0/x": np.array([1.0, 1.0 + noise])})
+    _save_npz(
+        second,
+        {"m.f32/s0/x": np.array([1.0, 1.0]), "m/s0/x": np.array([1.0, 1.0 + noise])},
+    )
     assert osn.main(["compare", str(first), str(second)]) == 0
-    np.savez(second, **{"m.f32/s0/x": np.array([1.0, 1.0 + noise]), "m/s0/x": np.array([1.0, 1.0])})
+    _save_npz(
+        second,
+        {"m.f32/s0/x": np.array([1.0, 1.0 + noise]), "m/s0/x": np.array([1.0, 1.0])},
+    )
     assert osn.main(["compare", str(first), str(second)]) == 1
     assert osn.main(["compare", str(first), str(second), "--scale-rtol", "1e-12"]) == 0
 
@@ -450,6 +477,27 @@ def test_cli_write_rejects_an_unknown_group(capsys):
 def test_as_list_accepts_lists_and_dictionaries():
     assert osn._as_list([1, 2]) == [1, 2]
     assert osn._as_list({"a": 1, "b": 2}) == [1, 2]
+
+
+def test_accepts_option_needs_the_constructor_argument_and_for_dense_the_dense_flag():
+    from types import (
+        SimpleNamespace as Instruction,
+    )  # stands in for an instruction: only two attributes are read
+
+    scalar_mode = Instruction(
+        _init_args={"dense_nbr": False, "lm_first": False}, dense_capable=False
+    )
+    equivariant = Instruction(_init_args={"dense_nbr": False}, dense_capable=True)
+    without = Instruction(_init_args={}, dense_capable=True)
+    assert not osn._accepts_option(
+        scalar_mode, "dense_nbr"
+    )  # takes it, but cannot use it
+    assert osn._accepts_option(equivariant, "dense_nbr")
+    assert not osn._accepts_option(without, "dense_nbr")
+    assert osn._accepts_option(
+        scalar_mode, "lm_first"
+    )  # no dense flag needed for lm_first
+    assert not osn._accepts_option(equivariant, "lm_first")
 
 
 def test_entries_accepts_the_three_yaml_layouts():
@@ -489,18 +537,16 @@ def test_describe_structure_records_what_the_edge_cases_are():
 
 # --------------------------------------- widened snapshot: physics and options, TF
 
-TOLERANCES.update(
-    {
-        # layout options reorder sums only: float64 round-off (a few ulp)
-        "layout_parity": (1e-10, 1e-12),
-        # float32 parameters against float64: about 1e-7 relative per operation,
-        # a few tens of operations between the parameters and the energy
-        "float32_vs_float64": (1e-5, 1e-6),
-        "fd_selfimage_forces": (1e-4, 1e-8),
-        "fd_selfimage_stress": (1e-4, 1e-9),
-        "newton_third_law": (0.0, 1e-12),
-    }
-)
+TOLERANCES.update({
+    # layout options reorder sums only: float64 round-off (a few ulp)
+    "layout_parity": (1e-10, 1e-12),
+    # float32 parameters against float64: about 1e-7 relative per operation,
+    # a few tens of operations between the parameters and the energy
+    "float32_vs_float64": (1e-5, 1e-6),
+    "fd_selfimage_forces": (1e-4, 1e-8),
+    "fd_selfimage_stress": (1e-4, 1e-9),
+    "newton_third_law": (0.0, 1e-12),
+})
 OPTION_MODEL = "model_grace_2L_omat.yaml"
 
 
@@ -567,6 +613,24 @@ def test_dense_layout_is_active_only_with_the_dense_option(tf_model):
     assert not osn.dense_layout_active(tf_model)
 
 
+def test_dense_model_is_fed_one_block_of_bond_slots_per_atom():
+    from ase import Atoms
+
+    # uneven coordination (2, 2, 2 and 1 dummy bond): the flat and the dense layouts differ
+    chain = Atoms("Mo4", positions=[[0, 0, 0], [0, 0, 2.6], [0, 0, 5.2], [0, 0, 13.0]])
+    model = osn.build_model(osn.TESTS / OPTION_MODEL, option="dense_nbr")
+    out = osn.evaluate(model, chain)
+    n_atoms = out["data/atomic_mu_i"].shape[0]
+    assert out["data/ind_i"].shape[0] % n_atoms == 0
+    owner = out["data/ind_i"].reshape(n_atoms, -1)
+    real = np.linalg.norm(out["data/bond_vector"], axis=1).reshape(n_atoms, -1) < 6.0
+    rows = np.broadcast_to(np.arange(n_atoms)[:, None], owner.shape)
+    assert real.sum() > n_atoms  # the structure has bonds
+    assert np.array_equal(
+        owner[real], rows[real]
+    )  # slot block a holds the bonds of atom a
+
+
 def test_float32_model_has_float32_parameters_with_the_seeded_values():
     _require_tensorflow()
     model = osn.build_model(osn.TESTS / MODEL, dtype="float32")
@@ -582,13 +646,17 @@ def test_float32_outputs_agree_with_float64_to_single_precision(reference, cases
     for name, atoms in cases.items():
         got = osn.evaluate(model, atoms)
         for quantity in ("energy", "forces", "stress"):
-            _assert_close(got[quantity], reference[name][quantity], "float32_vs_float64")
+            _assert_close(
+                got[quantity], reference[name][quantity], "float32_vs_float64"
+            )
     # float32 is not float64 in disguise: the energy must actually differ
     got = osn.evaluate(model, cases["s1"])
     assert np.any(got["energy"] != reference["s1"]["energy"])
 
 
-def test_isolated_atom_has_only_the_dummy_bond_and_no_energy_forces_or_stress(reference):
+def test_isolated_atom_has_only_the_dummy_bond_and_no_energy_forces_or_stress(
+    reference,
+):
     out = reference["isolated"]
     assert out["data/n_neigh_real"].item() == 1  # the builder's placeholder bond
     assert np.linalg.norm(out["data/bond_vector"][0]) > 6.0  # beyond the cutoff
@@ -656,7 +724,9 @@ def test_slab_energy_is_invariant_to_a_shift_along_the_periodic_axes(tf_model, c
 @pytest.mark.parametrize("name", list(osn.PRESET_SETTINGS))
 def test_presets_build_and_are_translation_invariant(name, cases):
     _require_tensorflow()
-    model = osn.build_spec_model(osn.ModelSpec(f"preset.{name}", osn.PRESET_PREFIX + name))
+    model = osn.build_spec_model(
+        osn.ModelSpec(f"preset.{name}", osn.PRESET_PREFIX + name)
+    )
     atoms = cases["s1"]
     base = osn.evaluate(model, atoms)
     assert np.isfinite(base["energy"]).all() and np.abs(base["forces"]).max() > 1e-6
@@ -686,9 +756,10 @@ def test_take_snapshot_records_variants_edge_cases_and_the_skipped_combinations(
     assert set(meta["variables"]) == labels
     f32 = {dtype for _, _, dtype in meta["variables"]["model_grace.f32"]}
     assert "float32" in f32
-    assert meta["yaml_sha256"]["model_grace"] == hashlib.sha256(
-        (osn.TESTS / "model_grace.yaml").read_bytes()
-    ).hexdigest()
+    assert (
+        meta["yaml_sha256"]["model_grace"]
+        == hashlib.sha256((osn.TESTS / "model_grace.yaml").read_bytes()).hexdigest()
+    )
 
 
 def test_take_snapshot_of_presets_has_no_yaml_hash():

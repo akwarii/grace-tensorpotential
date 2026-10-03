@@ -90,7 +90,12 @@ DEFAULT_SCALE_RTOL = TOLERANCE_ROWS["float64"].scale_rtol
 F32_SUFFIX = ".f32"
 
 GROUPS = ("base", "float32", "lm_first", "dense", "presets")
-GROUP_SUFFIX = {"base": "", "float32": F32_SUFFIX, "lm_first": ".lm_first", "dense": ".dense"}
+GROUP_SUFFIX = {
+    "base": "",
+    "float32": F32_SUFFIX,
+    "lm_first": ".lm_first",
+    "dense": ".dense",
+}
 GROUP_OPTION = {"lm_first": "lm_first", "dense": "dense_nbr"}
 PRESET_PREFIX = "preset:"
 PRESET_ELEMENTS = {"Mo": 0, "Nb": 1, "Ta": 2, "W": 3}
@@ -176,7 +181,9 @@ def seeded_values(name: str, shape: tuple[int, ...], seed: int = SEED) -> np.nda
 
 def _as_list(instructions) -> list:
     """The instructions of a list or of a ``{name: instruction}`` dictionary."""
-    return list(instructions.values() if hasattr(instructions, "values") else instructions)
+    return list(
+        instructions.values() if hasattr(instructions, "values") else instructions
+    )
 
 
 def _accepts_option(instruction, option: str) -> bool:
@@ -213,7 +220,9 @@ def with_layout_option(instructions, option: str):
 def _entries(raw) -> list[dict]:
     """The instruction dictionaries of a loaded model yaml (list or ``instructions`` map)."""
     collection = raw["instructions"] if "instructions" in raw else raw
-    return list(collection.values()) if isinstance(collection, dict) else list(collection)
+    return (
+        list(collection.values()) if isinstance(collection, dict) else list(collection)
+    )
 
 
 def preset_instructions(name: str):
@@ -451,7 +460,9 @@ def take_snapshot(
     for spec in specs:
         if not spec.source.startswith(PRESET_PREFIX):
             data = (TESTS / spec.source).read_bytes()
-            meta["yaml_sha256"][Path(spec.source).stem] = hashlib.sha256(data).hexdigest()
+            meta["yaml_sha256"][Path(spec.source).stem] = hashlib.sha256(
+                data
+            ).hexdigest()
         model = build_spec_model(spec, seed)
         meta["variables"][spec.label] = variable_table(model)
         for case, atoms in cases.items():
@@ -519,7 +530,11 @@ def compare_snapshots(
         peak = float(reference.max()) if reference.size else 0.0
         if peak > 0:
             report["max_scaled_diff"] = max(report["max_scaled_diff"], worst / peak)
-        rel = float(scale_rtol) if isinstance(scale_rtol, int | float) else scale_rtol(key)
+        rel = (
+            float(scale_rtol)
+            if isinstance(scale_rtol, int | float)
+            else scale_rtol(key)
+        )
         bound = atol + rtol * reference + rel * peak
         if not np.all(diff <= bound):
             report["exceeding"].append(key)
@@ -548,7 +563,9 @@ def repeat_spread(snapshots: Sequence[Mapping[str, np.ndarray]]) -> dict[str, di
     for key in sorted(keys):
         stack = np.stack([np.asarray(s[key], dtype=np.float64) for s in snapshots])
         scale = float(np.abs(stack[0]).max()) if stack[0].size else 0.0
-        spread = float(np.max(np.max(stack, 0) - np.min(stack, 0))) if stack.size else 0.0
+        spread = (
+            float(np.max(np.max(stack, 0) - np.min(stack, 0))) if stack.size else 0.0
+        )
         entry = groups.setdefault(
             f"{precision_of(key)}/{key.split('/', 2)[2]}",
             {"max_scaled_spread": 0.0, "worst_key": None},
@@ -614,7 +631,9 @@ def _write(args: argparse.Namespace) -> int:
         json.dumps(meta, indent=1, sort_keys=True) + "\n"
     )
     size = args.out.stat().st_size / 1e6
-    sys.stdout.write(f"{len(arrays) - 1} arrays written to {args.out} ({size:.1f} MB)\n")
+    sys.stdout.write(
+        f"{len(arrays) - 1} arrays written to {args.out} ({size:.1f} MB)\n"
+    )
     return 0
 
 
