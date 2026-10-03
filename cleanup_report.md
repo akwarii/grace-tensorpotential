@@ -307,7 +307,7 @@ Measured on 2026-10-02 (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20, pyt
 |---|---:|---:|---:|
 | serial | 27 min 34 s (1654.67 s; 28 min 34 s with start-up) | 20 min 11 s (1211.65 s; 21 min 13 s) | 73.2% |
 | `-n 4 --dist load` | 15 min 36 s (936.02 s) | 8 min 00 s (480.86 s; 8 min 06 s) | 51.4% |
-| `-n 4 --dist load -m "not slow"` (fast tier, 1,147 tests) | | 4 min 14 s (254.71 s; 4 min 20 s) | |
+| `-n 4 --dist load -m "not slow"` (fast tier, 1,147 tests; measured when the import-gate tests were still marked slow and so left out, they are in it now, about 30 s more per worker, not re-measured) | | 4 min 14 s (254.71 s; 4 min 20 s) | |
 | `-n 4 --dist load --slow-first=off` (at `7603b2a`, see item 5) | | 11 min 24 s (684.96 s) | |
 | largest process (serial / `-n 4`) | 14.5 GB / 7.7 GB | 14.1 GB / 7.2 GB | |
 

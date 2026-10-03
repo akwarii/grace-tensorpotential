@@ -25,7 +25,7 @@ uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load -m "not slow" \
-    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast development loop, about 4 minutes (TEST4)
+    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast development loop, about 4 to 5 minutes (TEST4)
 
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
