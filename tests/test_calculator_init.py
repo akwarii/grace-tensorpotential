@@ -331,8 +331,9 @@ def test_each_extra_key_adds_only_its_builder(key, shape, builder):
 )
 def test_magnetic_moments_need_the_missing_experimental_package():
     model = model_needing({constants.ATOMIC_MAGMOM: [None, 3]})
-    with pytest.raises(ImportError, match="mag.databuilder not found"):
+    with pytest.raises(ImportError, match="mag.databuilder not found") as excinfo:
         TPCalculator(model=model)
+    assert isinstance(excinfo.value.__cause__, ModuleNotFoundError)
 
 
 def test_magnetic_moment_builder_is_added_when_the_package_is_present(monkeypatch):
@@ -362,8 +363,9 @@ def test_a_missing_gen_tensor_package_is_reported(monkeypatch, key, shape):
     monkeypatch.setitem(
         sys.modules, "tensorpotential.extra.gen_tensor.databuilder", None
     )
-    with pytest.raises(ImportError, match="gen_tensor.databuilder not found"):
+    with pytest.raises(ImportError, match="gen_tensor.databuilder not found") as excinfo:
         TPCalculator(model=model)
+    assert isinstance(excinfo.value.__cause__, ModuleNotFoundError)
 
 
 def test_dense_only_model_serves_a_segment_sum_request_with_a_warning(caplog):

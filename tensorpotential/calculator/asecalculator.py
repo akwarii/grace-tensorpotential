@@ -925,10 +925,10 @@ class TPCalculator(Calculator):
                 from tensorpotential.experimental.mag.databuilder import (
                     MagMomDataBuilder,
                 )
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as err:
                 raise ImportError(
                     "TensorPotential.experimental.mag.databuilder not found"
-                )
+                ) from err
 
             self.data_builders.append(MagMomDataBuilder())
         if constants.ATOMIC_POS in self.data_keys:
@@ -936,10 +936,10 @@ class TPCalculator(Calculator):
                 from tensorpotential.extra.gen_tensor.databuilder import (
                     PositionsDataBuilder,
                 )
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as err:
                 raise ImportError(
                     "TensorPotential.extra.gen_tensor.databuilder not found"
-                )
+                ) from err
 
             self.data_builders.append(PositionsDataBuilder(cutoff=self.cutoff))
         if constants.CELL_VECTORS in self.data_keys:
@@ -947,10 +947,10 @@ class TPCalculator(Calculator):
                 from tensorpotential.extra.gen_tensor.databuilder import (
                     CellDataBuilder,
                 )
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as err:
                 raise ImportError(
                     "TensorPotential.extra.gen_tensor.databuilder not found"
-                )
+                ) from err
 
             self.data_builders.append(CellDataBuilder(cutoff=self.cutoff))
 

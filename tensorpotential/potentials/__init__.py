@@ -19,10 +19,10 @@ def get_preset(name: str) -> Callable:
     """
     try:
         return REGISTERED_PRESETS[name]
-    except KeyError:
+    except KeyError as err:
         raise KeyError(
             f"Preset '{name}' if not found in the list of registered presets"
-        )
+        ) from err
 
 
 def get_public_preset_list() -> list:

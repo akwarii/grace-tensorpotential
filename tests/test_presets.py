@@ -5,6 +5,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 from pathlib import Path
 
+import pytest
+
 from tensorpotential.instructions import load_instructions
 from tensorpotential.potentials import get_preset
 
@@ -73,3 +75,12 @@ def test_preset_FS_HEA25_with_simplification():
         7,
         5,
     ]
+
+
+def test_unknown_preset_name_raises_a_key_error_chained_to_the_lookup():
+    with pytest.raises(KeyError, match="not found in the list of registered") as excinfo:
+        get_preset("NO_SUCH_PRESET")
+
+    cause = excinfo.value.__cause__
+    assert isinstance(cause, KeyError)
+    assert cause.args == ("NO_SUCH_PRESET",)
