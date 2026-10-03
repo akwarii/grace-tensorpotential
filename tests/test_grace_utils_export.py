@@ -359,3 +359,66 @@ def test_export_kokkos_arch_override_routes_to_2l(
     # 2L exporter always writes the empty *_names index arrays
     assert "mlp_rad_names" in data.files
     assert "rms_names" in data.files
+
+
+# ------------------------------------------------------------ resolve_param_dtype (a code default of param_dtype)
+# The second of the code paths that decide param_dtype for a yaml without a param_dtype key; it agrees with
+# metadata_utils.resolve_param_dtype (float64) and disagrees with TensorPotential and get_param_dtype_from_config
+# (float32). PINNED, not endorsed (see test_metadata_utils.py).
+
+
+def _args(param_dtype=None):
+    import argparse
+
+    return argparse.Namespace(param_dtype=param_dtype)
+
+
+def _yaml_with_metadata(tmp_path, metadata):
+    import yaml
+
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml.dump({"metadata": metadata, "instructions": {}}))
+    return str(path)
+
+
+@pytest.mark.parametrize(("name", "dtype"), [("float32", tf.float32), ("float64", tf.float64)])
+def test_resolve_param_dtype_command_line_value_wins(tmp_path, name, dtype):
+    other = "float64" if name == "float32" else "float32"
+    path = _yaml_with_metadata(tmp_path, {"param_dtype": other})
+
+    assert grace_utils.resolve_param_dtype(_args(name), path) is dtype
+
+
+def test_resolve_param_dtype_command_line_value_does_not_need_the_file(tmp_path):
+    assert grace_utils.resolve_param_dtype(_args("float32"), str(tmp_path / "missing.yaml")) is tf.float32
+
+
+@pytest.mark.parametrize(("name", "dtype"), [("float32", tf.float32), ("float64", tf.float64)])
+def test_resolve_param_dtype_reads_the_metadata(tmp_path, name, dtype):
+    path = _yaml_with_metadata(tmp_path, {"param_dtype": name})
+
+    assert grace_utils.resolve_param_dtype(_args(), path) is dtype
+
+
+def test_resolve_param_dtype_without_the_key_gives_float64(tmp_path):
+    path = _yaml_with_metadata(tmp_path, {"tensorpotential_version": "x"})
+
+    assert grace_utils.resolve_param_dtype(_args(), path) is tf.float64
+
+
+def test_resolve_param_dtype_missing_file_gives_float64(tmp_path):
+    # unlike metadata_utils.resolve_param_dtype it does not test for the file: read_model_metadata gives {}
+    assert grace_utils.resolve_param_dtype(_args(), str(tmp_path / "missing.yaml")) is tf.float64
+
+
+def test_resolve_param_dtype_args_without_the_attribute_count_as_unset(tmp_path):
+    import argparse
+
+    path = _yaml_with_metadata(tmp_path, {"param_dtype": "float32"})
+
+    assert grace_utils.resolve_param_dtype(argparse.Namespace(), path) is tf.float32
+
+
+def test_resolve_param_dtype_unknown_name_is_a_key_error(tmp_path):
+    with pytest.raises(KeyError, match="Unknown dtype name float16"):
+        grace_utils.resolve_param_dtype(_args("float16"), str(tmp_path / "model.yaml"))

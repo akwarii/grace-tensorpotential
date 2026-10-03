@@ -1,0 +1,1806 @@
+{
+ "tensorpotential.instructions.base.TPEquivariantInstruction": {
+  "captured": false,
+  "parameters": [
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "coupling_meta_data",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "coupling_origin",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'TPEquivariantInstruction'"
+   }
+  ]
+ },
+ "tensorpotential.instructions.base.TPInstruction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'TPInstruction'"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.BondAvgSphericalHarmonic": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "spherical_harmonics",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "bonds",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "rcut",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1"
+   },
+   {
+    "name": "p",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "5"
+   },
+   {
+    "name": "avg_n_neigh",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.BondLength": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "instruction_with_bonds",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'BondLength'"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.BondSpecificRadialBasisFunction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "bonds",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "element_map",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "cutoff_dict",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "cutoff",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "5.0"
+   },
+   {
+    "name": "cutoff_type",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'symmetric_bond'"
+   },
+   {
+    "name": "cutoff_function_param",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "5"
+   },
+   {
+    "name": "basis_type",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'Cheb'"
+   },
+   {
+    "name": "nfunc",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "8"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'BondSpecificRadialBasisFunction'"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "init_gamma",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "trainable",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.CollectInvarBasis": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "instructions",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "ls_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.CropProductFunction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "left",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "right",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "Lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_crop",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "is_left_right_equal",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_left",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_right",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist_left",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist_right",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "history_drop_list",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "max_sum_l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "keep_parity",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.EquivariantGate": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "input",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "hidden_dim",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "use_bias",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "mix_channels",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.EquivariantRMSNorm": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "input",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "center_l0",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "center_l0_bias",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "balance_degrees",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "normalize_l0_only",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "split_norm",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "init",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'zeros'"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.FCRight2Left": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "left",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "right",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "left_coefs",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "is_central_atom_type_dependent",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "number_of_atom_types",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "init_vars",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'random'"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "norm_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.FunctionReduce": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "instructions",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "ls_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "allowed_l_p",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "is_central_atom_type_dependent",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "number_of_atom_types",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "init_vars",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'random'"
+   },
+   {
+    "name": "init_target_value",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'zeros'"
+   },
+   {
+    "name": "simplify",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.FunctionReduceN": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "instructions",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "ls_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "allowed_l_p",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "out_norm",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "is_central_atom_type_dependent",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "number_of_atom_types",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "init_vars",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'random'"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "init_target_value",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'zeros'"
+   },
+   {
+    "name": "simplify",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "scale",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.FunctionReduceParticular": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "instructions",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "selected_l",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "selected_p",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "is_central_atom_type_dependent",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "number_of_atom_types",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "out_norm",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.GeneralProductFunction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "left",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "right",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "Lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "mode",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'elementwise'"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "rank",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "use_S",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "is_left_right_equal",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_left",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_right",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist_left",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist_right",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "history_drop_list",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "max_sum_l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "keep_parity",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.InvariantLayerRMSNorm": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "inpt",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "type",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'only_nonlin'"
+   },
+   {
+    "name": "init",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'zeros'"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.LinearRadialFunction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "n_rad_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "basis",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "input_shape",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "init",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'random'"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'LinearRadialFunction'"
+   },
+   {
+    "name": "no_weight_decay",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.MLPRadialFunction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "n_rad_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "basis",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "input_shape",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "norm",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'MLPRadialFunction'"
+   },
+   {
+    "name": "activation",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "no_weight_decay",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "chemical_embedding_i",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "chemical_embedding_j",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.MLPRadialFunction_v2": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "n_rad_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'MLPRadialFunction'"
+   },
+   {
+    "name": "basis",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "input_shape",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "activation",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "no_weight_decay",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "init_type",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'normal'"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "chem_embedding",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "embed_i",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "embed_j",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.ProductFunction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "left",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "right",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "Lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "is_left_right_equal",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_left",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_right",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist_left",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax_hist_right",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "history_drop_list",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "max_sum_l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "keep_parity",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.RadialBasis": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "bonds",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "basis_type",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'RadialBasis'"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.SPBF": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "bonds",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "angular",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "chemical_embedding",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_rad_max",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "n_rad_basis",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "rcut",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "p",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "5"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "activation",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'silu'"
+   },
+   {
+    "name": "indicator",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "Lmax",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "keep_parity",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "history_drop_list",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "l_max_ind",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "max_sum_l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "normalize_cg",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "avg_n_neigh",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "sum_neighbors",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "dense_nbr",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.ScalarChemicalEmbedding": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "element_map",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "embedding_size",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "is_trainable",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "init",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'random'"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.ScaledBondVector": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "bond_length",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "bonds",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'ScaledBondVector'"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.SingleParticleBasisFunctionEquivariantInd": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "angular",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "indicator",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "Lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "radial",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "keep_parity",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "history_drop_list",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "l_max_ind",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "max_sum_l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "sum_neighbors",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "avg_n_neigh",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "radial_basis",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "chemical_embedding",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "dense_nbr",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.SingleParticleBasisFunctionScalarInd": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "radial",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "angular",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "indicator",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "indicator_l_depend",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "sum_neighbors",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "True"
+   },
+   {
+    "name": "avg_n_neigh",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "lm_first",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.SphericalHarmonic": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "vhat",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "lmax",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.compute.ZBLPotential": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "bonds",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "cutoff",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "element_map",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "delta_cutoff",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0.25"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'ZBL'"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.ConstantScaleShiftTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "scale",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "shift",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0.0"
+   },
+   {
+    "name": "atomic_shift_map",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "chemical_embedding",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'ConstantScaleShiftTarget'"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.CreateOutputTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "initial_value",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0.0"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.FSOut2ScalarTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "origin",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "fs_parameters",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "((1.0, 1.0), (1.0, 0.5))"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'FSOut2ScalarTarget'"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.LinMLPOut2ScalarTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "origin",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'LinMLPOut2ScalarTarget'"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "activation",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   },
+   {
+    "name": "lora_config",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "return_hidden_target",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.LinMLPScalarReadOut": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "origin",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'LinMLPScalarReadOut'"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1"
+   },
+   {
+    "name": "mlp_mode",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'per_input'"
+   },
+   {
+    "name": "element_dependent",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "number_of_atom_types",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "activation",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'silu'"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.LinearOut2EquivarTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "origin",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'LinearEquivarOut2Target'"
+   },
+   {
+    "name": "full_r2_form",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.LinearOut2Target": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "origin",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'LinearOut2ScalarTarget'"
+   },
+   {
+    "name": "trainable",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "init_type",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'zeros'"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.MLPOut2ScalarTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "origin",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "hidden_layers",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "n_out",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'MLPOut2ScalarTarget'"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "activation",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   },
+   {
+    "name": "kwargs",
+    "kind": "VAR_KEYWORD"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.TPOutputInstruction": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.TrainableShiftTarget": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "number_of_atom_types",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'TrainableShiftTarget'"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.instructions.output.TrainableShiftTarget_v2": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "target",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "chemical_embedding",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'TrainableShiftTarget_v2'"
+   },
+   {
+    "name": "l",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "0"
+   }
+  ]
+ },
+ "tensorpotential.uq.instructions.RandomProjectedBasisFeatures": {
+  "captured": true,
+  "parameters": [
+   {
+    "name": "basis_reduce_instructions",
+    "kind": "POSITIONAL_OR_KEYWORD"
+   },
+   {
+    "name": "out_dim",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "128"
+   },
+   {
+    "name": "seed",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "42"
+   },
+   {
+    "name": "projection_matrix",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "feature_transform",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "None"
+   },
+   {
+    "name": "normalize",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "add_density_channel",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "False"
+   },
+   {
+    "name": "density_scale",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "1.0"
+   },
+   {
+    "name": "name",
+    "kind": "POSITIONAL_OR_KEYWORD",
+    "default_repr": "'features'"
+   }
+  ]
+ }
+}

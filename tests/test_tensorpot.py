@@ -214,3 +214,21 @@ def test_function_arguments_default_to_none():
 
     names = ["model_compute_function", "model_train_function"]
     assert [parameters[name].default for name in names] == [None, None]
+
+
+# ---------------------------------------------------- param_dtype default (a code default of param_dtype)
+
+
+def test_param_dtype_default_is_float32():
+    # PINNED, not endorsed (see test_metadata_utils.py): float32 here, float64 for a yaml without the key
+    assert inspect.signature(TensorPotential.__init__).parameters["param_dtype"].default is tf.float32
+
+
+def test_default_param_dtype_gives_float32_weights_and_a_float64_input_dtype():
+    tp = TensorPotential(_instructions())
+
+    assert tp.param_dtype is tf.float32
+    assert tp.float_dtype is tf.float64
+    trainable = tp.model.trainable_variables
+    assert trainable
+    assert {v.dtype for v in trainable} == {tf.float32}
