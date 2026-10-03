@@ -163,6 +163,29 @@ class TestElasticBatchIterator:
         # Buckets should have been discovered
         assert len(elastic.buckets) > 0
 
+    def test_exhaustion_is_chained_to_the_end_of_the_parent_iterator(
+        self, train_df, data_builders
+    ):
+        batcher = MultiBinMetricBatcher(
+            num_bins=3, target_metric=2000, metric_strategy="neighbours"
+        )
+        elastic = ElasticBatchIterator(
+            structure_iter=_structure_gen(train_df, data_builders),
+            batcher=batcher,
+            data_builders=data_builders,
+            buckets=[],
+            growth_fraction=0.1,
+        )
+
+        drained = []
+        with pytest.raises(StopIteration) as excinfo:
+            while True:
+                drained.append(next(elastic))
+
+        assert drained
+        assert isinstance(excinfo.value.__cause__, StopIteration)
+        assert excinfo.value.__cause__ is not excinfo.value
+
     def test_buckets_persist_across_iterations(self, train_df, data_builders):
         """Second iteration should reuse buckets from first."""
         shared_buckets = []

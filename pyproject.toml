@@ -11,7 +11,7 @@ authors = [
 ]
 description = "Graph Atomic Cluster Expansion (GRACE)"
 readme = "README.md"
-requires-python = ">=3.9" # Update if needed
+requires-python = ">=3.11"
 license = { text = "Academic Software License (ASL)" }
 classifiers = [
     "License :: Other/Proprietary License",
@@ -56,7 +56,7 @@ grace_dashboard = "tensorpotential.scripts.grace_dashboard:main"
 # below and switched off for everything else by per-file-ignores, so legacy code is checked as before
 # (E, F, plus ERA001 which tools/lint_ratchet.py keeps from rising). Add a new package to the NEW_PACKAGES
 # glob and to NEW_PACKAGES in tools/lint_ratchet.py.
-per-file-target-version = { "{tensorpotential/torch_backend,tensorpotential/core,tests_torch}/**" = "py310" }
+per-file-target-version = { "{tensorpotential/torch_backend,tensorpotential/core,tests_torch}/**" = "py311" }
 
 [tool.ruff.lint]
 select = [

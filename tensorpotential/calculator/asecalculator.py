@@ -744,7 +744,7 @@ class TPCalculator(Calculator):
         pad_neighbors_fraction: float | None = 0.05,
         pad_atoms_number: int | None = 1,
         min_dist=None,
-        extra_properties: list[str] = None,
+        extra_properties: list[str] | None = None,
         truncate_extras_by_natoms: bool | list[str] = False,
         max_number_reduction_recompilation: int | None = 2,
         debug_padding_verbose: int = 0,
@@ -925,10 +925,10 @@ class TPCalculator(Calculator):
                 from tensorpotential.experimental.mag.databuilder import (
                     MagMomDataBuilder,
                 )
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as err:
                 raise ImportError(
                     "TensorPotential.experimental.mag.databuilder not found"
-                )
+                ) from err
 
             self.data_builders.append(MagMomDataBuilder())
         if constants.ATOMIC_POS in self.data_keys:
@@ -936,10 +936,10 @@ class TPCalculator(Calculator):
                 from tensorpotential.extra.gen_tensor.databuilder import (
                     PositionsDataBuilder,
                 )
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as err:
                 raise ImportError(
                     "TensorPotential.extra.gen_tensor.databuilder not found"
-                )
+                ) from err
 
             self.data_builders.append(PositionsDataBuilder(cutoff=self.cutoff))
         if constants.CELL_VECTORS in self.data_keys:
@@ -947,10 +947,10 @@ class TPCalculator(Calculator):
                 from tensorpotential.extra.gen_tensor.databuilder import (
                     CellDataBuilder,
                 )
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as err:
                 raise ImportError(
                     "TensorPotential.extra.gen_tensor.databuilder not found"
-                )
+                ) from err
 
             self.data_builders.append(CellDataBuilder(cutoff=self.cutoff))
 
@@ -1088,8 +1088,8 @@ class TPCalculator(Calculator):
     def load_uq_artifacts(
         self,
         artifact_path: str,
-        model_yaml: str = None,
-        checkpoint: str = None,
+        model_yaml: str | None = None,
+        checkpoint: str | None = None,
         param_dtype=None,
         compute_dsigma_dr: bool = True,
     ):

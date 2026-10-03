@@ -16,7 +16,7 @@ class TPAtomsDataContainer:
         forces: npt.NDArray[np.float64] = None,
         stress: npt.NDArray[np.float64] = None,
         atomic_nelec: npt.NDArray[np.float64] = None,
-        total_nelec: float = None,
+        total_nelec: float | None = None,
         mag_mom: npt.NDArray[np.float64] = None,
         atomic_chrg: npt.NDArray[np.float64] = None,
         total_chrg: npt.NDArray[np.float64] = None,

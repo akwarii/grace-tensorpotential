@@ -264,7 +264,7 @@ def compute_compositions(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
         for el in elements:
-            df["n_" + el] = df[COMP_DICT].map(lambda d: d.get(el, 0))
+            df["n_" + el] = df[COMP_DICT].map(lambda d, el=el: d.get(el, 0))
             df["c_" + el] = df["n_" + el] / df[NUMBER_OF_ATOMS]
     return elements
 

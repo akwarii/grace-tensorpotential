@@ -356,3 +356,59 @@ def test_forces_are_minus_the_finite_difference_of_the_energy():
             numeric[i, k] = -(energies[0] - energies[1]) / (2 * step)
     assert np.abs(forces).max() > 1e-3
     assert_close(forces, numeric, FINITE_DIFFERENCE_F64)
+
+
+# ------------------------------------------------------ default radial widths (n_rad_max)
+
+DEFAULT_WIDTHS = (32, 42)  # the two layer widths grace_2 has always defaulted to
+
+
+def radial_widths(ins) -> tuple[int, int, int, int]:
+    """Widths the two layers pass on: radial MLP of layer 1, A1, B and B1 of layer 2."""
+    return (
+        ins["R"]._init_args["n_rad_max"],
+        ins["A1"]._init_args["n_out"],
+        ins["B"]._init_args["n_out"],
+        ins["B1"]._init_args["n_out"],
+    )
+
+
+def small_without_widths() -> dict[str, Any]:
+    return {k: v for k, v in SMALL.items() if k != "n_rad_max"}
+
+
+def test_default_radial_widths_are_32_and_42():
+    first, second = DEFAULT_WIDTHS
+    ins = grace_2(**small_without_widths(), max_order=2)
+
+    assert radial_widths(ins) == (first, first, second, second)
+
+
+def test_default_widths_equal_the_explicit_default_list():
+    default = grace_2(**small_without_widths(), max_order=2)
+    explicit = grace_2(
+        **small_without_widths(), max_order=2, n_rad_max=list(DEFAULT_WIDTHS)
+    )
+
+    assert radial_widths(default) == radial_widths(explicit)
+
+
+def test_explicit_widths_are_used_and_not_modified():
+    widths = [6, 8]
+    ins = grace_2(**small_without_widths(), max_order=2, n_rad_max=widths)
+
+    assert radial_widths(ins) == (6, 6, 8, 8)
+    assert widths == [6, 8]
+
+
+def test_a_call_with_other_widths_does_not_change_the_default():
+    grace_2(**small_without_widths(), max_order=2, n_rad_max=[6, 8])
+    ins = grace_2(**small_without_widths(), max_order=2)
+
+    assert radial_widths(ins) == (32, 32, 42, 42)
+
+
+def test_n_rad_max_argument_defaults_to_none():
+    import inspect
+
+    assert inspect.signature(grace_2).parameters["n_rad_max"].default is None

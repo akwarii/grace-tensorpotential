@@ -8,6 +8,8 @@ and survives the real ``export_to_yaml`` round trip as ``scale``, ``shift`` and 
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pytest
 import tensorflow as tf
@@ -93,6 +95,38 @@ def test_extra_instructions_in_the_dict_are_ignored():
     ins = built(scale=3.0)
     out = extract_const_shift_scale({"energy": CreateOutputTarget("e"), NAME: ins})
     close(out[0], 3.0)
+
+
+def debug_messages(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "tensorpotential.export"]
+
+
+def test_values_returned_as_is_before_build_are_logged_at_debug(caplog):
+    ins = shift_target(scale=2.5, atomic_shift_map={0: 1.0, 1: 2.0})
+    with caplog.at_level(logging.DEBUG, logger="tensorpotential.export"):
+        extract_const_shift_scale({NAME: ins})
+
+    messages = debug_messages(caplog)
+    assert len(messages) == 2
+    assert "scale is not a TensorFlow value" in messages[0]
+    assert "atomic_shift_map is not a TensorFlow value" in messages[1]
+    assert {r.levelno for r in caplog.records} == {logging.DEBUG}
+
+
+def test_built_values_are_not_logged(caplog):
+    ins = built(scale=2.5, atomic_shift_map={0: 1.0, 1: 2.0})
+    with caplog.at_level(logging.DEBUG, logger="tensorpotential.export"):
+        extract_const_shift_scale({NAME: ins})
+
+    assert debug_messages(caplog) == []
+
+
+def test_no_shift_map_is_not_logged(caplog):
+    with caplog.at_level(logging.DEBUG, logger="tensorpotential.export"):
+        extract_const_shift_scale({NAME: shift_target(scale=2.5, shift=1.0)})
+
+    (message,) = debug_messages(caplog)
+    assert message.startswith("scale is not a TensorFlow value")
 
 
 # ----------------------------------------------------------------------------- values

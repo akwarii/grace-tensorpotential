@@ -228,11 +228,11 @@ class MLPOut2ScalarTarget(TPOutputInstruction):
         self,
         origin: list[FunctionReduce],
         target: CreateOutputTarget,
-        hidden_layers: list[int] = None,
+        hidden_layers: list[int] | None = None,
         n_out: int = 1,
         name="MLPOut2ScalarTarget",
-        normalize: str = None,
-        activation: str = None,
+        normalize: str | None = None,
+        activation: str | None = None,
         l: int = 0,  # noqa: E741
         **kwargs,
     ):
@@ -323,14 +323,14 @@ class LinMLPOut2ScalarTarget(TPOutputInstruction, LORAInstructionMixin):
         self,
         origin: list[FunctionReduce],
         target: CreateOutputTarget,
-        hidden_layers: list[int] = None,
+        hidden_layers: list[int] | None = None,
         name="LinMLPOut2ScalarTarget",
         n_out: int = 1,
-        normalize: str = None,
-        activation: str = None,
+        normalize: str | None = None,
+        activation: str | None = None,
         l: int = 0,  # noqa: E741
-        lora_config: dict[str, Any] = None,
-        return_hidden_target: str = None,
+        lora_config: dict[str, Any] | None = None,
+        return_hidden_target: str | None = None,
         **kwargs,
     ):
         super(LinMLPOut2ScalarTarget, self).__init__(name=name, target=target, l=l)
@@ -470,12 +470,12 @@ class LinMLPScalarReadOut(TPOutputInstruction):
         self,
         origin: list[FunctionReduce],
         target: CreateOutputTarget,
-        hidden_layers: list[int] = None,
+        hidden_layers: list[int] | None = None,
         name: str = "LinMLPScalarReadOut",
         n_out: int = 1,
         mlp_mode: str = "per_input",
         element_dependent: bool = False,
-        number_of_atom_types: int = None,
+        number_of_atom_types: int | None = None,
         activation: str | list[str] = "silu",
         l: int = 0,  # noqa: E741
         **kwargs,
@@ -671,7 +671,7 @@ class ConstantScaleShiftTarget(TPOutputInstruction, ElementsReduceInstructionMix
         target: TPInstruction,
         scale: float = 1.0,
         shift: float = 0.0,
-        atomic_shift_map: dict[int, float] = None,
+        atomic_shift_map: dict[int, float] | None = None,
         chemical_embedding: ScalarChemicalEmbedding = None,
         name: str = "ConstantScaleShiftTarget",
         l: int = 0,  # noqa: E741

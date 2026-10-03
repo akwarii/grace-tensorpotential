@@ -55,7 +55,7 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 
 ## Code style
 
-- Python 3.10+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
+- Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
 - **By default legacy code stays as it is**: no repo-wide reformat (`ruff format` would rewrite most files), no file splitting (`instructions/compute.py`
   is about 4,900 lines and upstream merges depend on its shape), no renames, and improve a unit only while you are already changing it. The exception
   is an issue whose job is to change legacy code (clean-up, code quality, deduplication, packaging, performance): it says what may change and how,
@@ -73,6 +73,7 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 
 - A function or class you **modify** must already be covered at 90% or more (line and branch). Below that, write characterization tests
   first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
+- **A test goes in the file named after the source module it covers** (`tests/test_<module>.py` for `tensorpotential/<...>/<module>.py`, for example `tests/test_tp_model.py` for `tpmodel.py`, `tests/test_process_df.py` for `data/process_df.py`); `tests/` stays flat. Do not group tests by the issue or the kind of change that added them, and do not move existing test files unless an issue says so (owner, 2026-10-03).
 - Tests have two layers: **logic** (branches, errors, shapes, edge cases) and **physical values** from an oracle that does not call the unit
   under test: finite-difference forces and stress, rotation/translation/permutation invariance, extensivity, sympy or scipy references,
   hand-computed numbers. A refactor may change the logic and the physics tests must still pass.

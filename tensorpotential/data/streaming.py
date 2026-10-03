@@ -261,7 +261,7 @@ class ElasticBatchIterator:
         while True:
             try:
                 structure = next(self._parent_iter)
-            except StopIteration:
+            except StopIteration as err:
                 for batch_structures in self._batcher.flush():
                     batch = self._pad_batch(batch_structures)
                     if batch:
@@ -270,7 +270,7 @@ class ElasticBatchIterator:
                 if self._batch_buffer:
                     return self._batch_buffer.pop(0)
                 else:
-                    raise StopIteration
+                    raise StopIteration from err
 
             found_batches = False
             for batch_structures in self._batcher.add_to_buffer(structure):
