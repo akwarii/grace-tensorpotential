@@ -233,8 +233,8 @@
    "total": 0
   },
   "tensorpotential/functions/couplings.py": {
-   "covered": 236,
-   "total": 404
+   "covered": 239,
+   "total": 407
   },
   "tensorpotential/functions/lora.py": {
    "covered": 62,
@@ -261,8 +261,8 @@
    "total": 525
   },
   "tensorpotential/instructions/compute.py": {
-   "covered": 2596,
-   "total": 3218
+   "covered": 2581,
+   "total": 3202
   },
   "tensorpotential/instructions/instruction_graph_utils.py": {
    "covered": 238,

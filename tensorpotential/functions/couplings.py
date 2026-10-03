@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from collections import defaultdict
+from functools import lru_cache
 from sympy.physics.quantum.cg import CG
 
 # (l1,l2,l3) -> mean(x**2)
@@ -2577,7 +2578,13 @@ def c2r_harm_matrix(l):  # noqa: E741
 
 
 
+@lru_cache(maxsize=None)
 def gen_CG_matrix2(l1, l2, L):
+    """Complex-basis Clebsch-Gordan matrix of shape ``[2L+1, 2l1+1, 2l2+1]``.
+
+    The result is cached per ``(l1, l2, L)`` (building a model asks for the same
+    triple many times) and is therefore read-only; copy it before modifying.
+    """
     CG_matrix = np.zeros((2 * L + 1, 2 * l1 + 1, 2 * l2 + 1))  # L, l1,l2
     for M in np.arange(-L, L + 1):
         for m1 in np.arange(-l1, l1 + 1):
@@ -2587,6 +2594,7 @@ def gen_CG_matrix2(l1, l2, L):
             c = float(CG(l1, m1, l2, m2, L, M).doit())
             CG_matrix[M + L, m1 + l1, m2 + l2] = c
 
+    CG_matrix.setflags(write=False)
     return CG_matrix
 
 
