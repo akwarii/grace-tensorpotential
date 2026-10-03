@@ -85,6 +85,22 @@ def test_share_not_count_decides():
     assert cr.falls(base, {"a.py": {"covered": 30, "total": 50}})
 
 
+def test_a_fall_that_adds_uncovered_code_is_listed():
+    base = {"a.py": {"covered": 80, "total": 100}}
+    assert cr.falls(base, {"a.py": {"covered": 70, "total": 100}})
+
+
+def test_a_rise_that_adds_uncovered_code_is_not_listed():
+    # 85% of 200 leaves 30 uncovered against 20, but the share went up
+    base = {"a.py": {"covered": 80, "total": 100}}
+    assert cr.falls(base, {"a.py": {"covered": 170, "total": 200}}) == []
+
+
+def test_unchanged_counts_are_not_listed():
+    base = {"a.py": {"covered": 80, "total": 100}, "e.py": {"covered": 0, "total": 0}}
+    assert cr.falls(base, dict(base)) == []
+
+
 def test_record_then_check_round_trip(tmp_path, capsys):
     cov = write(tmp_path, "cov.json", BASE)
     baseline = tmp_path / "base.json"
