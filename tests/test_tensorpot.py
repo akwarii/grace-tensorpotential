@@ -19,7 +19,6 @@ import pytest
 
 from tensorpotential.potentials import get_preset
 from tensorpotential.tensorpot import TensorPotential
-from tensorpotential.tpmodel import TPModel
 
 import tensorflow as tf  # after tensorpotential, which must set TF_USE_LEGACY_KERAS first
 
@@ -210,44 +209,8 @@ def test_explicit_functions_are_kept_by_identity():
     assert tp.model.train_function is train
 
 
-def test_each_tpmodel_gets_its_own_default_functions():
-    from tensorpotential.tpmodel import (
-        ComputeBatchEnergyAndForces,
-        ComputeStructureEnergyAndForcesAndVirial,
-        TPModel,
-    )
+def test_function_arguments_default_to_none():
+    parameters = inspect.signature(TensorPotential.__init__).parameters
 
-    first, second = TPModel(_instructions()), TPModel(_instructions())
-
-    assert isinstance(first.compute_function, ComputeStructureEnergyAndForcesAndVirial)
-    assert isinstance(first.train_function, ComputeBatchEnergyAndForces)
-    assert first.compute_function is not second.compute_function
-    assert first.train_function is not second.train_function
-
-
-def test_tpmodel_keeps_explicit_functions_by_identity():
-    from tensorpotential.tpmodel import (
-        ComputeBatchEnergyForcesVirials,
-        ComputeStructureEnergyAndForcesAndVirial,
-        TPModel,
-    )
-
-    compute = ComputeStructureEnergyAndForcesAndVirial()
-    train = ComputeBatchEnergyForcesVirials()
-    model = TPModel(_instructions(), compute_function=compute, train_function=train)
-
-    assert model.compute_function is compute
-    assert model.train_function is train
-
-
-@pytest.mark.parametrize(
-    ("owner", "names"),
-    [
-        (TensorPotential, ["model_compute_function", "model_train_function"]),
-        (TPModel, ["compute_function", "train_function"]),
-    ],
-)
-def test_function_arguments_default_to_none(owner, names):
-    parameters = inspect.signature(owner.__init__).parameters
-
+    names = ["model_compute_function", "model_train_function"]
     assert [parameters[name].default for name in names] == [None, None]

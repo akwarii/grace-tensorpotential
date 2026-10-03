@@ -530,3 +530,54 @@ def test_repr_numbers_the_instructions_in_file_order(cu_two_layer):
     names = list(model.instructions)
     assert len(lines) == len(names) > 10
     assert lines == [f"{i + 1}. {name!r}" for i, name in enumerate(names)]
+
+
+# ------------------------------------------------- default functions are not shared
+
+
+def _small_instructions():
+    preset = get_preset("GRACE_2LAYER_v1_24")
+    return preset(element_map={"Be": 0, "Li": 1}, lmax=0).get_instructions()
+
+
+def test_each_tpmodel_gets_its_own_default_functions():
+    from tensorpotential.tpmodel import (
+        ComputeBatchEnergyAndForces,
+        ComputeStructureEnergyAndForcesAndVirial,
+    )
+
+    first = TPModel(_small_instructions())
+    second = TPModel(_small_instructions())
+
+    assert isinstance(first.compute_function, ComputeStructureEnergyAndForcesAndVirial)
+    assert isinstance(first.train_function, ComputeBatchEnergyAndForces)
+    assert first.compute_function is not second.compute_function
+    assert first.train_function is not second.train_function
+
+
+def test_tpmodel_keeps_explicit_functions_by_identity():
+    from tensorpotential.tpmodel import (
+        ComputeBatchEnergyForcesVirials,
+        ComputeStructureEnergyAndForcesAndVirial,
+    )
+
+    compute = ComputeStructureEnergyAndForcesAndVirial()
+    train = ComputeBatchEnergyForcesVirials()
+    model = TPModel(
+        _small_instructions(), compute_function=compute, train_function=train
+    )
+
+    assert model.compute_function is compute
+    assert model.train_function is train
+
+
+def test_tpmodel_function_arguments_default_to_none():
+    import inspect
+
+    parameters = inspect.signature(TPModel.__init__).parameters
+
+    assert [parameters[n].default for n in ("compute_function", "train_function")] == [
+        None,
+        None,
+    ]
+
