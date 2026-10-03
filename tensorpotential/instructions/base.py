@@ -381,7 +381,7 @@ class TPInstruction(tf.Module, ABC):
         return input_data
 
     def summary(
-        self, verbose: summary_verbose_type, shown_vars: Set[str] = None
+        self, verbose: summary_verbose_type, shown_vars: Set[str] | None = None
     ) -> str:
         return InstructionPrinter.get_summary(self, verbose, shown_vars)
 
@@ -430,7 +430,7 @@ class TPEquivariantInstruction(TPInstruction):
         self,
         lmax,
         coupling_meta_data: pd.DataFrame = None,
-        coupling_origin: list[str, str] = None,
+        coupling_origin: list[str, str] | None = None,
         name="TPEquivariantInstruction",
     ):
         super().__init__(name=name)
@@ -446,7 +446,7 @@ class TPEquivariantInstruction(TPInstruction):
     def frwrd(self, input_data: dict, training: bool = False, local: bool = False):
         pass
 
-    def init_uncoupled_meta_data(self, l_p_init_list: list[list] = None):
+    def init_uncoupled_meta_data(self, l_p_init_list: list[list] | None = None):
         if l_p_init_list is None:
             l_p_init_list = [
                 [l, 1 if l % 2 == 0 else -1]
@@ -462,7 +462,7 @@ class TPEquivariantInstruction(TPInstruction):
 
     @staticmethod
     def collect_functions_from_meta_data(
-        coupling_meta_data: pd.DataFrame, max_l: int, l_p_list: list[list] = None
+        coupling_meta_data: pd.DataFrame, max_l: int, l_p_list: list[list] | None = None
     ) -> dict:
         if l_p_list is None:
             plist = []
@@ -498,7 +498,7 @@ class TPEquivariantInstruction(TPInstruction):
 
         return collect_d
 
-    def collect_functions(self, max_l: int, l_p_list: list[list] = None) -> dict:
+    def collect_functions(self, max_l: int, l_p_list: list[list] | None = None) -> dict:
         """
         Finds functions in the current tensor that have l <= max_l
         and have fitting [l, p] values
@@ -587,7 +587,7 @@ class InstructionPrinter:
     def get_summary(
         instruction: TPInstruction,
         verbose: summary_verbose_type = 0,
-        shown_vars: Set[str] = None,
+        shown_vars: Set[str] | None = None,
     ) -> str:
         res_str = InstructionPrinter.repr_instruction(instruction, verbose)
         res_str += InstructionPrinter.repr_var_info(instruction, shown_vars)
@@ -675,7 +675,7 @@ class InstructionPrinter:
 
     @staticmethod
     def repr_var_info(
-        instruction: TPInstruction, vars_counter: Dict[str, int] = None
+        instruction: TPInstruction, vars_counter: Dict[str, int] | None = None
     ) -> str:
         def hash_var_item(k: str, v: List[int]) -> str:
             return f"{k}={v}"

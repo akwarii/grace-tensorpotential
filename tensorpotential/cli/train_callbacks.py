@@ -16,10 +16,10 @@ class TPCallback(tf.keras.callbacks.Callback):
         model: TensorPotential,
         initial_lr: float,
         decay_steps: int,
-        warmup_target: float = None,
+        warmup_target: float | None = None,
         warmup_steps: int = 0,
         min_lr: float = 1e-6,
-        logfile: str = None,
+        logfile: str | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -44,12 +44,12 @@ class TPCallback(tf.keras.callbacks.Callback):
     def model(self):
         return self.model
 
-    def on_train_begin(self, logs: Dict = None) -> None:
+    def on_train_begin(self, logs: Dict | None = None) -> None:
         if self.warmup_steps > self.model.step:
             lr_0 = self.initial_lr if self._is_warmup() else self.warmup_target
             self.model.optimizer.learning_rate.assign(lr_0)
 
-    def on_batch_end(self, batch: int, logs: dict = None) -> None:
+    def on_batch_end(self, batch: int, logs: dict | None = None) -> None:
         if self.warmup_target is None:
             lr = self._decay_function(batch, self.initial_lr)
         else:
@@ -119,7 +119,7 @@ class CustomReduceLROnPlateau(tf.keras.callbacks.ReduceLROnPlateau):
         if self.best == 0.0:
             self.best = 1e99
 
-    def on_epoch_end(self, epoch: int, logs: Dict = None):
+    def on_epoch_end(self, epoch: int, logs: Dict | None = None):
         logs = logs or {}
         current = logs.get(self.monitor)
         current_lr = self.model.optimizer.learning_rate.numpy()
@@ -206,9 +206,9 @@ class CosineDecay(TPCallback):
         initial_lr: float,
         decay_steps: int,
         min_lr: float = 1e-6,
-        warmup_target: float = None,
+        warmup_target: float | None = None,
         warmup_steps: int = 0,
-        logfile: str = None,
+        logfile: str | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -239,9 +239,9 @@ class LinearDecay(TPCallback):
         initial_lr: float,
         decay_steps: int,
         min_lr: float = 1e-6,
-        warmup_target: float = None,
+        warmup_target: float | None = None,
         warmup_steps: int = 0,
-        logfile: str = None,
+        logfile: str | None = None,
         **kwargs,
     ):
         super().__init__(

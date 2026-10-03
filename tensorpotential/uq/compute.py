@@ -59,7 +59,7 @@ class _GMMUQComputeBase(ComputeFunction):
     def __init__(
         self,
         gmm_uq_model: GMMUQModel,
-        extra_return_keys: list[str] = None,
+        extra_return_keys: list[str] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

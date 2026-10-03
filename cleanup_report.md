@@ -384,7 +384,35 @@ The last row is the only place that stands in for something the rule discourages
 
 **What the numbers do not cover.** One `-n 4` run per configuration (the three-consecutive-runs clause was not repeated); the `--slow-first` comparison is one pair, and the timings of the first table were taken at `69f6265`, before the list was replaced by explicit marks (item 5: the final commit equals it within 7 s in an A/B on a slower machine state, its absolute time was measured once more on 2026-10-03 on a quiet machine, mean load from other processes 0.26 cores: 9 min 54 s (593.73 s, 1275 passed, 6 skipped, 2 xfailed, 1 xpassed, no changed or removed test id against the baseline). That is 114 s above the 8 min 00 s of the day before for the same tests, and the earlier commit also took 9 min 28 s in the A/B of that day, so the machine itself ran slower on 2026-10-03; absolute `-n 4` times are comparable only within one session, and the 51% ratio of the first table (a back-to-back pair) is the figure that carries; pandas 3 was not run (no test or library change depends on it); nothing was run on GPU or HPC. The fixture of the import gate runs once per xdist worker (about 30 s each), so it costs more at `-n 8`. The coverage run of the final tree took 12 min 27 s with `-n 4` (QUAL2 recorded 23 min 4 s, with other work on the machine).
 
-## 9. pandas 3 readiness (DEPS1)
+## 9. Code quality without architectural change (QUAL1)
+
+Measured on 2026-10-03 on the QUAL1 branch (CPU, `ruff 0.16.7 --isolated`, TensorFlow 2.20) against `torch-backend` at `39a3c86`.
+
+**Edits.** `ruff --select B006,B008,B904,B023,RUF013,S110`, library without `compat/pace/`, before and after:
+
+| Rule | Item | Before | After | Where it stays |
+|---|---|---:|---:|---|
+| RUF013 | (a) implicit `Optional` rewritten as `X \| None` | 157 in 19 files | 0 | |
+| B008 | (b) default-argument instances of `ComputeStructureEnergyAndForcesAndVirial` and `ComputeBatchEnergyAndForces` | 4 | 0 | |
+| B006 | (b) `grace_2(n_rad_max=[32, 42])` | 1 | 0 | |
+| B904 | (c) `raise ... from err` | 5 | 0 | 3 in `compat/pace/` (out of scope) |
+| S110 | (c) `except: pass` | 2 of 6 | 0 | 4 in units the suite does not run (below) |
+| B023 | (d) loop variable in a `map(lambda ...)` | 1 of 2 | 0 | `grace_collect.main` (below) |
+
+(a) is annotation-only: for each of the 19 files the AST with annotations removed equals the AST of `HEAD`. `TensorPotential.__init__`, `TPModel.__init__` and `grace_2` treat `None` as "build the default now"; the values are unchanged (widths 32 and 42, the same two function classes), and an explicit argument is kept by identity. A caller that used to pass `None` for a function on purpose would now get the default, and no caller in the tree does.
+
+**Edits that moved here (units the suite does not execute, coverage rule).** `scripts/grace_dashboard.py::extract_n_params` (silent `except`, 0/18) and `extrapolate_series` (0/42; the module cannot be imported without `flask`, which is not a declared dependency), `uq/cli/build/master.py::run_master` (two silent `except`, 1/361) and `scripts/grace_collect.py::main` (late-binding lambda at line 252, 0/108) are not edited. Their ruff hits are the only ones outside `compat/pace/` that remain.
+
+**Report only (item (e)).**
+
+- `FCRight2Left.build` draws normal random numbers for `w_right` when `init_vars="zeros"` (`instructions/compute.py:3755-3760`; the `w_left` branch above it uses `tf.zeros`). The weights are not zero and consume random state. Not changed: it would change the weights of models built with `init_vars="zeros"`.
+- The `rankmax` NameError is F1 above and sits in `compat/pace/` (out of scope).
+- TODO-style markers: 52 in total (`grep -rnE '\b(TODO|FIXME|XXX|HACK)\b' --include='*.py' tensorpotential`), 48 outside and 4 inside `compat/pace/`; F3 counted 47 and 5.
+- `print` calls: `ruff --select T201` gives 365 (346 outside `compat/pace/`, 19 inside); the issue text said 53. Outside `cli/`, `scripts/`, the wizards and `compat/pace/` there are 36 (`calculator/foundation_models.py` 15, `calculator/asecalculator.py` 11, `utils.py` 4, `__init__.py` 4, one each in `uq/feature_extraction.py` and `data/process_df.py`). They are user-facing messages and are left on purpose.
+
+**Side effects.** (1) Honest `X | None` annotations make `ty` report two more `no-matching-overload` findings, `' x '.join(self.coupling_origin)` in two `__repr__` methods of `compute.py` (the parameter can be `None`); the owner approved recording the rise in `baselines/lint_ratchet.json` (2 to 4). (2) The minimum Python version is now 3.11 (`pyproject.toml`; it was `>=3.9`), by decision of the owner; the ruff target of the new packages follows.
+
+## 10. pandas 3 readiness (DEPS1)
 
 Measured on 2026-10-03 on the DEPS1 branch (cut from `91103a8`), CPU, Python 3.12.3, `pytest -n 4 --dist load` with the two ignores of `baselines/README.md`. pandas 2.3.3 is the project environment, pandas 3.0.3 is a second environment built offline from the same lock (`baselines/README.md`).
 

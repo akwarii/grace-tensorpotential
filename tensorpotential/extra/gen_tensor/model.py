@@ -40,7 +40,7 @@ def grace_1(
     avg_n_neigh: float = 1.0,
     constant_out_shift: float = 0.0,
     constant_out_scale: float = 1.0,
-    atomic_shift_map: dict = None,
+    atomic_shift_map: dict | None = None,
     lmax=4,
     basis_type="Cheb",  # SBessel
     n_rad_base=8,
@@ -49,7 +49,7 @@ def grace_1(
     n_mlp_dens=16,
     max_order=4,
     compute_energy: bool = False,
-    tensor_components: list = None,
+    tensor_components: list | None = None,
     **kwargs,
 ):
     chem_init = "random"
@@ -239,21 +239,23 @@ def grace_2(
     avg_n_neigh: float = 1.0,
     constant_out_shift: float = 0.0,
     constant_out_scale: float = 1.0,
-    atomic_shift_map: dict = None,
+    atomic_shift_map: dict | None = None,
     lmax=4,
     lmax_indicator=1,
     basis_type="Cheb",  # SBessel
     n_rad_base=8,
-    n_rad_max=[32, 42],
+    n_rad_max=None,
     embedding_size=128,
     n_mlp_dens=16,
     max_order=4,
     compute_energy: bool = False,
-    tensor_components: list = None,
+    tensor_components: list | None = None,
     **kwargs,
 ):
     chem_init = "random"
     num_elements = len(element_map)
+    if n_rad_max is None:
+        n_rad_max = [32, 42]
     if tensor_components is None:
         tensor_components = [0, 1, 2]
     if len(tensor_components) == 1:

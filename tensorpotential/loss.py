@@ -1298,8 +1298,8 @@ class LossFunction:
 
     def __call__(
         self,
-        input_data: dict[str, tf.Tensor] = None,
-        predictions: dict[str, tf.Tensor] = None,
+        input_data: dict[str, tf.Tensor] | None = None,
+        predictions: dict[str, tf.Tensor] | None = None,
         model: TPModel = None,
     ):
         result = {self.name: 0.0}

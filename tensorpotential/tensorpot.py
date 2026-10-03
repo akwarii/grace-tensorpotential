@@ -12,8 +12,10 @@ from tensorpotential.loss import LossFunction
 from tensorpotential.metrics import ComputeMetrics
 from tensorpotential.tpmodel import (
     ComputeBatchEnergyAndForces,
+    ComputeFunction,
     ComputeStructureEnergyAndForcesAndVirial,
     TPModel,
+    TrainFunction,
 )
 from tensorpotential.utils import is_chief
 
@@ -62,8 +64,8 @@ class TensorPotential:
         regularization_loss: LossFunction = None,
         compute_metrics: ComputeMetrics = None,
         strategy: tf.distribute.Strategy = None,
-        model_compute_function=ComputeStructureEnergyAndForcesAndVirial(),
-        model_train_function=ComputeBatchEnergyAndForces(),
+        model_compute_function: ComputeFunction | None = None,
+        model_train_function: TrainFunction | None = None,
         param_dtype: tf.DType = tf.float32,
         eager_mode: bool = False,
         jit_compile: bool = True,
@@ -73,6 +75,11 @@ class TensorPotential:
         # get default mock strategy (single GPU mode)
         if strategy is None:
             strategy = tf.distribute.get_strategy()
+        # a default instance is created per object: a default argument would be shared by all
+        if model_compute_function is None:
+            model_compute_function = ComputeStructureEnergyAndForcesAndVirial()
+        if model_train_function is None:
+            model_train_function = ComputeBatchEnergyAndForces()
         self.strategy = strategy
         self.fit_config = fit_config or {}
         self.global_batch_size = global_batch_size

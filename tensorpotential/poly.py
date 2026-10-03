@@ -37,7 +37,7 @@ class Monomial:
     def __init__(
         self,
         coefficient: Union[int, float],
-        variables: Union[Dict[str, int], Tuple, str] = None,
+        variables: Union[Dict[str, int], Tuple, str] | None = None,
     ):
         self.coefficient = coefficient
 

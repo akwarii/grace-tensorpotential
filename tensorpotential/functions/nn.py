@@ -368,7 +368,7 @@ class FullyConnectedMLP(tf.Module):
         input_size: int,
         output_size: int,
         hidden_layers: list,
-        activation: callable = None,
+        activation: callable | None = None,
         out_act: bool = False,
         name: str = "FullyConnectedMLP",
         no_weight_decay: bool = False,

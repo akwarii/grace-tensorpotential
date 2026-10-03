@@ -272,7 +272,7 @@ class GMMUQArtifactBuilder:
                         self._effective_counts[elem][k] += float(w_k.sum())
                     self._counts[elem][k] += n_k
 
-    def finalize(self, element_names: dict[int, str] = None) -> dict:
+    def finalize(self, element_names: dict[int, str] | None = None) -> dict:
         """Compute inverse covariance matrices from accumulated scatter.
 
         Parameters
@@ -554,7 +554,7 @@ class GMMUQArtifactBuilder:
         cls,
         artifacts: dict,
         n_clusters: int,
-        feature_dim: int = None,
+        feature_dim: int | None = None,
         regularization: float = 1e-6,
     ):
         """Create a builder pre-loaded with centroids from artifacts.
@@ -675,7 +675,7 @@ class GMMUQArtifactBuilder:
             }
         atomic_savez(path, **save_dict)
 
-    def save(self, path: str, artifacts: dict = None, element_names: dict[int, str] = None, **kwargs):
+    def save(self, path: str, artifacts: dict | None = None, element_names: dict[int, str] | None = None, **kwargs):
         """Save artifacts to .npz file.
 
         Parameters

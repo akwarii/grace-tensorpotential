@@ -2,7 +2,7 @@ REGISTERED_PRESETS: dict = {}
 
 
 def register_preset(
-    name: str, settings: dict = None, default: bool = False, public: bool = False
+    name: str, settings: dict | None = None, default: bool = False, public: bool = False
 ):
     def decorator(obj):
         obj._settings = settings

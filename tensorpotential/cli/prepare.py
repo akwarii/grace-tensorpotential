@@ -74,7 +74,7 @@ def construct_model(
     potential_config: Dict,
     element_map: Dict,
     rcut: float,
-    cutoff_dict: dict = None,
+    cutoff_dict: dict | None = None,
     avg_n_neigh: float | dict = 1.0,
     constant_out_shift: float = 0.0,
     constant_out_scale: float = 1.0,
