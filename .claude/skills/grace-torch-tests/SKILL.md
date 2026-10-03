@@ -61,6 +61,10 @@ count of mock uses before and after when you change a test file.
 
 - Run the suite from the repository root (`pytest tests`; it also passes from inside `tests/`). Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 to 12 min instead of 32 min on 14 cores with the identical outcome (`--dist worksteal` was not faster).
   Choose the worker count from memory (TF processes are large); the root `conftest.py` gives each worker `cores / N` threads before TensorFlow is first imported (`tests/thread_budget.py`; it must stay out of `tests/conftest.py`, where it would add E402 findings; overridable by setting `TF_NUM_INTRAOP_THREADS`, `TF_NUM_INTEROP_THREADS` or `OMP_NUM_THREADS`).
+- **Check that the machine is idle first** (rule in `CLAUDE.md`). `uptime` gives the load average; `ps -eo pid,etimes,args | grep '[p]ytest\|[g]racemaker'` lists test and training processes (the bracket keeps the grep itself out of the list). A shell whose own command line merely contains the word
+  "pytest" is not a test run, so look at the executable (`python ... -m pytest`, or the xdist workers). `pgrep -f` matches the shell that runs it, so a wait loop on it never ends, and `pkill -f <script name>` kills your own shell: do not use either. Busy means another test or
+  training process is running or the 1-minute load average is above 4 on 14 cores (the figure comes from a suite at `-n 4` taking about twice as long next to another one; adjust it if the machine changes). While it is busy, do the cheap work (edits, `ruff`, `ty`, a single test file in one process) and
+  start the full run when the other has finished; if the wait blocks the task, say so. When a number depends on timing, note the load average before and after the run.
 - Tests must be safe in parallel: `tmp_path` or a per-worker directory for every file written, no test reads another test's output, no fixed ports.
 - **Check that nothing writes into the source tree** by running the suite on a read-only mount, not with `chmod -R a-w` (that makes `shutil.copy` and `copytree` copies read-only too, so tests that copy a fixture and edit it fail for the wrong reason):
 
