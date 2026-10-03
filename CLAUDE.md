@@ -35,11 +35,11 @@ prek install                  # hooks on the changed files (.pre-commit-config.y
 # Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json <same --ignore options>
 python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend] [--unit path/to/file.py::Class.method]   # touched units: 90%
-python tools/coverage_ratchet.py check cov.json       # no file may cover a smaller share than baselines/coverage_baseline.json
+python tools/coverage_ratchet.py check cov.json       # a file fails when its share falls below baselines/coverage_baseline.json and its uncovered count rises
 python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json     # also tools/ast_manifest.py and tools/check_clones.py
 ```
 
-**Rough runtime** (14 cores, 30 GB, about 1,340 tests; measured 2026-10-03, re-measure before relying on it): the full suite takes about 10 minutes with `-n 4` on an idle machine (12 with `--cov`) and about 20 serially; `-m "not slow"` about 4 to 5 minutes. Another suite running in a second worktree about doubles that, so check `uptime` and `ps` before a full run and run one suite at a time. Compare timings only between back-to-back runs (wall time to wall time).
+**Rough runtime** (14 cores, 30 GB, about 1,340 tests; measured 2026-10-03, re-measure before relying on it): the full suite takes about 10 minutes with `-n 4` on an idle machine (12 with `--cov`) and about 20 serially; `-m "not slow"` about 4 to 5 minutes. Another suite running in a second worktree about doubles that (see the idle-machine rule in Working agreements). Compare timings only between back-to-back runs (wall time to wall time).
 
 Two test files are not part of a normal run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; it is ignored above only so that
 counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
@@ -133,7 +133,11 @@ The procedure (board commands, PR text, findings, Definition of Done) is in the 
   (so no `pr/U*` branch is pushed or opened on your own); the `upstream` remote has its push URL disabled.
 - **Each agent works in its own git worktree** (`git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` so a plain push cannot update `torch-backend`), one agent per issue
   (`board.py` rewrites the whole issue body when it ticks a box). Never switch branches in, or run a branch-changing command on, a tree that another agent or the user is using. After the merge and `board.py done`:
-  `git worktree remove` (no `--force`; if it refuses, report the uncommitted work) and `git branch -d`; leave the remote branch unless the user says otherwise. Do not start a full test suite while another is running in a sibling worktree.
+  `git worktree remove` (no `--force`; if it refuses, report the uncommitted work) and `git branch -d`; leave the remote branch unless the user says otherwise.
+- **Check that the machine is idle before you run tests** (a pytest run of any size under `-n`, a coverage run, a baseline run, a `gracemaker` training or any other TensorFlow job): run `uptime` and
+  `ps -eo pid,etimes,args | grep '[p]ytest\|[g]racemaker'` first. The machine is **busy** when another test or training process is running (in any worktree, yours or another agent's) or the 1-minute load average is above 4 (14 cores).
+  When it is busy, start no full, `-n` or coverage run; do work that needs no CPU (edits, `ruff`, `ty`, one test file serially), look again later, and tell the user when waiting blocks you. Run one suite at a time, also your own.
+  Never kill another agent's process, and never use a run made on a busy machine for a timing or baseline claim. Details and pitfalls: "Speed" in the `grace-torch-tests` skill.
 - Ask before any download (file, source, size) and before any other outward action (creating or closing issues, repository settings); the draft PR for your own issue is covered above. New issues start only on the user's go, from `.github/ISSUE_TEMPLATE/milestone.md`.
   Development dependencies (test, coverage, parallelism, lint, typing, mutation tools) may be added to the `dev` group; runtime dependencies are decisions.
 - **An issue is resolved only once a pull request that references it (`Refs #<issue>`) is merged into `torch-backend` on this fork.** `tools/board.py done` checks that and

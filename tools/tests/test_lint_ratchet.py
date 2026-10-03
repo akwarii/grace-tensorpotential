@@ -388,8 +388,8 @@ def test_legacy_ignores_every_strict_family_except_the_commented_out_code() -> N
     assert set(ignores) == {f"!{NEW_GLOB}", "tests_torch/**"}
 
 
-def test_new_packages_have_python_310_as_target() -> None:
-    assert _ruff()["per-file-target-version"] == {NEW_GLOB: "py310"}
+def test_new_packages_have_python_311_as_target() -> None:
+    assert _ruff()["per-file-target-version"] == {NEW_GLOB: "py311"}
 
 
 def test_pyproject_ty_overrides_cover_legacy_and_exclude_the_new_packages() -> None:
