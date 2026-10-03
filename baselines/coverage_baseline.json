@@ -25,7 +25,7 @@
    "total": 0
   },
   "tensorpotential/cli/data.py": {
-   "covered": 465,
+   "covered": 654,
    "total": 972
   },
   "tensorpotential/cli/distribute.py": {
@@ -133,8 +133,8 @@
    "total": 2
   },
   "tensorpotential/data/databuilder.py": {
-   "covered": 617,
-   "total": 734
+   "covered": 624,
+   "total": 736
   },
   "tensorpotential/data/dataset_plotter.py": {
    "covered": 100,
@@ -145,7 +145,7 @@
    "total": 247
   },
   "tensorpotential/data/process_df.py": {
-   "covered": 122,
+   "covered": 134,
    "total": 164
   },
   "tensorpotential/data/shards.py": {
@@ -156,10 +156,6 @@
    "covered": 401,
    "total": 509
   },
-  "tensorpotential/data/symbols.py": {
-   "covered": 0,
-   "total": 1
-  },
   "tensorpotential/data/tpatoms.py": {
    "covered": 6,
    "total": 7
@@ -169,8 +165,8 @@
    "total": 209
   },
   "tensorpotential/export.py": {
-   "covered": 184,
-   "total": 189
+   "covered": 186,
+   "total": 191
   },
   "tensorpotential/extra/__init__.py": {
    "covered": 0,
@@ -209,8 +205,8 @@
    "total": 18
   },
   "tensorpotential/extra/gen_tensor/model.py": {
-   "covered": 269,
-   "total": 308
+   "covered": 273,
+   "total": 312
   },
   "tensorpotential/extra/gen_tensor/wizard.py": {
    "covered": 365,
@@ -233,23 +229,23 @@
    "total": 0
   },
   "tensorpotential/functions/couplings.py": {
-   "covered": 239,
+   "covered": 249,
    "total": 407
   },
   "tensorpotential/functions/lora.py": {
-   "covered": 62,
+   "covered": 64,
    "total": 71
   },
   "tensorpotential/functions/nn.py": {
-   "covered": 261,
+   "covered": 278,
    "total": 333
   },
   "tensorpotential/functions/radial.py": {
-   "covered": 165,
+   "covered": 183,
    "total": 196
   },
   "tensorpotential/functions/spherical_harmonics.py": {
-   "covered": 151,
+   "covered": 187,
    "total": 234
   },
   "tensorpotential/instructions/__init__.py": {
@@ -257,19 +253,19 @@
    "total": 19
   },
   "tensorpotential/instructions/base.py": {
-   "covered": 453,
-   "total": 525
+   "covered": 523,
+   "total": 583
   },
   "tensorpotential/instructions/compute.py": {
-   "covered": 2581,
-   "total": 3202
+   "covered": 2887,
+   "total": 3079
   },
   "tensorpotential/instructions/instruction_graph_utils.py": {
    "covered": 238,
    "total": 258
   },
   "tensorpotential/instructions/output.py": {
-   "covered": 461,
+   "covered": 534,
    "total": 601
   },
   "tensorpotential/loss.py": {
@@ -277,7 +273,7 @@
    "total": 591
   },
   "tensorpotential/metadata_utils.py": {
-   "covered": 32,
+   "covered": 44,
    "total": 44
   },
   "tensorpotential/metrics.py": {
@@ -293,7 +289,7 @@
    "total": 38
   },
   "tensorpotential/potentials/presets.py": {
-   "covered": 310,
+   "covered": 387,
    "total": 437
   },
   "tensorpotential/potentials/registry.py": {
@@ -334,7 +330,7 @@
   },
   "tensorpotential/scripts/grace_predict.py": {
    "covered": 0,
-   "total": 61
+   "total": 60
   },
   "tensorpotential/scripts/grace_preprocess.py": {
    "covered": 0,
@@ -345,7 +341,7 @@
    "total": 32
   },
   "tensorpotential/scripts/grace_utils.py": {
-   "covered": 124,
+   "covered": 129,
    "total": 403
   },
   "tensorpotential/scripts/gracemaker.py": {
@@ -353,12 +349,12 @@
    "total": 85
   },
   "tensorpotential/tensorpot.py": {
-   "covered": 268,
-   "total": 509
+   "covered": 296,
+   "total": 517
   },
   "tensorpotential/tpmodel.py": {
-   "covered": 523,
-   "total": 810
+   "covered": 580,
+   "total": 818
   },
   "tensorpotential/uq/__init__.py": {
    "covered": 5,
@@ -461,7 +457,7 @@
    "total": 110
   },
   "tensorpotential/utils.py": {
-   "covered": 231,
+   "covered": 245,
    "total": 405
   }
  },
