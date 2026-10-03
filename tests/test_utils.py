@@ -12,10 +12,20 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import logging
 
+import numpy as np
 import pytest
 import tensorflow as tf
+from ase import Atoms
 
-from tensorpotential.utils import get_param_dtype_from_config
+from tensorpotential.calculator import TPCalculator
+from tensorpotential.instructions import load_instructions, save_instructions_dict
+from tensorpotential.potentials import get_preset
+from tensorpotential.tensorpot import TensorPotential
+from tensorpotential.utils import (
+    convert_model_reduce_elements,
+    get_param_dtype_from_config,
+)
+from tests.tolerances import FLOAT64_ARITHMETIC
 
 
 class RecordingLog:
@@ -117,3 +127,49 @@ def test_deprecated_key_warning_cannot_be_formatted_by_a_real_logger():
     warning = next(r for r in records if r.levelno == logging.WARNING)
     with pytest.raises(TypeError, match="not all arguments converted"):
         warning.getMessage()
+
+
+def test_reduced_element_model_reproduces_energy_and_forces_of_the_full_model(tmp_path):
+    """``LINEAR`` ends in a ``FunctionReduce`` with one weight set per central atom type, which
+    ``convert_model_reduce_elements`` reduces through ``prepare_variables_for_selected_elements``. The full
+    model is the oracle on a cluster that holds only the kept elements (Mo and Ta of Mo, Nb, Ta, W)."""
+    instructions = get_preset("LINEAR")(
+        element_map={"Mo": 0, "Nb": 1, "Ta": 2, "W": 3},
+        lmax=1,
+        n_rad_max=6,
+        n_rad_base=4,
+        embedding_size=4,
+        rcut=5.0,
+    ).get_instructions()
+    full_yaml, full_ckpt = str(tmp_path / "full.yaml"), str(tmp_path / "full")
+    reduced_yaml, reduced_ckpt = str(tmp_path / "reduced.yaml"), str(tmp_path / "reduced")
+    full = TensorPotential(instructions, param_dtype=tf.float64)
+    save_instructions_dict(full_yaml, instructions, param_dtype=tf.float64)
+    full.save_checkpoint(checkpoint_name=full_ckpt)
+    convert_model_reduce_elements(
+        element_map={"Mo": 0, "Ta": 1},
+        potential_file_name=full_yaml,
+        checkpoint_name=full_ckpt,
+        new_potential_file_name=reduced_yaml,
+        new_checkpoint_name=reduced_ckpt,
+        param_dtype=tf.float64,
+    )
+    reduced = TensorPotential(
+        load_instructions(reduced_yaml), param_dtype=tf.float64
+    )
+    reduced.load_checkpoint(checkpoint_name=reduced_ckpt)
+
+    def energy_and_forces(model):
+        atoms = Atoms(
+            "MoTaMo",
+            positions=[[0.0, 0.0, 0.0], [0.3, 0.1, 2.2], [2.1, -0.4, 0.9]],
+            pbc=False,
+        )
+        atoms.calc = TPCalculator(model.model)
+        return atoms.get_potential_energy(), atoms.get_forces()
+
+    e_full, f_full = energy_and_forces(full)
+    e_reduced, f_reduced = energy_and_forces(reduced)
+    assert np.abs(f_full).max() > 1e-6
+    np.testing.assert_allclose(e_reduced, e_full, **FLOAT64_ARITHMETIC._asdict())
+    np.testing.assert_allclose(f_reduced, f_full, **FLOAT64_ARITHMETIC._asdict())

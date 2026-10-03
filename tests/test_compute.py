@@ -45,10 +45,12 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
+from types import SimpleNamespace
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import numpy as np
+import pandas as pd
 import pytest
 import tensorflow as tf
 from scipy.integrate import quad
@@ -60,6 +62,7 @@ from sympy.physics.quantum.cg import CG
 from tensorpotential import constants
 from tensorpotential.instructions import (
     FCRight2Left,
+    FunctionReduce,
     FunctionReduceN,
     InstructionManager,
     InvariantLayerRMSNorm,
@@ -71,6 +74,8 @@ from tensorpotential.instructions import (
 from tensorpotential.instructions.base import TPInstruction
 from tensorpotential.instructions.compute import (
     BondLength,
+    CropProductFunction,
+    FunctionReduceParticular,
     MLPRadialFunction,
     MLPRadialFunction_v2,
     RadialBasis,
@@ -78,6 +83,7 @@ from tensorpotential.instructions.compute import (
     ScaledBondVector,
     SphericalHarmonic,
 )
+from tensorpotential.poly import Monomial, Polynomial
 from tests.seeded_weights import seed_trainable_variables
 from tests.tolerances import (
     COVARIANCE_F64,
@@ -4179,6 +4185,283 @@ def test_function_reduce_n_simplify_cannot_rebuild_a_plain_product_function():
                 allowed_l_p=[[0, 1]],
                 simplify=True,
             )
+
+
+# ================================================================================================
+# What the reducers share: simplify_collected_tensors, drop_unused, element selection
+# (FunctionReduce, FunctionReduceN and, for the element selection, FunctionReduceParticular)
+# ================================================================================================
+
+_SHARED_REDUCERS = [
+    pytest.param(FunctionReduce, id="FunctionReduce"),
+    pytest.param(FunctionReduceN, id="FunctionReduceN"),
+    pytest.param(FunctionReduceParticular, id="FunctionReduceParticular"),
+]
+_SIMPLIFYING_REDUCERS = _SHARED_REDUCERS[:2]
+
+
+def _shared_reducer(cls, n_types: int | None = None, **kwargs):
+    """A built reducer of the class over ``(Y, AA)`` with seeded weights, plus its inputs."""
+    y, aa = _eqv_reduce_inputs()
+    options = dict(instructions=[y, aa], name="R", n_out=4)
+    if cls is FunctionReduceParticular:
+        options.update(selected_l=2, selected_p=1)
+    else:
+        options.update(ls_max=2, allowed_l_p=_EQV_ALLOWED)
+    if n_types is not None:
+        options.update(is_central_atom_type_dependent=True, number_of_atom_types=n_types)
+    red = cls(**(options | kwargs))
+    red.build(tf.float64)
+    seed_trainable_variables(red, seed=43)
+    return red, y, aa
+
+
+def _shared_data(y, aa, types) -> dict:
+    data = _eqv_reduce_data(y, aa)
+    data[constants.N_ATOMS_BATCH_TOTAL] = len(types)
+    data[constants.ATOMIC_MU_I] = np.asarray(types, dtype=np.int32)
+    return data
+
+
+@pytest.mark.parametrize("cls", _SHARED_REDUCERS)
+def test_shared_selected_elements_keep_the_rows_of_those_types_in_that_order(cls):
+    red, _, _ = _shared_reducer(cls, n_types=3)
+    new = red.prepare_variables_for_selected_elements([2, 0])
+    assert set(new) == {"reducing_Y", "reducing_AA"}
+    for name, var in new.items():
+        old = getattr(red, name).numpy()
+        assert var.shape.as_list() == [2, *old.shape[1:]]
+        np.testing.assert_array_equal(var.numpy(), old[[2, 0]])
+        assert var.trainable
+        assert var is not getattr(red, name)
+
+
+@pytest.mark.parametrize("cls", _SHARED_REDUCERS)
+def test_shared_selected_elements_without_central_atom_dependence_give_none(cls):
+    red, _, _ = _shared_reducer(cls)
+    assert red.prepare_variables_for_selected_elements([0]) is None
+
+
+@pytest.mark.parametrize("cls", _SHARED_REDUCERS)
+def test_shared_reduced_instruction_reproduces_the_full_one_on_the_kept_elements(cls):
+    """The full instruction is the oracle: the reduced one, with the prepared weights and the atom types
+    renumbered (2 -> 0, 0 -> 1), gives the same tensor; a different assignment of the types does not."""
+    full, y, aa = _shared_reducer(cls, n_types=3)
+    reduced, _, _ = _shared_reducer(cls, n_types=2)
+    for name, var in full.prepare_variables_for_selected_elements([2, 0]).items():
+        getattr(reduced, name).assign(var)
+    types = np.array([2, 0, 0, 2, 2])
+    renumbered = np.array([0, 1, 1, 0, 0])
+    expected = _eqv_np(full.frwrd(_shared_data(y, aa, types)))
+    assert np.abs(expected).max() > 1e-3
+    _eqv_assert_close(reduced.frwrd(_shared_data(y, aa, renumbered)), expected)
+    swapped = np.array([1, 0, 0, 1, 1])
+    wrong = _eqv_np(reduced.frwrd(_shared_data(y, aa, swapped)))
+    assert np.abs(wrong - expected).max() > 1e-3
+
+
+def _scalar_chain():
+    """``A`` (degree 2) and ``AA = A x A`` as built by the presets (``CropProductFunction``)."""
+    a = SingleParticleBasisFunctionScalarInd(
+        name="A",
+        radial=_eqv_radial(),
+        angular=_eqv_harmonic(),
+        indicator=_eqv_embedding(),
+    )
+    a.n_out = 3
+    aa = CropProductFunction(
+        left=a,
+        right=a,
+        name="AA",
+        lmax=2,
+        Lmax=2,
+        n_crop=3,
+        keep_parity=_EQV_ALLOWED,
+        history_drop_list=[],
+    )
+    return a, aa
+
+
+def _scalar_reducer(cls, a, aa, **kwargs):
+    """The invariant (``l = 0``, even parity) reduction of ``A`` and ``AA``."""
+    return cls(
+        instructions=[a, aa],
+        name="E",
+        ls_max=0,
+        n_out=2,
+        allowed_l_p=[[0, 1]],
+        **kwargs,
+    )
+
+
+def _evaluate(poly: Polynomial, values: dict[str, float]) -> float:
+    """Value of a ``Polynomial`` of the symbol module at the given variable values."""
+    return sum(
+        m.coefficient * np.prod([values[name] ** power for name, power in m.variables_tuple])
+        for m in poly.monomials
+    )
+
+
+@pytest.mark.parametrize("cls", _SIMPLIFYING_REDUCERS)
+def test_shared_simplify_gives_a_symbol_to_exactly_the_collected_functions(cls):
+    a, aa = _scalar_chain()
+    red = _scalar_reducer(cls, a, aa)
+    assert "symbol" not in aa.coupling_meta_data
+    red.simplify_collected_tensors()
+    meta = aa.coupling_meta_data
+    invariant = (meta["l"] == 0) & (meta["parity"] == 1)
+    assert invariant.sum() == 3
+    assert meta.loc[invariant, "symbol"].notna().all()
+    assert meta.loc[~invariant, "symbol"].isna().all()
+    # equal degrees (l, l) are the pairs that couple to a scalar
+    assert set(meta.loc[invariant, "hist"]) == {"(0,0)", "(1,1)", "(2,2)"}
+
+
+@pytest.mark.parametrize("cls", _SIMPLIFYING_REDUCERS)
+def test_shared_simplify_stops_at_the_degree_limit_of_the_instruction(cls):
+    """``ls_max`` bounds the degree per instruction even when the allowed ``(l, parity)`` list goes higher."""
+    a, aa = _scalar_chain()
+    red = cls(
+        instructions=[a, aa],
+        name="E",
+        ls_max=[0, 1],
+        n_out=2,
+        allowed_l_p=[[0, 1], [1, -1], [2, 1]],
+    )
+    red.simplify_collected_tensors()
+    meta = aa.coupling_meta_data
+    in_range = ((meta["l"] == 0) & (meta["parity"] == 1)) | (
+        (meta["l"] == 1) & (meta["parity"] == -1)
+    )
+    assert in_range.sum() > 3
+    assert meta.loc[in_range, "symbol"].notna().all()
+    assert meta.loc[~in_range, "symbol"].isna().all()
+
+
+@pytest.mark.parametrize("cls", _SIMPLIFYING_REDUCERS)
+def test_shared_simplified_scalar_symbols_follow_the_addition_theorem(cls):
+    """Replace ``A_(l, m)`` by the real harmonics of one direction (the library normalisation, mean square
+    1 over the sphere): ``sum_m Y_lm^2 = 2 l + 1``, so every scalar product ``A_l . A_l`` weighted by its
+    ``1 / (2 l + 1)`` is exactly 1, whatever the direction."""
+    a, aa = _scalar_chain()
+    _scalar_reducer(cls, a, aa).simplify_collected_tensors()
+    meta = aa.coupling_meta_data
+    vec = np.array([[0.3, -0.5, 0.8]])
+    harmonics = _eqv_real_harmonics(vec / np.linalg.norm(vec), 2)[0]
+    values = {
+        f"A_({l},{m})": harmonics[l * l + l + m]
+        for l in range(3)
+        for m in range(-l, l + 1)
+    }
+    scalars = meta[(meta["l"] == 0) & (meta["parity"] == 1)]
+    assert len(scalars) == 3
+    for symbol in scalars["symbol"]:
+        assert _evaluate(symbol, values) == pytest.approx(
+            1.0, rel=FLOAT64_ARITHMETIC.rtol, abs=FLOAT64_ARITHMETIC.atol
+        )
+
+
+@pytest.mark.parametrize("cls", _SIMPLIFYING_REDUCERS)
+def test_shared_simplify_flag_runs_both_steps_and_records_the_unused_histories(
+    cls, caplog
+):
+    """Pairs of different degree never couple to a scalar: ``(1,0)``, ``(2,0)``, ``(2,1)`` are the unused
+    histories of ``A x A``, written to the drop list of the product, whose table is rebuilt (the symbols
+    are gone, the rows stay: see the pinned behaviour of ``FunctionReduceN`` above)."""
+    a, aa = _scalar_chain()
+    rows = len(aa.coupling_meta_data)
+    with caplog.at_level("INFO"):
+        _scalar_reducer(cls, a, aa, simplify=True)
+    unused = sorted(f"({l1},{l2})" for l1 in range(3) for l2 in range(l1))
+    assert unused == ["(1,0)", "(2,0)", "(2,1)"]
+    assert list(aa.history_drop_list) == unused
+    assert f"Following exclusion hist list was discovered: {unused}" in caplog.text
+    assert "symbol" not in aa.coupling_meta_data
+    assert len(aa.coupling_meta_data) == rows
+
+
+class _Product:
+    """Stands in for a product instruction: a coupling table, and the two hooks ``drop_unused`` uses."""
+
+    def __init__(self, hists, symbols, n_terms, drop_list=("old",)):
+        self.coupling_meta_data = pd.DataFrame(
+            {
+                "hist": hists,
+                "cg_list": [[1.0] * n for n in n_terms],
+                "symbol": symbols,
+            }
+        )
+        self.history_drop_list = list(drop_list)
+        self.init_calls = 0
+
+    def init_coupling(self):
+        self.init_calls += 1
+
+
+def _poly(coefficient: float, variable: str) -> Polynomial:
+    return Polynomial([Monomial(coefficient, variable)])
+
+
+def _reducer_over(cls, instructions):
+    """A built reducer whose instruction list is replaced by hand-built tables."""
+    red, _, _ = _shared_reducer(cls)
+    red.instructions = instructions
+    return red
+
+
+# History a: the shortest product of x; b: the same function x with more terms; c: zero; d: y; e: never
+# collected (no symbol); a again, as a longer copy of y. Kept: the shortest of each distinct function (a, d);
+# a history is only excluded when none of its rows is kept: b (copy of x), c (zero) and e (no symbol).
+def _hand_table() -> _Product:
+    return _Product(
+        hists=["a", "b", "c", "d", "a", "e"],
+        symbols=[
+            _poly(1.0, "x"),
+            _poly(2.0, "x"),
+            Polynomial([Monomial(0)]),
+            _poly(1.0, "y"),
+            _poly(5.0, "y"),
+            None,
+        ],
+        n_terms=[1, 3, 2, 2, 4, 5],
+    )
+
+
+@pytest.mark.parametrize("cls", _SIMPLIFYING_REDUCERS)
+def test_shared_drop_unused_excludes_zero_duplicate_and_missing_symbols(cls, caplog):
+    product = _hand_table()
+    red = _reducer_over(cls, [product])
+    with caplog.at_level("INFO"):
+        red.drop_unused()
+    assert product.history_drop_list == ["old", "b", "c", "e"]
+    assert product.init_calls == 1
+    assert "Following exclusion hist list was discovered: ['b', 'c', 'e']" in caplog.text
+    assert list(product.coupling_meta_data["n_op"]) == [1, 3, 2, 2, 4, 5]
+    assert len(product.coupling_meta_data) == 6
+
+
+@pytest.mark.parametrize("cls", _SIMPLIFYING_REDUCERS)
+def test_shared_drop_unused_keeps_a_history_that_another_instruction_keeps(cls):
+    first = _hand_table()
+    second = _Product(
+        hists=["b", "f"],
+        symbols=[_poly(7.0, "z"), Polynomial([Monomial(0)])],
+        n_terms=[1, 1],
+        drop_list=(),
+    )
+    table_only = SimpleNamespace(coupling_meta_data=pd.DataFrame({"hist": ["g"]}))
+    list_only = SimpleNamespace(
+        coupling_meta_data=pd.DataFrame({"hist": ["h"]}), history_drop_list=["keep"]
+    )
+    red = _reducer_over(cls, [first, second, table_only, list_only])
+    red.drop_unused()
+    # b is a duplicate in the first table but the only copy of z in the second: not excluded overall
+    assert first.history_drop_list == ["old", "c", "e", "f"]
+    assert second.history_drop_list == ["c", "e", "f"]
+    assert first.init_calls == second.init_calls == 1
+    # no Clebsch-Gordan column: contributes nothing; no init_coupling: left alone
+    assert list_only.history_drop_list == ["keep"]
+    assert not hasattr(table_only, "history_drop_list")
 
 
 # ================================================================================================
