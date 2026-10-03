@@ -50,3 +50,8 @@ FLOAT32_NETWORK = Tolerance(rtol=1e-5, atol=1e-5)
 # A few element-wise float32 operations (square, sum of three terms, square root, ratio) against the same
 # formula in float64 on the same float32 inputs: unit roundoff 6e-8 per operation, errors of a few ulp.
 FLOAT32_ELEMENTWISE = Tolerance(rtol=1e-6, atol=1e-7)
+
+# Bond vectors of a neighbour list in float64 against the same vectors built by hand from the cell
+# (``pos[j] + n @ cell - pos[i]``) in a few additions of order 1 to 10 A: the observed error is about
+# 2e-15 A, and a component that is exactly zero in one of them can be a few 1e-15 in the other.
+NEIGHBOUR_VECTOR_F64 = Tolerance(rtol=1e-12, atol=1e-12)
