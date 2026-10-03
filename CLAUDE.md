@@ -19,37 +19,29 @@ user and an issue disagree, ask.
 # Environment (creates .venv from uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
 uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty
 
-# Tests: run from the repository root (they do not depend on the working directory and write nothing into the tree)
-# (under -n N, every worker gets cores/N TensorFlow and OpenMP threads from conftest.py; variables you set yourself win)
+# Tests: run from the repository root; they write nothing into the tree. Under -n N every worker gets cores/N TF and OpenMP threads (conftest.py).
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
-uv run --frozen --no-sync pytest tests -q -n 4 --dist load -m "not slow" \
-    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast development loop, about 4 to 5 minutes (TEST4)
+# fast loop: add -m "not slow" to the full command
 
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
 uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
-uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise
-uv run --frozen --no-sync python tools/lint_ratchet.py record   # after a drop: records the lower baseline (a rise needs --allow-rise)
+uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
-# Coverage gate (TEST3): a full run with branch coverage takes about 21 minutes with -n 4
-uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json \
-    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
-python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend]  # every def/method/class body the diff touches: 90%
-python tools/check_touched_coverage.py --coverage cov.json --unit path/to/file.py::Class.method   # name a unit whatever the diff says
-python tools/coverage_ratchet.py check cov.json            # no file may cover a smaller share than baselines/coverage_baseline.json
-
-# Compare against the untouched-tree baselines (see baselines/README.md)
-python tools/ast_manifest.py check baselines/ast_manifest.json
-python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json
-python tools/check_clones.py check                  # duplicated functions may not increase (baselines/clone_baseline.json)
+# Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json <same --ignore options>
+python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend] [--unit path/to/file.py::Class.method]   # touched units: 90%
+python tools/coverage_ratchet.py check cov.json       # no file may cover a smaller share than baselines/coverage_baseline.json
+python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json     # also tools/ast_manifest.py and tools/check_clones.py
 ```
 
-The full suite takes about 20 minutes serially and about 8 minutes with `-n 4` (14 cores, 30 GB; idle machine, 1,277 tests, see `cleanup_report.md` section 8). Two test files are not part of a normal
-run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; it is ignored above only so that
+**Rough runtime** (14 cores, 30 GB, about 1,340 tests; measured 2026-10-03, re-measure before relying on it): the full suite takes about 10 minutes with `-n 4` on an idle machine (12 with `--cov`) and about 20 serially; `-m "not slow"` about 4 to 5 minutes. Another suite running in a second worktree about doubles that, so check `uptime` and `ps` before a full run and run one suite at a time. Compare timings only between back-to-back runs (wall time to wall time).
+
+Two test files are not part of a normal run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; it is ignored above only so that
 counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
 A test writes only into `tmp_path` (or a scratch directory), never into the working directory or the source tree; `git status` is clean after a run.
 
@@ -60,9 +52,8 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
   is about 4,900 lines and upstream merges depend on its shape), no renames, and improve a unit only while you are already changing it. The exception
   is an issue whose job is to change legacy code (clean-up, code quality, deduplication, packaging, performance): it says what may change and how,
   and the coverage and comparison rules below then govern the change. Do not widen the change beyond what the issue names.
-- New packages get the strict ruff set (I, UP, B, SIM, C4, RUF, PD, NPY, PIE, PLE, PLW, PERF, RET, PTH, T20, ERA, W and the
-  complexity, docstring, exception and security families) through the **single ruff configuration in `pyproject.toml`** (no `ruff.toml` anywhere: the strict families are
-  selected for the whole repository and switched off by `per-file-ignores` for everything outside the new packages, which are listed there and in `tools/lint_ratchet.py`).
+- New packages get the strict ruff set (I, UP, B, SIM, C4, RUF, PD, NPY, PIE, PLE, PLW, PERF, RET, PTH, T20, ERA, W and the complexity, docstring, exception and security families) through the **single ruff configuration in `pyproject.toml`**
+  (no `ruff.toml`; the strict families are selected repo-wide and switched off by `per-file-ignores` outside the new packages, which are listed there and in `tools/lint_ratchet.py`).
 - Docstrings on new public API use the numpy convention. No commented-out code, no `print` in library code (use `logging.getLogger(__name__)`),
   no bare `except`, no `TODO` without an issue link, no mutable or shared default arguments.
 - Small functions (complexity at most 10, at most 6 arguments). Prefer pure functions and frozen dataclasses for specifications. Errors are
@@ -71,21 +62,18 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 
 ## Testing conventions
 
+Procedures, planted mutants and speed tips are in the `grace-torch-tests` skill.
+
 - A function or class you **modify** must already be covered at 90% or more (line and branch). Below that, write characterization tests
   first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
 - **A test goes in the file named after the source module it covers** (`tests/test_<module>.py` for `tensorpotential/<...>/<module>.py`, for example `tests/test_tp_model.py` for `tpmodel.py`, `tests/test_process_df.py` for `data/process_df.py`); `tests/` stays flat. Do not group tests by the issue or the kind of change that added them, and do not move existing test files unless an issue says so (owner, 2026-10-03).
-- Tests have two layers: **logic** (branches, errors, shapes, edge cases) and **physical values** from an oracle that does not call the unit
-  under test: finite-difference forces and stress, rotation/translation/permutation invariance, extensivity, sympy or scipy references,
-  hand-computed numbers. A refactor may change the logic and the physics tests must still pass.
-- Prefer real objects to mocks. A mock, stub or `monkeypatch` is acceptable at an external boundary (network, clock, absent hardware) with a
-  comment saying what it replaces; never for the unit under test or for a numeric or physical path.
-- Tolerances come from one named table (`tests/tolerances.py`; `numpy.isclose` semantics: `atol + rtol*|reference|`); never inline a number, never widen a tolerance to
-  make a test pass.
-- Tests must not depend on the working directory or on each other's output: use `tmp_path`, per-worker directories, fixed seeds, no network.
-- Markers: `slow` (30 s or more; registered in `pytest.ini`; put `@pytest.mark.slow` on a test of that size, 16 so far; under `-n` the root `conftest.py` starts the marked tests first, `--slow-first=off` disables that), `gpu`, `hpc`, `tf` (these three are not registered yet); unavailable capabilities skip locally but fail in CI jobs that require them. Nothing is skipped by default; `-m "not slow"` is the fast loop.
+- Two layers: **logic** (branches, errors, shapes, edge cases) and **physical values** from an oracle that does not call the unit under test
+  (finite differences, rotation/translation/permutation invariance, extensivity, sympy or scipy references, hand-computed numbers). A refactor may change the logic and the physics tests must still pass.
+- Prefer real objects to mocks; a mock or `monkeypatch` only at an external boundary (network, clock, absent hardware), with a comment saying what it replaces, never for the unit under test or a numeric path.
+- Tolerances come from one named table (`tests/tolerances.py`; `numpy.isclose` semantics: `atol + rtol*|reference|`); never inline a number, never widen a tolerance to make a test pass.
+- Tests must not depend on the working directory or on each other's output: `tmp_path`, per-worker directories, fixed seeds, no network. Random-weight models only; real or foundation-model weights are HPC-only.
+- Markers: `slow` (30 s or more, registered in `pytest.ini`; the root `conftest.py` starts them first under `-n`), `gpu`, `hpc`, `tf` (these three are not registered yet); unavailable capabilities skip locally but fail in CI jobs that require them. Nothing is skipped by default.
 - A model, calculator or result built once and used by several tests is read-only for them: fingerprint it when it is built and compare when its scope ends (`tests/shared_models.py`: `weights_fingerprint`, `CuTwoLayerModels`). A test that saves, trains or edits a model builds its own.
-- Timings: wall-clock figures are comparable only between runs made back to back on a machine with no other test run (another agent's suite in a second worktree about doubled the time of the same tests); under `-n N` the tests themselves run slower (about 38% at N = 4), so compare wall time to wall time and summed test times to summed test times.
-- Random-weight models only; real or foundation-model weights are HPC-only.
 
 ## Architecture
 
@@ -121,59 +109,44 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   be read by pandas 2.
 - TF numerics are not bit-reproducible across processes: some float64 intermediates (`large_base`: `YI`, `B`, `BB`, ...) differ by about one ulp
   between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
-- A worktree has no `.venv` (git-ignored): link `.venv` and `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable `tensorpotential`
-  install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout). `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
-- `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` in code, tests, docs and notebooks, `__cls__` strings,
-  every module imported on its own in a fork of one interpreter that has imported the package, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
-- `test_graph_split.py` writes `temp_saved_model_test/` into the working directory and removes it at the end; a killed run leaves it behind (untracked), delete it before committing.
-- A coverage run writes `.coverage*` into the working directory; another `--cov` run started in the same directory while a full-suite run is going (even of a tool test) is combined into its report (`tools/check_clones.py` appeared in a library report that way). Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
-- A new worktree has no `uv.lock` (it is git-excluded): copy it from another tree, then `uv sync --frozen --offline`.
-- Forces are `-dE/d(bond_vector)` with `F = segment_sum(pair_f, ind_j) - segment_sum(pair_f, ind_i)`; virial is `sum(pair_f (x) D)`; the ASE stress is
-  `-virial / V` with Voigt reorder `[0, 1, 2, 5, 4, 3]`.
-- The TF calculator's `enforce_pbc` edits the caller's `Atoms` in place and makes every axis periodic; new code must not copy that behaviour silently.
-- A git worktree has no `.venv`: run with the main checkout's interpreter and `PYTHONPATH=$PWD` (print `tensorpotential.__file__` once, because the
-  editable install otherwise resolves to the main tree), and give `ty` the environment with `--python <main>/.venv`. `--cov=<dotted module path>` failed once at
-  conftest import with an ImportError (cause not isolated); use `--cov=tensorpotential`.
-- `CollectInvarBasis` cannot be instantiated as shipped (it lacks the abstract `upd_init_args_new_elements`); `tests/test_spbf_layout_opt.py` and
-  `tests/test_function_reduce_builds.py` subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
-- `FCRight2Left.build` draws random numbers for `w_right` even with `init_vars="zeros"`; `compat/pace` has a latent `NameError` (`rankmax`).
+- **Worktrees.** A worktree has no `.venv` or `uv.lock` (both git-ignored): link `.venv` and copy `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable
+  `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
+  Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
+  give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or Keras 3 is used.
+- `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` anywhere, `__cls__` strings, every module imported on its own, the two `__getattr__` shims).
+  Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
+- A coverage run writes `.coverage*` into the working directory; a second `--cov` run in the same directory while a full run is going is combined into its report. Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
+- `CollectInvarBasis` cannot be instantiated as shipped (it lacks the abstract `upd_init_args_new_elements`); tests subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
+- Units, signs, the force, virial and stress formulas, and the TF calculator's `enforce_pbc` behaviour are in the `grace-torch-numerics` skill.
 - Stage-style work (cleanup, packaging, torch backend) is tracked as issues on the fork's board; use the skills in `.claude/skills/` for the
   procedure (`grace-torch`, `grace-torch-ticket`, `grace-torch-tests`, `grace-torch-goldens`, `grace-torch-numerics`).
 
 ## Working agreements
 
-- **You may commit, and once the work of your issue is ready you open a draft pull request for it yourself and ask the user to review it. You never merge it, mark it ready for review or turn on
-  auto-merge: the user does.** Commit on the work branch of the issue (one concern per commit, imperative message with `feat:`, `fix:`, `refactor:`, `test:`, `docs:` or `chore:`, test commits before
-  the change they protect, never on `torch-backend` or `master`). *Ready* means: the exit criterion is met, the checks the issue names are green, and the description made with `python tools/board.py
-  pr-body <ID>` passes `pr-check`. Push that branch (only that branch) to the fork when you open the draft PR into `torch-backend` and to update it after review; then `python tools/board.py status <ID>
-  "PR Open"` and tell the user the PR number and what to look at. Nothing is ever pushed to, or opened against, the upstream `ICAMS` repositories without an explicit go for that unit (so no `pr/U*`
-  branch is pushed or opened on your own); the `upstream` remote has its push URL disabled.
-- **Several agents may work at the same time, so each works in its own git worktree, and removes it when its pull request is merged.** Create it from the integration branch,
-  `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then run `git branch --unset-upstream` in it (git sets the upstream to `torch-backend`, and a plain push would
-  update that branch). Never switch branches in, or run a branch-changing command on, a tree that another agent or the user is using. One agent per issue: `board.py` rewrites the whole issue body
-  when it ticks a box, so two agents on the same issue overwrite each other. After the merge, and once `board.py done` has run: `git worktree remove ../<repository>-<id>` (without `--force`; if it
-  refuses, the tree holds uncommitted work, so report it) and `git branch -d <branch>`. Leave the remote branch unless the user says to delete it.
-- Ask before any download (file, source, size) and before any other outward action (creating or closing issues, repository settings); the draft PR for your own issue is covered by the rule above.
+The procedure (board commands, PR text, findings, Definition of Done) is in the `grace-torch-ticket` skill; these are the rules that hold even without it.
+
+- **You may commit, and once the work of your issue is ready you open a draft pull request into `torch-backend` yourself and ask the user to review it. You never merge it, mark it ready for review or turn on
+  auto-merge: the user does.** *Ready* means: the exit criterion is met, the checks the issue names are green, and the description made with `python tools/board.py pr-body <ID>` passes `pr-check`.
+  Commit on the work branch of the issue (one concern per commit, imperative message with `feat:`, `fix:`, `refactor:`, `test:`, `docs:` or `chore:`, test commits before the change they protect, never on `torch-backend` or `master`);
+  push only that branch to the fork; then `python tools/board.py status <ID> "PR Open"` and tell the user the PR number and what to look at. Nothing is ever pushed to, or opened against, the upstream `ICAMS` repositories without an explicit go for that unit
+  (so no `pr/U*` branch is pushed or opened on your own); the `upstream` remote has its push URL disabled.
+- **Each agent works in its own git worktree** (`git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` so a plain push cannot update `torch-backend`), one agent per issue
+  (`board.py` rewrites the whole issue body when it ticks a box). Never switch branches in, or run a branch-changing command on, a tree that another agent or the user is using. After the merge and `board.py done`:
+  `git worktree remove` (no `--force`; if it refuses, report the uncommitted work) and `git branch -d`; leave the remote branch unless the user says otherwise. Do not start a full test suite while another is running in a sibling worktree.
+- Ask before any download (file, source, size) and before any other outward action (creating or closing issues, repository settings); the draft PR for your own issue is covered above. New issues start only on the user's go, from `.github/ISSUE_TEMPLATE/milestone.md`.
   Development dependencies (test, coverage, parallelism, lint, typing, mutation tools) may be added to the `dev` group; runtime dependencies are decisions.
-- New issues (only on the user's go) start from `.github/ISSUE_TEMPLATE/milestone.md`; see "Creating an issue" in the `grace-torch-ticket` skill.
-- Pull-request descriptions use the fork's template (`.github/PULL_REQUEST_TEMPLATE/torch-backend.md`, generated with `python tools/board.py pr-body <ID>` and checked with
-  `pr-check`); the rules for writing the summary are in the `grace-torch-ticket` skill.
 - **An issue is resolved only once a pull request that references it (`Refs #<issue>`) is merged into `torch-backend` on this fork.** `tools/board.py done` checks that and
-  refuses otherwise; `--waive-pr` only when the user says so (for example for a gate or a repository setting). The user merges.
-- Work on an issue follows its protocol (`grace-torch-ticket` skill): Todo to In Progress when starting, unexpected findings commented on the issue, and the
-  **Definition of Done checkboxes ticked every time a task of the issue is finished** (`tools/board.py check`), with evidence.
-- Ask for GPU access before any GPU benchmark; do not report a GPU result from a CPU run.
-- Use the scratch directory for temporary files, not the repository.
-- **Keep the issues current: fix stale text.** When a task changes something an issue mentions (a path, command, count, decision, tool, dependency line or
-  exit criterion), update that issue in the same task; run `python tools/board.py lint` and fix every `STALE` finding, including ones you did not cause.
+  refuses otherwise; `--waive-pr` only when the user says so. Work follows the issue's protocol: Todo to In Progress when starting, unexpected findings commented on the issue,
+  and the **Definition of Done checkboxes ticked every time a task of the issue is finished** (`tools/board.py check`), with evidence.
+- **Keep the issues current: fix stale text.** When a task changes something an issue mentions (a path, command, count, decision, tool, dependency line or exit criterion), update that issue in the same task; run `python tools/board.py lint` and fix every `STALE` finding.
 - **The fork is public: sanitise everything you post** (issues, comments, PR descriptions, commit messages). `tools/board.py` sanitises automatically what it posts;
   pass any other text through `python tools/board.py sanitise FILE`. Sanitising means: no personal data, institution names, e-mail addresses, absolute local
   paths or research-application details; no bare `#N` that is not an issue of this repository; no `@mentions` outside code spans; no links to other
   repositories' issues or pull requests (they create back-links there). When an issue you touch needs it, sanitise its existing text too.
 - `CLAUDE.md`, `.claude/`, `tools/` and `baselines/` are fork-only. They are committed on `torch-backend` but must never appear on an upstream branch
   (`pr/U*`); check with `python tools/check_pr_branch.py` before any upstream PR text is drafted.
-- Verify compatibility claims with warnings unmuted (`-W always`) and across all entry points (scripts, CLI, data pipeline, tests), and state
-  what a check does not cover.
+- Ask for GPU access before any GPU benchmark; do not report a GPU result from a CPU run. Use the scratch directory for temporary files, not the repository.
+- Verify compatibility claims with warnings unmuted (`-W always`) and across all entry points (scripts, CLI, data pipeline, tests), and state what a check does not cover.
 
 Anytime we learn something that could be beneficial in future coding sessions, add it to this file or to the matching existing skill:
 gotchas that are not obvious, subtle bugs that appear under specific conditions, and repeated corrections made to the output of coding agents.
