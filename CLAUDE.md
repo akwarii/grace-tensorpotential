@@ -122,6 +122,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
 - A coverage run writes `.coverage*` into the working directory; a second `--cov` run in the same directory while a full run is going is combined into its report. Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
 - `CollectInvarBasis` cannot be instantiated as shipped (it lacks the abstract `upd_init_args_new_elements`); tests subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
+- `tools/junit_outcomes.py summarize` needs `--log <pytest log>` with `-rX` lines to know an XPASS; without it `test_construct_batches_multiple_db` reads as `xpassed -> passed` in `compare` (not a change). `baselines/ast_manifest.json` is the untouched tree: to check that a branch changes only some files, `ast_manifest.py write --rev origin/torch-backend <file>` first and `check` against that.
 - Units, signs, the force, virial and stress formulas, and the TF calculator's `enforce_pbc` behaviour are in the `grace-torch-numerics` skill.
 - Stage-style work (cleanup, packaging, torch backend) is tracked as issues on the fork's board; use the skills in `.claude/skills/` for the
   procedure (`grace-torch`, `grace-torch-ticket`, `grace-torch-tests`, `grace-torch-goldens`, `grace-torch-numerics`).
