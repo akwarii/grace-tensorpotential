@@ -176,7 +176,7 @@ def _build_element_map(atoms_iterable):
 def extract_features(
     calc: TPCalculator,
     atoms_iterable,
-    element_map: dict = None,
+    element_map: dict | None = None,
 ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
     """Generator yielding (features [N_atoms, D], element_indices [N_atoms]) per structure.
 
@@ -205,7 +205,7 @@ def extract_features(
 def extract_features_bulk(
     calc: TPCalculator,
     atoms_iterable,
-    element_map: dict = None,
+    element_map: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Collect all features into single arrays.
 
@@ -307,7 +307,7 @@ def batched_feature_iterator(
     model,
     element_map: dict,
     cutoff: float,
-    cutoff_dict: dict = None,
+    cutoff_dict: dict | None = None,
     max_num_neighbours_per_batch: int = 3000,
     hidden_target_name: str = uq_constants.FEATURES,
     verbose: bool = True,
@@ -416,11 +416,11 @@ def tf_dataset_feature_iterator(
     shard_paths: list,
     model,
     hidden_target_name: str = uq_constants.FEATURES,
-    frac: float = None,
+    frac: float | None = None,
     seed: int = 42,
     verbose: bool = True,
     desc: str = "TF dataset features",
-    total_num_batches: int = None,
+    total_num_batches: int | None = None,
 ) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Yield (features, element_indices, weights) from pre-computed TF dataset shards.
 

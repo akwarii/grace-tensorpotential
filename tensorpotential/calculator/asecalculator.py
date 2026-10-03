@@ -744,7 +744,7 @@ class TPCalculator(Calculator):
         pad_neighbors_fraction: float | None = 0.05,
         pad_atoms_number: int | None = 1,
         min_dist=None,
-        extra_properties: list[str] = None,
+        extra_properties: list[str] | None = None,
         truncate_extras_by_natoms: bool | list[str] = False,
         max_number_reduction_recompilation: int | None = 2,
         debug_padding_verbose: int = 0,
@@ -1088,8 +1088,8 @@ class TPCalculator(Calculator):
     def load_uq_artifacts(
         self,
         artifact_path: str,
-        model_yaml: str = None,
-        checkpoint: str = None,
+        model_yaml: str | None = None,
+        checkpoint: str | None = None,
         param_dtype=None,
         compute_dsigma_dr: bool = True,
     ):

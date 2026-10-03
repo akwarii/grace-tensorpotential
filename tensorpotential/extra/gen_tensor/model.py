@@ -40,7 +40,7 @@ def grace_1(
     avg_n_neigh: float = 1.0,
     constant_out_shift: float = 0.0,
     constant_out_scale: float = 1.0,
-    atomic_shift_map: dict = None,
+    atomic_shift_map: dict | None = None,
     lmax=4,
     basis_type="Cheb",  # SBessel
     n_rad_base=8,
@@ -49,7 +49,7 @@ def grace_1(
     n_mlp_dens=16,
     max_order=4,
     compute_energy: bool = False,
-    tensor_components: list = None,
+    tensor_components: list | None = None,
     **kwargs,
 ):
     chem_init = "random"
@@ -239,7 +239,7 @@ def grace_2(
     avg_n_neigh: float = 1.0,
     constant_out_shift: float = 0.0,
     constant_out_scale: float = 1.0,
-    atomic_shift_map: dict = None,
+    atomic_shift_map: dict | None = None,
     lmax=4,
     lmax_indicator=1,
     basis_type="Cheb",  # SBessel
@@ -249,7 +249,7 @@ def grace_2(
     n_mlp_dens=16,
     max_order=4,
     compute_energy: bool = False,
-    tensor_components: list = None,
+    tensor_components: list | None = None,
     **kwargs,
 ):
     chem_init = "random"

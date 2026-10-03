@@ -278,7 +278,7 @@ class ComputeBatchEnergyAndForces(TrainFunction):
         constants.N_ATOMS_BATCH_TOTAL: {"shape": [], "dtype": "int"},
     }
 
-    def __init__(self, extra_return_keys: list[str] = None, **kwargs):
+    def __init__(self, extra_return_keys: list[str] | None = None, **kwargs):
         super().__init__(**kwargs)
         self.extra_return_keys = extra_return_keys
 
@@ -332,7 +332,7 @@ class ComputeBatchEnergyForcesVirials(TrainFunction):
         # constants.N_ATOMS_BATCH_TOTAL: {"shape": [], "dtype": "int"},
     }
 
-    def __init__(self, extra_return_keys: list[str] = None, **kwargs):
+    def __init__(self, extra_return_keys: list[str] | None = None, **kwargs):
         super().__init__(**kwargs)
         self.extra_return_keys = extra_return_keys
 
@@ -385,7 +385,7 @@ class ComputeStructureEnergyAndForcesAndVirial(ComputeFunction):
         constants.ATOMIC_MU_I: {"shape": [None], "dtype": "int"},
     }
 
-    def __init__(self, local=False, extra_return_keys: list[str] = None, **kwargs):
+    def __init__(self, local=False, extra_return_keys: list[str] | None = None, **kwargs):
         super().__init__(**kwargs)
         self.local = local
         self.extra_return_keys = extra_return_keys
@@ -438,7 +438,7 @@ class ComputeEnergy(ComputeFunction):
         constants.ATOMIC_MU_I: {"shape": [None], "dtype": "int"},
     }
 
-    def __init__(self, local=False, extra_return_keys: list[str] = None, **kwargs):
+    def __init__(self, local=False, extra_return_keys: list[str] | None = None, **kwargs):
         super().__init__(**kwargs)
         self.local = local
         self.extra_return_keys = extra_return_keys
@@ -730,7 +730,7 @@ class TPModel(tf.Module):
         instructions,
         compute_function: ComputeFunction = ComputeStructureEnergyAndForcesAndVirial(),
         train_function: TrainFunction = ComputeBatchEnergyAndForces(),
-        aux_compute: dict = None,
+        aux_compute: dict | None = None,
         name="TPModel",
     ):
         super(TPModel, self).__init__(name=name)
