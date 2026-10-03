@@ -37,3 +37,7 @@ def sample_std_rtol(n_samples: int, n_sigma: float = 5.0) -> float:
     ``1.7e6`` runs for 5 sigma; with a fixed seed the outcome is deterministic anyway.
     """
     return n_sigma / (2.0 * n_samples) ** 0.5
+
+# A float64 least-squares solve (``numpy.linalg.lstsq``) on a small well-conditioned system whose
+# exact solution is known: the observed error is about 1e-14 on values of order 1 to 10.
+LEAST_SQUARES_F64 = Tolerance(rtol=1e-10, atol=1e-10)
