@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import math
 import sys
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -543,6 +544,22 @@ def test_joint_hull_does_not_alter_the_files_it_read(workdir):
     for name, source in (("train.pkl.gz", train), ("test.pkl.gz", test)):
         on_disk = pd.read_pickle(workdir / name)
         assert list(on_disk.columns) == list(source.columns)
+
+
+def test_joint_hull_raises_no_pandas_warning(workdir):
+    train, test = (
+        hull_frame(["al", "cu", "above"]),
+        hull_frame(["stable", "far"], seed=9),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        run(hull_args(workdir, train, test))
+    from_pandas = [
+        str(w.message)
+        for w in caught
+        if "pandas" in w.category.__module__ or "/pandas/" in w.filename
+    ]
+    assert from_pandas == []
 
 
 def test_hull_joint_call_gets_one_frame_with_train_rows_first(workdir, monkeypatch):
