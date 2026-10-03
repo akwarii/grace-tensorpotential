@@ -41,3 +41,12 @@ def sample_std_rtol(n_samples: int, n_sigma: float = 5.0) -> float:
 # A float64 least-squares solve (``numpy.linalg.lstsq``) on a small well-conditioned system whose
 # exact solution is known: the observed error is about 1e-14 on values of order 1 to 10.
 LEAST_SQUARES_F64 = Tolerance(rtol=1e-10, atol=1e-10)
+
+# A float32 network with random weights (a few matrix products, an RMS normalisation, activations) against
+# a float64 numpy evaluation of the same stored weights: float32 has a unit roundoff of 6e-8, and a handful of
+# accumulations of order-one terms give errors of about 1e-6.
+FLOAT32_NETWORK = Tolerance(rtol=1e-5, atol=1e-5)
+
+# A few element-wise float32 operations (square, sum of three terms, square root, ratio) against the same
+# formula in float64 on the same float32 inputs: unit roundoff 6e-8 per operation, errors of a few ulp.
+FLOAT32_ELEMENTWISE = Tolerance(rtol=1e-6, atol=1e-7)
