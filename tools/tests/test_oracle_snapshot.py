@@ -47,6 +47,11 @@ def test_seeded_values_matrices_are_scaled_and_vectors_centred_on_one():
     assert np.all(osn.seeded_values("never zero", (64,)) != 0)
 
 
+def _save_npz(path, arrays: dict) -> None:
+    """``np.savez`` for keys that are not identifiers (the stub types ``**kwds`` as a flag)."""
+    np.savez(path, **arrays)
+
+
 def _snap(**arrays):
     return {k: np.asarray(v, dtype=float) for k, v in arrays.items()}
 
@@ -135,7 +140,17 @@ def test_cli_compare_exit_status(tmp_path, capsys):
 def test_cli_write_saves_a_real_snapshot_with_metadata(tmp_path, capsys):
     _require_tensorflow()
     out = tmp_path / "sub" / "snap.npz"
-    args = ["write", str(out), "--yamls", "model_grace.yaml", "--n-structures", "1"]
+    args = [
+        "write",
+        str(out),
+        "--yamls",
+        "model_grace.yaml",
+        "--n-structures",
+        "1",
+        "--groups",
+        "base",
+        "--no-edge",
+    ]
     assert osn.main(args) == 0
     with np.load(out) as saved:
         arrays = dict(saved)
@@ -263,9 +278,9 @@ def test_energy_and_forces_are_translation_invariant(tf_model, structure):
 def test_snapshot_is_reproducible_and_detects_a_changed_weight():
     _require_tensorflow()
     yamls = ("model_grace.yaml",)
-    first = osn.take_snapshot(yamls, n_structures=2)
-    second = osn.take_snapshot(yamls, n_structures=2)
-    assert json.loads(str(first[osn.META_KEY]))["structures"][1]["n_atoms"] == 16
+    first = osn.take_snapshot(yamls, n_structures=2, groups=("base",), edge=False)
+    second = osn.take_snapshot(yamls, n_structures=2, groups=("base",), edge=False)
+    assert json.loads(str(first[osn.META_KEY]))["structures"]["s1"]["n_atoms"] == 16
     assert any(k.endswith("/energy") for k in first)
     assert osn.compare_snapshots(first, second)["ok"]
     assert osn.compare_snapshots(first, second)["max_abs_diff"] == 0.0
@@ -275,3 +290,483 @@ def test_snapshot_is_reproducible_and_detects_a_changed_weight():
     perturbed[energy_key] = perturbed[energy_key] * (1 + 1e-12)
     report = osn.compare_snapshots(first, perturbed)
     assert not report["ok"] and report["exceeding"] == [energy_key]
+
+
+# ----------------------------------------------- widened snapshot: logic, no TF
+
+
+def test_snapshot_specs_label_every_group_and_name_the_options():
+    specs, skipped = osn.snapshot_specs(osn.GROUPS, ("model_grace_2L_omat.yaml",))
+    by_label = {spec.label: spec for spec in specs}
+    assert set(by_label) == {
+        "model_grace_2L_omat",
+        "model_grace_2L_omat.f32",
+        "model_grace_2L_omat.lm_first",
+        "model_grace_2L_omat.dense",
+        "preset.LINEAR",
+        "preset.FS",
+        "preset.GRACE_1LAYER_v2_25",
+        "preset.GRACE_2LAYER_v2_25",
+    }
+    assert skipped == {}
+    assert by_label["model_grace_2L_omat"].dtype == "float64"
+    assert by_label["model_grace_2L_omat"].option is None
+    assert by_label["model_grace_2L_omat.f32"].dtype == "float32"
+    assert by_label["model_grace_2L_omat.lm_first"].option == "lm_first"
+    assert by_label["model_grace_2L_omat.dense"].option == "dense_nbr"
+    assert by_label["preset.FS"].source == "preset:FS"
+    assert by_label["preset.FS"].dtype == "float64"
+
+
+def test_snapshot_specs_records_unsupported_combinations_instead_of_dropping_them():
+    specs, skipped = osn.snapshot_specs(("lm_first",), osn.DEFAULT_YAMLS)
+    assert [s.label for s in specs] == [
+        "model_grace_2L_omat.lm_first",
+        "model_grace_2L_omat_large_base.lm_first",
+    ]
+    assert list(skipped) == ["model_grace.lm_first"]
+    assert "MLPOut2ScalarTarget" in skipped["model_grace.lm_first"]
+
+
+def test_snapshot_specs_rejects_an_unknown_group():
+    with pytest.raises(ValueError, match="unknown group 'bogus'"):
+        osn.snapshot_specs(("base", "bogus"))
+
+
+def test_model_spec_is_immutable():
+    spec = osn.ModelSpec("a", "b.yaml")
+    with pytest.raises(AttributeError):
+        spec.label = "c"
+
+
+def test_precision_rows_are_named_and_select_by_label():
+    assert set(osn.TOLERANCE_ROWS) == {"float32", "float64"}
+    assert osn.precision_of("model_grace.f32/s0/energy") == "float32"
+    assert osn.precision_of("model_grace/s0/energy") == "float64"
+    assert osn.precision_of("preset.FS/dimer/data/B") == "float64"
+    assert osn.precision_of("model_grace.dense/s0/energy") == "float64"
+    for row in osn.TOLERANCE_ROWS.values():
+        assert row.scale_rtol >= 0 and row.rationale
+    assert osn.scale_rtol_for_key("m/s0/energy") == osn.DEFAULT_SCALE_RTOL == 1e-12
+    assert (
+        osn.scale_rtol_for_key("m.f32/s0/energy")
+        == osn.TOLERANCE_ROWS["float32"].scale_rtol
+    )
+
+
+def test_tolerance_row_is_chosen_per_key_from_the_table_given():
+    rows = {
+        "float32": osn.ScaleTolerance(1e-3, "test row"),
+        "float64": osn.ScaleTolerance(1e-9, "test row"),
+    }
+    assert osn.scale_rtol_for_key("m.f32/s0/x", rows) == 1e-3
+    assert osn.scale_rtol_for_key("m/s0/x", rows) == 1e-9
+    noise = 1e-5  # between the two rows
+    a = _snap(**{"m.f32/s0/x": [1.0, 2.0], "m/s0/x": [1.0, 2.0]})
+    b = _snap(**{
+        "m.f32/s0/x": [1.0, 2.0 + 2 * noise],
+        "m/s0/x": [1.0, 2.0 + 2 * noise],
+    })
+
+    def by_key(key):
+        return osn.scale_rtol_for_key(key, rows)
+
+    report = osn.compare_snapshots(a, b, scale_rtol=by_key)
+    assert report["exceeding"] == ["m/s0/x"]  # the float64 key only
+    assert osn.compare_snapshots(a, b, scale_rtol=1e-3)["ok"]
+
+
+def test_float32_row_is_exact_because_no_repeat_spread_was_measured():
+    row = osn.TOLERANCE_ROWS["float32"]
+    assert row.scale_rtol == 0.0
+    assert "exactly 0" in row.rationale
+    a = _snap(**{"m.f32/s0/x": [1.0, 2.0]})
+    b = _snap(**{"m.f32/s0/x": [1.0, 2.0 * (1 + 2**-23)]})  # one float32 ulp
+    assert not osn.compare_snapshots(a, b, scale_rtol=osn.scale_rtol_for_key)["ok"]
+
+
+def test_repeat_spread_of_identical_repeats_is_zero_and_groups_by_precision():
+    a = _snap(**{"m/s0/energy": [1.0], "m.f32/s0/energy": [2.0], "m/s0/data/B": [3.0]})
+    report = osn.repeat_spread([a, dict(a), dict(a)])
+    assert set(report) == {"float64/energy", "float32/energy", "float64/data/B"}
+    assert all(entry["max_scaled_spread"] == 0.0 for entry in report.values())
+
+
+def test_repeat_spread_is_range_over_first_array_maximum():
+    runs = [
+        _snap(**{"m.f32/s0/forces": [4.0, 0.0], "m/s0/forces": [4.0, 0.0]}),
+        _snap(**{"m.f32/s0/forces": [4.0, 0.5], "m/s0/forces": [4.0, 0.0]}),
+        _snap(**{"m.f32/s0/forces": [4.0 - 1.0, 0.25], "m/s0/forces": [4.0, 0.0]}),
+    ]
+    report = osn.repeat_spread(runs)
+    # range 1.0 in the first element, scale max|first| = 4.0
+    assert report["float32/forces"]["max_scaled_spread"] == 0.25
+    assert report["float32/forces"]["worst_key"] == "m.f32/s0/forces"
+    assert report["float64/forces"]["max_scaled_spread"] == 0.0
+
+
+def test_repeat_spread_takes_the_maximum_over_cases_and_keeps_the_worst_key():
+    runs = [
+        _snap(**{"m/s0/energy": [10.0], "m/s1/energy": [10.0]}),
+        _snap(**{"m/s0/energy": [10.5], "m/s1/energy": [12.0]}),
+    ]
+    entry = osn.repeat_spread(runs)["float64/energy"]
+    assert entry["max_scaled_spread"] == 0.2
+    assert entry["worst_key"] == "m/s1/energy"
+
+
+def test_repeat_spread_ignores_meta_and_keys_missing_from_a_repeat():
+    meta = np.array(json.dumps({}))
+    runs = [
+        {
+            osn.META_KEY: meta,
+            "m/s0/energy": np.array([1.0]),
+            "m/s0/only_first": np.array([1.0]),
+        },
+        {osn.META_KEY: meta, "m/s0/energy": np.array([1.0])},
+    ]
+    assert set(osn.repeat_spread(runs)) == {"float64/energy"}
+
+
+def test_repeat_spread_of_a_zero_scale_array_is_one_when_it_moves():
+    runs = [_snap(**{"m/s0/z": [0.0, 0.0]}), _snap(**{"m/s0/z": [0.0, 1e-30]})]
+    assert osn.repeat_spread(runs)["float64/z"]["max_scaled_spread"] == 1.0
+
+
+def test_repeat_spread_needs_two_snapshots():
+    with pytest.raises(ValueError, match="at least two"):
+        osn.repeat_spread([_snap(x=[1.0])])
+
+
+def test_cli_spread_prints_the_report(tmp_path, capsys):
+    paths = []
+    for index, value in enumerate((1.0, 1.0, 1.5)):
+        path = tmp_path / f"run{index}.npz"
+        _save_npz(path, {"m.f32/s0/energy": np.array([value])})
+        paths.append(str(path))
+    assert osn.main(["spread", *paths]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["float32/energy"]["max_scaled_spread"] == pytest.approx(0.5)
+
+
+def test_cli_compare_uses_the_float32_row_for_float32_keys(tmp_path):
+    first, second = tmp_path / "a.npz", tmp_path / "b.npz"
+    _save_npz(
+        first, {"m.f32/s0/x": np.array([1.0, 1.0]), "m/s0/x": np.array([1.0, 1.0])}
+    )
+    noise = 1e-14  # inside the float64 row, outside the exact float32 row
+    _save_npz(
+        second,
+        {"m.f32/s0/x": np.array([1.0, 1.0]), "m/s0/x": np.array([1.0, 1.0 + noise])},
+    )
+    assert osn.main(["compare", str(first), str(second)]) == 0
+    _save_npz(
+        second,
+        {"m.f32/s0/x": np.array([1.0, 1.0 + noise]), "m/s0/x": np.array([1.0, 1.0])},
+    )
+    assert osn.main(["compare", str(first), str(second)]) == 1
+    assert osn.main(["compare", str(first), str(second), "--scale-rtol", "1e-12"]) == 0
+
+
+def test_cli_write_rejects_an_unknown_group(capsys):
+    with pytest.raises(SystemExit):
+        osn.main(["write", "x.npz", "--groups", "bogus"])
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_as_list_accepts_lists_and_dictionaries():
+    assert osn._as_list([1, 2]) == [1, 2]
+    assert osn._as_list({"a": 1, "b": 2}) == [1, 2]
+
+
+def test_accepts_option_needs_the_constructor_argument_and_for_dense_the_dense_flag():
+    from types import (
+        SimpleNamespace as Instruction,
+    )  # stands in for an instruction: only two attributes are read
+
+    scalar_mode = Instruction(
+        _init_args={"dense_nbr": False, "lm_first": False}, dense_capable=False
+    )
+    equivariant = Instruction(_init_args={"dense_nbr": False}, dense_capable=True)
+    without = Instruction(_init_args={}, dense_capable=True)
+    assert not osn._accepts_option(
+        scalar_mode, "dense_nbr"
+    )  # takes it, but cannot use it
+    assert osn._accepts_option(equivariant, "dense_nbr")
+    assert not osn._accepts_option(without, "dense_nbr")
+    assert osn._accepts_option(
+        scalar_mode, "lm_first"
+    )  # no dense flag needed for lm_first
+    assert not osn._accepts_option(equivariant, "lm_first")
+
+
+def test_entries_accepts_the_three_yaml_layouts():
+    entry = {"name": "a"}
+    assert osn._entries([entry]) == [entry]
+    assert osn._entries({"a": entry}) == [entry]
+    assert osn._entries({"metadata": {}, "instructions": {"a": entry}}) == [entry]
+
+
+def test_edge_structures_have_the_properties_their_names_promise():
+    edge = osn.edge_structures()
+    assert list(edge) == ["isolated", "dimer", "slab", "selfimage"]
+    isolated, dimer, slab, selfimage = (edge[k] for k in edge)
+    assert len(isolated) == 1 and not isolated.pbc.any()
+    assert len(dimer) == 2 and not dimer.pbc.any()
+    assert dimer.get_distance(0, 1) < 6.0  # inside the cutoff of the test models
+    assert slab.pbc.tolist() == [True, True, False]
+    assert slab.cell.lengths()[2] > 2 * 6.0  # vacuum wider than twice the cutoff
+    assert selfimage.pbc.all() and len(selfimage) == 2
+    assert selfimage.cell.lengths().max() < 6.0  # an atom sees its own images
+    # generic positions: no symmetry may make the forces vanish
+    fractional = selfimage.get_scaled_positions()
+    assert not np.allclose(fractional[1], 0.5)
+    for atoms in edge.values():
+        assert {*atoms.get_chemical_symbols()} <= {"Mo", "Nb", "Ta", "W"}
+
+
+def test_describe_structure_records_what_the_edge_cases_are():
+    slab = osn.edge_structures()["slab"]
+    described = osn.describe_structure(slab)
+    assert described["n_atoms"] == 4
+    assert described["formula"] == "Nb4"
+    assert described["pbc"] == [True, True, False]
+    assert described["cell"][2][2] == 20.0
+    json.dumps(described)  # the metadata is JSON
+
+
+# --------------------------------------- widened snapshot: physics and options, TF
+
+TOLERANCES.update({
+    # layout options reorder sums only: float64 round-off (a few ulp)
+    "layout_parity": (1e-10, 1e-12),
+    # float32 parameters against float64: about 1e-7 relative per operation,
+    # a few tens of operations between the parameters and the energy
+    "float32_vs_float64": (1e-5, 1e-6),
+    "fd_selfimage_forces": (1e-4, 1e-8),
+    "fd_selfimage_stress": (1e-4, 1e-9),
+    "newton_third_law": (0.0, 1e-12),
+})
+OPTION_MODEL = "model_grace_2L_omat.yaml"
+
+
+@pytest.fixture(scope="module")
+def cases():
+    _require_tensorflow()
+    structures = osn.load_structures(osn.TESTS / osn.DEFAULT_STRUCTURES, 2)
+    return {"s0": structures[0], "s1": structures[1], **osn.edge_structures()}
+
+
+@pytest.fixture(scope="module")
+def reference(tf_model, cases):
+    return {name: osn.evaluate(tf_model, atoms) for name, atoms in cases.items()}
+
+
+@pytest.mark.parametrize("option", ["lm_first", "dense_nbr"])
+def test_layout_options_leave_the_physical_outputs_unchanged(option, reference, cases):
+    model = osn.build_model(osn.TESTS / OPTION_MODEL, option=option)
+    for name, atoms in cases.items():
+        got = osn.evaluate(model, atoms)
+        for quantity in ("energy", "forces", "stress"):
+            _assert_close(got[quantity], reference[name][quantity], "layout_parity")
+
+
+def test_with_layout_option_switches_the_option_on_where_it_is_accepted():
+    _require_tensorflow()
+    from tensorpotential.instructions import load_instructions
+
+    plain = osn._as_list(load_instructions(str(osn.TESTS / OPTION_MODEL)))
+    accepting = {i.name for i in plain if osn._accepts_option(i, "lm_first")}
+    assert accepting and not all(getattr(i, "lm_first", False) for i in plain)
+    switched = osn.with_layout_option(
+        load_instructions(str(osn.TESTS / OPTION_MODEL)), "lm_first"
+    )
+    flags = {i.name: getattr(i, "lm_first", False) for i in osn._as_list(switched)}
+    assert {name for name, flag in flags.items() if flag} == accepting
+    assert [i.name for i in osn._as_list(switched)] == [i.name for i in plain]
+
+
+def test_with_layout_option_changes_the_layout_of_the_stored_tensors(reference, cases):
+    model = osn.build_model(osn.TESTS / OPTION_MODEL, option="lm_first")
+    got = osn.evaluate(model, cases["s0"])
+    changed = [
+        key
+        for key, value in got.items()
+        if key.startswith("data/")
+        and key in reference["s0"]
+        and value.shape != reference["s0"][key].shape
+    ]
+    assert changed, "lm_first must move the lm axis of some stored tensor"
+
+
+def test_with_layout_option_rejects_an_option_nothing_takes():
+    _require_tensorflow()
+    linear = osn.preset_instructions("LINEAR")
+    assert not any(osn._accepts_option(i, "dense_nbr") for i in osn._as_list(linear))
+    with pytest.raises(ValueError, match="dense_nbr"):
+        osn.with_layout_option(linear, "dense_nbr")
+
+
+def test_dense_layout_is_active_only_with_the_dense_option(tf_model):
+    dense = osn.build_model(osn.TESTS / OPTION_MODEL, option="dense_nbr")
+    assert osn.dense_layout_active(dense)
+    assert not osn.dense_layout_active(tf_model)
+
+
+def test_dense_model_is_fed_one_block_of_bond_slots_per_atom():
+    from ase import Atoms
+
+    # uneven coordination (2, 2, 2 and 1 dummy bond): the flat and the dense layouts differ
+    chain = Atoms("Mo4", positions=[[0, 0, 0], [0, 0, 2.6], [0, 0, 5.2], [0, 0, 13.0]])
+    model = osn.build_model(osn.TESTS / OPTION_MODEL, option="dense_nbr")
+    out = osn.evaluate(model, chain)
+    n_atoms = out["data/atomic_mu_i"].shape[0]
+    assert out["data/ind_i"].shape[0] % n_atoms == 0
+    owner = out["data/ind_i"].reshape(n_atoms, -1)
+    real = np.linalg.norm(out["data/bond_vector"], axis=1).reshape(n_atoms, -1) < 6.0
+    rows = np.broadcast_to(np.arange(n_atoms)[:, None], owner.shape)
+    assert real.sum() > n_atoms  # the structure has bonds
+    assert np.array_equal(
+        owner[real], rows[real]
+    )  # slot block a holds the bonds of atom a
+
+
+def test_float32_model_has_float32_parameters_with_the_seeded_values():
+    _require_tensorflow()
+    model = osn.build_model(osn.TESTS / MODEL, dtype="float32")
+    trainable = model.trainable_variables
+    assert {v.dtype.name for v in trainable if v.dtype.is_floating} == {"float32"}
+    var = trainable[0]
+    expected = osn.seeded_values(var.name, tuple(var.shape)).astype(np.float32)
+    assert np.array_equal(var.numpy(), expected)
+
+
+def test_float32_outputs_agree_with_float64_to_single_precision(reference, cases):
+    model = osn.build_model(osn.TESTS / OPTION_MODEL, dtype="float32")
+    for name, atoms in cases.items():
+        got = osn.evaluate(model, atoms)
+        for quantity in ("energy", "forces", "stress"):
+            _assert_close(
+                got[quantity], reference[name][quantity], "float32_vs_float64"
+            )
+    # float32 is not float64 in disguise: the energy must actually differ
+    got = osn.evaluate(model, cases["s1"])
+    assert np.any(got["energy"] != reference["s1"]["energy"])
+
+
+def test_isolated_atom_has_only_the_dummy_bond_and_no_energy_forces_or_stress(
+    reference,
+):
+    out = reference["isolated"]
+    assert out["data/n_neigh_real"].item() == 1  # the builder's placeholder bond
+    assert np.linalg.norm(out["data/bond_vector"][0]) > 6.0  # beyond the cutoff
+    assert out["energy"].item() == 0.0
+    assert not out["forces"].any() and not out["stress"].any()
+
+
+def test_dimer_forces_obey_newton_and_point_along_the_bond(reference):
+    out = reference["dimer"]
+    forces = out["forces"]
+    assert np.abs(forces).max() > 1e-3
+    _assert_close(forces[0] + forces[1], np.zeros(3), "newton_third_law")
+    _assert_close(forces[:, :2], np.zeros((2, 2)), "newton_third_law")
+    assert not out["stress"].any()  # no cell: no stress
+    assert out["virial"].reshape(6)[2] != 0.0  # the bond lies along z
+    assert not np.delete(out["virial"].reshape(6), 2).any()
+
+
+def test_evaluate_leaves_the_structure_unchanged(tf_model, cases):
+    for name in ("dimer", "isolated"):
+        before = cases[name].copy()
+        osn.evaluate(tf_model, cases[name])
+        assert cases[name] == before  # no cell, no centring, same periodicity
+        assert cases[name].cell.rank == 0 and not cases[name].pbc.any()
+
+
+def test_selfimage_cell_has_bonds_from_an_atom_to_its_own_image(reference):
+    out = reference["selfimage"]
+    assert out["data/ind_i"].shape[0] > 0
+    assert np.any(out["data/ind_i"] == out["data/ind_j"])
+
+
+def test_selfimage_forces_and_stress_match_finite_differences(tf_model, cases):
+    atoms = cases["selfimage"]
+    out = osn.evaluate(tf_model, atoms)
+    assert np.abs(out["forces"]).max() > 1e-3
+    for axis in range(3):
+        plus, minus = atoms.copy(), atoms.copy()
+        plus.positions[1, axis] += STEP
+        minus.positions[1, axis] -= STEP
+        fd = -(_energy(tf_model, plus) - _energy(tf_model, minus)) / (2 * STEP)
+        _assert_close(out["forces"][1, axis], fd, "fd_selfimage_forces")
+    for axis in range(3):  # diagonal strain
+        energies = []
+        for sign in (+1, -1):
+            eps = np.zeros((3, 3))
+            eps[axis, axis] = sign * STEP
+            strained = atoms.copy()
+            strained.set_cell(atoms.cell.array @ (np.eye(3) + eps), scale_atoms=True)
+            energies.append(_energy(tf_model, strained))
+        fd = (energies[0] - energies[1]) / (2 * STEP) / atoms.get_volume()
+        _assert_close(out["stress"][axis], fd, "fd_selfimage_stress")
+
+
+def test_slab_energy_is_invariant_to_a_shift_along_the_periodic_axes(tf_model, cases):
+    base = osn.evaluate(tf_model, cases["slab"])
+    moved = cases["slab"].copy()
+    moved.translate([0.61, 1.17, 0.0])
+    moved.wrap()
+    shifted = osn.evaluate(tf_model, moved)
+    _assert_close(shifted["energy"], base["energy"], "translation_energy")
+    _assert_close(shifted["forces"], base["forces"], "translation_forces")
+
+
+@pytest.mark.parametrize("name", list(osn.PRESET_SETTINGS))
+def test_presets_build_and_are_translation_invariant(name, cases):
+    _require_tensorflow()
+    model = osn.build_spec_model(
+        osn.ModelSpec(f"preset.{name}", osn.PRESET_PREFIX + name)
+    )
+    atoms = cases["s1"]
+    base = osn.evaluate(model, atoms)
+    assert np.isfinite(base["energy"]).all() and np.abs(base["forces"]).max() > 1e-6
+    moved = atoms.copy()
+    moved.translate([0.37, -1.21, 2.05])
+    moved.wrap()
+    shifted = osn.evaluate(model, moved)
+    _assert_close(shifted["energy"], base["energy"], "translation_energy")
+    _assert_close(shifted["forces"], base["forces"], "translation_forces")
+
+
+def test_take_snapshot_records_variants_edge_cases_and_the_skipped_combinations():
+    _require_tensorflow()
+    yamls = ("model_grace.yaml",)
+    arrays = osn.take_snapshot(
+        yamls, n_structures=1, groups=("base", "float32", "lm_first", "dense")
+    )
+    meta = json.loads(str(arrays[osn.META_KEY]))
+    labels = {k.split("/")[0] for k in arrays if k != osn.META_KEY}
+    assert labels == {"model_grace", "model_grace.f32", "model_grace.dense"}
+    assert list(meta["skipped"]) == ["model_grace.lm_first"]
+    assert set(meta["structures"]) == {"s0", "isolated", "dimer", "slab", "selfimage"}
+    assert {s["label"] for s in meta["specs"]} == labels
+    for label in labels:
+        assert f"{label}/selfimage/energy" in arrays
+        assert f"{label}/s0/data/bond_vector" in arrays
+    assert set(meta["variables"]) == labels
+    f32 = {dtype for _, _, dtype in meta["variables"]["model_grace.f32"]}
+    assert "float32" in f32
+    assert (
+        meta["yaml_sha256"]["model_grace"]
+        == hashlib.sha256((osn.TESTS / "model_grace.yaml").read_bytes()).hexdigest()
+    )
+
+
+def test_take_snapshot_of_presets_has_no_yaml_hash():
+    _require_tensorflow()
+    arrays = osn.take_snapshot((), n_structures=1, groups=("presets",), edge=False)
+    meta = json.loads(str(arrays[osn.META_KEY]))
+    assert meta["yaml_sha256"] == {}
+    assert {k.split("/")[0] for k in arrays if k != osn.META_KEY} == {
+        f"preset.{name}" for name in osn.PRESET_SETTINGS
+    }

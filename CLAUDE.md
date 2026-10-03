@@ -109,7 +109,10 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   (decision D11) and pickles written with pandas 3 cannot be read by pandas 2. `pd.concat(..., copy=False)` in `cli/data.py` still raises `Pandas4Warning` on pandas 3. A second pandas environment:
   `UV_PROJECT_ENVIRONMENT=<dir> uv sync --frozen --offline` then `uv pip install --offline --python <dir>/bin/python pandas==3.0.3`; put its `bin` on `PATH` (the tests start `grace_preprocess` by name).
 - TF numerics are not bit-reproducible across processes: some float64 intermediates (`large_base`: `YI`, `B`, `BB`, ...) differ by about one ulp
-  between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
+  between runs (float32-parameter snapshots did not vary in seven repeats). Compare through `tools/oracle_snapshot.py compare` (a named scaled tolerance per precision), never with exact
+  equality for float64. `baselines/oracle_snapshot_wide.npz` adds float32, `lm_first`, `dense_nbr`, edge structures and presets (`baselines/README.md`); a `git archive` copy of a tag is imported with `PYTHONPATH` from a directory outside both trees.
+- `GeometricalDataBuilder.extract_from_ase_atoms` edits its argument: `enforce_pbc` gives a non-periodic `Atoms` a cell, centres it and sets `pbc=True`. Pass a copy when the structure is reused (stress would otherwise be divided by an invented volume).
+- `lm_first=True` fails on yamls whose output is `MLPOut2ScalarTarget` (it has no transpose for it, unlike `LinMLPOut2ScalarTarget`); `model_grace.yaml` is such a model.
 - **Worktrees.** A worktree has no `.venv` or `uv.lock` (both git-ignored): link `.venv` and copy `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable
   `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
