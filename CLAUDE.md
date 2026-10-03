@@ -55,7 +55,7 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 
 ## Code style
 
-- Python 3.10+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
+- Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
 - **By default legacy code stays as it is**: no repo-wide reformat (`ruff format` would rewrite most files), no file splitting (`instructions/compute.py`
   is about 4,900 lines and upstream merges depend on its shape), no renames, and improve a unit only while you are already changing it. The exception
   is an issue whose job is to change legacy code (clean-up, code quality, deduplication, packaging, performance): it says what may change and how,
