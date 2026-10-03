@@ -728,13 +728,18 @@ class TPModel(tf.Module):
     def __init__(
         self,
         instructions,
-        compute_function: ComputeFunction = ComputeStructureEnergyAndForcesAndVirial(),
-        train_function: TrainFunction = ComputeBatchEnergyAndForces(),
+        compute_function: ComputeFunction | None = None,
+        train_function: TrainFunction | None = None,
         aux_compute: dict | None = None,
         name="TPModel",
     ):
         super(TPModel, self).__init__(name=name)
         self.instructions = instructions
+        # a default instance is created per model: a default argument would be shared by all
+        if compute_function is None:
+            compute_function = ComputeStructureEnergyAndForcesAndVirial()
+        if train_function is None:
+            train_function = ComputeBatchEnergyAndForces()
         self.compute_function = compute_function
         self.train_function = train_function
         self.aux_compute = aux_compute

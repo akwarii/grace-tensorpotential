@@ -10,6 +10,7 @@ unit under test, which only decides which variables are excluded.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 
@@ -18,6 +19,7 @@ import pytest
 
 from tensorpotential.potentials import get_preset
 from tensorpotential.tensorpot import TensorPotential
+from tensorpotential.tpmodel import TPModel
 
 import tensorflow as tf  # after tensorpotential, which must set TF_USE_LEGACY_KERAS first
 
@@ -180,3 +182,70 @@ def test_graph_mode_decorates_the_step_functions():
     assert _is_traced(tp.predict)
     assert _is_traced(tp.model_grad)
     assert _is_traced(tp.distributed_train_step)
+
+
+# ------------------------------------------------- default functions are not shared
+
+
+def test_each_tensorpotential_gets_its_own_default_functions():
+    first, second = _tp(), _tp()
+
+    assert first.model.compute_function is not second.model.compute_function
+    assert first.model.train_function is not second.model.train_function
+
+
+def test_explicit_functions_are_kept_by_identity():
+    from tensorpotential.tpmodel import (
+        ComputeBatchEnergyForcesVirials,
+        ComputeStructureEnergyAndForcesAndVirial,
+    )
+
+    compute = ComputeStructureEnergyAndForcesAndVirial()
+    train = ComputeBatchEnergyForcesVirials()
+    tp = _tp(model_compute_function=compute, model_train_function=train)
+
+    assert tp.model.compute_function is compute
+    assert tp.model.train_function is train
+
+
+def test_each_tpmodel_gets_its_own_default_functions():
+    from tensorpotential.tpmodel import (
+        ComputeBatchEnergyAndForces,
+        ComputeStructureEnergyAndForcesAndVirial,
+        TPModel,
+    )
+
+    first, second = TPModel(_instructions()), TPModel(_instructions())
+
+    assert isinstance(first.compute_function, ComputeStructureEnergyAndForcesAndVirial)
+    assert isinstance(first.train_function, ComputeBatchEnergyAndForces)
+    assert first.compute_function is not second.compute_function
+    assert first.train_function is not second.train_function
+
+
+def test_tpmodel_keeps_explicit_functions_by_identity():
+    from tensorpotential.tpmodel import (
+        ComputeBatchEnergyForcesVirials,
+        ComputeStructureEnergyAndForcesAndVirial,
+        TPModel,
+    )
+
+    compute = ComputeStructureEnergyAndForcesAndVirial()
+    train = ComputeBatchEnergyForcesVirials()
+    model = TPModel(_instructions(), compute_function=compute, train_function=train)
+
+    assert model.compute_function is compute
+    assert model.train_function is train
+
+
+@pytest.mark.parametrize(
+    ("owner", "names"),
+    [
+        (TensorPotential, ["model_compute_function", "model_train_function"]),
+        (TPModel, ["compute_function", "train_function"]),
+    ],
+)
+def test_function_arguments_default_to_none(owner, names):
+    parameters = inspect.signature(owner.__init__).parameters
+
+    assert [parameters[name].default for name in names] == [None, None]
