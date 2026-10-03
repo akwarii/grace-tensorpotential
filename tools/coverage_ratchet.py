@@ -1,10 +1,19 @@
 """No-fall ratchet on the per-file coverage of the library (TEST3).
 
 ``baselines/coverage_baseline.json`` holds, for every file of a full-suite run with branch coverage,
-the executed and the total number of statements plus branches. A later run may not cover a smaller
-share of any file: ``check`` exits 1 when one does, ``record`` refuses to write a baseline that
-lowers a file unless ``--allow-fall`` says so. A file that disappeared from the report (deleted or
+the executed and the total number of statements plus branches. A file breaks the ratchet when its
+covered share falls **and** its number of uncovered statements and branches (``total - covered``)
+rises; ``check`` exits 1 when one does, ``record`` refuses to write a baseline that lowers a file
+that way unless ``--allow-fall`` says so. A file that disappeared from the report (deleted or
 renamed) is reported but is not a failure; a file that is new is recorded at the next ``record``.
+
+Why both conditions: a refactor that removes fully covered code lowers the share even though it
+leaves less untested code than before (``instructions/compute.py`` went from 2596 of 3218 covered,
+80.67%, to 2581 of 3202, 80.61%, while the uncovered count fell from 622 to 621). The share alone
+would fail that change; the uncovered count alone would accept a file that grows by untested code
+while a lot of covered code is added next to it. Together they fail exactly the changes that add
+untested code without improving the share. The lower share of an accepted file becomes the new
+baseline at the next ``record``, so the uncovered count can only go down from there.
 
 Usage::
 
@@ -13,7 +22,8 @@ Usage::
 
 ``COVERAGE_JSON`` is a coverage.py report (``--cov-report=json``) made with ``--cov-branch`` over
 the whole suite. ``--tolerance`` is in percentage points (default 0: coverage of lines does not
-depend on the numerics, and a parallel run gave the same per-file numbers as a serial one).
+depend on the numerics, and a parallel run gave the same per-file numbers as a serial one); it widens
+the share condition only.
 """
 
 from __future__ import annotations
@@ -54,13 +64,26 @@ def percent(entry: dict[str, int]) -> float:
     return 100.0 if entry["total"] == 0 else 100.0 * entry["covered"] / entry["total"]
 
 
+def uncovered(entry: dict[str, int]) -> int:
+    """Statements plus branches that no test executed."""
+    return entry["total"] - entry["covered"]
+
+
 def falls(base: Counts, now: Counts, tolerance: float = 0.0) -> list[str]:
-    """One line for each file that lost more than ``tolerance`` percentage points."""
+    """One line for each file whose share fell and whose uncovered count rose.
+
+    The share must lose more than ``tolerance`` percentage points; the uncovered count must be
+    strictly higher than in the baseline.
+    """
     lines = []
     for path in sorted(set(base) & set(now)):
         before, after = percent(base[path]), percent(now[path])
-        if after < before - tolerance - 1e-9:
-            lines.append(f"fell: {path} {before:.2f}% -> {after:.2f}%")
+        unc_before, unc_after = uncovered(base[path]), uncovered(now[path])
+        if after < before - tolerance - 1e-9 and unc_after > unc_before:
+            lines.append(
+                f"fell: {path} {before:.2f}% -> {after:.2f}%, "
+                f"uncovered {unc_before} -> {unc_after}"
+            )
     return lines
 
 
