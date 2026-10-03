@@ -412,6 +412,32 @@ Measured on 2026-10-03 on the QUAL1 branch (CPU, `ruff 0.16.7 --isolated`, Tenso
 
 **Side effects.** (1) Honest `X | None` annotations make `ty` report two more `no-matching-overload` findings, `' x '.join(self.coupling_origin)` in two `__repr__` methods of `compute.py` (the parameter can be `None`); the owner approved recording the rise in `baselines/lint_ratchet.json` (2 to 4). (2) The minimum Python version is now 3.11 (`pyproject.toml`; it was `>=3.9`), by decision of the owner; the ruff target of the new packages follows.
 
+## 10. pandas 3 readiness (DEPS1)
+
+Measured on 2026-10-03 on the DEPS1 branch (cut from `91103a8`), CPU, Python 3.12.3, `pytest -n 4 --dist load` with the two ignores of `baselines/README.md`. pandas 2.3.3 is the project environment, pandas 3.0.3 is a second environment built offline from the same lock (`baselines/README.md`).
+
+**Change.** The two `np.array_split(<DataFrame>, n)` calls of `data/databuilder.py` (in `estimate_n_buckets` and `split_batches_into_buckets`) go through one private helper, `_split_rows`, that splits the row positions and takes `df.iloc[ix]`; the chunks are the same as before (sizes and row labels pinned by `tests/test_split_batches_into_buckets.py`, written first and green on the old code). The blanket `FutureWarning` and `DeprecationWarning` filters of `scripts/grace_predict.py` are replaced by one filter for the `DeprecationWarning` that ASE raises through NumPy 2.5 (`Setting the shape on a NumPy array`, 3 per two structures); with every filter removed and `-W always`, that was the only warning of a `grace_predict` run, and no pandas warning occurred.
+
+| Run | passed | failed | skipped | xfailed | xpassed |
+|---|---:|---:|---:|---:|---:|
+| pandas 2.3.3 | 1282 | 0 | 6 | 2 | 1 |
+| pandas 3.0.3 | 1282 (1281 in the full run, `test_distrib` re-run, see below) | 0 | 6 | 2 | 1 |
+| pandas 2.3.3, `PANDAS_COPY_ON_WRITE=warn` | 1282 | 0 | 6 | 2 | 1 |
+| pandas 2.3.3, `-W error::FutureWarning -W error::DeprecationWarning` | 1183 | 66 (+33 errors) | 6 | 2 | 1 |
+
+`test_distrib` failed in the first pandas 3 run with exit status 127: the test starts `grace_preprocess` by name and the environment's `bin` was not on `PATH` (the interpreter was called by path). With `PATH` set it passes (1 passed, 1 min 54 s). The 27 failures of the pandas 3 baseline (`outcomes_pd3.json`) are all gone, 26 through the fix and the 27th (`test_distrib`) through the same fix in stage 3.
+
+**Triage of the warn-mode runs.**
+
+- `PANDAS_COPY_ON_WRITE=warn`: no test fails and the log holds no pandas warning (0 occurrences of "pandas", `ChainedAssignment` or `SettingWithCopy`); the library does not rely on chained assignment or on views of a frame.
+- `-W error`: all 100 error lines are `DeprecationWarning`s from outside pandas, none from pandas: 93 NumPy 2.5 "Setting the shape on a NumPy array" (raised in `ase/atoms.py`), 5 "`__array__` implementation doesn't accept a copy keyword" (`instructions/compute.py:477-514`, TensorFlow tensors passed to `np.array`), 2 `importlib.resources.open_text` (`cli/wizard.py:1043`). They affect NumPy 2.5 readiness, not pandas 3, and are not fixed here.
+- pandas 3.0.3 emits one warning of its own in the whole suite: `Pandas4Warning` for `pd.concat(..., copy=False)` at `cli/data.py:957` (inside `load_and_prepare_datasets`, a 550-line function; `cli/data.py` is covered 48% in `baselines/coverage_baseline.json`, so it may not be modified before characterization tests exist). `Pandas4Warning` derives from `DeprecationWarning`, not from `FutureWarning`. Reported on the issue as a finding, not fixed here.
+- `FutureWarning`: the only ones left on pandas 2.3.3 are ASE's `FiniteDifferenceCalculator` notices in `tests/test_calculator.py`; none comes from pandas. The 48 `DataFrame.swapaxes` warnings of `estimate_n_buckets` are gone.
+
+**Pipeline.** `grace_preprocess` stages 1 to 4 on `tests/data/MoNbTaW_train50.pkl.gz` (strategy `neighbours`, batch 400, 3 buckets, cutoff 5) give the same stage 2 table hash, the same 46 stage 3 batches (hash of every tensor of every batch) and the same `stats.json` on pandas 2.3.3 and 3.0.3.
+
+**What this does not cover.** `grace_collect` and `gracemaker` data loading on real user datasets were not run with pandas 3 beyond what the suite exercises; `df2extxyz` ran on both versions with `-W error::FutureWarning`; a pickle written by pandas 3 cannot be read by pandas 2 (unchanged); the pin `pandas<3` is not relaxed here (decision D11, the relaxation belongs to the packaging issues); nothing ran on GPU or HPC.
+
 ## Provenance
 
 Counts re-measured on the tree named at the top; the F1 reproduction was run with the project environment. Compared with the issue text: star imports are 3 in `.py` files (4 with the notebook), everything else (1 `NameError`, 8 bare `except`, 52 markers, the unimported package) matches.

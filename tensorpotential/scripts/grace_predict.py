@@ -9,8 +9,9 @@ from tqdm import tqdm
 
 from tensorpotential.calculator import TPCalculator, predict_structures
 
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+# only the NumPy deprecation that ASE triggers on every structure is hidden; pandas and
+# TensorFlow warnings stay visible
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"ase(\.|$)")
 
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"

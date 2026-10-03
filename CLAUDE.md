@@ -105,8 +105,9 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - Output instructions overwrite `input_data[target.name]` **in place** (`instructions/output.py`); instruction order in the yaml matters, and
   a dump must snapshot the key before and after.
 - `tpmodel.__getattr__` and `instructions.__getattr__` look unused but saved yamls import classes through them. Dead-code tools flag them; keep them.
-- pandas 3 breaks `data/databuilder.py` (`np.array_split(<DataFrame>)`), which is why `pandas<3` is pinned; pickles written with pandas 3 cannot
-  be read by pandas 2.
+- `np.array_split(<DataFrame>)` broke `data/databuilder.py` on pandas 3; DEPS1 fixed it (`_split_rows`), and the suite is green on pandas 3.0.3 and 2.3.3, but `pandas<3` stays pinned
+  (decision D11) and pickles written with pandas 3 cannot be read by pandas 2. `pd.concat(..., copy=False)` in `cli/data.py` still raises `Pandas4Warning` on pandas 3. A second pandas environment:
+  `UV_PROJECT_ENVIRONMENT=<dir> uv sync --frozen --offline` then `uv pip install --offline --python <dir>/bin/python pandas==3.0.3`; put its `bin` on `PATH` (the tests start `grace_preprocess` by name).
 - TF numerics are not bit-reproducible across processes: some float64 intermediates (`large_base`: `YI`, `B`, `BB`, ...) differ by about one ulp
   between runs. Compare through `tools/oracle_snapshot.py compare` (scaled tolerance), never with exact equality.
 - **Worktrees.** A worktree has no `.venv` or `uv.lock` (both git-ignored): link `.venv` and copy `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable

@@ -131,7 +131,7 @@ def estimate_n_buckets(batches_df, max_padding_fraction=0.3):
         return 1
 
     for n_buckets in range(1, min(num_batches, 32) + 1):
-        buckets = np.array_split(batches_df, n_buckets)
+        buckets = _split_rows(batches_df, n_buckets)
         total_padded_neigh = sum(b["n_neighbours"].max() * len(b) for b in buckets)
         overhead = total_padded_neigh / total_real_neigh - 1.0
         if overhead <= max_padding_fraction:
@@ -207,10 +207,15 @@ def bucketing_split(
     return data_batches, max_pad_batches
 
 
+def _split_rows(df, n):
+    # same chunks as np.array_split(df, n), which pandas 3 no longer accepts
+    return [df.iloc[ix] for ix in np.array_split(np.arange(len(df)), n)]
+
+
 def split_batches_into_buckets(batches_df, max_n_buckets):
     # dynamic bucket splitting, where split boundary is determined based on increase of nneigh
     # Assumes batches_df is already sorted
-    buckets_list = np.array_split(batches_df, max_n_buckets)  # naive static splitting
+    buckets_list = _split_rows(batches_df, max_n_buckets)  # naive static splitting
     return buckets_list
 
 
