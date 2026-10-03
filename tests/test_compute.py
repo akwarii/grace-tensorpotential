@@ -3913,14 +3913,18 @@ def test_function_reduce_n_float32_weights_give_float32_output():
     )
 
 
-def test_function_reduce_n_call_adds_the_output_and_never_edits_the_inputs():
-    red, y, aa = _eqv_reducer()
-    data = _eqv_reduce_data(y, aa)
+def _assert_call_adds_only_its_output(instruction, data: dict) -> None:
+    """``instruction(data)`` returns the inputs plus a key named after the instruction and edits no input."""
     snapshot = {k: np.array(v, copy=True) for k, v in data.items()}
-    out = red(data)
-    assert set(out) == set(snapshot) | {"R"}
+    out = instruction(data)
+    assert set(out) == set(snapshot) | {instruction.name}
     for key, value in snapshot.items():
         np.testing.assert_array_equal(np.asarray(data[key]), value)
+
+
+def test_function_reduce_n_call_adds_the_output_and_never_edits_the_inputs():
+    red, y, aa = _eqv_reducer()
+    _assert_call_adds_only_its_output(red, _eqv_reduce_data(y, aa))
 
 
 def test_function_reduce_n_table_lists_the_allowed_blocks_by_degree_parity_and_order():
@@ -4864,12 +4868,7 @@ def test_fc_right2left_is_equivariant_and_adds_nothing_to_a_vanishing_right_fact
 
 def test_fc_right2left_call_adds_the_output_and_never_edits_the_inputs():
     fc, y, aa = _eqv_fc()
-    data = _eqv_fc_data(y, aa)
-    snapshot = {k: np.array(v, copy=True) for k, v in data.items()}
-    out = fc(data)
-    assert set(out) == set(snapshot) | {"FC"}
-    for key, value in snapshot.items():
-        np.testing.assert_array_equal(np.asarray(data[key]), value)
+    _assert_call_adds_only_its_output(fc, _eqv_fc_data(y, aa))
 
 
 # ================================================================================================
