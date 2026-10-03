@@ -128,6 +128,36 @@ def _equiv_cg_couple(prod, lr_inds, cg, m_sum_ind, nfunc, lm_first, name):
     return tf.transpose(prod_g, [1, 2, 0], name=f"trans_120{name}")
 
 
+def _lmp_lookup(coupling_meta_data):
+    """Map ``(l, m, parity)`` to the row labels of ``coupling_meta_data`` having it, in row order."""
+    lookup = {}
+    for idx, key in zip(
+        coupling_meta_data.index,
+        zip(
+            coupling_meta_data["l"],
+            coupling_meta_data["m"],
+            coupling_meta_data["parity"],
+        ),
+    ):
+        lookup.setdefault(key, []).append(idx)
+    return lookup
+
+
+def _lmp_matches(collect_meta_df, lookup):
+    """Row labels of the coupling metadata matching each row of ``collect_meta_df``.
+
+    For every row of ``collect_meta_df`` (in order), the labels of all rows of the metadata with
+    the same ``(l, m, parity)`` (in their order): the result of a nested loop over both tables,
+    without constructing a ``Series`` per row.
+    """
+    matches = []
+    for key in zip(
+        collect_meta_df["l"], collect_meta_df["m"], collect_meta_df["parity"]
+    ):
+        matches.extend(lookup.get(key, ()))
+    return matches
+
+
 @capture_init_args
 class BondLength(TPInstruction):
     """
@@ -2905,19 +2935,14 @@ class FunctionReduce(TPEquivariantInstruction, ElementsReduceInstructionMixin):
             self.drop_unused()
 
         self.collector = {}
+        lmp_lookup = _lmp_lookup(self.coupling_meta_data)
         for instr, instr_lmax in zip(self.instructions, self.ls_max):
             instruction_collection = instr.collect_functions(
                 max_l=instr_lmax, l_p_list=self.allowed_l_p
             )
-            instruction_collection["total_sum_ind"] = []
-            for index, row in instruction_collection["collect_meta_df"].iterrows():
-                for idx, rw in self.coupling_meta_data.iterrows():
-                    if (
-                        (row["l"] == rw["l"])
-                        & (row["m"] == rw["m"])
-                        & (row["parity"] == rw["parity"])
-                    ):
-                        instruction_collection["total_sum_ind"].append(idx)
+            instruction_collection["total_sum_ind"] = _lmp_matches(
+                instruction_collection["collect_meta_df"], lmp_lookup
+            )
             instruction_collection["total_sum_ind"] = tf.constant(
                 np.array(instruction_collection["total_sum_ind"]).reshape(-1, 1),
                 dtype=tf.int32,
@@ -3184,20 +3209,16 @@ class FunctionReduceN(
 
         # TODO: Special case when only one instruction to collect from
         self.collector = {}
+        lmp_lookup = _lmp_lookup(self.coupling_meta_data)
         for instr, instr_lmax in zip(self.instructions, self.ls_max):
             instruction_collection = instr.collect_functions(
                 max_l=instr_lmax, l_p_list=self.allowed_l_p
             )
-            instruction_collection["total_sum_ind"] = []
-            for index, row in instruction_collection["collect_meta_df"].iterrows():
-                for idx, rw in self.coupling_meta_data.iterrows():
-                    if (
-                        (row["l"] == rw["l"])
-                        & (row["m"] == rw["m"])
-                        & (row["parity"] == rw["parity"])
-                    ):
-                        instruction_collection["total_sum_ind"].append(idx)
-                        norms[idx] += 1
+            instruction_collection["total_sum_ind"] = _lmp_matches(
+                instruction_collection["collect_meta_df"], lmp_lookup
+            )
+            for idx in instruction_collection["total_sum_ind"]:
+                norms[idx] += 1
             instruction_collection["total_sum_ind"] = tf.constant(
                 np.array(instruction_collection["total_sum_ind"]).reshape(-1, 1),
                 dtype=tf.int32,
@@ -3520,19 +3541,14 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
         )
 
         self.collector = {}
+        lmp_lookup = _lmp_lookup(self.coupling_meta_data)
         for instr, instr_lmax in zip(self.instructions, self.ls_max):
             instruction_collection = instr.collect_functions(
                 max_l=instr_lmax, l_p_list=self.allowed_l_p
             )
-            instruction_collection["total_sum_ind"] = []
-            for index, row in instruction_collection["collect_meta_df"].iterrows():
-                for idx, rw in self.coupling_meta_data.iterrows():
-                    if (
-                        (row["l"] == rw["l"])
-                        & (row["m"] == rw["m"])
-                        & (row["parity"] == rw["parity"])
-                    ):
-                        instruction_collection["total_sum_ind"].append(idx)
+            instruction_collection["total_sum_ind"] = _lmp_matches(
+                instruction_collection["collect_meta_df"], lmp_lookup
+            )
 
             instruction_collection["total_sum_ind"] = tf.constant(
                 np.array(instruction_collection["total_sum_ind"]).reshape(-1, 1),
@@ -4618,20 +4634,16 @@ class FunctionReduceParticular(
         )
         norms = np.zeros(self.coupling_meta_data.shape[0])
         self.selector = {}
+        lmp_lookup = _lmp_lookup(self.coupling_meta_data)
         for instr in self.instructions:
             instruction_collection = instr.select_functions(
                 selected_l=self.selected_l, selected_p=self.selected_p
             )
-            instruction_collection["total_sum_ind"] = []
-            for index, row in instruction_collection["collect_meta_df"].iterrows():
-                for idx, rw in self.coupling_meta_data.iterrows():
-                    if (
-                        (row["l"] == rw["l"])
-                        & (row["m"] == rw["m"])
-                        & (row["parity"] == rw["parity"])
-                    ):
-                        instruction_collection["total_sum_ind"].append(idx)
-                        norms[idx] += 1
+            instruction_collection["total_sum_ind"] = _lmp_matches(
+                instruction_collection["collect_meta_df"], lmp_lookup
+            )
+            for idx in instruction_collection["total_sum_ind"]:
+                norms[idx] += 1
             instruction_collection["total_sum_ind"] = tf.constant(
                 np.array(instruction_collection["total_sum_ind"]).reshape(-1, 1),
                 dtype=tf.int32,
