@@ -954,7 +954,7 @@ def load_and_prepare_datasets(
             # compute only for train set
             train_df["is_train"] = 1
             test_df["is_train"] = 0
-            tot_df = pd.concat([train_df, test_df], axis=0, copy=False)
+            tot_df = pd.concat([train_df, test_df], axis=0)
             log.info("Computing convex hull for joint train+test dataset")
             compute_convexhull_dist(
                 tot_df, energy_per_atom_column="energy_corrected_per_atom", verbose=True
