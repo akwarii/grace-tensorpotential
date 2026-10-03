@@ -9,6 +9,7 @@ numpy 2.5.3, ASE 3.29.0, Python 3.12.3). Stage 0 must leave all of this unchange
 | `junit_pd2.xml`, `outcomes_pd2.json` | full suite, pandas 2.3.3 | see below |
 | `junit_pd3.xml`, `outcomes_pd3.json` | full suite, pandas 3.0.3 | see below |
 | `oracle_snapshot.npz` (git-ignored, 52 MB) and `oracle_snapshot.meta.json` | TensorFlow numerics of the three test yamls | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
+| `oracle_snapshot_wide.npz` (git-ignored, about 220 MB) and `oracle_snapshot_wide.meta.json` | the same plus float32 parameters, layout options, edge structures and presets: 4,130 arrays (SAFE2) | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot_wide.npz new.npz` |
 | `lint_ratchet.json` | ruff (E, F, ERA001) and ty findings of legacy code per file and rule, with the tool versions (TOOL1); the strict packages have no baseline | `python tools/lint_ratchet.py check` |
 | `coverage_baseline.json` | executed and total statements plus branches of each of the 116 library files from a full-suite run with branch coverage on `torch-backend` **with** the TEST3 tests and QUAL2 (not the untouched tree; 56.34% in all, coverage.py 7.16.2) | `python tools/coverage_ratchet.py check cov.json` (`cov.json` from `pytest tests -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json`); `record` refuses a fall unless `--allow-fall` |
 | `clone_baseline.json` | groups, functions and redundant lines of the duplicated functions (8 lines or more; identical bodies, and bodies equal after abstracting identifiers) of `tensorpotential/` without `compat/pace/` and of `tests/` (QUAL2); the totals of a tree may not rise | `python tools/check_clones.py check` |
@@ -65,3 +66,50 @@ largest element). The variation is between processes and does not follow the pan
 `TF_ENABLE_ONEDNN_OPTS`; its cause was not pinned down. Hence `compare` defaults to `--scale-rtol 1e-12` (tolerance
 relative to the largest element of each array; `0` gives an exact comparison). Planted checks: a swapped index in the
 virial of `tpmodel.py` (scratch clone) is flagged in `stress` and `virial` only, with a maximum scaled difference of `0.069`.
+
+## Wide numeric oracle snapshot (SAFE2)
+
+`oracle_snapshot_wide.npz` is the first snapshot widened to the paths that the clean-up could change without the first one
+noticing. It was recorded by the same tool on a `git archive` copy of the tag `pre-cleanup` (the tool of the SAFE2 branch run
+with `PYTHONPATH` on the copy; `tensorpotential.__file__` printed to make sure the copy is imported), one thread, CPU, TensorFlow 2.20.0.
+Keys are `<model>/<case>/<quantity>`; the 369 keys of `oracle_snapshot.npz` are in it (compared with the old file: no key
+outside the tolerance, largest difference `8e-28`). `oracle_snapshot_wide.meta.json` lists the models, structures, variables and versions.
+
+| Model label | What | Arrays |
+|---|---|---|
+| `model_grace`, `model_grace_2L_omat`, `model_grace_2L_omat_large_base` | float64, as before; cases `s0`-`s2` as before | 369 + 4 edge cases each |
+| `<yaml>.f32` | the same three yamls with float32 parameters and float64 inputs (the precision of the foundation models) | 3 models |
+| `<yaml>.lm_first` | `lm_first: true` set in the serialised yaml on every instruction that takes it | 2 models; `model_grace` is skipped (see below) |
+| `<yaml>.dense` | `dense_nbr: true` on the equivariant single-particle basis, evaluated in the dense bond layout | 3 models |
+| `preset.LINEAR`, `preset.FS`, `preset.GRACE_1LAYER_v2_25`, `preset.GRACE_2LAYER_v2_25` | small versions (settings in `PRESET_SETTINGS`) with the elements Mo, Nb, Ta, W; float64 | 4 models |
+
+Cases: `s0`, `s1`, `s2` are Nb2, Mo7W9 and Ta26 of the test data. `isolated` is one Mo atom (the data builder adds one dummy bond beyond
+the cutoff and the energy of the test models is zero); `dimer` is Mo-Nb at 2.6 A without a cell (the stress is recorded as zero, the virial is not);
+`slab` is four Nb atoms with 20 A of vacuum, periodic in x and y (the data builder switches periodicity on in all directions: `enforce_pbc`);
+`selfimage` is Mo-W in a 2.7 x 2.9 x 3.1 A cell, so that bonds join an atom to its own image (`i == j`, non-zero shift), with generic positions so that the forces do not cancel.
+In all, 4,130 arrays: 15 models of 196 to 329 arrays each.
+
+`lm_first` is skipped for `model_grace`: its output instruction `MLPOut2ScalarTarget` (`instructions/output.py`) reads `[:, :, 0]` without the
+`lm_first` transpose, so the model fails with a `MatMul` shape error. The skip is stored in `UNSUPPORTED` and in the metadata, so it is visible, not silent.
+The library is not changed by SAFE2.
+
+**Evaluation detail.** The data builder edits its argument (`enforce_pbc` gives a non-periodic structure a cell and centres it), so the tool
+evaluates a copy; the first snapshot's three structures are periodic and were not affected.
+
+**Tolerance rows.** `compare` takes the tolerance from the named table `TOLERANCE_ROWS` of the tool, by the precision of the key (`.f32` suffix of the model
+label: float32, else float64), relative to the largest element of each array: float64 `1e-12` (as before), float32 `0` (exact). `--scale-rtol` overrides both.
+
+**Repeat spread.** `python tools/oracle_snapshot.py spread run1.npz ... run7.npz` reports, per precision and quantity, the largest range over the repeats divided by the
+largest element of the first. Seven snapshots of the untouched tree (six started together, one alone; one thread each): every float32 quantity (52 groups,
+including energies, forces, virials, stresses and all intermediate tensors) has a spread of exactly 0. The float64 spread is at most `1.9e-17` (`YI` of `large_base`, case
+`selfimage`; 8 of 56 groups nonzero, all intermediate tensors of `large_base`), as in the first snapshot: energies, forces and stresses never moved. Hence the exact float32 row.
+
+Record and compare (one thread; the file is large, so keep it outside the repository or in this git-ignored directory):
+
+```bash
+python tools/oracle_snapshot.py write new.npz              # about 75 s, 220 MB, also writes new.meta.json
+python tools/oracle_snapshot.py compare baselines/oracle_snapshot_wide.npz new.npz
+```
+
+To record on the untouched tree: `git archive pre-cleanup | tar -x -C /scratch/pre-cleanup`, then run the tool with
+`PYTHONPATH=/scratch/pre-cleanup` from a directory outside both trees.
