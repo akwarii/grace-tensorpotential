@@ -44,6 +44,7 @@ from tensorpotential.potentials.presets import (
     GRACE_1LAYER_v2_25,
     GRACE_2LAYER_v2_25,
 )
+from tests.shared_models import weights_fingerprint
 from tests.tolerances import COVARIANCE_F64, FINITE_DIFFERENCE_F64
 
 ELEMENTS = {"Al": 0, "Li": 1}
@@ -80,6 +81,18 @@ def one_layer(
             cutoff_dict=cutoff_dict,
         ).get_instructions()
     )
+
+
+@pytest.fixture(scope="module")
+def default_one_layer():
+    """``one_layer()`` built once for the tests that only read it; weights checked at the end.
+
+    Each test still builds its own ``TPCalculator`` around it.
+    """
+    model = one_layer()
+    before = weights_fingerprint(model)
+    yield model
+    assert weights_fingerprint(model) == before, "a test changed the shared model"
 
 
 def two_layer(dense: bool, seed: int = 3) -> TPModel:
@@ -166,15 +179,15 @@ def test_unrecognised_model_object_is_refused():
         TPCalculator(model=42)
 
 
-def test_mode_is_case_insensitive_and_validated():
-    model = one_layer()
+def test_mode_is_case_insensitive_and_validated(default_one_layer):
+    model = default_one_layer
     assert TPCalculator(model=model, mode="DIVERSE").mode == "diverse"
     with pytest.raises(ValueError, match="mode must be 'uniform'"):
         TPCalculator(model=model, mode="fast")
 
 
-def test_attribute_defaults_after_construction():
-    calc = TPCalculator(model=one_layer())
+def test_attribute_defaults_after_construction(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     assert calc.compute_properties == ["energy", "forces", "free_energy", "stress"]
     assert calc.eval_time == 0
     assert calc.extra_properties is None
@@ -189,9 +202,9 @@ def test_attribute_defaults_after_construction():
     assert set(calc.data_keys) == set(calc.models[0].compute_specs)
 
 
-def test_constructor_options_are_stored():
+def test_constructor_options_are_stored(default_one_layer):
     calc = TPCalculator(
-        model=one_layer(),
+        model=default_one_layer,
         min_dist=0.5,
         extra_properties=("a", "b"),
         truncate_extras_by_natoms=["a"],
@@ -201,9 +214,9 @@ def test_constructor_options_are_stored():
     assert calc.truncate_extras_by_natoms == ["a"]
 
 
-def test_padding_options_reach_the_padding_manager():
+def test_padding_options_reach_the_padding_manager(default_one_layer):
     calc = TPCalculator(
-        model=one_layer(),
+        model=default_one_layer,
         pad_neighbors_fraction=0.2,
         pad_atoms_number=3,
         max_number_reduction_recompilation=5,
@@ -220,8 +233,8 @@ def test_padding_options_reach_the_padding_manager():
     assert pm.data_builders is calc.data_builders
 
 
-def test_the_geometry_builder_gets_the_extracted_cutoff_and_elements():
-    calc = TPCalculator(model=one_layer())
+def test_the_geometry_builder_gets_the_extracted_cutoff_and_elements(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     builder = calc.geom_data_builder
     assert isinstance(builder, GeometricalDataBuilder)
     assert calc.data_builders == [builder]
@@ -229,19 +242,19 @@ def test_the_geometry_builder_gets_the_extracted_cutoff_and_elements():
     assert dict(builder.elements_map) == ELEMENTS
 
 
-def test_element_map_follows_the_model():
-    calc = TPCalculator(model=one_layer())
+def test_element_map_follows_the_model(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     assert {str(k): int(v) for k, v in calc.element_map.items()} == ELEMENTS
 
 
-def test_cutoff_of_the_model_wins_over_the_keyword_and_says_so(capsys):
-    calc = TPCalculator(model=one_layer(), cutoff=7.5)
+def test_cutoff_of_the_model_wins_over_the_keyword_and_says_so(capsys, default_one_layer):
+    calc = TPCalculator(model=default_one_layer, cutoff=7.5)
     assert calc.cutoff == RCUT
     assert "different from calculator's 7.5" in capsys.readouterr().out
 
 
-def test_matching_cutoff_keyword_is_silent(capsys):
-    calc = TPCalculator(model=one_layer(), cutoff=RCUT)
+def test_matching_cutoff_keyword_is_silent(capsys, default_one_layer):
+    calc = TPCalculator(model=default_one_layer, cutoff=RCUT)
     assert calc.cutoff == RCUT
     assert capsys.readouterr().out == ""
 
@@ -283,8 +296,8 @@ def test_ensemble_of_a_dense_and_a_segment_sum_model_has_no_common_engine():
 
 
 @pytest.mark.parametrize("order", [(0, 1), (1, 0)])
-def test_ensemble_with_different_data_keys_is_refused(order):
-    models = [one_layer(), tensor_model()]
+def test_ensemble_with_different_data_keys_is_refused(order, default_one_layer):
+    models = [default_one_layer, tensor_model()]
     with pytest.raises(ValueError, match="inconsistent data keys"):
         TPCalculator(model=[models[i] for i in order])
 
@@ -360,9 +373,9 @@ def test_dense_only_model_serves_a_segment_sum_request_with_a_warning(caplog):
     assert "only provides the dense engine" in caplog.text
 
 
-def test_segment_sum_only_model_serves_a_dense_request_with_a_warning(caplog):
+def test_segment_sum_only_model_serves_a_dense_request_with_a_warning(caplog, default_one_layer):
     with caplog.at_level("WARNING"):
-        calc = TPCalculator(model=one_layer(), mode="uniform")
+        calc = TPCalculator(model=default_one_layer, mode="uniform")
     assert calc.dense_reshape is False
     assert calc.dense_padding_manager is None
     assert "has no `compute_dense` signature" in caplog.text
@@ -460,8 +473,8 @@ def isolated(calc: TPCalculator, symbol: str) -> float:
     return energy(calc, Atoms(symbol, positions=[[0.0, 0.0, 0.0]]))
 
 
-def test_atoms_beyond_the_extracted_cutoff_do_not_interact():
-    calc = TPCalculator(model=one_layer())
+def test_atoms_beyond_the_extracted_cutoff_do_not_interact(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     far = energy(calc, dimer(RCUT + 0.5))
     assert far == pytest.approx(
         isolated(calc, "Al") + isolated(calc, "Li"),
@@ -493,8 +506,8 @@ def test_pair_cutoffs_switch_interactions_pair_by_pair():
     )
 
 
-def test_energy_is_invariant_and_forces_rotate_under_a_rigid_motion():
-    calc = TPCalculator(model=one_layer())
+def test_energy_is_invariant_and_forces_rotate_under_a_rigid_motion(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     atoms = cluster()
     rot = Rotation.from_rotvec(0.7 * np.array([1.0, 2.0, 3.0]) / 14**0.5).as_matrix()
     moved = atoms.copy()
@@ -515,8 +528,8 @@ def test_energy_is_invariant_and_forces_rotate_under_a_rigid_motion():
     )
 
 
-def test_forces_are_minus_the_finite_difference_of_the_energy():
-    calc = TPCalculator(model=one_layer())
+def test_forces_are_minus_the_finite_difference_of_the_energy(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     atoms = cluster()
     atoms.calc = calc
     forces = atoms.get_forces()
@@ -538,8 +551,8 @@ def test_forces_are_minus_the_finite_difference_of_the_energy():
     )
 
 
-def test_swapping_the_labels_of_two_atoms_does_not_change_the_energy():
-    calc = TPCalculator(model=one_layer())
+def test_swapping_the_labels_of_two_atoms_does_not_change_the_energy(default_one_layer):
+    calc = TPCalculator(model=default_one_layer)
     atoms = cluster()
     permuted = atoms.copy()
     order = [1, 0, 3, 2]  # swap within each species

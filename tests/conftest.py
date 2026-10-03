@@ -10,6 +10,7 @@ from tensorpotential.uq.artifact_builder import GMMUQArtifactBuilder
 from tensorpotential.uq.feature_extraction import setup_feature_calculator, extract_features_bulk
 from tensorpotential.uq.factories import make_basis_rp_spec
 from tensorpotential.instructions import save_instructions_dict
+from tests.shared_models import CuTwoLayerModels
 
 @pytest.fixture(scope="session")
 def uq_setup(tmp_path_factory):
@@ -90,3 +91,15 @@ def uq_setup(tmp_path_factory):
         "element_indices": element_indices,
         "feature_spec": feature_spec,
     }
+
+
+
+@pytest.fixture(scope="session")
+def cu_two_layer():
+    """Callable ``cu_two_layer(dense)`` returning a shared, read-only Cu 2-layer model.
+
+    Checked unchanged when the session ends.
+    """
+    shared = CuTwoLayerModels()
+    yield shared.get
+    assert not shared.changed(), "a test changed a shared Cu 2-layer model"

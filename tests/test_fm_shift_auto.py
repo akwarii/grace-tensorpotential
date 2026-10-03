@@ -14,6 +14,7 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+import hashlib
 import logging
 
 import numpy as np
@@ -139,9 +140,25 @@ def _build_checkpoint(preset_name, folder):
 # ---------------------------------------------------------------------------
 
 
+def _fingerprint(df):
+    """Hash of everything the tests read from the training frame: energies, symbols, positions."""
+    digest = hashlib.sha256()
+    digest.update(df["energy"].to_numpy().tobytes())
+    digest.update(df["energy_corrected"].to_numpy().tobytes())
+    for at in df["ase_atoms"]:
+        digest.update("".join(at.get_chemical_symbols()).encode())
+        digest.update(at.get_positions().tobytes())
+        digest.update(at.get_cell().array.tobytes())
+    return digest.hexdigest()
+
+
 @pytest.fixture(scope="module")
 def train_df():
-    return _make_train_df(_make_bulk_structures())
+    """Shared by every test of the module; checked unchanged when the module ends."""
+    df = _make_train_df(_make_bulk_structures())
+    before = _fingerprint(df)
+    yield df
+    assert _fingerprint(df) == before, "a test modified the shared train_df"
 
 
 @pytest.fixture(scope="module", params=list(PRESET_CONFIGS.keys()))
@@ -152,9 +169,44 @@ def fm_checkpoint_folder(request, tmp_path_factory):
     return _build_checkpoint(preset_name, folder)
 
 
+@pytest.fixture(scope="module")
+def fm_shift(fm_checkpoint_folder, train_df):
+    """The automatic shift of each preset, computed once for the three tests that read it.
+
+    Checked unchanged when the last of them is done.
+    """
+    shifts = compute_fm_energy_shift_auto(
+        train_df=train_df,
+        checkpoint_folder=fm_checkpoint_folder,
+        seed=42,
+    )
+    before = dict(shifts)
+    yield shifts
+    assert shifts == before, "a test modified the shared shift dictionary"
+
+
 @pytest.fixture(params=list(PRESET_CONFIGS.keys()))
 def preset_name(request):
     return request.param
+
+
+def test_fingerprint_changes_with_energy_symbols_positions_and_cell():
+    base = _make_train_df(_make_bulk_structures())
+    reference = _fingerprint(base)
+    assert _fingerprint(_make_train_df(_make_bulk_structures())) == reference
+
+    energy = _make_train_df(_make_bulk_structures())
+    energy.loc[0, "energy"] += 1e-9
+    moved = _make_train_df(_make_bulk_structures())
+    moved["ase_atoms"].iloc[0].positions[0, 0] += 1e-9
+    relabelled = _make_train_df(_make_bulk_structures())
+    relabelled["ase_atoms"].iloc[0].symbols[0] = "Al"
+    strained = _make_train_df(_make_bulk_structures())
+    strained["ase_atoms"].iloc[0].set_cell(
+        strained["ase_atoms"].iloc[0].cell[:] * 1.001
+    )
+    for changed in (energy, moved, relabelled, strained):
+        assert _fingerprint(changed) != reference
 
 
 # ---------------------------------------------------------------------------
@@ -232,35 +284,24 @@ def test_build_composition_matrix_row_sums_equal_natoms():
 # ---------------------------------------------------------------------------
 
 
-def test_compute_fm_energy_shift_returns_all_elements(fm_checkpoint_folder, train_df):
-    result = compute_fm_energy_shift_auto(
-        train_df=train_df,
-        checkpoint_folder=fm_checkpoint_folder,
-        seed=42,
-    )
+def test_compute_fm_energy_shift_returns_all_elements(fm_shift):
+    result = fm_shift
     assert isinstance(result, dict)
     assert "Cu" in result
     assert "Al" in result
 
 
-def test_compute_fm_energy_shift_values_are_finite(fm_checkpoint_folder, train_df):
-    result = compute_fm_energy_shift_auto(
-        train_df=train_df,
-        checkpoint_folder=fm_checkpoint_folder,
-        seed=42,
-    )
-    for el, shift in result.items():
+def test_compute_fm_energy_shift_values_are_finite(fm_shift):
+    for el, shift in fm_shift.items():
         assert np.isfinite(shift), f"shift for {el} is not finite: {shift}"
 
 
-def test_compute_fm_energy_shift_reduces_residual(fm_checkpoint_folder, train_df):
+def test_compute_fm_energy_shift_reduces_residual(
+    fm_checkpoint_folder, train_df, fm_shift
+):
     """After applying computed shifts, per-structure energy residual should decrease."""
 
-    shift_dict = compute_fm_energy_shift_auto(
-        train_df=train_df,
-        checkpoint_folder=fm_checkpoint_folder,
-        seed=42,
-    )
+    shift_dict = fm_shift
 
     model_yaml = os.path.join(fm_checkpoint_folder, "model.yaml")
     ckpt_prefix = os.path.join(fm_checkpoint_folder, "checkpoint")

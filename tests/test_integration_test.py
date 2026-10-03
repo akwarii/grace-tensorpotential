@@ -629,6 +629,7 @@ def test_MoNbTaW_LINEAR_energy_weighting():
     )
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_huber():
     ref_n_epochs = 2
 
@@ -675,6 +676,7 @@ def test_MoNbTaW_LINEAR_huber():
     )
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_LBFGS():
     ref_n_epochs = 2
 
@@ -715,10 +717,12 @@ def test_MoNbTaW_LINEAR_LBFGS():
     )
 
 
+@pytest.mark.slow
 def test_MoNbTaW_FS_ef_switch():
     _run_reference("FS_ef_switch")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_FS_HEA25():
     _run_reference("FS_HEA25")
 
@@ -933,6 +937,7 @@ def test_MoNbTaW_CUSTOM_mlp_emb():
     )
 
 
+@pytest.mark.slow
 def test_MoNbTaW_FS_restart():
 
     train_ref_metrics = {
@@ -982,14 +987,17 @@ def test_MoNbTaW_FS_restart():
     )
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_virial():
     _run_reference("LINEAR_virial")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_stress():
     _run_reference("LINEAR_stress")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_f32():
     train_ref_metrics = {
         "total_loss/train": 75.80302429199219,
@@ -1036,21 +1044,26 @@ def test_MoNbTaW_LINEAR_lr_reduce_on_plateau():
     _run_reference("lr_reduce_on_plateau")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_lr_reduce_on_plateau_new_api():
     _run_reference("lr_reduce_on_plateau_new_api")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_lr_exponential_decay():
     _run_reference("lr_exponential_decay")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_lr_cosine_decay():
     _run_reference("lr_cosine_decay")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_lr_linear_decay():
     _run_reference("lr_linear_decay")
 
 
+@pytest.mark.slow
 def test_MoNbTaW_LINEAR_lr_linear_decay_no_warmup():
     _run_reference("lr_linear_decay_no_warmup")

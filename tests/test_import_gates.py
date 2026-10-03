@@ -229,10 +229,49 @@ def _run_python(
     )
 
 
-_IMPORT_MODULE_CODE = """
-import importlib, sys
-module = importlib.import_module(sys.argv[1])
-assert module.__file__.startswith(sys.argv[2]), module.__file__
+# One interpreter imports ``tensorpotential`` (the package ``__init__`` always runs first when a
+# submodule is imported, and it loads TensorFlow, which costs seconds), then forks one child per
+# module.  A child starts from exactly the state of a fresh ``import tensorpotential.X`` and
+# imports nothing else beforehand, so the modules are still checked independently of each other.
+_FORK_IMPORT_CODE = """
+import importlib, json, os, sys, traceback
+
+root = sys.argv[1]
+names = json.load(sys.stdin)
+try:
+    import tensorpotential
+except BaseException:
+    failure = {"returncode": 1, "stderr": traceback.format_exc()[-2000:]}
+    print(json.dumps({name: failure for name in names}))
+    sys.exit(0)
+results = {}
+for name in names:
+    read_end, write_end = os.pipe()
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_end)
+        code = 0
+        try:
+            module = importlib.import_module(name)
+            assert module.__file__.startswith(root), module.__file__
+        except BaseException:
+            code = 1
+            os.write(write_end, traceback.format_exc()[-2000:].encode())
+        os._exit(code)
+    os.close(write_end)
+    chunks = []
+    while True:
+        chunk = os.read(read_end, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    os.close(read_end)
+    _, status = os.waitpid(pid, 0)
+    results[name] = {
+        "returncode": os.waitstatus_to_exitcode(status),
+        "stderr": b"".join(chunks).decode(errors="replace"),
+    }
+print(json.dumps(results))
 """
 
 _RESOLVE_CODE = """
@@ -264,19 +303,45 @@ def _unresolved(pairs: list[tuple[str, str]], cwd: Path) -> list[list[str]]:
 # --------------------------------------------------------------------------------------
 # Gate 1: every module imports in its own interpreter
 # --------------------------------------------------------------------------------------
-@pytest.mark.slow
-@pytest.mark.parametrize("module_name", package_modules())
-def test_module_imports_in_fresh_subprocess(module_name, tmp_path):
+def _imports_in_forks(names: list[str], root: Path, cwd: Path) -> dict[str, dict]:
+    """``{name: {"returncode", "stderr"}}`` of importing each of ``names`` from below ``root``."""
     result = _run_python(
-        _IMPORT_MODULE_CODE, tmp_path, args=(module_name, str(REPO_ROOT))
+        _FORK_IMPORT_CODE, cwd, args=(str(root),), stdin=json.dumps(names)
     )
+    assert result.returncode == 0, result.stderr[-2000:]
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+@pytest.fixture(scope="module")
+def import_results(tmp_path_factory):
+    """The outcome of importing every module of the package, computed once per module."""
+    return _imports_in_forks(
+        package_modules(), REPO_ROOT, tmp_path_factory.mktemp("import_gate")
+    )
+
+
+@pytest.mark.parametrize("module_name", package_modules())
+def test_module_imports_in_fresh_subprocess(module_name, import_results):
+    returncode = import_results[module_name]["returncode"]
+    stderr = import_results[module_name]["stderr"]
     missing = BASELINED_IMPORT_FAILURES.get(module_name)
-    if result.returncode != 0 and missing is not None:
-        assert f"No module named '{missing}'" in result.stderr, result.stderr[-2000:]
+    if returncode != 0 and missing is not None:
+        assert f"No module named '{missing}'" in stderr, stderr[-2000:]
         return
-    assert result.returncode == 0, (
-        f"import {module_name} failed:\n{result.stderr[-2000:]}"
+    assert returncode == 0, f"import {module_name} failed:\n{stderr[-2000:]}"
+
+
+def test_fork_import_reports_missing_modules_and_foreign_files(tmp_path):
+    results = _imports_in_forks(
+        ["tensorpotential.utils", "tensorpotential.no_such_module"], REPO_ROOT, tmp_path
     )
+    assert results["tensorpotential.utils"]["returncode"] == 0
+    assert results["tensorpotential.no_such_module"]["returncode"] != 0
+    assert "ModuleNotFoundError" in results["tensorpotential.no_such_module"]["stderr"]
+    # a module found outside the expected root is a failure (the assert in the child)
+    elsewhere = _imports_in_forks(["tensorpotential.utils"], tmp_path, tmp_path)
+    assert elsewhere["tensorpotential.utils"]["returncode"] != 0
+    assert "AssertionError" in elsewhere["tensorpotential.utils"]["stderr"]
 
 
 # --------------------------------------------------------------------------------------

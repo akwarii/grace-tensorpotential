@@ -139,6 +139,7 @@ Adapted from the retirement gates (RET-1 to RET-6) that MACE used for its legacy
 
 1. **Class E**: decided (2.1); the follow-up work is tracked in LORA1, DATA1, CLEAN5 and TEST5 (2.1).
 2. **Upstream issues (U10)**: whether to report F1 (reporting does not change the code) and the class-E documentation mismatch (`--aux`) as issue texts to the maintainers; nothing is sent without an explicit go (D6).
+3. **Wall-time clauses of TEST4 (section 8)**: serial 73.2% of the baseline (target 60%) and `-n 4` 8 min 00 s (target 7 min) are not met, and the rest cannot be reached without touching the 19 integration runs (44% of the serial time; each has its own configuration and reference metrics, so they cannot be merged and a golden may not be regenerated). Options: (a) accept the measured 73.2% and 8 min 00 s and close TEST4 with the fast tier (4 min 14 s with `-n 4`) (`-m "not slow"`) as the development loop; (b) cut the fixed cost of a `gracemaker` run in the library (tf.function tracing and autograph conversion, about 9 s of 24 s, and the SavedModel export, about 3 s), which is a library change for a separate issue; (c) move the two clauses to that issue.
 
 ## 5. Parallel test execution (TEST2)
 
@@ -295,6 +296,93 @@ The numbers of the issue text (library 6 identical groups / 16 functions and 9 r
 Checks: the collected test ids are identical before and after (1,271 ids; `pytest --collect-only`, sorted, `diff` empty). For the integration tests, whose bodies are data, a scratch script imported the old and the new module with `general_integration_test` replaced by a recorder and compared the keyword arguments of the 22 calls: equal for all; the same script reports a difference when one number is changed in the table. Seven library mutants (two in `piecewise_linear`, four in `cli/wizard.py`, one in `_ask_foundation_model`) were run against the old and the new `test_loss_piecewise_linear.py` and `test_wizard.py`: the same tests fail in both for each of them (six caught by both; the seventh, `models_in_size[0]` to `[-1]`, survives both: an existing gap, not changed here).
 
 **Full suite.** `pytest tests -n 4 --dist load --cov=tensorpotential --cov-branch` from the repository root, `test_structured_grid.py` and `test_foundation_model_regression.py` ignored as in `baselines/`: 1262 passed, 6 skipped, 2 xfailed, 1 xpassed, 0 failed in 23 min 4 s (the machine ran other work, and coverage is on). `tools/junit_outcomes.py compare baselines/outcomes_pd2.json` reports no changed and no removed test, only 576 added ones (those of the earlier issues and the 236 of `test_sizeof_fmt.py`). Per-file coverage against `baselines/coverage_baseline.json`: identical for 111 of the 115 files; the four that differ are the four edited by the `sizeof_fmt` merge. `cli/data.py` falls from 48.12% to 47.84% (474/985 to 465/972) because nine covered statements and branches of the function moved to `formatting.py` (17 of 17 covered) together with four uncovered ones; `df2extxyz.py`, `extxyz2df.py` rise because `test_sizeof_fmt.py` now imports them; `grace_preprocess.py` loses the dead copy. The baseline was re-recorded with `--allow-fall` for that relocation (116 files, 56.34%; it was 56.16%). Library units are otherwise untouched: `ast_manifest.py check` lists the same files as before plus the four. A concurrent `--cov` run of the tool tests wrote `tools/check_clones.py` into the combined data of this run; it was removed from the report before recording. **Pandas 3.0.3** (environment rebuilt offline as in `baselines/README.md`, same command without coverage): 1184 passed, 27 failed, 6 skipped, 51 xfailed, 3 xpassed in 10 min 19 s; the 27 failures are the baselined ones (`np.array_split(<DataFrame>)`, DEPS1), `junit_outcomes.py compare baselines/outcomes_pd3.json` reports no changed and no removed test, only 576 added.
+
+## 8. Test-suite runtime beyond parallelism (TEST4)
+
+Measured on 2026-10-02 (CPU, 14 cores, 30 GB, pandas 2.3.3, TensorFlow 2.20, pytest-xdist 3.8.0), full suite from the repository root, `tests/test_structured_grid.py` and `tests/test_foundation_model_regression.py` ignored as in `baselines/`, thread budget of `conftest.py` active under `-n`. **Before** is `torch-backend` at `5a93aaa` (QUAL2 merged), **after** is the branch of this issue at `69f6265`; each pair was run back to back, in a separate worktree each, with no other test run on the machine (checked with `ps` before every run; the machine-wide load average was 2 to 5 from the preceding run).
+
+**Measurement conditions matter.** A first serial run (37 min 13 s) was taken while another agent ran its own suites in a second worktree and is discarded: `test_distrib` took 254 s in it and 113 s alone, `test_savedmodel_dual_dense_signature` 45 s against 19 s. The wall-clock spread that TEST2 left unexplained (9 min 37 s to 11 min 53 s for the same tree) is probably the same cause. Compare wall-clock figures only between runs made on an idle machine, back to back.
+
+| Run | Before | After | Ratio |
+|---|---:|---:|---:|
+| serial | 27 min 34 s (1654.67 s; 28 min 34 s with start-up) | 20 min 11 s (1211.65 s; 21 min 13 s) | 73.2% |
+| `-n 4 --dist load` | 15 min 36 s (936.02 s) | 8 min 00 s (480.86 s; 8 min 06 s) | 51.4% |
+| `-n 4 --dist load -m "not slow"` (fast tier, 1,147 tests; measured when the import-gate tests were still marked slow and so left out, they are in it now, about 30 s more per worker, not re-measured) | | 4 min 14 s (254.71 s; 4 min 20 s) | |
+| `-n 4 --dist load --slow-first=off` (at `7603b2a`, see item 5) | | 11 min 24 s (684.96 s) | |
+| largest process (serial / `-n 4`) | 14.5 GB / 7.7 GB | 14.1 GB / 7.2 GB | |
+
+An earlier pair on `7603b2a` (before the UQ calculator sharing was undone, see item 4) gave 20 min 00 s serial and 7 min 45 s at `-n 4`; the two ends of that change differ by 11 s and 15 s, within the run-to-run spread, which was not measured with repeats.
+
+Outcomes: before 1261 passed, 7 skipped, 2 xfailed, 1 xpassed (serial) and 1262 passed, 6 skipped (the xdist-only test skips serially); after 1277 (serial) and 1278 (`-n 4`) passed with the same skips, xfails and xpass. `tools/junit_outcomes.py compare` of before against after, serial and `-n 4`: no changed and no removed test id, 16 added (the new tests listed below); against `baselines/outcomes_pd2.json` the only difference is `test_construct_batches_multiple_db`, an XPASS that a log without `-rX` records as a pass.
+
+**Reading against the exit criterion.**
+
+| Clause | Result |
+|---|---|
+| serial at most 60% of the baseline | **not met**: 73.2% (16 min 33 s would be 60% of 27 min 34 s) |
+| `-n 4` at most 7 min | **not met**: 8 min 00 s, 60 s over (7 min 45 s in the earlier run) |
+| no `-n 4` run above a third of the serial time (9 min 11 s of the new baseline) | met in both runs made (481 s and 465 s against 551 s); three consecutive runs not made (the clause is redundant with the 7 min target by decision of 2026-10-02) |
+| same pass, skip, xfail, xpass counts and ids | met (above) |
+| branch coverage per file not below the baseline | met: `coverage_ratchet.py check` on a full `-n 4` run with coverage (1278 passed, 12 min 27 s): 116 files in the baseline, 0 fell, 0 gone, 0 new |
+| TEST3 planted mutants still caught | the nine of `TPCalculator.__init__` (TC1 to TC9) are checked by `test_calculator_init.py`, which this issue edited: all nine caught; the test files of the other 32 are not touched |
+| every cut listed, no assertion removed | met: no cut was made (items c and d below); every assertion of an edited test is kept |
+| `slow` list committed | the 16 tests carry `@pytest.mark.slow` (no separate list) |
+| mock listing before and after | below: 160 places, unchanged |
+
+**Where the time is (sum of test times in the serial runs, seconds).**
+
+| File | Before | After | `-n 4` before | `-n 4` after |
+|---|---:|---:|---:|---:|
+| `test_integration_test.py` (22 tests) | 734 | 704 | 746 | 711 |
+| `test_import_gates.py` | 423 | 46 | 636 | 138 |
+| `test_distrib.py` | 111 | 107 | 204 | 200 |
+| `test_uq_integration.py` | 72 | 75 | 127 | 86 |
+| `test_instructions.py` | 55 | 37 | 71 | 96 |
+| `test_calculator.py` | 54 | 51 | 103 | 102 |
+| `test_databuilder.py` | 45 | 43 | 33 | 50 |
+| `test_graph_split.py` | 39 | 41 | 92 | 76 |
+| `test_uq_features.py` | 28 | 27 | 71 | 64 |
+| `test_fm_shift_auto.py` | 19 | 10 | 25 | 19 |
+| `test_calculator_init.py` | 16 | 12 | 45 | 22 |
+| rest | 57 | 58 | 132 | 136 |
+
+The integration tests are 44% of the serial time and no change in this issue touches them (see item (c)). Under `-n 4` the same tests take about 38% longer than serially (sum of test times 2,284 s against 1,652 s before; 1,701 s against 1,210 s after), so four workers give a speed-up of 1.77, not 4; the cause (memory bandwidth, three threads per worker) was not isolated.
+
+**What was changed, one commit each.**
+
+1. `test_import_gates.py`: gate 1 imported each of the 115 modules in its own interpreter and paid the TensorFlow import each time. One interpreter now imports `tensorpotential` (a fresh `import tensorpotential.X` always runs the package `__init__` first) and forks one child per module, so each module is still imported on its own; the test ids are the same. 423 s to 46 s serial. Planted mutants (a missing third-party package, a missing name in a sibling module) are each caught by exactly the affected module's test; a logic test covers a missing module and a module found outside the expected root. The module-scoped fixture runs once per worker, about 30 s.
+2. Slow tier: `slow` registered in `pytest.ini`; the 16 tests of 30 s or more (serial reference run) carry `@pytest.mark.slow`; `-m "not slow"` is the quick loop (1268 of 1284 collected tests; the 115 import-gate tests are in it, they take a fraction of a second each and the fixture they share costs about 30 s once). They are deliberately not marked: marked slow, the hook dealt them over all four workers and every worker ran that fixture (see item 5).
+3. `test_fm_shift_auto.py`: the shift is computed once per preset instead of in three tests (23.9 s to 14.0 s for the file alone).
+4. Shared read-only models: the default one-layer model of `test_calculator_init.py` (14 builds to 1), the Cu two-layer models of `test_calculator.py` and `test_databuilder.py` (5 of 8 builds). A model that is saved, exported or edited, and the `"reshape"` spelling of `dense_nbr`, keep their own build. Each shared object is fingerprinted when built (name, dtype, shape, values of every variable; string variables by content) and compared when its scope ends, so a test that changes it makes the run fail; the first version of the fingerprint hashed the pointers of a string variable and was caught by that very check, now fixed and tested (four tests, three planted mutants caught). Lint ratchet: two E702 fewer in `test_calculator.py`. **Sharing the UQ feature calculator was tried and undone**: `test_uq_features.py` and `test_uq_gmm.py` were the only callers of `setup_feature_calculator` without `param_dtype`, so the shared (explicit-dtype) calculator stopped running the dtype inference of `metadata_utils.resolve_param_dtype`, and the coverage ratchet reported `metadata_utils.py` falling from 72.73% to 50.00%. The two tests are back to their previous form.
+5. `--slow-first` (default `deal`): `pytest-xdist --dist load` hands the collected list to the workers in blocks (the first block to the first worker). The hook in the root `conftest.py` deals the tests marked `slow` round-robin, in collection order, over the first block of each worker (`tests/slow_first.py`); all at the front would all go to worker 0. `--slow-first=off` restores the collection order; serial runs are unchanged. Logic tests (the block size against hand-computed values, a real two-worker session) and seven planted mutants (stride, block size, one-worker guard, padding, dropped or reversed tests) are all caught. Measured at `7603b2a`, where the order came from a duration-sorted list: 7 min 45 s with `deal`, 11 min 24 s with `off` (one pair). The list was then replaced by explicit marks; the first version also marked the 115 import-gate tests, and an A/B against the duration-sorted commit (`-n 4`, alternating, same machine state, which was slower than during the earlier runs) gave 9 min 28 s and 9 min 31 s for the earlier commit and 10 min 13 s and 10 min 48 s for the marked-gate version: the summed time of `test_import_gates.py` went from 162 s to 290 s, because every worker that received some of the dealt gate tests ran the 30 s fixture. With the gate tests unmarked a second A/B gave 563 s and 563 s for the earlier commit and 570 s and 563 s for the final one, i.e. no difference. (Before the A/B, five `-n 4` runs of the code with explicit marks took 9 min 54 s to 12 min 15 s with other work on the machine, and a scheduler simulation put the marks equal to the list; the simulation did not model the per-worker fixture and missed this effect.)
+
+**Item (c): merging runs that differ only in the assertions.** No candidate exists. The 22 integration tests (19 run, 3 skipped) each use their own input file; the files differ from `MoNbTaW-LINEAR/input.yaml` in the loss, the optimiser, the scheduler, the dtype, the number of structures or epochs, and each test compares different reference metrics. Merging two would mean one run and one set of reference values, i.e. regenerating a golden reference, which this issue may not do. `test_MoNbTaW_FS_restart` is already one test with several runs. The other repeats were of models and results, not of runs, and were shared (item b). QUAL2 had been merged first, as the issue asked.
+
+**Item (d): reducing work.** Nothing was cut. A `gracemaker` run of `MoNbTaW-LINEAR` takes about 24 s, of which the first epoch (tf.function tracing and autograph conversion) is about 9 s, the SavedModel export about 3 s and the TensorFlow import about 4 s; the second epoch takes 1 s. The cost is per run, not per epoch, and the reference metrics depend on the two epochs, so fewer epochs would change what is compared.
+
+**Item (f): mocks, stubs and `monkeypatch`.** Counted with an AST scan (calls of `monkeypatch.*`, `Mock`, `MagicMock`, `patch`, and classes named `Fake*`, `Stub*`, `Mock*`) over `tests/` and `tools/tests/`: **160 places in 15 files before, 160 after, the same places** (this issue adds none). By what they replace:
+
+| Files | Places | Replaces |
+|---|---:|---|
+| `test_wizard.py`, `test_gen_tensor_wizard.py` | 96 | the interactive prompts (`_ask_select`, `_ask_text`, `_ask_confirm`, `_ask_path`, `builtins.input`), the terminal output helpers and the presence of the optional `questionary`: user input and console, no numeric path |
+| `test_origin_sidecar.py` | 17 | the download of foundation models (`get_or_download_model`, `check_origin`), the cache directories, the model registry and one environment variable: network and file-system boundary |
+| `tools/tests/test_board.py`, `test_check_pr_branch.py` | 20 | the `gh` command line, `subprocess.run`, `sys.argv`, `git diff`: external service, fork-only tools |
+| `test_uq_cli.py`, `test_detect_multigpu_intent.py` | 7 | working directory, `sys.path`, one environment variable: environment, no logic replaced |
+| `test_thread_budget.py`, `test_uq_common.py` | 8 | `os.cpu_count` (the hardware) and environment variables |
+| `test_grace_utils_export.py` | 4 | `sys.argv` of a command-line entry point |
+| `test_calculator_init.py` | 2 | `sys.modules` entry for the absent `tensorpotential.experimental` package |
+| `test_instructions.py`, `test_uq_features.py`, `test_structured_grid.py` | 4 | small stand-ins for a metadata object (`MockOrigin`, `_Stub`, `_StubInstr`) |
+| `test_intra_epoch_checkpoint.py` | 2 | **the training object** (`MagicMock` for `TensorPotential` in `train_one_epoch`) |
+
+The last row is the only place that stands in for something the rule discourages: the unit under test is the fast-forward logic of `train_one_epoch`, and the mock replaces the training step that does the numerics, with no number asserted; recorded here and not changed (a real `TensorPotential` would turn a control-flow test into a training run).
+
+**Item (g): tail latency.** Dealing the slow tests is the whole change (item 5 above). `test_distrib.py` was not split: its three stages cost 25 s (data), 43 s and 42 s (two `gracemaker -m` fits) when run alone, 113 s together, and a split would lower the longest single test but not the total, which is what bounds the wall time here (sum of test times 1,718 s over four workers is 430 s of the 465 s). The second fit exists to check `TF_CONFIG` handling and could be shortened with a smaller input; not done, because the first epoch's tracing, not the epoch count, dominates it.
+
+**Found on the way.** Two things that the coverage ratchet exposed and the timing comparison alone would have hidden: (1) the UQ calculator sharing above; (2) `TPModel.__repr__` (`tpmodel.py` 64.57% to 64.44%) was run by nothing except TensorFlow's "function retraced too often" warning, which formats `repr(model)`; `test_fm_shift_auto` stopped triggering it once the shift is computed once, so `test_repr_numbers_the_instructions_in_file_order` now pins it directly. Both are the reason the coverage clause is checked on the final tree.
+
+**Identified, not done (each under 10 s of the serial time, risk higher than the gain).** The same `get_gmm_uq_calculator` build in two tests of `test_uq_integration.py` (6 to 8 s; ASE caches results per `Atoms`, so the second test could skip the computation it is meant to exercise); `tensor_model` of `test_grace_2_tensor_preset.py` (3 builds, 4 to 5 s); the padding tests of `test_calculator.py` (4 to 6 s); the `two_layer` models of `test_calculator_init.py` (4 to 5 s); one exported SavedModel shared by the dual-signature and the export-flag tests (about 10 s, but the flag test asserts the state of the model it exported itself).
+
+**What the numbers do not cover.** One `-n 4` run per configuration (the three-consecutive-runs clause was not repeated); the `--slow-first` comparison is one pair, and the timings of the first table were taken at `69f6265`, before the list was replaced by explicit marks (item 5: the final commit equals it within 7 s in an A/B on a slower machine state, its absolute time was measured once more on 2026-10-03 on a quiet machine, mean load from other processes 0.26 cores: 9 min 54 s (593.73 s, 1275 passed, 6 skipped, 2 xfailed, 1 xpassed, no changed or removed test id against the baseline). That is 114 s above the 8 min 00 s of the day before for the same tests, and the earlier commit also took 9 min 28 s in the A/B of that day, so the machine itself ran slower on 2026-10-03; absolute `-n 4` times are comparable only within one session, and the 51% ratio of the first table (a back-to-back pair) is the figure that carries; pandas 3 was not run (no test or library change depends on it); nothing was run on GPU or HPC. The fixture of the import gate runs once per xdist worker (about 30 s each), so it costs more at `-n 8`. The coverage run of the final tree took 12 min 27 s with `-n 4` (QUAL2 recorded 23 min 4 s, with other work on the machine).
 
 ## Provenance
 

@@ -348,22 +348,11 @@ def test_construct_batches_dense_matches_segment_real_counts():
     assert seg["nreal_neigh"] == dense["nreal_neigh"]
 
 
-def test_dense_batch_parity_with_segment_sum():
+def test_dense_batch_parity_with_segment_sum(cu_two_layer):
     import numpy as np
     import tensorflow as tf
     from ase.build import bulk
-    from tensorpotential import TPModel, constants as C
-    from tensorpotential.potentials.presets import GRACE_2LAYER_v2_25
-
-    def build_model(dense):
-        tf.random.set_seed(7)
-        np.random.seed(7)
-        ins = GRACE_2LAYER_v2_25(
-            element_map={"Cu": 0}, rcut=6.0, dense_nbr=dense
-        ).get_instructions()
-        m = TPModel(ins)
-        m.build(tf.float64)
-        return m
+    from tensorpotential import constants as C
 
     # Three 2x2x1 supercells (16 atoms each) with different rattles.
     # Equal atom counts are required: the dense planner sorts structures by nat within a band
@@ -397,7 +386,7 @@ def test_dense_batch_parity_with_segment_sum():
                 out[k] = tf.constant(arr, dtype=tf.int32)
         return out
 
-    m_seg, m_den = build_model(False), build_model(True)
+    m_seg, m_den = cu_two_layer(False), cu_two_layer(True)
     seg = to_tensors(make_batch(False))
     den = to_tensors(make_batch(True))
 
