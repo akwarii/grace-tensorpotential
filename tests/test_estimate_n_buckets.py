@@ -17,15 +17,6 @@ import pytest
 from tensorpotential.data.databuilder import estimate_n_buckets
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
-# ``np.array_split(<DataFrame>)`` is broken on pandas 3 (CLAUDE.md, Gotchas); DEPS1 fixes it.
-needs_pandas2 = pytest.mark.xfail(
-    int(pd.__version__.split(".")[0]) >= 3,
-    reason="np.array_split(DataFrame) fails on pandas 3 (DEPS1)",
-    raises=Exception,
-    strict=False,
-)
-pytestmark = needs_pandas2
-
 BUDGET = 0.3
 MAX_BUCKETS = 32
 
