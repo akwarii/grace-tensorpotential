@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import Literal, Any
 
 import numpy as np
@@ -42,16 +41,12 @@ from tensorpotential.instructions.base import (
     TPEquivariantInstruction,
     capture_init_args,
     ElementsReduceInstructionMixin,
+    PerElementReduceMixin,
+    SimplifyingReduceMixin,
     LORAInstructionMixin,
     active_dense_nbr,
 )
-from tensorpotential.poly import (
-    Monomial,
-    Polynomial,
-    init_coupling_symbols,
-    get_symbol,
-    normalize_poly,
-)
+from tensorpotential.poly import init_coupling_symbols
 from tensorpotential.utils import process_cutoff_dict
 
 # Compute equivariant SPBF CG couple as dense matmul instead of sparce elemwise.
@@ -2849,7 +2844,7 @@ class GeneralProductFunction(TPEquivariantInstruction):
 
 
 @capture_init_args
-class FunctionReduce(TPEquivariantInstruction, ElementsReduceInstructionMixin):
+class FunctionReduce(TPEquivariantInstruction, SimplifyingReduceMixin):
     input_tensor_spec = {
         constants.N_ATOMS_BATCH_TOTAL: {"shape": [], "dtype": "int"},
         constants.ATOMIC_MU_I: {"shape": [None], "dtype": "int"},
@@ -2934,52 +2929,6 @@ class FunctionReduce(TPEquivariantInstruction, ElementsReduceInstructionMixin):
             )
             instruction_collection["n_out"] = instr.n_out
             self.collector[instr.name] = instruction_collection
-
-    def simplify_collected_tensors(self):
-        collector_dict = {}
-
-        A_ins_dict = {ins.name: ins for ins in self.instructions}
-        for instr, instr_lmax in zip(self.instructions, self.ls_max):
-            instruction_collection = instr.collect_functions(
-                max_l=instr_lmax, l_p_list=self.allowed_l_p
-            )
-            col_index = instruction_collection["func_collect_ind"]
-            collector_dict[instr.name] = instruction_collection
-            for ind in col_index:
-                get_symbol(instr.name, ind, A_ins_dict)
-
-    def drop_unused(self):
-        ZERO = Polynomial([Monomial(0)])
-        incl_hist_list = []
-        excl_hist_list = []
-        for A_ins in self.instructions:
-            cmd = A_ins.coupling_meta_data
-            if "cg_list" in cmd:
-                cmd["n_op"] = cmd["cg_list"].map(len)
-                cmd_clean = cmd[cmd["symbol"] != ZERO]
-                cmd_clean["symbol"] = cmd_clean["symbol"].map(normalize_poly)
-
-                cmd_clean = (
-                    cmd_clean.dropna(subset=["symbol"])
-                    .sort_values("n_op")
-                    .drop_duplicates("symbol", keep="first")
-                )
-                cmd_clean = cmd_clean.sort_index()
-                incl_hist_list += [h for h in cmd_clean["hist"]]
-                excl_hist_list += [
-                    h for h in cmd["hist"] if h not in cmd_clean["hist"].values
-                ]
-        incl_hist_list = sorted(set(incl_hist_list))
-        excl_hist_list = sorted(set(excl_hist_list))
-        excl_hist_list = [e for e in excl_hist_list if e not in incl_hist_list]
-        logging.info(f"Following exclusion hist list was discovered: {excl_hist_list}")
-
-        # re-initialize collectable instructions with new drop_list
-        for inst in self.instructions:
-            # duck typing
-            if hasattr(inst, "history_drop_list") and hasattr(inst, "init_coupling"):
-                inst.history_drop_list = list(inst.history_drop_list) + excl_hist_list
-                inst.init_coupling()
 
     @tf.Module.with_name_scope
     def build(self, float_dtype):
@@ -3088,23 +3037,13 @@ class FunctionReduce(TPEquivariantInstruction, ElementsReduceInstructionMixin):
             return collection  # [lm, atoms, n_out]  # * self.n_instr
         return tf.transpose(collection, [1, 2, 0])  # * self.n_instr
 
-    def prepare_variables_for_selected_elements(self, index_to_select):
-        if self.is_central_atom_type_dependent:
-            reducing_tensor_names = [s for s in dir(self) if s.startswith("reducing_")]
-            new_tensors = {}
-            for tn in reducing_tensor_names:
-                var = getattr(self, tn)
-                new_tensors[tn] = tf.Variable(tf.gather(var, index_to_select, axis=0))
-
-            return new_tensors
-
     def upd_init_args_new_elements(self, new_element_map):
         self._init_args["number_of_atom_types"] = len(new_element_map)
 
 
 @capture_init_args
 class FunctionReduceN(
-    TPEquivariantInstruction, ElementsReduceInstructionMixin, LORAInstructionMixin
+    TPEquivariantInstruction, SimplifyingReduceMixin, LORAInstructionMixin
 ):
     input_tensor_spec = {
         constants.ATOMIC_MU_I: {"shape": [None], "dtype": "int"},
@@ -3210,52 +3149,6 @@ class FunctionReduceN(
             self.collector[instr.name] = instruction_collection
         norms[norms == 0] = 1
         self.norm_map = 1 / norms**0.5
-
-    def simplify_collected_tensors(self):
-        collector_dict = {}
-
-        A_ins_dict = {ins.name: ins for ins in self.instructions}
-        for instr, instr_lmax in zip(self.instructions, self.ls_max):
-            instruction_collection = instr.collect_functions(
-                max_l=instr_lmax, l_p_list=self.allowed_l_p
-            )
-            col_index = instruction_collection["func_collect_ind"]
-            collector_dict[instr.name] = instruction_collection
-            for ind in col_index:
-                get_symbol(instr.name, ind, A_ins_dict)
-
-    def drop_unused(self):
-        ZERO = Polynomial([Monomial(0)])
-        incl_hist_list = []
-        excl_hist_list = []
-        for A_ins in self.instructions:
-            cmd = A_ins.coupling_meta_data
-            if "cg_list" in cmd:
-                cmd["n_op"] = cmd["cg_list"].map(len)
-                cmd_clean = cmd[cmd["symbol"] != ZERO]
-                cmd_clean["symbol"] = cmd_clean["symbol"].map(normalize_poly)
-
-                cmd_clean = (
-                    cmd_clean.dropna(subset=["symbol"])
-                    .sort_values("n_op")
-                    .drop_duplicates("symbol", keep="first")
-                )
-                cmd_clean = cmd_clean.sort_index()
-                incl_hist_list += [h for h in cmd_clean["hist"]]
-                excl_hist_list += [
-                    h for h in cmd["hist"] if h not in cmd_clean["hist"].values
-                ]
-        incl_hist_list = sorted(set(incl_hist_list))
-        excl_hist_list = sorted(set(excl_hist_list))
-        excl_hist_list = [e for e in excl_hist_list if e not in incl_hist_list]
-        logging.info(f"Following exclusion hist list was discovered: {excl_hist_list}")
-
-        # re-initialize collectable instructions with new drop_list
-        for inst in self.instructions:
-            # duck typing
-            if hasattr(inst, "history_drop_list") and hasattr(inst, "init_coupling"):
-                inst.history_drop_list = list(inst.history_drop_list) + excl_hist_list
-                inst.init_coupling()
 
     @tf.Module.with_name_scope
     def build(self, float_dtype):
@@ -3442,16 +3335,6 @@ class FunctionReduceN(
         if self.lm_first:
             return collection  # [lm, atoms, n_out]
         return tf.transpose(collection, [1, 2, 0])
-
-    def prepare_variables_for_selected_elements(self, index_to_select):
-        if self.is_central_atom_type_dependent:
-            reducing_tensor_names = [s for s in dir(self) if s.startswith("reducing_")]
-            new_tensors = {}
-            for tn in reducing_tensor_names:
-                var = getattr(self, tn)
-                new_tensors[tn] = tf.Variable(tf.gather(var, index_to_select, axis=0))
-
-            return new_tensors
 
     def upd_init_args_new_elements(self, new_element_map):
         self._init_args["number_of_atom_types"] = len(new_element_map)
@@ -4488,9 +4371,7 @@ class EquivariantGate(TPEquivariantInstruction):
 
 
 @capture_init_args
-class FunctionReduceParticular(
-    TPEquivariantInstruction, ElementsReduceInstructionMixin
-):
+class FunctionReduceParticular(TPEquivariantInstruction, PerElementReduceMixin):
     input_tensor_spec = {
         constants.N_ATOMS_BATCH_TOTAL: {"shape": [], "dtype": "int"},
         constants.ATOMIC_MU_I: {"shape": [None], "dtype": "int"},
@@ -4639,17 +4520,6 @@ class FunctionReduceParticular(
         if self.lm_first:
             return collection
         return tf.transpose(collection, [1, 2, 0])
-
-    def prepare_variables_for_selected_elements(self, index_to_select):
-        if self.is_central_atom_type_dependent:
-
-            reducing_tensor_names = [s for s in dir(self) if s.startswith("reducing_")]
-            new_tensors = {}
-            for tn in reducing_tensor_names:
-                var = getattr(self, tn)
-                new_tensors[tn] = tf.Variable(tf.gather(var, index_to_select, axis=0))
-
-            return new_tensors
 
     def upd_init_args_new_elements(self, new_element_map):
         self._init_args["number_of_atom_types"] = len(new_element_map)
