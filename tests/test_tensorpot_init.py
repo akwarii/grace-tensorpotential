@@ -74,7 +74,9 @@ def test_default_model_functions_are_the_standard_ones():
 
 def test_test_batch_size_falls_back_to_the_batch_size():
     assert _tp(global_batch_size=8).global_test_batch_size == 8
-    assert _tp(global_batch_size=8, global_test_batch_size=4).global_test_batch_size == 4
+    assert (
+        _tp(global_batch_size=8, global_test_batch_size=4).global_test_batch_size == 4
+    )
     assert _tp().global_test_batch_size is None
 
 
