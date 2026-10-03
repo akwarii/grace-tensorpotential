@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import logging
 import re
 
 import numpy as np
@@ -9,6 +10,8 @@ import yaml
 
 from tensorpotential.instructions.base import TPInstruction, TPEquivariantInstruction
 from tensorpotential.poly import init_coupling_symbols, get_symbol, expand_monomial
+
+log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -36,8 +39,8 @@ def extract_const_shift_scale(fs_ins_dict):
         scale = const_shift_scale.scale
         try:
             scale = scale.numpy()
-        except Exception:
-            pass
+        except Exception as err:
+            log.debug("scale is not a TensorFlow value, returned as is: %r", err)
 
         constant_shift = const_shift_scale.constant_shift
 
@@ -48,8 +51,10 @@ def extract_const_shift_scale(fs_ins_dict):
         try:
             if atomic_shift_map is not None:
                 atomic_shift_map = atomic_shift_map.numpy().flatten()
-        except Exception:
-            pass
+        except Exception as err:
+            log.debug(
+                "atomic_shift_map is not a TensorFlow value, returned as is: %r", err
+            )
 
         return scale, constant_shift, atomic_shift_map
     else:
