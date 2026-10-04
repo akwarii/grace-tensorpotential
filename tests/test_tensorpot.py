@@ -232,3 +232,27 @@ def test_default_param_dtype_gives_float32_weights_and_a_float64_input_dtype():
     trainable = tp.model.trainable_variables
     assert trainable
     assert {v.dtype for v in trainable} == {tf.float32}
+
+
+# ---------------------------------------------- LoRA entry points of TensorPotential (characterization)
+
+
+def test_is_lora_enabled_follows_the_model():
+    tp = _tp()
+    assert not tp.is_lora_enabled()
+
+    tp.model.enable_lora_adaptation({"Z": {"rank": 2, "alpha": 1}})
+
+    assert tp.is_lora_enabled()
+
+
+@pytest.mark.parametrize("method", ["enable_lora_adaptation", "finalize_lora_update"])
+def test_the_lora_entry_points_are_not_implemented_yet(method):
+    # PINNED, not endorsed: both raise before doing anything (LORA1 replaces this test)
+    tp = _tp()
+    args = ({"Z": {"rank": 2, "alpha": 1}},) if method == "enable_lora_adaptation" else ()
+
+    with pytest.raises(NotImplementedError, match="not yet fully implemented"):
+        getattr(tp, method)(*args)
+
+    assert not tp.is_lora_enabled()

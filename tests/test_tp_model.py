@@ -977,3 +977,165 @@ def test_saved_model_reloads_with_the_same_energy(saved_bond_model):
     assert reloaded.get_potential_energy() == pytest.approx(
         expected, rel=FLOAT64_ARITHMETIC.rtol, abs=FLOAT64_ARITHMETIC.atol
     )
+
+
+# ---------------------------------------- LoRA activation at the level of the model (characterization)
+#
+# ``TPModel.enable_lora_adaptation`` / ``finalize_lora_update`` / ``is_lora_enabled`` decide which
+# instructions get low-rank update tensors; the numerics of one instruction are tested in
+# test_compute.py, test_output.py and test_functions_nn.py.
+
+LORA_RANK_4 = {"rank": 4, "alpha": 1}
+LORA_RANK_2 = {"rank": 2, "alpha": 1}
+
+
+def _lora_model() -> TPModel:
+    instructions = get_preset("GRACE_2LAYER_v1_24")(
+        element_map={"Mo": 0, "Nb": 1}, lmax=0
+    ).get_instructions()
+    model = TPModel(instructions)
+    model.build(tf.float64)
+    return model
+
+
+def _lora_capable(model: TPModel) -> set[str]:
+    return {
+        name
+        for name, ins in model.instructions.items()
+        if isinstance(ins, LORAInstructionMixin)
+    }
+
+
+def _lora_active(model: TPModel) -> set[str]:
+    return {
+        name
+        for name, ins in model.instructions.items()
+        if isinstance(ins, LORAInstructionMixin) and ins.lora
+    }
+
+
+def _weights(model: TPModel) -> dict[str, np.ndarray]:
+    return {v.name: v.numpy().copy() for v in model.variables if v.dtype == tf.float64}
+
+
+def test_a_fresh_model_has_lora_capable_instructions_and_none_active():
+    model = _lora_model()
+
+    assert {"R", "Z", "A", "LinMLPOut2ScalarTarget"} <= _lora_capable(model)
+    assert not model.is_lora_enabled()
+    assert _lora_active(model) == set()
+
+
+def test_enabling_with_no_config_changes_nothing():
+    model = _lora_model()
+    before = _weights(model)
+
+    model.enable_lora_adaptation(None)
+
+    assert not model.is_lora_enabled()
+    assert before.keys() == _weights(model).keys()
+
+
+def test_enabling_all_activates_every_lora_capable_instruction_and_only_those():
+    model = _lora_model()
+    capable = _lora_capable(model)
+    assert capable < set(model.instructions)  # the preset also holds instructions without LoRA
+
+    model.enable_lora_adaptation({"all": dict(LORA_RANK_4)})
+
+    assert model.is_lora_enabled()
+    assert _lora_active(model) == capable
+    assert all(model.instructions[n].lora_config == LORA_RANK_4 for n in capable)
+
+
+def test_an_explicit_entry_overrides_the_all_entry():
+    model = _lora_model()
+
+    model.enable_lora_adaptation({"all": dict(LORA_RANK_4), "Z": dict(LORA_RANK_2)})
+
+    Z = model.instructions["Z"]
+    assert Z.lora_config == LORA_RANK_2
+    assert [t.shape[-1] for t in Z.lora_tensors] == [2, 2]  # one rank-2 factor per matrix side
+    assert model.instructions["R"].lora_config == LORA_RANK_4
+
+
+def test_only_the_named_instructions_are_activated():
+    model = _lora_model()
+
+    model.enable_lora_adaptation({"Z": dict(LORA_RANK_2), "R": dict(LORA_RANK_4)})
+
+    assert _lora_active(model) == {"Z", "R"}
+
+
+def test_empty_unknown_and_non_lora_entries_are_skipped():
+    model = _lora_model()
+    not_capable = sorted(set(model.instructions) - _lora_capable(model))[0]
+
+    model.enable_lora_adaptation(
+        {"Z": {}, "no_such_instruction": dict(LORA_RANK_4), not_capable: dict(LORA_RANK_4)}
+    )
+
+    assert not model.is_lora_enabled()
+    assert not getattr(model.instructions[not_capable], "lora", False)
+
+
+def test_enabling_freezes_the_original_weight_and_trains_the_update_tensors():
+    model = _lora_model()
+    Z = model.instructions["Z"]
+    assert [v.name for v in Z.trainable_variables] == ["Z/ChemicalEmbedding:0"]
+
+    model.enable_lora_adaptation({"Z": dict(LORA_RANK_2)})
+
+    assert [v.name for v in Z.trainable_variables] == ["Z/w/LORA/A:0", "Z/w/LORA/B:0"]
+
+
+def test_finalizing_reduces_every_active_instruction_and_restores_trainability():
+    model = _lora_model()
+    model.enable_lora_adaptation({"all": dict(LORA_RANK_4)})
+
+    model.finalize_lora_update()
+
+    assert not model.is_lora_enabled()
+    assert _lora_active(model) == set()
+    Z = model.instructions["Z"]
+    assert not hasattr(Z, "lora_tensors")
+    assert [v.name for v in Z.trainable_variables] == ["Z/ChemicalEmbedding:0"]
+    assert "lora_config" not in Z._init_args
+
+
+def test_finalizing_leaves_instructions_without_lora_untouched():
+    model = _lora_model()
+    model.enable_lora_adaptation({"Z": dict(LORA_RANK_2)})
+    R_before = {v.name: v.numpy().copy() for v in model.instructions["R"].variables}
+
+    model.finalize_lora_update()
+
+    for v in model.instructions["R"].variables:
+        np.testing.assert_array_equal(v.numpy(), R_before[v.name])
+
+
+def test_finalizing_a_model_without_lora_changes_nothing():
+    model = _lora_model()
+    before = _weights(model)
+
+    model.finalize_lora_update()
+
+    after = _weights(model)
+    assert before.keys() == after.keys()
+    assert all(np.array_equal(before[k], after[k]) for k in before)
+
+
+def test_activation_is_written_into_the_saved_yaml_and_restored_from_it(tmp_path):
+    model = _lora_model()
+    model.enable_lora_adaptation({"all": dict(LORA_RANK_4)})
+    path = str(tmp_path / "model.yaml")
+    save_instructions_dict(path, model.instructions, param_dtype=tf.float64)
+
+    restored = TPModel(load_instructions(path))
+    restored.build(tf.float64)
+
+    assert _lora_active(restored) == _lora_active(model)
+    assert restored.instructions["Z"].lora_config == LORA_RANK_4
+    assert sorted(v.name for v in restored.trainable_variables) == sorted(
+        v.name for v in model.trainable_variables
+    )
