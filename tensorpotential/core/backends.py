@@ -88,8 +88,24 @@ def require_backend(backend: str, *, needed_by: str | None = None) -> None:
         If ``backend`` is unknown.
     """
     missing = missing_packages(backend)
-    if not missing:
-        return
+    if missing:
+        raise backend_not_installed(backend, missing, needed_by)
+
+
+def backend_not_installed(
+    backend: str, missing: tuple[str, ...], needed_by: str | None = None
+) -> BackendNotInstalledError:
+    """Build the error that tells the user which packages are missing and which extra installs them.
+
+    Parameters
+    ----------
+    backend
+        ``"tf"``, ``"torch"`` or ``"torch-sim"``.
+    missing
+        The packages that could not be found (at least one).
+    needed_by
+        What asked for the backend; the message starts with it when given.
+    """
     name = _DISPLAY_NAMES[backend]
     who = f"{needed_by} needs" if needed_by else "This needs"
     message = (
@@ -97,4 +113,4 @@ def require_backend(backend: str, *, needed_by: str | None = None) -> None:
         f"Install it with: pip install 'tensorpotential[{backend}]'. "
         f"The parts of the package that do not need {name}, for example 'tensorpotential.core', still work."
     )
-    raise BackendNotInstalledError(backend, missing, message)
+    return BackendNotInstalledError(backend, missing, message)

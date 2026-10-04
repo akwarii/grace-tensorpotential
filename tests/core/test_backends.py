@@ -21,6 +21,7 @@ import pytest
 from tensorpotential.core.backends import (
     BACKEND_PACKAGES,
     BackendNotInstalledError,
+    backend_not_installed,
     missing_packages,
     require_backend,
 )
@@ -136,3 +137,17 @@ def test_the_error_type_is_an_import_error_with_the_backend_attributes() -> None
         "tensorflow",
         "text",
     )
+
+
+def test_backend_not_installed_builds_the_error_without_checking_anything() -> None:
+    error = backend_not_installed("torch-sim", ("vesin",), "TorchSimModel")
+    assert isinstance(error, BackendNotInstalledError)
+    assert (error.backend, error.missing, error.name) == (
+        "torch-sim",
+        ("vesin",),
+        "vesin",
+    )
+    assert str(error).startswith(
+        "TorchSimModel needs torch-sim, which is not installed"
+    )
+    assert "pip install 'tensorpotential[torch-sim]'" in str(error)
