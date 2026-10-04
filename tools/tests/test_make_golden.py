@@ -813,10 +813,38 @@ def test_a_fixture_holds_a_dump_for_every_structure_and_instruction(tiny_dir):
     assert manifest["n_arrays"] == len(arrays)
 
 
-def test_command_line_cells_and_yamls(tmp_path, capsys):
+def test_command_line_cells_and_yamls(capsys):
     assert mg.main(["cells"]) == 0
     assert mg.main(["yamls", "--tier", "tiny"]) == 0
     capsys.readouterr()
+
+
+def test_command_line_write_verify_and_compare(tiny_dir, tmp_path):
+    out = tmp_path / "cli"
+    assert (
+        mg.main(["write", "--tier", "tiny", "--out", str(out), "--models", "omat"]) == 0
+    )
+    assert sorted(p.stem for p in out.glob("*.json")) == sorted(
+        p.stem for p in tiny_dir.glob("*.json")
+    )
+    assert mg.main(["verify", str(out)]) == 0
+    assert mg.main(["compare", str(tiny_dir), str(out)]) == 0
+    weights = mg.load_npz(out / "omat_tiny_f64.weights.npz")
+    weights["A1/w_left"] = weights["A1/w_left"] * 1.5
+    mg.save_npz(out / "omat_tiny_f64.weights.npz", weights)
+    assert mg.main(["compare", str(tiny_dir), str(out)]) == 1
+    assert (
+        mg.main(["verify", str(out)]) == 1
+    )  # the stored arrays no longer follow from the stored weights
+
+
+def test_a_fixture_over_the_size_limit_makes_write_fail(tmp_path, monkeypatch):
+    # a limit smaller than any fixture stands in for a model that has grown: ``write`` must say so and exit 1
+    monkeypatch.setattr(mg, "TINY_BYTE_LIMIT", 1000)
+    assert (
+        mg.main(["write", "--tier", "tiny", "--out", str(tmp_path), "--models", "omat"])
+        == 1
+    )
 
 
 def test_the_committed_tiny_anchors_reproduce_in_tensorflow():
