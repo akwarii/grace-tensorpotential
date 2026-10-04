@@ -826,13 +826,16 @@ def verify_fixture(
     """Reload fixture ``name`` in TF (yaml, weights, stored inputs) and compare with the stored outputs.
 
     The model is built from the yaml next to the fixture, given the stored weights, and run on the stored
-    inputs, not on a neighbour list built again; the comparison is ``compare_arrays`` on every output.
+    inputs, not on a neighbour list built again; the comparison is ``compare_arrays`` on every output. It is
+    first seeded with a seed other than the one of the fixture, so that its result can only be the stored one
+    if the stored weights were really assigned (the same seed would reproduce them without the file).
     """
     fixture = load_fixture(folder, name)
     manifest = fixture["manifest"]
     dtype = "f32" if manifest["dtype"] == "float32" else "f64"
     ypath = folder / "yamls" / manifest["yaml"]
-    model = build_model(ypath, manifest["dtype"], manifest["option"], manifest["seed"])
+    other_seed = manifest["seed"] + 1
+    model = build_model(ypath, manifest["dtype"], manifest["option"], other_seed)
     report = assign_weights(model, fixture["weights"])
     if any(
         report[k]
