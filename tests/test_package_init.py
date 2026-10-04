@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 import tensorpotential
-from tests.fresh_python import run_fresh_python
+from tests.fresh_python import last_stdout_line, run_fresh_python
 
 FLAG = "TF_USE_LEGACY_KERAS"
 
@@ -124,20 +124,40 @@ def test_a_tensorflow_side_import_turns_tf32_off_and_numpy_behaviour_on(
     assert result.stdout.strip().splitlines()[-1] == "False True True"
 
 
-def test_public_names_are_the_classes_of_their_modules(tmp_path: Path) -> None:
-    code = (
-        "import tensorpotential as t\n"
-        "from tensorpotential.tensorpot import TensorPotential\n"
-        "from tensorpotential.tpmodel import TPModel\n"
-        "from tensorpotential.loss import LossFunction, L2Loss\n"
-        "print(t.TensorPotential is TensorPotential, t.TPModel is TPModel,"
-        " t.LossFunction is LossFunction, t.L2Loss is L2Loss, sorted(t.__all__))\n"
-    )
-    result = run_fresh_python(code, tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip().splitlines()[-1] == (
-        "True True True True ['L2Loss', 'LossFunction', 'TPModel', 'TensorPotential']"
-    )
+@pytest.mark.parametrize(
+    ("package", "owners"),
+    [
+        (
+            "tensorpotential",
+            {
+                "TensorPotential": "tensorpotential.tensorpot",
+                "TPModel": "tensorpotential.tpmodel",
+                "LossFunction": "tensorpotential.loss",
+                "L2Loss": "tensorpotential.loss",
+            },
+        ),
+        (
+            "tensorpotential.calculator",
+            {
+                "TPCalculator": "tensorpotential.calculator.asecalculator",
+                "predict_structures": "tensorpotential.calculator.bulk",
+                "grace_fm": "tensorpotential.calculator.foundation_models",
+            },
+        ),
+    ],
+)
+def test_public_names_are_the_objects_of_their_modules(
+    package: str, owners: dict[str, str], tmp_path: Path
+) -> None:
+    """A package ``__init__`` re-exports each name: the package attribute is the module's object."""
+    checks = [
+        f"getattr(importlib.import_module({package!r}), {name!r}) is "
+        f"getattr(importlib.import_module({module!r}), {name!r})"
+        for name, module in owners.items()
+    ]
+    names = sorted(owners)
+    code = f"import importlib\nprint(all([{', '.join(checks)}]), sorted(importlib.import_module({package!r}).__all__))"
+    assert last_stdout_line(code, tmp_path) == f"True {names}"
 
 
 def test_star_import_offers_the_public_names(tmp_path: Path) -> None:
@@ -152,23 +172,6 @@ def test_star_import_offers_the_public_names(tmp_path: Path) -> None:
     )
 
 
-def test_calculator_subpackage_offers_its_three_names(tmp_path: Path) -> None:
-    """``tensorpotential.calculator`` is the other package ``__init__`` that imports eagerly."""
-    code = (
-        "import tensorpotential.calculator as c\n"
-        "from tensorpotential.calculator.asecalculator import TPCalculator\n"
-        "from tensorpotential.calculator.bulk import predict_structures\n"
-        "from tensorpotential.calculator.foundation_models import grace_fm\n"
-        "print(c.TPCalculator is TPCalculator, c.predict_structures is predict_structures,"
-        " c.grace_fm is grace_fm, sorted(c.__all__))\n"
-    )
-    result = run_fresh_python(code, tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip().splitlines()[-1] == (
-        "True True True ['TPCalculator', 'grace_fm', 'predict_structures']"
-    )
-
-
 # ---- the package no longer imports TensorFlow ----
 
 LOADED = (
@@ -177,9 +180,10 @@ LOADED = (
 
 
 def test_importing_the_package_does_not_load_tensorflow(tmp_path: Path) -> None:
-    result = run_fresh_python(f"import sys, tensorpotential\nprint({LOADED})", tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip().splitlines()[-1] == "[]"
+    assert (
+        last_stdout_line(f"import sys, tensorpotential\nprint({LOADED})", tmp_path)
+        == "[]"
+    )
 
 
 def test_a_public_name_loads_tensorflow_with_the_options_applied(

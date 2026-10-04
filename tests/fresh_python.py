@@ -38,3 +38,10 @@ def run_fresh_python(
         timeout=TIMEOUT_S,
         check=False,
     )
+
+
+def last_stdout_line(code: str, tmp_path: Path, **env_overrides: str | None) -> str:
+    """Run ``code`` like :func:`run_fresh_python`, require success and return the last line printed."""
+    result = run_fresh_python(code, tmp_path, **env_overrides)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip().splitlines()[-1]
