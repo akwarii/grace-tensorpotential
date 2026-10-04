@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +22,7 @@ from tensorpotential.potentials import get_preset
 from tensorpotential.scripts import grace_utils
 
 _COMMUNICATED_KEYS_2L = ["I", "I_out_0_LN"]
+_DOCS = Path(__file__).resolve().parent.parent / "docs" / "gracemaker" / "utilities.md"
 
 
 def _save_model(directory: Path, preset_name: str, **config) -> tuple[Path, Path]:
@@ -102,3 +104,69 @@ def test_aux_model_has_no_aux_argument(tmp_path, model_1l, capsys):
         _run_aux_model(*model_1l, tmp_path / "upgraded", "--aux", "energy_only")
     assert stop.value.code == 2
     assert "unrecognized arguments: --aux" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------ documentation against the parser
+
+
+def _help(monkeypatch, capsys, *words: str) -> str:
+    """The ``--help`` text of ``grace_utils`` (or a subcommand) at the width of the documentation."""
+    monkeypatch.setenv("COLUMNS", "80")
+    with patch.object(sys, "argv", ["grace_utils", "-p", "model.yaml", *words, "-h"]):
+        with pytest.raises(SystemExit) as stop:
+            grace_utils.main()
+    assert stop.value.code == 0
+    return capsys.readouterr().out
+
+
+def _normalised(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _docs_text() -> str:
+    return _DOCS.read_text()
+
+
+def test_documented_subcommand_line_is_the_help_of_the_parser(monkeypatch, capsys):
+    listed = next(
+        line.strip()
+        for line in _help(monkeypatch, capsys).splitlines()
+        if line.strip().startswith("aux_model ")
+    )
+    documented = [
+        line.strip()
+        for line in _docs_text().splitlines()
+        if line.strip().startswith("aux_model ")
+    ]
+    assert documented == [listed]
+
+
+def test_documented_aux_model_options_are_those_of_the_parser(monkeypatch, capsys):
+    options = _help(monkeypatch, capsys, "aux_model").split("options:\n", 1)[1]
+    # The documentation lists the options of each subcommand without -h.
+    parser_options = options.split("  -o ", 1)[1]
+    block = _docs_text().split("aux_model:\n", 1)[1].split("```", 1)[0]
+    assert _normalised(block) == _normalised("-o " + parser_options)
+
+
+def test_documentation_does_not_offer_the_removed_aux_argument():
+    assert "--aux" not in _docs_text()
+    assert "energy_only" not in _docs_text()
+
+
+def test_documented_aux_model_command_is_accepted_by_the_parser():
+    example = next(
+        line
+        for line in _docs_text().splitlines()
+        if line.startswith("grace_utils") and " aux_model " in line
+    )
+    argv = example.split()
+    # aux_model itself is replaced: only the parsing of the documented command is under test.
+    with (
+        patch.object(sys, "argv", argv),
+        patch.object(grace_utils, "aux_model") as called,
+    ):
+        grace_utils.main()
+    args = called.call_args.args[0]
+    assert args.output_path == "/path/to/upgraded_model"
+    assert args.communicated_keys == ["I", "I_out_0_LN"]

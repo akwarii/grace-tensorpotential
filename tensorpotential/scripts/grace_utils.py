@@ -689,7 +689,12 @@ def main():
     # upgrade model
     parser_aux_model = subparsers.add_parser(
         "aux_model",
-        help="Upgrade model with different compute functions: parallel, compute energy only, compute local",
+        help="Add compute_energy; split a 2L model (see -ck)",
+        description=(
+            "Save the model as a SavedModel with the extra compute function compute_energy. "
+            "A GRACE-2L model is also split at the communicated keys (-ck) into "
+            "forward_layer_1, backward_layer_2 and backward_layer_1."
+        ),
     )
     parser_aux_model.add_argument(
         "-o", "--output-path", required=True, help="Path to save the upgraded model"
@@ -699,7 +704,8 @@ def main():
         "--communicated-keys",
         nargs="+",
         default=["I_nl_LN", "I"],
-        help="List of communicated keys, used for parallelization of GRACE-2L model.",
+        help="Keys communicated between the two layers of a GRACE-2L model, at which it is "
+        "split (unused for other models); they must exist in the model (default: I_nl_LN I)",
     )
     parser_aux_model.set_defaults(func=lambda args: aux_model(args))
 
