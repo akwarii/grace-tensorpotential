@@ -126,9 +126,8 @@ class GaussianRadialBasisFunction(RadialBasisFunction):
             -0.5 / (init_gamma * (self.grid[0, 1] - self.grid[0, 0])).item() ** 2
         )
         self.trainable = trainable
-        # self.normalized = normalized
-        # if self.normalized:
-        #     self.norm = 1 / np.sqrt(2 * np.pi)
+        # A Gaussian normalisation (`normalized`) was never active; the removed blocks of
+        # __init__, build and compute_basis are in the history at 73ad1c2.
 
     def build(self, float_dtype):
         if not self.is_build:
@@ -139,23 +138,10 @@ class GaussianRadialBasisFunction(RadialBasisFunction):
             self.scale = tf.Variable(
                 self.scale, dtype=float_dtype, trainable=self.trainable
             )
-            # if self.normalized:
-            #     if self.trainable:
-            #         self.norm = tf.convert_to_tensor(self.norm, dtype=float_dtype)
-            #     else:
-            #         self.norm = tf.convert_to_tensor(
-            #             self.norm, dtype=float_dtype
-            #         ) * tf.math.rsqrt(self.scale)
             self.is_build = True
 
     def compute_basis(self, r):
         basis = tf.math.exp(self.scale * (r - self.grid) ** 2)
-        # if self.normalized:
-        #     if self.trainable:
-        #         gamma_norm = tf.math.rsqrt(self.scale)
-        #         basis = basis * self.norm * gamma_norm
-        #     else:
-        #         basis = basis * self.norm
 
         return basis * cutoff_func_p_order_poly(r / self.rc, self.pcut)
 
