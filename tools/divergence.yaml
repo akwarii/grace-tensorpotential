@@ -8,6 +8,11 @@
 #   upstream   pending (could be offered, not yet), merged (offered and merged, the row goes when the fork takes the upstream file),
 #              or never (depends on fork-only code or is a fork policy); the owner decides, a new row starts as pending
 
+- path: .gitignore
+  reason: 'ignores the faithful golden fixtures (tests_torch/fixtures/*.npz), which are generated locally'
+  milestone: [FIX2]
+  upstream: never
+
 - path: docs/gracemaker/utilities.md
   reason: 'documents the --stress-units option of grace_preprocess; the aux_model help and usage describe what the command does (no --aux argument)'
   milestone: [DATA1, CLEAN5]

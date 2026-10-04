@@ -156,3 +156,6 @@ static
 /.idea/
 !/.idea/vcs.xml
 !/.idea/vcs.xml
+
+# faithful golden fixtures: generated locally (tools/make_golden.py), only their manifests and yamls are committed
+tests_torch/fixtures/*.npz

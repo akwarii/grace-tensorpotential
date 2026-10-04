@@ -17,7 +17,11 @@ reports more skips. Pass the pytest log to `summarize`, otherwise an XPASS reads
 
 Golden fixtures for the twins (TF-generated, random weights, fp64 and fp32, every instruction output, index tables, energies, forces, virial, stress, a manifest of
 versions and seeds) come in two tiers: tiny anchors under 1 MB committed in `tests_torch/golden/` (so CI needs no TF) and faithful larger ones generated
-locally into `tests_torch/fixtures/` (git-ignored). The generator is the only thing allowed to rewrite either.
+locally into `tests_torch/fixtures/` (the npz files git-ignored, manifests and yamls committed). The generator, `tools/make_golden.py`, is the only thing allowed to
+rewrite either; `tests_torch/golden/README.md` has the key layout (`<case>/in|ins|out_before|out_after|res/...`, `tables/...`, weights keyed `<instruction>/<attribute path>`),
+the option pairs (`*_dense`, `*_lm_first`: same weights, option on), the species relabelling and the sizes. A twin test reads them with numpy only
+(`np.load(..., allow_pickle=False)`); `python tools/make_golden.py verify tests_torch/golden` reloads them in TF. Compare two runs of the generator (for example from
+the `pre-cleanup` tag and from the head) with `compare`, which uses the rows of `tools/oracle_snapshot.py`.
 
 ## Tolerances
 
