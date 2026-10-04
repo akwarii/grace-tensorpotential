@@ -31,6 +31,11 @@ tf = pytest.importorskip("tensorflow")
 
 YAML = "model_grace.yaml"
 
+# One TensorFlow configuration for every test module of tools/ (one thread, deterministic ops):
+# the thread pools cannot be changed once TensorFlow has run, and the oracle-snapshot tests
+# set exactly this.
+gp.osn.configure_tensorflow()
+
 
 # ------------------------------------------------------------------ logic
 
@@ -400,3 +405,26 @@ def test_a_checkpoint_of_another_model_is_refused(tmp_path):
     prefix = tf.train.Checkpoint(model=other).write(str(tmp_path / "ckpt"))
     with pytest.raises(AssertionError):
         gp.build_probe_model(gp.resolve_yaml(YAML), "float64", checkpoint=prefix)
+
+
+def test_main_with_timing_records_rows_and_the_foreign_cpu(tmp_path):
+    code = gp.main([
+        "write",
+        str(tmp_path),
+        "--yamls",
+        YAML,
+        "--dtypes",
+        "float64",
+        "--n-structures",
+        "1",
+        "--supercells",
+        "--repeats",
+        "1",
+    ])
+    assert code == 0
+    section = json.loads((tmp_path / "probe_model_grace.json").read_text())["dtypes"][
+        "float64"
+    ]
+    assert [row["structure"] for row in section["timings"]] == ["s0"]
+    foreign = section["timings_foreign_cpu_cores"]
+    assert foreign is None or foreign >= 0.0
