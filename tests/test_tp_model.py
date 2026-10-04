@@ -309,17 +309,16 @@ def test_load_model_metadata_missing_for_old_models(tmp_path):
     assert len(loaded) == len(instructions)
 
 
-@pytest.mark.xfail
-def test_activate_reduce_lora():
+def test_activate_reduce_lora(tmp_path):
     LORA_CONFIG = {"rank": 4, "alpha": 1}
     float_dtype = tf.float64
-    GRACE_2LAYER = get_preset("GRACE_2LAYER")
+    GRACE_2LAYER = get_preset("GRACE_2LAYER_v1_24")
     instructions = GRACE_2LAYER(
         element_map={"Mo": 0, "Nb": 1, "Ta": 2, "W": 3}, lmax=0, basis_type="SBessel"
-    )
+    ).get_instructions()
     tp = TensorPotential(instructions, param_dtype=float_dtype)
     assert not tp.is_lora_enabled()
-    tp.save_checkpoint(checkpoint_name="test_checkpoints/checkpoint_no_lora")
+    tp.save_checkpoint(checkpoint_name=str(tmp_path / "checkpoint_no_lora"))
 
     at = bulk("Mo")
 
@@ -352,7 +351,7 @@ def test_activate_reduce_lora():
     assert Z.lora
     assert hasattr(Z, "lora_tensors")
 
-    tp.save_checkpoint(checkpoint_name="test_checkpoints/checkpoint_with_lora")
+    tp.save_checkpoint(checkpoint_name=str(tmp_path / "checkpoint_with_lora"))
 
     calc2 = TPCalculator(tp.model)
     at.calc = calc2
@@ -394,17 +393,16 @@ def test_activate_reduce_lora():
     assert np.allclose(e4, e2b)
 
 
-@pytest.mark.xfail
-def test_activate_reduce_additive():
+def test_activate_reduce_additive(tmp_path):
     LORA_CONFIG = {"mode": "full_additive"}
     float_dtype = tf.float64
-    GRACE_2LAYER = get_preset("GRACE_2LAYER")
+    GRACE_2LAYER = get_preset("GRACE_2LAYER_v1_24")
     instructions = GRACE_2LAYER(
         element_map={"Mo": 0, "Nb": 1, "Ta": 2, "W": 3}, lmax=0, basis_type="SBessel"
-    )
+    ).get_instructions()
     tp = TensorPotential(instructions, param_dtype=float_dtype)
     assert not tp.is_lora_enabled()
-    tp.save_checkpoint(checkpoint_name="test_checkpoints/checkpoint_no_lora")
+    tp.save_checkpoint(checkpoint_name=str(tmp_path / "checkpoint_no_lora"))
 
     at = bulk("Mo")
 
@@ -437,7 +435,7 @@ def test_activate_reduce_additive():
     assert Z.lora
     assert hasattr(Z, "lora_tensors")
 
-    tp.save_checkpoint(checkpoint_name="test_checkpoints/checkpoint_with_lora")
+    tp.save_checkpoint(checkpoint_name=str(tmp_path / "checkpoint_with_lora"))
 
     calc2 = TPCalculator(tp.model)
     at.calc = calc2
@@ -1139,3 +1137,29 @@ def test_activation_is_written_into_the_saved_yaml_and_restored_from_it(tmp_path
     assert sorted(v.name for v in restored.trainable_variables) == sorted(
         v.name for v in model.trainable_variables
     )
+
+
+def test_enabling_does_not_edit_the_callers_config():
+    model = _lora_model()
+    config = {"all": dict(LORA_RANK_4), "Z": dict(LORA_RANK_2)}
+
+    model.enable_lora_adaptation(config)
+
+    assert config == {"all": LORA_RANK_4, "Z": LORA_RANK_2}
+
+
+def test_enabling_twice_keeps_the_tensors_of_an_instruction_that_is_already_active():
+    # a model restored from a yaml with LoRA, then given the same input again: nothing is re-initialised
+    model = _lora_model()
+    model.enable_lora_adaptation({"Z": dict(LORA_RANK_2)})
+    Z = model.instructions["Z"]
+    tensors = list(Z.lora_tensors)
+    for t in tensors:
+        t.assign(tf.ones_like(t))
+
+    model.enable_lora_adaptation({"all": dict(LORA_RANK_4)})
+
+    assert Z.lora_config == LORA_RANK_2
+    assert all(a is b for a, b in zip(Z.lora_tensors, tensors))
+    assert all(np.all(t.numpy() == 1.0) for t in Z.lora_tensors)
+    assert model.instructions["R"].lora_config == LORA_RANK_4  # the others are activated as asked
