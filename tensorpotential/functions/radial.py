@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from abc import ABC, abstractmethod

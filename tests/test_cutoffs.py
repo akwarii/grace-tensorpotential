@@ -48,7 +48,10 @@ def test_star_expands_over_the_element_map() -> None:
 
 
 def test_lone_star_gives_every_homonuclear_pair() -> None:
-    assert process_cutoff_dict({"*": 2.0}, CU_AL) == {("Cu", "Cu"): 2.0, ("Al", "Al"): 2.0}
+    assert process_cutoff_dict({"*": 2.0}, CU_AL) == {
+        ("Cu", "Cu"): 2.0,
+        ("Al", "Al"): 2.0,
+    }
 
 
 def test_star_wins_over_an_explicit_key_for_the_same_pair() -> None:

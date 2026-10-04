@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 

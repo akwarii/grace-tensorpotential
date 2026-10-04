@@ -12,11 +12,12 @@ import pandas as pd
 import logging
 from contextlib import contextmanager
 
+from tensorpotential.core.cutoffs import CUTOFF_PRESETS, process_cutoff_dict  # noqa: F401  (re-exported; the code moved to core)
 from tensorpotential.instructions.base import ElementsReduceInstructionMixin
 from yaml import safe_load
 
+from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.dtypes import float32, float64, DType
-from tensorpotential.core.cutoffs import CUTOFF_PRESETS, process_cutoff_dict  # noqa: F401  (re-exported; the code moved to core)
 from tensorpotential.metadata_utils import get_dtype_by_name
 
 

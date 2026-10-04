@@ -7,6 +7,7 @@ import numpy as np
 from ase import Atoms
 
 from pathlib import Path
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential.instructions import (

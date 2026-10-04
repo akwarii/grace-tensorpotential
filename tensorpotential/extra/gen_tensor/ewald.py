@@ -1,3 +1,4 @@
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 import numpy as np
 
