@@ -53,7 +53,7 @@ None.
 
 ## 4. Runtime constants
 
-`PI = float64(pi)`, `factor4pi = sqrt(4 pi)`, `l_tile` (int32), `alm`, `blm`, all created in `build`
+(dtypes **[I]**) `PI = float64(pi)`, `factor4pi = sqrt(4 pi)`, `l_tile` (int32), `alm`, `blm`, all created in `build`
 (`spherical_harmonics.py:35-46`). **`build` ignores its `float_dtype` argument**: `float_dtype` is set to `tf.float64`
 whatever the model's parameter dtype (`spherical_harmonics.py:36`; pinned at `tests/test_compute.py:558`).
 

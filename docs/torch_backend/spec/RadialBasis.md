@@ -62,7 +62,7 @@ sigma[n]  = sqrt(sigma2[n])                   (urcut = 1.0)
 
 ## 3. Parameters
 
-All non-trainable except as noted; none is a learned weight of a shipped model.
+All non-trainable; none is a learned weight of a shipped model. Names, shapes and dtypes are **[I]**.
 
 | Attribute | TF name | Shape | dtype | Notes |
 |---|---|---|---|---|
@@ -75,7 +75,7 @@ The checkpoint therefore holds `rc` for every model: it is data, not a derived v
 
 ## 4. Runtime constants
 
-Created in `build` (`radial.py:48-55`, `219-234`):
+Created in `build` (`radial.py:48-55`, `219-234`); the dtypes are **[I]**:
 
 | Constant | Value | dtype | Used by |
 |---|---|---|---|

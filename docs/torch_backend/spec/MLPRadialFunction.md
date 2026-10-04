@@ -55,10 +55,12 @@ not pass it.
 | `mlp.layer<i>.w`, `i = 0 .. len(hidden_layers)` | `[layers_config[i], layers_config[i+1]]`, e.g. `[8, 64]`, `[64, 64]`, `[64, 160]` | `R_MLP_layer<i>/DenseLayer_R_MLP_layer<i>_no_decay:0` |
 | `gamma` (only if `norm`) | `[1, n_out]`, `N(0, 1)` | unnamed variable |
 
-Names were **Measured** for `name = "MLPRadialFunction"` and carry the instruction name twice (name scope, then
-the explicit variable name).
+All names, shapes and dtypes of this section are **[I]**. The names were **Measured** for
+`name = "MLPRadialFunction"` and carry the instruction name twice (name scope, then the explicit variable name).
 
 ## 4. Runtime constants
+
+(The dtypes of this section are **[I]**.)
 
 - `DenseLayer.norm = 1 / sqrt(n_in)` per layer, a tensor in the weight dtype made in `build`
   (`functions/nn.py:295`). It is **not stored in the checkpoint**; the twin recomputes it from the layer's

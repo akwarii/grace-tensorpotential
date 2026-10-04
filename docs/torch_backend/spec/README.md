@@ -39,9 +39,16 @@ the eight sections of the template (Appendix C of the board):
 7. Options rejected as unsupported, with the reason.
 8. Golden-fixture keys used to test the twin and the error achieved.
 
-Two conventions: a statement marked **Measured** was obtained by running the TF class on the pinned commit and
-is not a reading of the code; a statement marked **Proposal** is a decision the reviewer may overrule, and the
-sheet's closing list "For the reviewer" repeats them.
+Three conventions:
+
+- **[I]** marks a variable name, shape or dtype that is *inferred*: read from the code, or seen in an ad hoc run of
+  the TF class. **[V]** marks one *verified* against a `probe_<model>.json` of SPEC5 (the TensorFlow probe of the
+  variables and tensor attributes of the test yamls). Every such item in these sheets is **[I]** until SPEC5
+  delivers the probe files; the issue that does it flips the tags (SPEC5 states that as its exit criterion).
+- **Measured** marks a behaviour obtained by running the TF class on the pinned commit, as opposed to a reading of
+  the code. It is not a verification against a probe.
+- **Proposal** marks a decision the reviewer may overrule; the closing list "For the reviewer" of a sheet repeats
+  them.
 
 ## Facts every sheet relies on
 

@@ -55,12 +55,14 @@ All in `float_dtype`, trainable, created in `build` (`compute.py:924-934`; `func
 | `layers[i].w`, `i = 0 .. len(hidden_layers)` | `[widths[i], widths[i+1]]`, e.g. `[8, 64]`, `[64, 64]`, `[64, 210]` | `MLPRadialFunction_Linear_<i>/Linear_MLPRadialFunction_Linear_<i>_no_decay:0` |
 | `embed_transform.w` (only with `chem_embedding`) | `[embedding_size, n_out]` | `<name>_ChemEmb_Linear`, weight-decay flag `_` (this `Linear` is made with the default `no_weight_decay = False`) |
 
+All names, shapes and dtypes of this section are **[I]**.
+
 Initial distribution (training only; a loaded model overwrites it): `normal` is `N(0, s)` with `s = 1` if
 `normalize` and `s = 1/sqrt(n_in)` if not; `uniform` is `U(-s, s)`; `zeros` is zero (`functions/nn.py:50-101`).
 
 ## 4. Runtime constants
 
-`Linear.norm` (`functions/nn.py:36-37`, `56-60`, `102`): `1 / sqrt(n_in)` if `normalize`, else `1.0`; a tensor in the
+(dtypes **[I]**) `Linear.norm` (`functions/nn.py:36-37`, `56-60`, `102`): `1 / sqrt(n_in)` if `normalize`, else `1.0`; a tensor in the
 weight dtype, **not in the checkpoint**. The twin recomputes it from the layer's `n_in` and from `normalize`
 (which it reads from the yaml). The embedding transform is always built with `normalize = True`, so its factor is
 `1 / sqrt(embedding_size)`.
