@@ -19,8 +19,13 @@
   upstream: pending
 
 - path: pyproject.toml
-  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor'
-  milestone: [TOOL1, QUAL1, CORE1]
+  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py'
+  milestone: [TOOL1, QUAL1, CORE1, CI1]
+  upstream: never
+
+- path: setup.py
+  reason: 'removed: package discovery and package data moved to [tool.setuptools] in pyproject.toml (the wheel file list is unchanged, tests/test_packaging.py)'
+  milestone: [CI1]
   upstream: never
 
 - path: pytest.ini
