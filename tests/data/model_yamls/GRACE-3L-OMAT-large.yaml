@@ -1,0 +1,1550 @@
+metadata:
+  tensorpotential_version: 0.5.10
+  saved_at: '2026-07-02T16:07:58Z'
+  param_dtype: float32
+instructions:
+  BondLength:
+    __cls__: tensorpotential.instructions.compute.BondLength
+    instruction_with_bonds: null
+    name: BondLength
+  ScaledBondVector:
+    __cls__: tensorpotential.instructions.compute.ScaledBondVector
+    bonds: null
+    name: ScaledBondVector
+    bond_length:
+      _instruction_: true
+      name: BondLength
+  Y:
+    __cls__: tensorpotential.instructions.compute.SphericalHarmonic
+    vhat:
+      _instruction_: true
+      name: ScaledBondVector
+    lmax: 4
+    name: Y
+  Z:
+    __cls__: tensorpotential.instructions.compute.ScalarChemicalEmbedding
+    is_trainable: true
+    init: random
+    lora_config: null
+    element_map:
+      Ac: 0
+      Ag: 1
+      Al: 2
+      Ar: 3
+      As: 4
+      Au: 5
+      B: 6
+      Ba: 7
+      Be: 8
+      Bi: 9
+      Br: 10
+      C: 11
+      Ca: 12
+      Cd: 13
+      Ce: 14
+      Cl: 15
+      Co: 16
+      Cr: 17
+      Cs: 18
+      Cu: 19
+      Dy: 20
+      Er: 21
+      Eu: 22
+      F: 23
+      Fe: 24
+      Ga: 25
+      Gd: 26
+      Ge: 27
+      H: 28
+      He: 29
+      Hf: 30
+      Hg: 31
+      Ho: 32
+      I: 33
+      In: 34
+      Ir: 35
+      K: 36
+      Kr: 37
+      La: 38
+      Li: 39
+      Lu: 40
+      Mg: 41
+      Mn: 42
+      Mo: 43
+      N: 44
+      Na: 45
+      Nb: 46
+      Nd: 47
+      Ne: 48
+      Ni: 49
+      Np: 50
+      O: 51
+      Os: 52
+      P: 53
+      Pa: 54
+      Pb: 55
+      Pd: 56
+      Pm: 57
+      Pr: 58
+      Pt: 59
+      Pu: 60
+      Rb: 61
+      Re: 62
+      Rh: 63
+      Ru: 64
+      S: 65
+      Sb: 66
+      Sc: 67
+      Se: 68
+      Si: 69
+      Sm: 70
+      Sn: 71
+      Sr: 72
+      Ta: 73
+      Tb: 74
+      Tc: 75
+      Te: 76
+      Th: 77
+      Ti: 78
+      Tl: 79
+      Tm: 80
+      U: 81
+      V: 82
+      W: 83
+      Xe: 84
+      Y: 85
+      Yb: 86
+      Zn: 87
+      Zr: 88
+    embedding_size: 64
+    name: Z
+  A1:
+    __cls__: tensorpotential.instructions.compute.SPBF
+    lmax: null
+    p: 5
+    hidden_layers:
+    - 256
+    - 128
+    activation: silu
+    indicator:
+      _instruction_: true
+      name: Z
+    Lmax: null
+    keep_parity: null
+    history_drop_list: null
+    l_max_ind: null
+    max_sum_l: null
+    normalize_cg: false
+    avg_n_neigh: 39.26424084623179
+    sum_neighbors: true
+    lm_first: false
+    name: A1
+    bonds:
+      _instruction_: true
+      name: BondLength
+    n_rad_max: 64
+    n_rad_basis: 10
+    rcut: 6.0
+    angular:
+      _instruction_: true
+      name: Y
+    chemical_embedding:
+      _instruction_: true
+      name: Z
+  A1_2:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 64
+    use_S: false
+    is_left_right_equal: true
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A1
+    right:
+      _instruction_: true
+      name: A1
+    name: A1_2
+    lmax: 4
+    Lmax: 4
+  A1_2_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A1_2_red
+    instructions:
+    - _instruction_: true
+      name: A1_2
+    ls_max: 4
+    n_out: 128
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+  A1_2a:
+    __cls__: tensorpotential.instructions.compute.FCRight2Left
+    n_out: null
+    left_coefs: false
+    is_central_atom_type_dependent: null
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    norm_out: true
+    lora_config: null
+    lm_first: false
+    left:
+      _instruction_: true
+      name: A1_2_red
+    right:
+      _instruction_: true
+      name: A1
+    name: A1_2a
+  A1_3:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 32
+    use_S: false
+    is_left_right_equal: null
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A1_2a
+    right:
+      _instruction_: true
+      name: A1
+    name: A1_3
+    lmax: 4
+    Lmax: 4
+  A1_3_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A1_3_red
+    instructions:
+    - _instruction_: true
+      name: A1_3
+    ls_max: 4
+    n_out: 128
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+  A1_2b:
+    __cls__: tensorpotential.instructions.compute.FCRight2Left
+    n_out: null
+    left_coefs: false
+    is_central_atom_type_dependent: null
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    norm_out: true
+    lora_config: null
+    lm_first: false
+    left:
+      _instruction_: true
+      name: A1_2_red
+    right:
+      _instruction_: true
+      name: A1
+    name: A1_2b
+  A1_4:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 32
+    use_S: false
+    is_left_right_equal: null
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A1_2b
+    right:
+      _instruction_: true
+      name: A1_2b
+    name: A1_4
+    lmax: 4
+    Lmax: 4
+  A1_4_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A1_4_red
+    instructions:
+    - _instruction_: true
+      name: A1_4
+    ls_max: 4
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+  eq1:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: true
+    number_of_atom_types: 89
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: eq1
+    instructions:
+    - _instruction_: true
+      name: A1
+    - _instruction_: true
+      name: A1_2_red
+    - _instruction_: true
+      name: A1_3_red
+    - _instruction_: true
+      name: A1_4_red
+    ls_max:
+    - 4
+    - 4
+    - 4
+    - 4
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+  eq1_norm:
+    __cls__: tensorpotential.instructions.compute.EquivariantRMSNorm
+    center_l0: true
+    center_l0_bias: false
+    balance_degrees: true
+    normalize_l0_only: false
+    split_norm: false
+    init: ones
+    lm_first: false
+    input:
+      _instruction_: true
+      name: eq1
+    name: eq1_norm
+  rho1:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: true
+    number_of_atom_types: 89
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: rho1
+    instructions:
+    - _instruction_: true
+      name: A1
+    - _instruction_: true
+      name: A1_2_red
+    - _instruction_: true
+      name: A1_3_red
+    - _instruction_: true
+      name: A1_4_red
+    ls_max: 0
+    n_out: 32
+    allowed_l_p:
+    - - 0
+      - 1
+  rho1_norm:
+    __cls__: tensorpotential.instructions.compute.InvariantLayerRMSNorm
+    type: only_nonlin
+    init: zeros
+    inpt:
+      _instruction_: true
+      name: rho1
+    name: rho1_norm
+  A2:
+    __cls__: tensorpotential.instructions.compute.SPBF
+    lmax: 4
+    p: 5
+    hidden_layers:
+    - 256
+    - 128
+    activation: silu
+    indicator:
+      _instruction_: true
+      name: eq1_norm
+    Lmax: 4
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    history_drop_list: null
+    l_max_ind: null
+    max_sum_l: null
+    normalize_cg: false
+    avg_n_neigh: 39.26424084623179
+    sum_neighbors: true
+    lm_first: false
+    name: A2
+    bonds:
+      _instruction_: true
+      name: BondLength
+    angular:
+      _instruction_: true
+      name: Y
+    n_rad_max: 64
+    n_rad_basis: 10
+    rcut: 6.0
+    chemical_embedding:
+      _instruction_: true
+      name: Z
+  A2_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A2_red
+    instructions:
+    - _instruction_: true
+      name: A2
+    ls_max: 4
+    n_out: 128
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+  A2_2:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 64
+    use_S: false
+    is_left_right_equal: true
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A2_red
+    right:
+      _instruction_: true
+      name: A2_red
+    name: A2_2
+    lmax: 4
+    Lmax: 4
+  A2_2_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A2_2_red
+    instructions:
+    - _instruction_: true
+      name: A2_2
+    ls_max: 4
+    n_out: 128
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+  A2_2a:
+    __cls__: tensorpotential.instructions.compute.FCRight2Left
+    n_out: null
+    left_coefs: false
+    is_central_atom_type_dependent: null
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    norm_out: true
+    lora_config: null
+    lm_first: false
+    left:
+      _instruction_: true
+      name: A2_2_red
+    right:
+      _instruction_: true
+      name: A2_red
+    name: A2_2a
+  A2_3:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 32
+    use_S: false
+    is_left_right_equal: null
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A2_2a
+    right:
+      _instruction_: true
+      name: A2_red
+    name: A2_3
+    lmax: 4
+    Lmax: 4
+  A2_3_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A2_3_red
+    instructions:
+    - _instruction_: true
+      name: A2_3
+    ls_max: 4
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+  A2_2b:
+    __cls__: tensorpotential.instructions.compute.FCRight2Left
+    n_out: null
+    left_coefs: false
+    is_central_atom_type_dependent: null
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    norm_out: true
+    lora_config: null
+    lm_first: false
+    left:
+      _instruction_: true
+      name: A2_2_red
+    right:
+      _instruction_: true
+      name: A2_red
+    name: A2_2b
+  A2_4:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 32
+    use_S: false
+    is_left_right_equal: null
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+    - - 1
+      - 1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A2_2b
+    right:
+      _instruction_: true
+      name: A2_2b
+    name: A2_4
+    lmax: 4
+    Lmax: 4
+  A2_4_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A2_4_red
+    instructions:
+    - _instruction_: true
+      name: A2_4
+    ls_max: 4
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+    - - 1
+      - 1
+  eq2:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: true
+    number_of_atom_types: 89
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: eq2
+    instructions:
+    - _instruction_: true
+      name: A2_red
+    - _instruction_: true
+      name: A2_2_red
+    - _instruction_: true
+      name: A2_3_red
+    - _instruction_: true
+      name: A2_4_red
+    ls_max:
+    - 4
+    - 4
+    - 4
+    - 4
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+  eq2_norm:
+    __cls__: tensorpotential.instructions.compute.EquivariantRMSNorm
+    center_l0: true
+    center_l0_bias: false
+    balance_degrees: true
+    normalize_l0_only: false
+    split_norm: false
+    init: ones
+    lm_first: false
+    input:
+      _instruction_: true
+      name: eq2
+    name: eq2_norm
+  rho2:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: true
+    number_of_atom_types: 89
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: rho2
+    instructions:
+    - _instruction_: true
+      name: A2_red
+    - _instruction_: true
+      name: A2_2_red
+    - _instruction_: true
+      name: A2_3_red
+    - _instruction_: true
+      name: A2_4_red
+    ls_max: 0
+    n_out: 32
+    allowed_l_p:
+    - - 0
+      - 1
+  rho2_norm:
+    __cls__: tensorpotential.instructions.compute.InvariantLayerRMSNorm
+    type: full
+    init: zeros
+    inpt:
+      _instruction_: true
+      name: rho2
+    name: rho2_norm
+  A3:
+    __cls__: tensorpotential.instructions.compute.SPBF
+    lmax: 4
+    p: 5
+    hidden_layers:
+    - 256
+    - 128
+    activation: silu
+    indicator:
+      _instruction_: true
+      name: eq2_norm
+    Lmax: 4
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+    history_drop_list: null
+    l_max_ind: null
+    max_sum_l: null
+    normalize_cg: false
+    avg_n_neigh: 39.26424084623179
+    sum_neighbors: true
+    lm_first: false
+    name: A3
+    bonds:
+      _instruction_: true
+      name: BondLength
+    angular:
+      _instruction_: true
+      name: Y
+    n_rad_max: 64
+    n_rad_basis: 10
+    rcut: 6.0
+    chemical_embedding:
+      _instruction_: true
+      name: Z
+  A3_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A3_red
+    instructions:
+    - _instruction_: true
+      name: A3
+    ls_max: 4
+    n_out: 128
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+  A3_2:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 64
+    use_S: false
+    is_left_right_equal: true
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A3_red
+    right:
+      _instruction_: true
+      name: A3_red
+    name: A3_2
+    lmax: 4
+    Lmax: 4
+  A3_2_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A3_2_red
+    instructions:
+    - _instruction_: true
+      name: A3_2
+    ls_max: 4
+    n_out: 128
+    allowed_l_p:
+    - - 0
+      - 1
+    - - 1
+      - -1
+    - - 1
+      - 1
+    - - 2
+      - -1
+    - - 2
+      - 1
+    - - 3
+      - -1
+    - - 3
+      - 1
+    - - 4
+      - -1
+    - - 4
+      - 1
+    - - 5
+      - -1
+    - - 5
+      - 1
+    - - 6
+      - -1
+    - - 6
+      - 1
+    - - 0
+      - -1
+  A3_2a:
+    __cls__: tensorpotential.instructions.compute.FCRight2Left
+    n_out: null
+    left_coefs: false
+    is_central_atom_type_dependent: null
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    norm_out: true
+    lora_config: null
+    lm_first: false
+    left:
+      _instruction_: true
+      name: A3_2_red
+    right:
+      _instruction_: true
+      name: A3_red
+    name: A3_2a
+  A3_3:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 32
+    use_S: false
+    is_left_right_equal: null
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A3_2a
+    right:
+      _instruction_: true
+      name: A3_red
+    name: A3_3
+    lmax: 4
+    Lmax: 0
+  A3_3_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A3_3_red
+    instructions:
+    - _instruction_: true
+      name: A3_3
+    ls_max: 0
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+  A3_2b:
+    __cls__: tensorpotential.instructions.compute.FCRight2Left
+    n_out: null
+    left_coefs: false
+    is_central_atom_type_dependent: null
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    norm_out: true
+    lora_config: null
+    lm_first: false
+    left:
+      _instruction_: true
+      name: A3_2_red
+    right:
+      _instruction_: true
+      name: A3_red
+    name: A3_2b
+  A3_4:
+    __cls__: tensorpotential.instructions.compute.GeneralProductFunction
+    mode: cp_l
+    n_out: null
+    rank: 32
+    use_S: false
+    is_left_right_equal: null
+    lmax_left: null
+    lmax_right: null
+    lmax_hist: null
+    lmax_hist_left: null
+    lmax_hist_right: null
+    history_drop_list: null
+    max_sum_l: null
+    keep_parity:
+    - - 0
+      - 1
+    normalize: false
+    lm_first: false
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    left:
+      _instruction_: true
+      name: A3_2b
+    right:
+      _instruction_: true
+      name: A3_2b
+    name: A3_4
+    lmax: 4
+    Lmax: 0
+  A3_4_red:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: false
+    number_of_atom_types: null
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: A3_4_red
+    instructions:
+    - _instruction_: true
+      name: A3_4
+    ls_max: 0
+    n_out: 64
+    allowed_l_p:
+    - - 0
+      - 1
+  rho3:
+    __cls__: tensorpotential.instructions.compute.FunctionReduceN
+    out_norm: true
+    is_central_atom_type_dependent: true
+    number_of_atom_types: 89
+    init_vars: random
+    normalize: true
+    init_target_value: zeros
+    simplify: false
+    scale: 1.0
+    lora_config: null
+    lm_first: false
+    name: rho3
+    instructions:
+    - _instruction_: true
+      name: A3_red
+    - _instruction_: true
+      name: A3_2_red
+    - _instruction_: true
+      name: A3_3_red
+    - _instruction_: true
+      name: A3_4_red
+    ls_max: 0
+    n_out: 32
+    allowed_l_p:
+    - - 0
+      - 1
+  rho3_norm:
+    __cls__: tensorpotential.instructions.compute.InvariantLayerRMSNorm
+    type: full
+    init: zeros
+    inpt:
+      _instruction_: true
+      name: rho3
+    name: rho3_norm
+  atomic_energy:
+    __cls__: tensorpotential.instructions.output.CreateOutputTarget
+    initial_value: 0.0
+    l: 0
+    name: atomic_energy
+  out1:
+    __cls__: tensorpotential.instructions.output.LinMLPOut2ScalarTarget
+    hidden_layers:
+    - 64
+    name: out1
+    n_out: 1
+    normalize: null
+    activation: silu
+    l: 0
+    lora_config: null
+    origin:
+    - _instruction_: true
+      name: rho1_norm
+    - _instruction_: true
+      name: rho2_norm
+    - _instruction_: true
+      name: rho3_norm
+    target:
+      _instruction_: true
+      name: atomic_energy
+  ConstantScaleShiftTarget:
+    __cls__: tensorpotential.instructions.output.ConstantScaleShiftTarget
+    scale: 1.0
+    shift: 0.0
+    atomic_shift_map:
+      0: -4.754927451934597
+      1: -2.140466605142622
+      2: -3.655772658958052
+      3: 2.332627918827364
+      4: -4.630164014489658
+      5: -3.1545293552338807
+      6: -6.117638423299229
+      7: -2.3332806742404126
+      8: -3.0960125145979003
+      9: -3.6678325964151606
+      10: -2.584920657799312
+      11: -7.426231386286504
+      12: -2.2549950367083804
+      13: -0.3793752290253222
+      14: -6.499603536972256
+      15: -3.150512943085312
+      16: -6.0493834526107655
+      17: -7.988380195453456
+      18: -1.24896840832671
+      19: -3.004356863838466
+      20: -4.753228720493115
+      21: -4.695933734567731
+      22: -9.968074186102077
+      23: -4.8238870936717495
+      24: -6.983743864155181
+      25: -2.8835740816049826
+      26: -13.856274540091807
+      27: -4.381771077596559
+      28: -2.9682290060324514
+      29: 0.12298638477652721
+      30: -9.71757163061043
+      31: 0.1631137677427789
+      32: -4.699618843550313
+      33: -2.084764173050638
+      34: -2.278030975557376
+      35: -8.279239829938268
+      36: -0.8098614086982076
+      37: 1.5867317020800091
+      38: -5.217788211432353
+      39: -2.101213822937894
+      40: -4.616724456603047
+      41: -1.3453655678494447
+      42: -7.888316080227688
+      43: -9.280963297933571
+      44: -7.904945924659916
+      45: -1.351852590103735
+      46: -9.354247642138667
+      47: -5.073464412995743
+      48: 3.0647730337618517
+      49: -5.013122256992141
+      50: -13.643886470147551
+      51: -7.158823296352087
+      52: -9.431444882117356
+      53: -5.292773258229279
+      54: -10.59529291177726
+      55: -3.1609844824558775
+      56: -5.422870457517838
+      57: -5.15548780895306
+      58: -5.111487171051079
+      59: -6.3101013779892074
+      60: -14.439884404906145
+      61: -1.1400623370495457
+      62: -10.256939870736147
+      63: -7.141196931384278
+      64: -8.2262027500072
+      65: -5.368211298447258
+      66: -3.9318137020284434
+      67: -6.542010293083066
+      68: -4.51676936456769
+      69: -5.180007818351023
+      70: -4.941535188720667
+      71: -3.73202977975999
+      72: -2.080683173144869
+      73: -10.681887181991994
+      74: -4.824297235923737
+      75: -9.088424656407259
+      76: -3.7492674170240674
+      77: -8.139396858850585
+      78: -7.864730201867491
+      79: -1.9358680346477706
+      80: -4.57603574152436
+      81: -12.651884456459157
+      82: -8.250991640241114
+      83: -10.70817876211441
+      84: 6.824991325043815
+      85: -6.517743130739955
+      86: -5.5055240162406545
+      87: -0.9063716512311266
+      88: -8.435832217096266
+    chemical_embedding: null
+    name: ConstantScaleShiftTarget
+    l: 0
+    target:
+      _instruction_: true
+      name: atomic_energy
