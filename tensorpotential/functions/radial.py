@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
@@ -71,7 +73,28 @@ class RadialBasisFunction(tf.Module, ABC):
 
 
 class GaussianRadialBasisFunction(RadialBasisFunction):
-    """ """
+    """Gaussian radial basis multiplied by a polynomial cutoff envelope.
+
+    Parameters
+    ----------
+    nfunc : int
+        Number of basis functions (centres spread evenly over ``[rmin, rcut]``).
+    rcut : float
+        Cutoff radius.
+    p : int
+        Order of the polynomial cutoff envelope.
+    rmin : float
+        Position of the first centre.
+    init_gamma : float
+        Initial width, in units of the centre spacing.
+    trainable : bool
+        Whether the centres and the width are trainable.
+    normalized : bool
+        Deprecated, has no effect. The argument is still accepted because
+        ``capture_init_args`` writes it into saved ``model.yaml`` files; the default ``False``
+        is silent (loading such a file warns about nothing) and any other value emits a
+        ``DeprecationWarning``.
+    """
 
     def __init__(
         self,
@@ -89,6 +112,13 @@ class GaussianRadialBasisFunction(RadialBasisFunction):
             rcut,
             name="GaussianRadialBasisFunction",
         )
+        if normalized is not False:
+            warnings.warn(
+                "GaussianRadialBasisFunction: the argument `normalized` is deprecated and has "
+                "no effect; the basis is not normalised. Remove it from the model definition.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.pcut = p
         self.rmin = rmin
         self.grid = np.linspace(self.rmin, self.rcut, self.nfunc).reshape(1, -1)

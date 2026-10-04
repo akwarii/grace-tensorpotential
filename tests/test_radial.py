@@ -7,6 +7,8 @@ into a saved ``model.yaml``, so such a file must keep loading (and silently) and
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 import tensorflow as tf
@@ -62,7 +64,9 @@ def test_gaussian_saved_with_normalized_false_loads_into_the_same_model(tmp_path
 
 def test_gaussian_normalized_is_ignored_when_true():
     # The three blocks that used the argument were commented out: it has no effect.
-    _assert_same_model(_gaussian(normalized=True), _gaussian(normalized=False))
+    with pytest.warns(DeprecationWarning):
+        flagged = _gaussian(normalized=True)
+    _assert_same_model(flagged, _gaussian(normalized=False))
 
 
 def test_gaussian_without_the_argument_equals_the_explicit_default():
@@ -72,8 +76,61 @@ def test_gaussian_without_the_argument_equals_the_explicit_default():
 @pytest.mark.parametrize("trainable", [False, True])
 def test_gaussian_variables_do_not_depend_on_normalized(trainable):
     plain = _gaussian(trainable=trainable)
-    flagged = _gaussian(trainable=trainable, normalized=True)
+    with pytest.warns(DeprecationWarning):
+        flagged = _gaussian(trainable=trainable, normalized=True)
     assert [v.shape for v in plain.variables] == [v.shape for v in flagged.variables]
     assert [v.trainable for v in plain.variables] == [
         v.trainable for v in flagged.variables
     ]
+
+
+def _gaussian_warnings(**extra) -> list[warnings.WarningMessage]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _gaussian(**extra)
+    return caught
+
+
+@pytest.mark.parametrize("extra", [{}, {"normalized": False}])
+def test_gaussian_default_normalized_is_silent(extra):
+    # capture_init_args writes the default into saved yamls: loading one must warn about nothing.
+    assert _gaussian_warnings(**extra) == []
+
+
+@pytest.mark.parametrize("value", [True, None, 1])
+def test_gaussian_non_default_normalized_warns_once_naming_class_and_argument(value):
+    caught = _gaussian_warnings(normalized=value)
+    assert [w.category for w in caught] == [DeprecationWarning]
+    message = str(caught[0].message)
+    assert "GaussianRadialBasisFunction" in message
+    assert "normalized" in message
+    assert "no effect" in message
+
+
+def test_gaussian_warning_points_at_the_caller_of_the_class():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        GaussianRadialBasisFunction(nfunc=_NFUNC, rcut=_RCUT, p=5, normalized=True)
+    assert caught[0].filename == __file__
+
+
+def test_gaussian_yaml_with_normalized_true_still_loads_with_the_warning(tmp_path):
+    with pytest.warns(DeprecationWarning):
+        original = _gaussian(normalized=True)
+    path = tmp_path / "model.yaml"
+    save_instructions_dict(str(path), {original.name: original}, param_dtype=tf.float64)
+    assert "normalized: true" in path.read_text()
+
+    with pytest.warns(DeprecationWarning):
+        loaded = load_instructions(str(path))[original.name]
+    loaded.build(tf.float64)
+    _assert_same_model(original, loaded)
+
+
+def test_gaussian_yaml_with_normalized_false_loads_without_any_warning(tmp_path):
+    original = _gaussian(normalized=False)
+    path = tmp_path / "model.yaml"
+    save_instructions_dict(str(path), {original.name: original}, param_dtype=tf.float64)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        load_instructions(str(path))
