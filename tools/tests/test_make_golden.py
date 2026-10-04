@@ -795,3 +795,9 @@ def test_command_line_cells_and_yamls(tmp_path, capsys):
     assert mg.main(["cells"]) == 0
     assert mg.main(["yamls", "--tier", "tiny"]) == 0
     capsys.readouterr()
+
+
+def test_the_committed_tiny_anchors_reproduce_in_tensorflow():
+    for path in sorted(mg.GOLDEN_DIR.glob("*.json")):
+        report = mg.verify_fixture(mg.GOLDEN_DIR, path.stem)
+        assert mg.report_ok(report), (path.stem, report["exceeding"][:5])
