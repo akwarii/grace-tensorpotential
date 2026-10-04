@@ -17,15 +17,22 @@ import os
 import numpy as np
 import pytest
 
+from ase import Atoms
+from ase.build import bulk
+
+from tensorpotential.calculator import TPCalculator
+from tensorpotential.instructions import load_instructions, save_instructions_dict
 from tensorpotential.potentials import get_preset
 from tensorpotential.tensorpot import TensorPotential
 
 import tensorflow as tf  # after tensorpotential, which must set TF_USE_LEGACY_KERAS first
 
+from tests.tolerances import FINITE_DIFFERENCE_F64 as FD
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+FD_STEP = 1e-4  # A; the step assumed by FINITE_DIFFERENCE_F64 in tests/tolerances.py
 LEARNING_RATE = 1.0
 WEIGHT_DECAY = 0.25
 
@@ -232,3 +239,159 @@ def test_default_param_dtype_gives_float32_weights_and_a_float64_input_dtype():
     trainable = tp.model.trainable_variables
     assert trainable
     assert {v.dtype for v in trainable} == {tf.float32}
+
+
+# ---------------------------------------------- LoRA at the level of TensorPotential
+
+
+def test_is_lora_enabled_follows_the_model():
+    tp = _tp()
+    assert not tp.is_lora_enabled()
+
+    tp.model.enable_lora_adaptation({"Z": {"rank": 2, "alpha": 1}})
+
+    assert tp.is_lora_enabled()
+
+
+LORA_CONFIG = {"all": {"rank": 2, "alpha": 1}}
+
+
+def _lora_tp(**kwargs) -> TensorPotential:
+    """A four-element float64 model whose LoRA tensors can be perturbed (B starts at zero)."""
+    instructions = get_preset("GRACE_2LAYER_v1_24")(
+        element_map={"Mo": 0, "Nb": 1, "Ta": 2, "W": 3}, lmax=0
+    ).get_instructions()
+    return TensorPotential(instructions, param_dtype=tf.float64, **kwargs)
+
+
+def _perturb_lora_tensors(tp: TensorPotential, seed: int = 0) -> None:
+    """Give every update tensor a small nonzero value (the zero-initialised ones included)."""
+    rng = np.random.default_rng(seed)
+    for variable in tp.model.trainable_variables:
+        variable.assign(variable + 0.1 * rng.standard_normal(variable.shape))
+
+
+def _structure() -> Atoms:
+    atoms = bulk("Mo", cubic=True) * (2, 1, 1)
+    atoms.set_chemical_symbols(["Mo", "Nb", "Ta", "W"])
+    atoms.rattle(stdev=0.05, seed=3)
+    return atoms
+
+
+def _energy_forces(tp: TensorPotential, atoms: Atoms | None = None):
+    atoms = (atoms or _structure()).copy()
+    atoms.calc = TPCalculator(model=tp.model)
+    return atoms.get_potential_energy(), atoms.get_forces()
+
+
+def _variables_by_name(tp: TensorPotential) -> dict[str, np.ndarray]:
+    return {v.name: v.numpy().copy() for v in tp.model.variables if v.dtype == tf.float64}
+
+
+def test_enabling_lora_makes_the_checkpoint_save_the_update_tensors(tmp_path):
+    tp = _lora_tp(fit_config={"optimizer": "Adam"})
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    prefix = str(tmp_path / "checkpoint")
+
+    tp.save_checkpoint(checkpoint_name=prefix)
+
+    saved = {name for name, _ in tf.train.list_variables(prefix)}
+    assert any("lora_tensors" in name for name in saved)
+
+
+def test_enabling_and_reducing_lora_keep_the_step_and_epoch_counters():
+    tp = _lora_tp(fit_config={"optimizer": "Adam"})  # an optimizer, so that the reduction rebuilds the checkpoint
+    tp.step, tp.epoch = 7, 3
+
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    assert (tp.step, tp.epoch) == (7, 3)
+
+    tp.finalize_lora_update()
+    assert (tp.step, tp.epoch) == (7, 3)
+
+
+def test_reducing_lora_resets_the_optimizer_and_the_mid_epoch_flag():
+    tp = _lora_tp(fit_config={"optimizer": "Adam"})
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    tp.intra_epoch_save = True
+    optimizer = tp.optimizer
+
+    tp.finalize_lora_update()
+
+    assert tp.optimizer is not optimizer
+    assert not tp.intra_epoch_save
+
+
+def test_a_freshly_activated_lora_model_equals_the_base_model():
+    # physical value: the B matrices start at zero, so the update tensors add exactly nothing
+    tp = _lora_tp()
+    e_base, f_base = _energy_forces(tp)
+
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    e_lora, f_lora = _energy_forces(tp)
+
+    assert e_lora == pytest.approx(e_base, rel=ARITH.rtol, abs=ARITH.atol)
+    np.testing.assert_allclose(f_lora, f_base, rtol=ARITH.rtol, atol=ARITH.atol)
+
+
+@pytest.mark.parametrize("config", [LORA_CONFIG, {"all": {"mode": "full_additive"}}], ids=["lora", "additive"])
+def test_a_reduced_lora_model_reproduces_the_activated_model(config):
+    # physical value: merging W + delta_W into W is the same function as keeping delta_W apart
+    tp = _lora_tp()
+    tp.enable_lora_adaptation(dict(config))
+    _perturb_lora_tensors(tp)
+    e_active, f_active = _energy_forces(tp)
+
+    tp.finalize_lora_update()
+    e_reduced, f_reduced = _energy_forces(tp)
+
+    assert not tp.is_lora_enabled()
+    assert e_reduced == pytest.approx(e_active, rel=ARITH.rtol, abs=ARITH.atol)
+    np.testing.assert_allclose(f_reduced, f_active, rtol=ARITH.rtol, atol=ARITH.atol)
+
+
+def test_perturbing_the_update_tensors_changes_the_energy():
+    # guards the two tests above against comparing two unchanged models
+    tp = _lora_tp()
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    e_zero, _ = _energy_forces(tp)
+
+    _perturb_lora_tensors(tp)
+
+    assert _energy_forces(tp)[0] != pytest.approx(e_zero, rel=1e-3)
+
+
+def test_forces_of_an_activated_lora_model_match_finite_differences_of_its_energy():
+    tp = _lora_tp()
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    _perturb_lora_tensors(tp)
+    atoms = _structure()
+    _, forces = _energy_forces(tp, atoms)
+
+    atom, axis, step = 1, 0, FD_STEP
+    plus, minus = atoms.copy(), atoms.copy()
+    plus.positions[atom, axis] += step
+    minus.positions[atom, axis] -= step
+    derivative = -(_energy_forces(tp, plus)[0] - _energy_forces(tp, minus)[0]) / (2 * step)
+
+    assert forces[atom, axis] == pytest.approx(derivative, rel=FD.rtol, abs=FD.atol)
+
+
+def test_the_lora_variables_survive_a_checkpoint_round_trip(tmp_path):
+    tp = _lora_tp()
+    tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    _perturb_lora_tensors(tp)
+    tp.save_checkpoint(checkpoint_name=str(tmp_path / "checkpoint"))
+    yaml_path = str(tmp_path / "model.yaml")
+    save_instructions_dict(yaml_path, tp.model.instructions, param_dtype=tf.float64)
+
+    restored = TensorPotential(load_instructions(yaml_path), param_dtype=tf.float64)
+    restored.load_checkpoint(checkpoint_name=str(tmp_path / "checkpoint"), assert_consumed=False)
+
+    assert restored.is_lora_enabled()
+    expected, found = _variables_by_name(tp), _variables_by_name(restored)
+    assert expected.keys() == found.keys()
+    assert any("LORA" in name for name in found)
+    assert all(np.array_equal(expected[k], found[k]) for k in expected)
+    assert _energy_forces(restored)[0] == pytest.approx(_energy_forces(tp)[0], rel=ARITH.rtol)
+

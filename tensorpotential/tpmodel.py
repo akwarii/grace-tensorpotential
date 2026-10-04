@@ -1134,6 +1134,7 @@ class TPModel(tf.Module):
             return
 
         logging.info(f"Activating LoRA (config = {lora_config})")
+        lora_config = dict(lora_config)  # the caller's dictionary is not edited
         if "all" in lora_config:
             all_config = lora_config.pop("all")
             new_lora_config = {
@@ -1155,6 +1156,11 @@ class TPModel(tf.Module):
             if ins_name in lora_config and isinstance(ins, LORAInstructionMixin):
                 ins_lora_config = lora_config[ins_name]
                 if ins_lora_config:
+                    if ins.lora:
+                        # a model restored from a yaml that already holds LoRA: new tensors
+                        # would replace the trained ones
+                        logging.info(f" - LoRA is already active for {ins_name}, kept")
+                        continue
                     logging.info(
                         f" - activating LoRA for {ins_name}: {ins_lora_config}"
                     )
