@@ -314,7 +314,7 @@ def test_float64_model_computes_and_stores_everything_in_float64(probed):
 
 
 def test_float64_model_reads_the_swish_beta_as_a_float32_literal(probed):
-    # Pins current behaviour (a finding of SPEC5): the activation constant ``beta`` is created
+    # Pins current behaviour (a finding of SPEC2): the activation constant ``beta`` is created
     # as a float32 literal and cast up, one per activated layer: R has three, the output MLP one.
     _, report = probed["float64"]
     literals = {

@@ -1,7 +1,7 @@
 """Probe of the TensorFlow GRACE models: variables, dtypes, where constants are created and used, timings.
 
 For a model built from a test yaml (random weights, CPU), or from a yaml plus a real checkpoint
-(``--checkpoint``, the HPC job SPEC5b), the probe records into ``probe_<label>.json``:
+(``--checkpoint``, the HPC job SPEC2b), the probe records into ``probe_<label>.json``:
 
 * ``variables``: every ``model.variables`` entry with its name, shape, dtype, trainability and the
   checkpoint key it is saved under (``tf.train.list_variables``), and the two sets compared;
