@@ -16,8 +16,8 @@ user and an issue disagree, ask.
 ## Development commands
 
 ```bash
-# Environment (creates .venv from uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
-uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty
+# Environment (creates .venv from the committed uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
+uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty, and depends on the tf extra (TensorFlow is not a base dependency since CI1)
 
 # Tests: run from the repository root; they write nothing into the tree. Under -n N every worker gets cores/N TF and OpenMP threads (conftest.py).
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
@@ -41,6 +41,8 @@ uv run --frozen --no-sync ty check path/to/new_package     # strict in the new p
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also tests/test_import_gates.py
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # every upstream file the fork modifies has a row in tools/divergence.yaml (add it in the same PR as the change, drop it when the file equals upstream again); no fork-only path on a local pr/U* branch
+uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py    # builds the wheel in a scratch copy (or TENSORPOTENTIAL_WHEEL=<wheel>): file list against baselines/wheel_files_upstream.txt, metadata, extras; --noconftest because tests/conftest.py imports TensorFlow
+python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf    # clean venv with the wheel: core imports without TF, --help of the ten console scripts; python tools/resolve_extras.py [EXTRA] resolves the extras with uv (CI runs both)
 uv run --frozen --no-sync python tools/instruction_ast.py check    # TF-free: every TPInstruction subclass has a registry entry (torch_backend/spec/registry.py) and the pinned defaults equal the source; `table` prints the constructor table
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
@@ -128,10 +130,15 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
 - **Golden fixtures** (`tools/make_golden.py`, `tests_torch/golden/README.md`): the library imported is the one on `PYTHONPATH` (the generator appends its own root to `sys.path`, so a worktree of an older tag works: `PYTHONPATH=<tag worktree>`, and read the `library:` line it prints); the manifest records `library_dirty` and `generator_dirty` and `tests_torch/test_golden_fixtures.py` fails on a modified tree, so commit the generator before you write fixtures. The instruction order of the manifest is the execution order: never write it with sorted keys. The probe's `attribute_objects` walks into the instructions that an instruction refers to (`left`, `radial`, `indicator`), which repeats every table dozens of times (2.3 MB instead of 0.1 MB for one tiny fixture): the fixture tables use their own walk (`_own_tables`). A reload test must start from a seed other than the fixture's, or it reproduces the weights without reading them. Measured: `lm_first` moves the last axis of every angular tensor and Clebsch-Gordan table to the front and changes nothing else; `dense_nbr` pads the per-bond tensors of a structure with unequal neighbour counts with dummy bonds (`ind_i = ind_j = 0`, zero pair force), nodes and results are unchanged; neither option changes a weight shape.
 - `lm_first=True` fails on yamls whose output is `MLPOut2ScalarTarget` (it has no transpose for it, unlike `LinMLPOut2ScalarTarget`); `model_grace.yaml` is such a model.
 - `CollectInvarBasis` cannot be instantiated as shipped (it lacks the abstract `upd_init_args_new_elements`); tests subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
-- **Worktrees.** A worktree has no `.venv` or `uv.lock` (both git-ignored): link `.venv` and copy `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable
+- **Worktrees.** A worktree has no `.venv` (git-ignored): link it from the main checkout (`uv.lock` is tracked since CI1, so a worktree has it). Never run `uv sync` there: it repoints the editable
   `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
   give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or Keras 3 is used.
+- **TensorFlow is the `tf` extra, not a base dependency (CI1, D12).** `pip install tensorpotential` has no TensorFlow; extras are `tf`, `torch`, `torch-sim`, `all`, and `[dependency-groups] dev` includes `tensorpotential[tf]`.
+  `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils`
+  and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` still needs `flask`, which no extra installs). Package discovery is
+  `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package. TensorFlow and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before
+  `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue). The CI set is `.github/workflows/ci.yml` (lint, tests-torch, wheel, wheel-smoke, extras-resolve) and `nightly.yml` (both stacks, TF suite, torch-sim main).
 - **The package no longer imports TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve their public names on first access (`core/lazy.py`); the TF options
   (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`. **A new module with a module-level `import tensorflow` starts with
   `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt, out of scope). A module that must stay TF-free goes in the

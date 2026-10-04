@@ -24,23 +24,41 @@ micromamba activate grace
 
 ---
 
-### Installing TensorFlow and Tensorpotential
+### Installing Tensorpotential
 
-Install `tensorpotential` from PyPI:
+The base package (`pip install tensorpotential`) contains the TensorFlow-free parts only: the neighbour-list and cutoff
+helpers (`tensorpotential.core`), the coupling tables, the data tools and the foundation-model registry. TensorFlow and
+PyTorch come with extras, so install the one you need:
 
-```bash
-pip install tensorpotential
-```
+| Command | Installs | Use it for |
+|---|---|---|
+| `pip install "tensorpotential[tf]"` | TensorFlow (with CUDA libraries on Linux) and `tf_keras` | fitting with `gracemaker`, `grace_predict`, `grace_utils`, `grace_preprocess`, the ASE calculator |
+| `pip install "tensorpotential[torch]"` | PyTorch | the PyTorch backend |
+| `pip install "tensorpotential[torch-sim]"` | PyTorch, `torch-sim-atomistic` and `vesin` | running models through torch-sim |
+| `pip install "tensorpotential[all]"` | all of the above | both stacks in one environment |
+
+!!! warning "`pip install tensorpotential` no longer installs TensorFlow"
+    Earlier releases pulled TensorFlow in automatically. Now a command that needs it (`gracemaker`, `grace_predict`,
+    `grace_utils`, `grace_preprocess`, `extxyz2df`) stops with the message
+    `... needs TensorFlow, which is not installed ... pip install 'tensorpotential[tf]'`. Add the `tf` extra to your
+    existing install commands and requirement files.
+
+!!! note "Both stacks in one process"
+    TensorFlow and PyTorch can be installed together, but import `torch` (and `torch_sim`) before `tensorflow` in a
+    process that loads both: with `tensorflow` first, loading `triton` (a PyTorch dependency, imported by `torch_sim`)
+    currently crashes with a segmentation fault.
+
+The package needs Python 3.11 or newer.
 
 For the latest developer version, clone the `grace-tensorpotential` repository:
 
 ```bash
 git clone https://github.com/ICAMS/grace-tensorpotential.git
 cd grace-tensorpotential
-pip install .
+pip install ".[tf]"
 ```
 
-TensorFlow should be installed automatically. However, to manually install TensorFlow with GPU support:
+TensorFlow is installed with the `tf` extra. To install TensorFlow with GPU support by hand instead:
 
 ```bash
 pip install "tensorflow[and-cuda]<=2.20"
