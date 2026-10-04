@@ -114,3 +114,13 @@ python tools/oracle_snapshot.py compare baselines/oracle_snapshot_wide.npz new.n
 
 To record on the untouched tree: `git archive pre-cleanup | tar -x -C /scratch/pre-cleanup`, then run the tool with
 `PYTHONPATH=/scratch/pre-cleanup` from a directory outside both trees.
+
+## Pitfalls
+
+- `tools/junit_outcomes.py summarize` needs `--log <pytest log>` with `-rX` lines to know an XPASS; without it `test_construct_batches_multiple_db` reads as `xpassed -> passed` in `compare` (not a change).
+- `baselines/ast_manifest.json` is the untouched tree: to check that a branch changes only some files, `ast_manifest.py write --rev origin/torch-backend <file>` first and `check` against that.
+- A `git archive` copy of a tag is imported with `PYTHONPATH` from a directory outside both trees; print `tensorpotential.__file__` to be sure which tree is imported.
+- Checkpoint keys are not `variable.name`: a variable is saved as `model/instructions/<instruction>/<attribute path>/.ATTRIBUTES/VARIABLE_VALUE` (`A1/w_left_FC:0` is saved under `.../A1/w_left/...`); `tools/grace_probe.py` writes both (`probes/`).
+  Each model also has two non-float variables (`Z/element_map_symbols`, a string, and `Z/element_map_index`, int32).
+- With float32 parameters the radial basis, the bond vectors and the spherical harmonics still compute in float64 and `A`/`YI`/`R` cast down; with float64 parameters the swish `beta` is a float32 literal (value 1.0) cast up.
+- Timings of the probe are quotable only when `timings_foreign_cpu_cores` in the JSON is near 0.

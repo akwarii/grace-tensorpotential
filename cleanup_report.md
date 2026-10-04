@@ -57,7 +57,7 @@ Reproduce: `uvx ruff@0.16.7 check --isolated --select F403,F821 --exclude tools 
 
 Evidence (all on the current tree):
 
-- `grep -rnI 'compat.pace\|compat/pace\|tensorpotential.compat' . --exclude-dir=.venv --exclude-dir=.git` outside `tensorpotential/compat/pace/` matches only `CLAUDE.md`, `cleanup_triage.md` and the planning/tooling files (`plan/`, which are not shipped).
+- `grep -rnI 'compat.pace\|compat/pace\|tensorpotential.compat' . --exclude-dir=.venv --exclude-dir=.git` outside `tensorpotential/compat/pace/` matches only `CLAUDE.md` and the planning/tooling files (`plan/`, which are not shipped).
 - No `tests/` file mentions it (the three matches of "compat" are the words "compatible" / "backward compat").
 - No `importlib.import_module`, string import or saved-yaml class lookup reaches it: the dynamic imports of the library (`extra/presets.py`, `uq/cli/build/data_resolve.py`, `scripts/grace_uq.py`, `cli/prepare.py`) resolve other modules, and `tpmodel.__getattr__` resolves instruction classes, none of which lives in `compat/pace/`.
 - No console script of `pyproject.toml` (`[project.scripts]`) points into it.
@@ -69,7 +69,7 @@ Conclusion: **out of scope, no change allowed** (owner decision of 2026-10-01, o
 
 ## 2. Class E register (disabled wiring of documented or user-visible options)
 
-Copied from `cleanup_triage.md` (CLEAN1). Locations are re-measured on the current tree: CLEAN2 deleted comment blocks above these lines, so they moved by a few lines; the id is the stable key. Default action: keep. Each row needed a decision from the owner; they were taken on 2026-10-01 and are in 2.1.
+Copied from the CLEAN1 triage table (the table itself, `cleanup_triage.md`, was removed once CLEAN2 and CLEAN3 had applied its decisions; it is in the git history). Locations are re-measured on the current tree: CLEAN2 deleted comment blocks above these lines, so they moved by a few lines; the id is the stable key. Default action: keep. Each row needed a decision from the owner; they were taken on 2026-10-01 and are in 2.1.
 
 | id | location (current tree) | what is disabled | evidence | decision to take |
 |---|---|---|---|---|

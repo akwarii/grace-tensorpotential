@@ -9,13 +9,8 @@ The torch backend is measured against TensorFlow numbers that are committed or r
 
 ## What exists
 
-`baselines/` (read its `README.md`; taken from tag `pre-cleanup` = master cc1bb38 = upstream 0.6.1) and `tools/`:
-
-| File | What | Check |
-|---|---|---|
-| `ast_manifest.json` | sha256 of the AST of each tracked `.py` file (165; fork-only paths ignored) | `python tools/ast_manifest.py check baselines/ast_manifest.json` |
-| `outcomes_pd2.json`, `outcomes_pd3.json` (+ junit) | per-test outcomes of the full suite on pandas 2.3.3 and 3.0.3 | `python tools/junit_outcomes.py summarize junit.xml new.json --log pytest.log`, then `compare` |
-| `oracle_snapshot.npz` (git-ignored, 52 MB), `.meta.json` | TF float64 numerics of the three test yamls, 369 arrays | `python tools/oracle_snapshot.py compare baselines/oracle_snapshot.npz new.npz` |
+`baselines/` is the untouched tree (tag `pre-cleanup` = master cc1bb38 = upstream 0.6.1) plus the later ratchets; `baselines/README.md` lists every file with the command that checks it and its pitfalls
+(AST manifest, junit outcomes for pandas 2 and 3, the narrow and wide TensorFlow numeric snapshots, lint, coverage and clone ratchets, probes). The tools are in `tools/`.
 
 Use the same `--ignore` list as the baseline (`tests/test_structured_grid.py`, `tests/test_foundation_model_regression.py`) when comparing counts: an unfiltered run
 reports more skips. Pass the pytest log to `summarize`, otherwise an XPASS reads as a pass.
