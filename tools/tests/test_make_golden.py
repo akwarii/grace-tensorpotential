@@ -97,7 +97,7 @@ def test_tier_structures_and_aliases_are_consistent():
 
     every = load_structures()
     for tier in mg.TIERS.values():
-        assert set(tier.structures) <= set(every)
+        assert set(tier.structures) <= set(every) | set(mg.EXTRA_STRUCTURES)
         assert set(tier.aliases.values()) <= set(tier.elements)
         assert len(set(tier.structures)) == len(tier.structures)
     assert 3 <= len(mg.TIERS["tiny"].elements) <= 4
@@ -215,6 +215,28 @@ def test_relabel_rejects_an_unknown_species():
     atoms = Atoms("Xe", positions=[[0, 0, 0]])
     with pytest.raises(ValueError, match="Xe"):
         mg.relabel(atoms, mg.TIERS["tiny"])
+
+
+def test_the_extra_structure_has_no_symmetry_that_zeroes_the_forces(omat_model, cases):
+    atoms = cases["periodic_triple"]
+    assert sorted(atoms.get_chemical_symbols()) == ["Cu", "Mg", "O"]
+    assert atoms.cell.rank == 3 and all(atoms.pbc)
+    assert (
+        min(atoms.cell.lengths()) < 6.0
+    )  # smaller than the cutoff: atoms are neighbours of their own images
+    out = _evaluate(omat_model, atoms)
+    assert np.abs(out["res/forces"]).max() > 1e-5
+    assert np.abs(out["res/stress"]).max() > 1e-6
+    # the shared structures that fit a tiny anchor are symmetric: this is why the extra one exists
+    for name in ("fcc4", "self_image_cell"):
+        shared = _evaluate(omat_model, mg.relabel(_shared(name), mg.TIERS["tiny"]))
+        assert np.abs(shared["res/forces"]).max() < 1e-12, name
+
+
+def _shared(name: str):
+    from tests_torch.structures.build_structures import load_structures
+
+    return load_structures()[name]
 
 
 def test_tier_cases_stay_inside_the_element_set(cases):

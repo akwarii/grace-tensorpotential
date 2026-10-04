@@ -109,7 +109,7 @@ TIERS = {
         "tiny",
         ("Cu", "H", "Mg", "O"),
         True,
-        ("isolated_atom", "dimer", "self_image_cell"),
+        ("isolated_atom", "dimer", "self_image_cell", "periodic_triple"),
         {"Au": "H", "Ca": "Mg", "Si": "Cu"},
     ),
     "faithful": Tier(
@@ -231,11 +231,34 @@ def relabel(atoms, tier: Tier):
     return out
 
 
+def periodic_triple():
+    """Three atoms of Cu, Mg and O at generic positions of a small orthorhombic cell (79 bonds at the cutoff of 6 A).
+
+    The structures of ``tests_torch/structures`` that are small enough for a tiny anchor are symmetric (``fcc4``,
+    ``self_image_cell``: an inversion centre on every atom or the mid-point, so the forces vanish to 1e-15), and
+    ``dimer`` is aperiodic: without this case no tiny anchor has a non-zero force in a periodic cell. The cell is smaller
+    than the cutoff along every axis, so atoms are their own neighbours through images.
+    """
+    from ase import Atoms
+
+    return Atoms(
+        "CuMgO",
+        scaled_positions=[[0.0, 0.0, 0.0], [0.27, 0.41, 0.13], [0.63, 0.19, 0.71]],
+        cell=[4.4, 4.7, 5.0],
+        pbc=True,
+    )
+
+
+#: structures that belong to the generator and not to the shared set of ``tests_torch/structures``
+EXTRA_STRUCTURES: dict[str, Callable[[], Any]] = {"periodic_triple": periodic_triple}
+
+
 def tier_cases(tier: Tier) -> dict[str, Any]:
     """The structures of ``tier`` (relabelled), in the order of ``tier.structures``."""
     from tests_torch.structures.build_structures import load_structures
 
-    every = load_structures()
+    shared = load_structures()
+    every = {**shared, **{n: make() for n, make in EXTRA_STRUCTURES.items()}}
     return {name: relabel(every[name], tier) for name in tier.structures}
 
 
