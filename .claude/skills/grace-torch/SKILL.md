@@ -42,9 +42,7 @@ The decisions taken so far (D1-D19: packaging, fixtures, periodic-boundary polic
   Random-weight fixtures only locally; foundation-model weights only on the HPC.
 - **R7 - Measure before optimising.** A performance idea is a hypothesis until a benchmark says otherwise, and GPU results need GPU access
   that must be asked for.
-- **R8 - Public surface.** The fork is public. Every issue, comment, PR text and commit message is sanitised before it is posted (no personal data, institution or
-  research-application details, local paths, e-mail addresses, stray `#N`, `@mentions`, or links into other repositories' issues); `tools/board.py` does it for what it posts, and
-  `python tools/board.py sanitise FILE` does it for other text. Sanitise the existing text of an issue you touch if it needs it.
+- **R8 - Public surface.** The fork is public: everything you post is sanitised (rules and the `board.py sanitise` command in `CLAUDE.md`).
 - **R9 - The user and the issue take precedence** over the general rules here and in `CLAUDE.md`. An issue whose job is to change legacy code (clean-up, quality,
   deduplication, packaging) may do what the general text discourages, within its scope and with the safeguards it names.
 
