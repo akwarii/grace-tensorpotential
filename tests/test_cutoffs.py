@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from tensorpotential.utils import CUTOFF_PRESETS, process_cutoff_dict
+from tensorpotential.core.cutoffs import CUTOFF_PRESETS, process_cutoff_dict
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITHMETIC
 
 CU_AL = {"Cu": 0, "Al": 1}
