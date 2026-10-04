@@ -168,12 +168,16 @@ def test_lazy_exports_returns_two_functions() -> None:
     assert callable(dir_)
 
 
-def test_missing_tf_error_does_not_wrap_an_error_that_already_carries_the_hint() -> None:
+def test_missing_tf_error_does_not_wrap_an_error_that_already_carries_the_hint() -> (
+    None
+):
     original = BackendNotInstalledError("tf", ("tensorflow", "tf_keras"), "text")
     error = missing_tf_error("TPCalculator", original)
     assert isinstance(error, BackendNotInstalledError)
     assert (error.backend, error.missing) == ("tf", ("tensorflow", "tf_keras"))
-    assert str(error).startswith("'TPCalculator' needs TensorFlow, which is not installed")
+    assert str(error).startswith(
+        "'TPCalculator' needs TensorFlow, which is not installed"
+    )
     assert "missing: tensorflow, tf_keras" in str(error)
     assert "could not be imported" not in str(error)
     assert "pip install 'tensorpotential[tf]'" in str(error)

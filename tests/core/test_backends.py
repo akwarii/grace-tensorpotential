@@ -14,6 +14,7 @@ as "not installed".
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -151,3 +152,44 @@ def test_backend_not_installed_builds_the_error_without_checking_anything() -> N
         "TorchSimModel needs torch-sim, which is not installed"
     )
     assert "pip install 'tensorpotential[torch-sim]'" in str(error)
+
+
+class Refuse:
+    """A finder that refuses the given top-level packages, as an environment without them would."""
+
+    def __init__(self, *packages: str) -> None:
+        self.packages = packages
+
+    def find_spec(self, name: str, path: object = None, target: object = None) -> None:
+        if name.split(".")[0] in self.packages:
+            raise ImportError(f"No module named {name!r}", name=name)
+
+
+@pytest.fixture
+def no_torch_sim_packages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ``torch``, ``torch_sim`` and ``vesin`` absent for this process (in-process, for coverage)."""
+    packages = BACKEND_PACKAGES["torch-sim"]
+    for package in packages:
+        monkeypatch.delitem(sys.modules, package, raising=False)
+    monkeypatch.setattr(sys, "meta_path", [Refuse(*packages), *sys.meta_path])
+
+
+def test_require_backend_raises_in_this_process_when_the_packages_are_absent(
+    no_torch_sim_packages: None,
+) -> None:
+    assert missing_packages("torch-sim") == ("torch", "torch_sim", "vesin")
+    with pytest.raises(
+        BackendNotInstalledError, match="missing: torch, torch_sim, vesin"
+    ):
+        require_backend("torch-sim", needed_by="TorchSimModel")
+
+
+def test_require_backend_returns_in_this_process_when_the_packages_are_found(
+    no_torch_sim_packages: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sys.meta_path.pop(0)  # the refusing finder of the fixture
+    monkeypatch.syspath_prepend(str(stub_site(tmp_path, BACKEND_PACKAGES["torch-sim"])))
+    assert missing_packages("torch-sim") == ()
+    assert require_backend("torch-sim") is None
