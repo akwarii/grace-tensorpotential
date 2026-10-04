@@ -1,0 +1,165 @@
+# Checks on every pull request and on every push to the integration branch (CI1, D17a):
+#   lint            ruff, ty, the lint ratchet, the import contract (TensorFlow-free modules)
+#   tests-torch     the TF-free torch-backend tests on pandas 2.3 and 3.0 (runs once tests_torch/ has tests)
+#   wheel           builds the wheel, checks its file list and metadata against upstream and the declared extras
+#   wheel-smoke     installs the wheel into a clean venv (base, torch, tf) and runs the smoke test
+#   extras-resolve  resolves each extra with uv, on Python 3.11 and 3.13; an empty extra fails
+# The slow jobs (TensorFlow suite, both stacks, torch-sim main) are in nightly.yml.
+# Every action is pinned to a commit; the token has read access only.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [torch-backend]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.5"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install the development environment (the dev group includes the tf extra)
+        run: uv sync --frozen --group dev
+      - name: ruff, strict set (new packages)
+        run: uv run --frozen --no-sync ruff check tensorpotential/core tensorpotential/torch_backend tests_torch
+      - name: ty (new packages)
+        run: uv run --frozen --no-sync ty check tensorpotential/core tensorpotential/torch_backend tests_torch
+      - name: Lint ratchet (legacy counts may not rise)
+        run: uv run --frozen --no-sync python tools/lint_ratchet.py check
+      - name: Import contract (TensorFlow-free modules)
+        run: uv run --frozen --no-sync lint-imports
+      - name: Registry completeness (instruction classes and pinned defaults)
+        run: uv run --frozen --no-sync python tools/instruction_ast.py check
+      - name: Tests of the packaging tools (the environment has the tf extra and tensorpotential installed)
+        run: uv run --frozen --no-sync pytest tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py -q -p no:cacheprovider
+
+  tests-torch:
+    # Defined here, switched on by TORCH1, which creates tests_torch/ (the job is skipped while it has no test file).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        pandas: ["2.3.3", "3.0.3"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - id: has-tests
+        name: Look for tests_torch/ tests
+        run: |
+          if compgen -G "tests_torch/test_*.py" > /dev/null; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.has-tests.outputs.found == 'true'
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+      - if: steps.has-tests.outputs.found == 'true'
+        name: Install the torch extra without TensorFlow, then pin pandas
+        run: |
+          uv venv .venv-torch
+          uv pip install --python .venv-torch/bin/python ".[torch]" pytest
+          uv pip install --python .venv-torch/bin/python "pandas==${{ matrix.pandas }}"
+      - if: steps.has-tests.outputs.found == 'true'
+        name: Run tests_torch without TensorFlow
+        run: |
+          .venv-torch/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
+          .venv-torch/bin/python -m pytest tests_torch -q -p no:cacheprovider -W always
+
+  wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+      - name: Build the wheel
+        run: uv build --wheel --out-dir dist
+      - name: Check the wheel (file list against upstream, metadata, extras)
+        # --noconftest: tests/conftest.py imports TensorFlow, which the packaging tests do not need
+        run: |
+          uv venv .venv-check
+          uv pip install --python .venv-check/bin/python pytest
+          TENSORPOTENTIAL_WHEEL="$(ls dist/*.whl)" .venv-check/bin/python -m pytest --noconftest -p no:cacheprovider -q \
+            tests/test_packaging.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheel
+          path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 7
+
+  wheel-smoke:
+    needs: wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+        extra: ["none", "torch", "tf"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: wheel
+          path: dist
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python }}
+      - name: Install the wheel into a clean venv
+        run: |
+          uv venv --python ${{ matrix.python }} ../clean-venv
+          if [ "${{ matrix.extra }}" = none ]; then target="$(ls "$PWD"/dist/*.whl)"; else target="$(ls "$PWD"/dist/*.whl)[${{ matrix.extra }}]"; fi
+          uv pip install --python ../clean-venv/bin/python "$target"
+      - name: Smoke test (core imports, --help of the ten console scripts)
+        run: |
+          expect=no-tf; if [ "${{ matrix.extra }}" = tf ]; then expect=tf; fi
+          python3 tools/wheel_smoke.py ../clean-venv/bin/python --expect "$expect"
+
+  extras-resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+        extra: ["tf", "torch", "torch-sim", "all"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+      - name: Resolve the extra (fails when its list is empty or a requirement is not resolved)
+        run: python3 tools/resolve_extras.py --python-version ${{ matrix.python }} ${{ matrix.extra }}
