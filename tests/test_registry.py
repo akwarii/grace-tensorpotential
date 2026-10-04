@@ -302,7 +302,9 @@ def test_a_required_option_that_is_missing_is_reported():
 
 
 def test_an_option_with_a_default_is_not_required():
-    assert problems_of(make("L", C + "BondLength")) == []
+    """The loader fills the defaults in; an instruction built by hand without them is not reported either."""
+    bare = InstructionSpec("L", C + "BondLength", {}, (), 0)
+    assert problems_of(bare) == []
     assert "instruction_with_bonds" not in make("L", C + "BondLength").defaulted
 
 
