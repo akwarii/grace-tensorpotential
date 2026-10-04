@@ -23,7 +23,7 @@ numbers move with it; the sheets are re-pinned by the issue that changes the uni
 | Geometry and radial | [BondLength](BondLength.md), [ScaledBondVector](ScaledBondVector.md), [RadialBasis](RadialBasis.md), [SphericalHarmonic](SphericalHarmonic.md), [MLPRadialFunction](MLPRadialFunction.md), [MLPRadialFunction_v2](MLPRadialFunction_v2.md) | draft; proposals accepted, review pending |
 | Embedding and single-particle basis | [ScalarChemicalEmbedding](ScalarChemicalEmbedding.md), [SingleParticleBasisFunctionScalarInd](SingleParticleBasisFunctionScalarInd.md), [SingleParticleBasisFunctionEquivariantInd](SingleParticleBasisFunctionEquivariantInd.md) | draft, awaiting review |
 | Product and reduce | [ProductFunction](ProductFunction.md), [FCRight2Left](FCRight2Left.md), [FunctionReduceN](FunctionReduceN.md) | draft, awaiting review |
-| Norm and output | InvariantLayerRMSNorm, CreateOutputTarget, LinMLPOut2ScalarTarget, ConstantScaleShiftTarget, TrainableShiftTarget | not written |
+| Norm and output | [InvariantLayerRMSNorm](InvariantLayerRMSNorm.md), [CreateOutputTarget](CreateOutputTarget.md), [LinMLPOut2ScalarTarget](LinMLPOut2ScalarTarget.md), [ConstantScaleShiftTarget](ConstantScaleShiftTarget.md), [TrainableShiftTarget](TrainableShiftTarget.md) | draft, awaiting review |
 
 ## Layout of a sheet
 
@@ -87,6 +87,13 @@ These hold for all 17 classes and are not repeated in each sheet.
 - **G8. Variable names carry the weight-decay flag.** `no_weight_decay=True` puts `no_decay` in a weight's name
   and `False` puts `_` (`functions/nn.py:39-42`, `271-274`). The flag has no effect at inference, but the
   checkpoint keys differ between the two spellings, and the extractor has to follow the names of the model.
+- **G9. Variable names are not unique keys.** Some variables are created without a name scope or a name:
+  the two `InvariantLayerRMSNorm.scale` of large_base are both called `Variable:0`. The extractor keys weights by the
+  attribute path of the instruction (`<instruction>/<attribute>`), as rule R6 says, never by the TF variable name.
+- **G10. The energy chain.** `CreateOutputTarget` makes `atomic_energy`; every output instruction after it reads that key
+  and writes the result back under the same key (`instructions/output.py:67-74`). A dump of the data dictionary therefore
+  holds only the last value; an intermediate value needs a snapshot before and after each output instruction. The model
+  reads `atomic_energy` as `[n_atoms, 1]` (`tpmodel.py:295`).
 
 ## Unread keywords
 
