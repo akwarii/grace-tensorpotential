@@ -31,6 +31,7 @@ uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW f
 uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also a test in tests/test_import_gates.py
+uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # divergence ledger: every upstream file the fork modifies has a row in tools/divergence.yaml (add the row in the same PR as the change; drop it when the file is identical to upstream again); also no fork-only path on a local pr/U* branch
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)
