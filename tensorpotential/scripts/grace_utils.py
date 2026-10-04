@@ -489,7 +489,6 @@ def aux_model(args):
         args.output_path,
         args.communicated_keys,
     )
-    # aux_options = args.aux
     param_dtype = resolve_param_dtype(args, model_path)
     # clean checkpoint_name from .index suffix if needed
     if checkpoint_path.endswith(".index"):
@@ -500,10 +499,6 @@ def aux_model(args):
     instr = load_instructions(model_path)
 
     extra_aux_computes = {"compute_energy": ComputeEnergy()}
-
-    #     extra_aux_computes["compute_local"] = ComputeStructureEnergyAndForcesAndVirial(
-    #         local=True
-    #     )
 
     has_spbfei = False
     for ins_name, ins in instr.items():
@@ -706,12 +701,6 @@ def main():
         default=["I_nl_LN", "I"],
         help="List of communicated keys, used for parallelization of GRACE-2L model.",
     )
-    # parser_aux_model.add_argument(
-    #     "--aux",
-    #     nargs="+",
-    #     default=["parallel_2L", "energy_only", "compute_local"],
-    #     help="List of aux functions to add: parallel_2L, energy_only, compute_local",
-    # )
     parser_aux_model.set_defaults(func=lambda args: aux_model(args))
 
     # Parse arguments and execute the corresponding function
