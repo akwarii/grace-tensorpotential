@@ -100,6 +100,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "import-linter",
     "ruff==0.16.7",
     "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
 ]
