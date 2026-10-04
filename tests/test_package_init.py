@@ -37,7 +37,7 @@ FLAG_PROBE = (
 def test_flag_is_set_when_missing_or_empty_and_the_user_is_told(
     before: str | None, tmp_path: Path
 ) -> None:
-    result = run_fresh_python(FLAG_PROBE, tmp_path, **{FLAG: before})
+    result = run_fresh_python(FLAG_PROBE, tmp_path, env={FLAG: before})
     assert result.returncode == 0, result.stderr
     assert "automatically set" in result.stdout
     assert result.stdout.strip().endswith("'1'")
@@ -47,7 +47,7 @@ def test_flag_is_set_when_missing_or_empty_and_the_user_is_told(
 def test_flag_already_right_is_left_alone_and_silent(
     value: str, tmp_path: Path
 ) -> None:
-    result = run_fresh_python(FLAG_PROBE, tmp_path, **{FLAG: value})
+    result = run_fresh_python(FLAG_PROBE, tmp_path, env={FLAG: value})
     assert result.returncode == 0, result.stderr
     assert f"'{value}'" in result.stdout
     assert "automatically set" not in result.stdout
@@ -68,7 +68,7 @@ def test_flag_set_to_something_else_in_a_fresh_interpreter_is_kept_with_a_warnin
     result = run_fresh_python(
         "import tensorpotential, os; print(os.environ['TF_USE_LEGACY_KERAS'])",
         tmp_path,
-        **{FLAG: "0"},
+        env={FLAG: "0"},
     )
     assert result.returncode == 0, result.stderr
     assert "requires '1'" in result.stdout

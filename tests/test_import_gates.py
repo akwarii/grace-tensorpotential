@@ -17,12 +17,12 @@ import ast
 import json
 import os
 import re
-import subprocess
-import sys
 import warnings
 from pathlib import Path
 
 import pytest
+
+from tests.fresh_python import run_fresh_python
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "tensorpotential"
@@ -207,28 +207,6 @@ def cls_strings() -> dict[str, list[str]]:
 # --------------------------------------------------------------------------------------
 # Subprocess helper
 # --------------------------------------------------------------------------------------
-def _run_python(
-    code: str, cwd: Path, args: tuple[str, ...] = (), stdin: str | None = None
-) -> subprocess.CompletedProcess:
-    """Run ``code`` in a fresh interpreter that imports ``tensorpotential`` from this tree."""
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join(
-        filter(None, [str(REPO_ROOT), env.get("PYTHONPATH")])
-    )
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    env["TF_CPP_MIN_LOG_LEVEL"] = "3"
-    return subprocess.run(
-        [sys.executable, "-W", "ignore", "-c", code, *args],
-        input=stdin,
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=IMPORT_TIMEOUT_S,
-        check=False,
-    )
-
-
 # One interpreter imports ``tensorpotential`` and ``tensorpotential._tf_options`` (which loads and
 # configures TensorFlow, costing seconds: the package ``__init__`` itself no longer does), then
 # forks one child per module.  A child starts from the state a TensorFlow-side import finds and
@@ -296,7 +274,7 @@ print(json.dumps(unresolved))
 
 def _unresolved(pairs: list[tuple[str, str]], cwd: Path) -> list[list[str]]:
     """The ``[module, name, reason]`` of each pair that does not resolve, in one interpreter."""
-    result = _run_python(_RESOLVE_CODE, cwd, stdin=json.dumps(pairs))
+    result = run_fresh_python(_RESOLVE_CODE, cwd, stdin=json.dumps(pairs))
     assert result.returncode == 0, result.stderr[-2000:]
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -306,7 +284,7 @@ def _unresolved(pairs: list[tuple[str, str]], cwd: Path) -> list[list[str]]:
 # --------------------------------------------------------------------------------------
 def _imports_in_forks(names: list[str], root: Path, cwd: Path) -> dict[str, dict]:
     """``{name: {"returncode", "stderr"}}`` of importing each of ``names`` from below ``root``."""
-    result = _run_python(
+    result = run_fresh_python(
         _FORK_IMPORT_CODE, cwd, args=(str(root),), stdin=json.dumps(names)
     )
     assert result.returncode == 0, result.stderr[-2000:]
@@ -545,7 +523,7 @@ print(json.dumps({"failures": failures, "loaded": sorted(m for m in sys.modules 
 
 @pytest.fixture(scope="module")
 def tf_blocked_run(tmp_path_factory):
-    result = _run_python(
+    result = run_fresh_python(
         _TF_BLOCKED_CODE,
         tmp_path_factory.mktemp("tf_blocked"),
         args=(str(REPO_ROOT) + os.sep,),
@@ -575,13 +553,10 @@ def test_tf_free_names_work_and_tf_names_explain_what_is_missing(tf_blocked_run)
 
 def test_the_import_contract_is_kept():
     """``lint-imports`` reads ``[tool.importlinter]`` of pyproject.toml: no path from the TF-free modules to TensorFlow."""
-    result = subprocess.run(
-        [sys.executable, "-c", "from importlinter.cli import lint_imports_command as main; main()"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=IMPORT_TIMEOUT_S,
-        check=False,
+    result = run_fresh_python(
+        "from importlinter.cli import lint_imports_command as main; main()",
+        REPO_ROOT,
+        args=("--no-cache",),
     )
     assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-1000:]
     assert "1 kept, 0 broken" in result.stdout

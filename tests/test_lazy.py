@@ -13,8 +13,6 @@ requested object and the ``tf`` extra and keeps the original error as its cause.
 
 from __future__ import annotations
 
-import os
-import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -22,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from tensorpotential.core.lazy import is_tf_import_error, lazy_exports, missing_tf_error
+from tests.fresh_python import run_fresh_python
 
 PACKAGE = "lazy_demo_pkg"
 FILES = {
@@ -41,7 +40,6 @@ FILES = {
     "needs_tf.py": "import tf_keras\n\nclass NeedsTf:\n    pass\n",
     "needs_other.py": "import no_such_module_for_tensorpotential_tests\n\nclass NeedsOther:\n    pass\n",
 }
-REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
@@ -129,17 +127,7 @@ except ImportError as exc:
 def test_a_missing_tensorflow_is_reported_with_the_name_and_the_extra(
     demo_package: Path,
 ) -> None:
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join([str(demo_package), str(REPO_ROOT)])
-    result = subprocess.run(
-        [sys.executable, "-c", BLOCKED_TF],
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=demo_package,
-        check=False,
-        timeout=120,
-    )
+    result = run_fresh_python(BLOCKED_TF, demo_package, pythonpath=[demo_package])
     assert result.returncode == 0, result.stderr
     out = result.stdout
     assert "'NeedsTf' needs TensorFlow" in out
