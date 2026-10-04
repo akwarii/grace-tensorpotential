@@ -20,8 +20,8 @@ numbers move with it; the sheets are re-pinned by the issue that changes the uni
 
 | Family | Sheets | Status |
 |---|---|---|
-| Geometry and radial | [BondLength](BondLength.md), [ScaledBondVector](ScaledBondVector.md), [RadialBasis](RadialBasis.md), [SphericalHarmonic](SphericalHarmonic.md), [MLPRadialFunction](MLPRadialFunction.md), [MLPRadialFunction_v2](MLPRadialFunction_v2.md) | draft, awaiting review |
-| Embedding and single-particle basis | ScalarChemicalEmbedding, SingleParticleBasisFunctionScalarInd, SingleParticleBasisFunctionEquivariantInd | not written |
+| Geometry and radial | [BondLength](BondLength.md), [ScaledBondVector](ScaledBondVector.md), [RadialBasis](RadialBasis.md), [SphericalHarmonic](SphericalHarmonic.md), [MLPRadialFunction](MLPRadialFunction.md), [MLPRadialFunction_v2](MLPRadialFunction_v2.md) | draft; proposals accepted, review pending |
+| Embedding and single-particle basis | [ScalarChemicalEmbedding](ScalarChemicalEmbedding.md), [SingleParticleBasisFunctionScalarInd](SingleParticleBasisFunctionScalarInd.md), [SingleParticleBasisFunctionEquivariantInd](SingleParticleBasisFunctionEquivariantInd.md) | draft, awaiting review |
 | Product and reduce | ProductFunction, FCRight2Left, FunctionReduceN | not written |
 | Norm and output | InvariantLayerRMSNorm, CreateOutputTarget, LinMLPOut2ScalarTarget, ConstantScaleShiftTarget, TrainableShiftTarget | not written |
 
@@ -67,6 +67,9 @@ These hold for all 17 classes and are not repeated in each sheet.
   included, in `model.yaml` (`instructions/base.py:157-224`, `to_dict` at 206-212). A twin reads the arguments
   from the yaml and must not apply its own defaults to a key that is present; for an absent key the pinned
   default of section 1 applies.
+  The two shipped 2L yamls are in the old flat format (one entry per instruction, no `metadata` block, so no
+  `param_dtype`); `load_instructions` reads that format, the wrapped one and the oldest list format
+  (`instructions/base.py:273-324`). The twin reads the parameter dtype from the weights it is given, not from the yaml.
 - **G4. Call convention.** `TPInstruction.__call__` runs `frwrd` and stores the result under the instruction's
   own name in the data dictionary; it fails if the name is already there (`instructions/base.py:374-382`).
   Instructions run in the order of the yaml. Consumers refer to producers by name (`bonds`, `basis`, `vhat`, ...).
@@ -84,6 +87,28 @@ These hold for all 17 classes and are not repeated in each sheet.
 - **G8. Variable names carry the weight-decay flag.** `no_weight_decay=True` puts `no_decay` in a weight's name
   and `False` puts `_` (`functions/nn.py:39-42`, `271-274`). The flag has no effect at inference, but the
   checkpoint keys differ between the two spellings, and the extractor has to follow the names of the model.
+
+## Unread keywords
+
+Many classes end in `**kwargs`, and `capture_init_args` stores whatever keys the yaml has. Keys that TF accepts and
+**never reads** therefore exist in shipped models. Measured on the two 2L yamls (every key that is not a constructor
+parameter): `RadialBasis` (the basis keywords `nfunc`, `p`, `rcut`, `normalized`, which are read); `ProductFunction`
+`n_out`, `chemical_embedding`, `downscale_embedding_size`; `FunctionReduceN` `n_in`, `chemical_embedding`,
+`downscale_embedding_size`; `SingleParticleBasisFunctionEquivariantInd` `radia_basis` (sic), `n_out`;
+`LinMLPOut2ScalarTarget` `full_origin_norm`, `init_norm` (omat yaml only). Policy for the twins (**Proposal**, accepted
+for the radial classes): each class keeps an allow-list of keys that TF ignores, accepted with any value; every other
+unknown key is an error naming it. The allow-list of a class is in its sheet.
+
+## Dtype chain of a float32 model (Measured)
+
+Both 2L yamls built with float32 parameters on the pinned commit and run on a 16-atom periodic structure with float64
+data (`tools/oracle_snapshot.py` builders): the outputs of `BondLength`, `ScaledBondVector`, `RadialBasis` and
+`SphericalHarmonic` are **float64**; the outputs of every instruction from the radial functions `R`, `R1` on (all
+`SingleParticleBasisFunction*`, `FCRight2Left`, `ProductFunction`, `FunctionReduceN`, `InvariantLayerRMSNorm`, the
+output instructions) are **float32**. With float64 parameters everything is float64. The energy of the float32 model
+differs from the float64 one by `1.6e-7` eV and `5.3e-9` eV (omat, large_base; same seeded weights, one structure). Shapes
+for that structure (16 atoms, 928 bonds): `R` `[928, 32, 25]` (omat) and `[928, 42, 25]` (large_base); the sheets give
+the others.
 
 ## Existing TF characterisation
 
