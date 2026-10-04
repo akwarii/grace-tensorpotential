@@ -558,33 +558,46 @@ def test_a_changed_default_of_the_basis_function_that_radial_basis_forwards_to_i
     assert "RadialBasis.p: source default 6, pinned 5" in ia.problems(copy)
 
 
-def test_a_new_constructor_parameter_is_reported(copy):
-    edit(
-        copy,
-        "instructions/compute.py",
+SPBF_SCALAR = "SingleParticleBasisFunctionScalarInd"
+CONSTRUCTOR_CHANGES = [
+    pytest.param(
         "avg_n_neigh: float | dict = 1.0,",
         "avg_n_neigh: float | dict = 1.0,\n        extra_knob: int = 3,",
-        "SingleParticleBasisFunctionScalarInd",
-    )
-    found = ia.problems(copy)
-    assert any(
-        "constructor parameter 'extra_knob' has no option rule" in p for p in found
-    )
-    assert any("extra_knob: source default 3, pinned <absent>" in p for p in found)
-
-
-def test_a_removed_parameter_is_reported(copy):
-    edit(
-        copy,
-        "instructions/compute.py",
+        [
+            "constructor parameter 'extra_knob' has no option rule",
+            "extra_knob: source default 3, pinned <absent>",
+        ],
+        id="new-parameter",
+    ),
+    pytest.param(
         "        indicator_l_depend: bool = False,\n",
         "",
-        "SingleParticleBasisFunctionScalarInd",
-    )
-    assert any(
-        "option 'indicator_l_depend' is no constructor parameter any more" in p
-        for p in ia.problems(copy)
-    )
+        ["option 'indicator_l_depend' is no constructor parameter any more"],
+        id="removed-parameter",
+    ),
+    pytest.param(
+        "avg_n_neigh: float | dict = 1.0,",
+        "avg_n_neigh: float | dict = default_avg(),",
+        ["the default default_avg() is not a literal"],
+        id="non-literal-default",
+    ),
+    pytest.param(
+        "sum_neighbors: bool = True,",
+        "sum_neighbors: bool = 1,",
+        ["sum_neighbors: source default 1, pinned True"],
+        id="equal-but-another-type",
+    ),
+]
+
+
+@pytest.mark.parametrize(("old", "new", "expected"), CONSTRUCTOR_CHANGES)
+def test_a_changed_constructor_of_a_supported_class_is_reported(
+    copy, old, new, expected
+):
+    edit(copy, "instructions/compute.py", old, new, SPBF_SCALAR)
+    found = ia.problems(copy)
+    for text in expected:
+        assert any(text in p for p in found), (text, found)
 
 
 def test_a_removed_class_is_reported_as_a_stale_registry_entry(copy):

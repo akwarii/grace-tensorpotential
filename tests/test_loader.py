@@ -706,7 +706,7 @@ def test_options_are_read_only_and_exclude_the_class_and_the_name():
     options = spec["Y"].options
     assert "__cls__" not in options and "name" not in options
     with pytest.raises(TypeError):
-        options["lmax"] = 3  # type: ignore[index]
+        options["lmax"] = 3  # ty: ignore[invalid-assignment]
 
 
 def test_specs_are_frozen_values():
@@ -715,9 +715,9 @@ def test_specs_are_frozen_values():
         spec.instructions[0], InstructionSpec
     )
     with pytest.raises(AttributeError):
-        spec.param_dtype = "float32"  # type: ignore[misc]
+        spec.param_dtype = "float32"  # ty: ignore[invalid-assignment]
     with pytest.raises(AttributeError):
-        spec.instructions[0].name = "x"  # type: ignore[misc]
+        spec.instructions[0].name = "x"  # ty: ignore[invalid-assignment]
     assert InstructionRef("A") == InstructionRef("A") and hash(
         InstructionRef("A")
     ) == hash(InstructionRef("A"))
