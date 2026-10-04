@@ -164,7 +164,7 @@ positional arguments:
     export              Export model to saved_model or FS/C++ format.
     export_kokkos       Export GRACE-1L/2L weights to .npz for LAMMPS Kokkos pair style.
     summary             Show info about the model
-    aux_model           Upgrade model with different compute functions: parallel_2L, compute_energy_only,
+    aux_model           Add compute_energy; split a 2L model (see -ck)
 
 options:
   -h, --help            show this help message and exit
@@ -224,8 +224,9 @@ aux_model:
   -o OUTPUT_PATH, --output-path OUTPUT_PATH
                         Path to save the upgraded model
   -ck COMMUNICATED_KEYS [COMMUNICATED_KEYS ...], --communicated-keys COMMUNICATED_KEYS [COMMUNICATED_KEYS ...]
-                        List of communicated keys
-  --aux AUX [AUX ...]   List of aux functions to add: parallel_2L, energy_only, compute_local (all by default)
+                        Keys communicated between the two layers of a GRACE-2L
+                        model, at which it is split (unused for other models);
+                        they must exist in the model (default: I_nl_LN I)
 ```
 #### Update models
 If a model was fitted with `gracemaker` version < 0.5, it will break in the newer versions due to the format change.
@@ -340,11 +341,17 @@ grace_utils -p /path/to/model.yaml summary -v 1
 ```
 
 #### Upgrade model with auxiliary compute functions
-One can add auxiliary compute functions to the model, for example to compute energy only (using `energy_only` compute function).
-Also, one can split the 2L model into two parts for parallel computation (using `parallel_2L` aux function).
+`aux_model` loads a model and its checkpoint and saves it as a SavedModel with one extra compute function, `compute_energy` (the atomic energies, without forces and stress).
+The set of functions is fixed: there is no option to choose them.
+
+A GRACE-2L model (one that contains a `SingleParticleBasisFunctionEquivariantInd` instruction) is also split into two parts for parallel computation.
+The split happens at the communicated keys given with `-ck`, and adds the compute functions `forward_layer_1`, `backward_layer_2` and `backward_layer_1`.
+The keys must be instructions of the model: the default `I_nl_LN I` suits only models that have them, and for other models (for example the
+`GRACE_2LAYER_latest` preset, which has `I` and `I_out_0_LN`) the keys have to be passed, otherwise the command stops with "Key ... not found in dependency graph".
+For GRACE-1L models `-ck` is not used.
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index aux_model -o /path/to/upgraded_model --aux energy_only parallel_2L
+grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index aux_model -o /path/to/upgraded_model -ck I I_out_0_LN
 ```
 
 ## `grace_predict`

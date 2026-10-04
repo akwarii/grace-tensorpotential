@@ -9,8 +9,8 @@
 #              or never (depends on fork-only code or is a fork policy); the owner decides, a new row starts as pending
 
 - path: docs/gracemaker/utilities.md
-  reason: 'documents the --stress-units option of grace_preprocess'
-  milestone: [DATA1]
+  reason: 'documents the --stress-units option of grace_preprocess; the aux_model help and usage describe what the command does (no --aux argument)'
+  milestone: [DATA1, CLEAN5]
   upstream: pending
 
 - path: pyproject.toml
@@ -149,8 +149,8 @@
   upstream: pending
 
 - path: tensorpotential/functions/radial.py
-  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CORE1]
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); the ignored normalized argument of the Gaussian basis is deprecated'
+  milestone: [CLEAN2, CORE1, CLEAN5]
   upstream: pending
 
 - path: tensorpotential/functions/spherical_harmonics.py
@@ -239,8 +239,8 @@
   upstream: pending
 
 - path: tensorpotential/scripts/grace_utils.py
-  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CORE1]
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); dead --aux comments removed and the aux_model help corrected'
+  milestone: [CORE1, CLEAN5]
   upstream: pending
 
 - path: tensorpotential/tensorpot.py
