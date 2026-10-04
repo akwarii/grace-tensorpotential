@@ -153,6 +153,7 @@ The procedure (board commands, PR text, findings, Definition of Done) is in the 
 - **An issue is resolved only once a pull request that references it (`Refs #<issue>`) is merged into `torch-backend` on this fork.** `tools/board.py done` checks that and
   refuses otherwise; `--waive-pr` only when the user says so. Work follows the issue's protocol: Todo to In Progress when starting, unexpected findings commented on the issue,
   and the **Definition of Done checkboxes ticked every time a task of the issue is finished** (`tools/board.py check`), with evidence.
+- **Mind the GraphQL budget** (5,000 points an hour for the whole account, shared by all agents): use `tools/board.py` for the board, never `gh project item-list` or `gh project field-list` (about 100 and 150 points a call) and never loops of `gh` calls; `python tools/board.py budget` shows what is left. Details in the `grace-torch-ticket` skill.
 - **Keep the issues current: fix stale text.** When a task changes something an issue mentions (a path, command, count, decision, tool, dependency line or exit criterion), update that issue in the same task; run `python tools/board.py lint` and fix every `STALE` finding.
 - **The fork is public: sanitise everything you post** (issues, comments, PR descriptions, commit messages). `tools/board.py` sanitises automatically what it posts;
   pass any other text through `python tools/board.py sanitise FILE`. Sanitising means: no personal data, institution names, e-mail addresses, absolute local

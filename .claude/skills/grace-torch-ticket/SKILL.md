@@ -56,6 +56,10 @@ sanitise as you go (the helper does it for what it posts).
 The table view shows Status, Stage, Priority, **Blocked by** (dependencies that are not Done), **PR** (pull requests whose description has `Refs #<issue>`, with their state). GitHub's own "Linked pull requests" column stays empty: tested on this fork, neither a closing keyword (`Closes #N`) nor a linked branch links a pull request whose base is not the default branch (`master`), and our pull requests target `torch-backend`; hence the PR column. `board.py status` and `board.py done`
 refresh the two text columns by themselves; after anything else that changes them (a PR opened or closed, an issue created) run `python tools/board.py refresh` (it writes only the cells that changed).
 
+## The GraphQL budget
+
+GitHub allows 5,000 GraphQL points an hour for the whole account, shared by every agent and the desktop app, and every `gh issue`, `gh pr` and `gh project` command spends them. **`gh project item-list` (about 100 points per call on this 97-item board) and `gh project field-list` (about 150) are expensive**, because they fetch every field, label and assignee as nested connections; the old `board.py` spent 200 to 800 points per command on them. Never call them, and never loop over `gh` calls (an issue list or a pull-request list costs 1 to 3). `board.py` reads the table with one narrow query and reads the issues, the pull requests and the table once per command; the project's id and columns are kept for a day in `<git-dir>/board-cache.json` (`BOARD_NO_CACHE=1` ignores it). `python tools/board.py budget` shows what is left and when it resets (`gh api rate_limit` lags behind the real count; the `X-Ratelimit-*` headers of `GH_DEBUG=api` are correct); `--verbose` prints the cost of each table query. When a call fails with "API rate limit exceeded", stop using `gh` until the reset time the message gives.
+
 ## Keep the Definition of Done current
 
 The issue body ends with a **Definition of Done** checklist. **Every time you finish a task that belongs to the issue, tick the boxes it satisfies**, with the
