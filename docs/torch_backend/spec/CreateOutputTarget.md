@@ -58,9 +58,14 @@ of the chain is float32 for float32 parameters (**Measured**).
 
 ## 7. Options rejected
 
-- `l != 0` for the energy chain: the 2L models only have `l = 0`; `CreateOutputTarget` itself works for any `l` (it only
-  stores it). **Proposal**: the twin supports `l = 0` and raises on a model whose output chain has another `l`
-  (forces and stress are derived by autograd, not as separate targets).
+- `l != 0` for the energy chain: **rejected** (owner, 2026-10-04, after a check). `CreateOutputTarget` only stores `l`, and
+  the readouts only compare it with the `l` of their target (`output.py:60-63`). **Measured** (random weights, float64):
+  `ConstantScaleShiftTarget` and `TrainableShiftTarget` on a target of `l` 0, 1 and 2 return the identical `[n_atoms, 1]`
+  values, so in the 17 classes `l` changes no number; the other readouts of this module that make a non-scalar target
+  (`LinearOut2EquivarTarget`, `l` 1 and 2) are not in the 17 classes. A chain declaring `l >= 1` with scalar readouts
+  would claim a vector or tensor target while computing a scalar, so it is not meaningful. The twin supports `l = 0` and
+  raises, naming the instruction, on any other `l` (forces and stress come from autograd, not from separate targets). The
+  option table already accepts only `l = 0` for these classes.
 - `initial_value != 0.0`: ported (a constant added to the energy of every atom).
 
 ## 8. Golden-fixture keys

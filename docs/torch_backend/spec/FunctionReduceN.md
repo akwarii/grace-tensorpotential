@@ -135,8 +135,9 @@ source to the weight dtype before the contraction, as TF does.
 
 - `lora_config` not `None`: **Proposal**, rejected (`compute.py:3226-3227`, `3231-3251`).
 - `simplify = True`: **Proposal**, rejected. With a plain `ProductFunction` TF raises `TypeError` (the other class combination
-  runs but leaves the tables unchanged: `drop_unused` is a no-op on them, `tests/test_compute.py:4119`, `4168`); no
-  shipped model has it.
+  runs but leaves the tables unchanged: `drop_unused` is a no-op on them, `tests/test_compute.py:4119`, `4168`). Only one
+  model yaml has it, `GRACE-FS-OMAT.yaml` (instruction `E`, with `CropProductFunction`, a class outside the 17); no yaml
+  with `ProductFunction` does. Decided (owner, 2026-10-04): rejected. The option table of SPEC2 still accepts both booleans.
 - `init_vars`: accepted, no effect. `init_target_value` is **ported** (see section 5). `is_central_atom_type_dependent`,
   `normalize = False`, `out_norm = True`, `scale != 1`, `lm_first`: ported; those not set by a 2L yaml need option-pair
   fixtures.
@@ -156,5 +157,7 @@ re-computation from the stored weights, invariance of the scalar outputs, the la
 
 ## For the reviewer
 
-1. **`init_target_value`.** It looks like a training knob but changes the inference result when `"ones"`. The twin ports it.
-   Both yamls use `"zeros"`; say if it should be rejected instead.
+1. **`init_target_value`.** Decided (owner, 2026-10-04): ported. It looks like a training knob but changes the inference
+   result when `"ones"`. Both yamls use `"zeros"`, and the option table of SPEC2 still accepts only `"zeros"`: see the
+   README, section "Decisions of the review".
+2. **`simplify = True`.** Decided: rejected (section 7).

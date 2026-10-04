@@ -123,5 +123,4 @@ Gauss-Legendre quadrature, parity `(-1)**l`, the addition theorem and rotation c
 
 ## For the reviewer
 
-1. **Proposal (section 7)**: reject `type: complex` at load. Alternative: port the (broken) option as it is. The
-   proposal is preferred because TF itself fails on it.
+1. Decided (owner, 2026-10-04): `type: complex` is rejected at load (section 7), because TF itself fails on it.

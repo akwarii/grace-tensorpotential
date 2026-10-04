@@ -131,7 +131,9 @@ yaml fixtures; no achieved error exists yet.
 
 ## For the reviewer
 
-1. **`norm` and the embeddings.** No 2L model uses `norm = True`, `chemical_embedding_i` or
-   `chemical_embedding_j`. Rule R3 says all options of in-scope classes are ported. Proposal: port them (a few
-   lines each, TF oracles exist) and test them with option-pair fixtures; alternative: reject until needed.
-2. **Proposal (section 7)**: reject `lora_config` and `is_per_atom` embeddings.
+Both decided (owner, 2026-10-04):
+
+1. **`norm` and the embeddings.** No 2L model uses `norm = True`, `chemical_embedding_i` or `chemical_embedding_j`. Rule R3
+   says all options of in-scope classes are ported: they are ported (a few lines each, TF oracles exist) and tested with
+   option-pair fixtures.
+2. **Section 7**: `lora_config` and `is_per_atom` embeddings are rejected.

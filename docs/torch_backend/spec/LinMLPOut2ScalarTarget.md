@@ -27,7 +27,7 @@ channels (normalised if asked) go through a bias-free MLP, and the result is add
 | `activation` | `None` | `None`, `"tanh"`, `"silu"`, `"sigmoid"` | `None`: `silu(x) * 1.6759` (`functions/nn.py:344-345`); a string: that plain function (`functions/nn.py:15`, `387-392`). |
 | `l` | `0` | integer | Must equal `target.l`. |
 | `lora_config` | `None` | dict or `None` | Section 7. |
-| `return_hidden_target` | `None` | a `str` or `None` | Names an extra data key that receives the hidden features (section 7). Both yamls: absent. |
+| `return_hidden_target` | `None` | a `str` or `None` | Names an extra data key that receives the hidden features (sections 5 and 7). Both yamls: absent. An empty string is off, as `None` (`if self.return_hidden_target:`, `output.py:425`). |
 | `**kwargs` | | | Swallowed. The omat yaml stores `full_origin_norm: false` and `init_norm: zeros`, both **ignored** (allow-list of this class). |
 
 ## 2. Derived tables
@@ -87,9 +87,14 @@ constant in the dtype of the features.
 ## 7. Options rejected
 
 - `lora_config` not `None`: **Proposal**, rejected (`output.py:379-380`, `384-399`).
-- `return_hidden_target` not `None`: **Proposal**, rejected. It writes the hidden features into the data dictionary from
-  inside the forward pass (a contract violation noted in the code, `output.py:430-435`) for the uncertainty tools; the
-  twin has no GMM-UQ feature path (out of scope).
+- `return_hidden_target` not `None`: **ported** (owner, 2026-10-04). The TF class writes the hidden features into the data
+  dictionary from inside the forward pass (a contract violation noted in the code, `output.py:430-435`) for the uncertainty
+  tools. The twin returns them under that key as an extra output, with the same value:
+  `hidden = concat([lin, h_last], axis=1)`, `[n_atoms, 1 + hidden_layers[-1]]`, where `lin` is the summed linear channel of
+  the formula in section 5 and `h_last` the input of the **last** MLP layer (`nn.py:422-433`, the output of the last hidden
+  layer after its activation; with `hidden_layers = []` it is the normalised transformed channels themselves). Both are in the
+  parameter dtype, and the main output is unchanged by the option (pinned at `tests/test_output.py:512-545`). The option
+  needs an option-pair fixture (no shipped yaml sets it). The GMM-UQ path that reads the key stays out of scope.
 - `normalize` other than `None` and `"layer"`: rejected (TF asserts).
 - Several origins, `lm_first` origins, `hidden_layers` of any length, `activation` in `{tanh, silu, sigmoid}`, `n_out`:
   ported (large_base has two origins; `lm_first` needs an option fixture).
@@ -106,4 +111,4 @@ the value before the shift instruction (a snapshot of the key before and after e
 
 ## For the reviewer
 
-None beyond the family-wide proposals (reject `lora_config`, plus `return_hidden_target`).
+None open. Decided (owner, 2026-10-04): `return_hidden_target` is ported, not rejected. The option table of SPEC2 (`tensorpotential/torch_backend/spec/options.py`) still accepts only `null` for it: see the README, section "Decisions of the review".

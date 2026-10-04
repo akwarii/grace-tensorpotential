@@ -125,8 +125,9 @@ Gate-less case, the shipped one: a plain MLP, `silu` on both hidden layers, no b
 - An activation name outside `{tanh, silu, sigmoid}`: rejected at load time (TF raises `KeyError` at the first
   forward pass).
 - `local = True` with a `chem_embedding` (TF raises `NotImplementedError`, `compute.py:964-965`). `local` is the TF
-  flag of the domain-decomposed execution path (`tpmodel.py:389-401`, `610-618`); the twin has no such mode, so the
-  case does not arise. **Proposal**; a decision for the reviewer.
+  flag of the domain-decomposed execution path (`tpmodel.py:389-401`, `610-618`); the twin has no such mode. Decided (owner,
+  2026-10-04): rejected explicitly, with `NotImplementedError` naming the instruction, if a local path is asked for a model
+  with a `chem_embedding`, as TF does; it is not left to chance.
 
 ## 8. Golden-fixture keys
 
@@ -137,9 +138,11 @@ re-computation of the forward pass from seeded weights, including the gate, and 
 
 ## For the reviewer
 
-1. **The gate.** `chem_embedding` is not used by either 2L model. Proposal: port it (as the R3 rule says), with
-   the `tanh` exactly where it is, and cover it by an option-pair fixture. Alternative: reject until a model needs it.
-2. **The `tanh` placement** (inside `if embed_i`) looks accidental. The twin copies it (the TF classes are the
-   oracle); say so if the owner wants it reported to upstream instead.
-3. **Proposal (section 7)**: reject `lora_config`, unknown activation names and `basis = None` at load time; no
-   `local` mode in the twin.
+All decided (owner, 2026-10-04):
+
+1. **The gate.** `chem_embedding` is not used by either 2L model. Ported (rule R3), with the `tanh` exactly where it is, and
+   covered by an option-pair fixture.
+2. **The `tanh` placement** (inside `if embed_i`) looks accidental. The twin copies it (the TF classes are the oracle). It is
+   kept as a recorded quirk and not reported upstream.
+3. **Section 7**: `lora_config`, unknown activation names and `basis = None` are rejected at load time; there is no `local`
+   mode in the twin, and a local call with a `chem_embedding` is rejected explicitly.

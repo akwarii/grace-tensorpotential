@@ -112,8 +112,7 @@ Many classes end in `**kwargs`, and `capture_init_args` stores whatever keys the
 parameter): `RadialBasis` (the basis keywords `nfunc`, `p`, `rcut`, `normalized`, which are read); `ProductFunction`
 `n_out`, `chemical_embedding`, `downscale_embedding_size`; `FunctionReduceN` `n_in`, `chemical_embedding`,
 `downscale_embedding_size`; `SingleParticleBasisFunctionEquivariantInd` `radia_basis` (sic), `n_out`;
-`LinMLPOut2ScalarTarget` `full_origin_norm`, `init_norm` (omat yaml only). Policy for the twins (**Proposal**, accepted
-for the radial classes): each class keeps an allow-list of keys that TF ignores, accepted with any value; every other
+`LinMLPOut2ScalarTarget` `full_origin_norm`, `init_norm` (omat yaml only). Policy for the twins (decided, owner, 2026-10-04): each class keeps an allow-list of keys that TF ignores, accepted with any value; every other
 unknown key is an error naming it. The allow-list of a class is in its sheet.
 
 ## Dtype chain of a float32 model (Measured)
@@ -133,3 +132,31 @@ the others.
 logic tests and with oracle-based physics tests. The sheets cite them for every behaviour they pin, and a comment
 starting "Pins current behaviour (reported as a finding)" marks a TF defect that a twin must not copy by
 accident. They are the first fixture of a twin: the TF numbers of a sheet are reproducible from there.
+
+## Decisions of the review
+
+The owner decided on 2026-10-04 (the PR for these sheets is the record); the sheets say **Proposal** only for what is
+still open, and the "For the reviewer" list of each sheet states what was decided.
+
+| Topic | Decision | Sheet |
+|---|---|---|
+| Unread keys | per-class allow-list of keys TF ignores; every other unknown key is an error naming it | every class; list in each sheet |
+| `lora_config`, `is_per_atom`, `type: complex` | rejected at load | radial MLPs, embedding, `SphericalHarmonic` |
+| All four radial bases, both Chebyshev kinds | ported | `RadialBasis` |
+| `norm` and the chemical embeddings of the radial MLPs, the gate of `MLPRadialFunction_v2` | ported, `tanh` copied where it is, not reported upstream | `MLPRadialFunction`, `MLPRadialFunction_v2` |
+| `rc` in two precisions | copied | `RadialBasis` |
+| `dense_nbr` | `true` and `false` accepted, same sum | `SingleParticleBasisFunctionEquivariantInd` |
+| `init_target_value = "ones"` | ported | `FunctionReduceN` |
+| `simplify = True` | rejected | `FunctionReduceN` |
+| `atomic_shift_map` keys other than `0 .. n-1` | rejected with a message | `ConstantScaleShiftTarget` |
+| `return_hidden_target` | ported (extra output `concat([lin, h_last])`) | `LinMLPOut2ScalarTarget` |
+| `l != 0` in the energy chain | rejected after a check: the scalar readouts return the same `[n_atoms, 1]` for any `l` | `CreateOutputTarget` |
+| `local` with a `chem_embedding` | rejected explicitly (`NotImplementedError`) | `MLPRadialFunction_v2` |
+
+**Disagreements with the option table of SPEC2.** `tensorpotential/torch_backend/spec/options.py` (and the generated
+`option_matrix.md`) was written before these decisions and differs in four places, which the issue that builds the twins
+has to reconcile (the sheets are the specification): `FunctionReduceN.init_target_value` accepts only `"zeros"` (decided:
+`"ones"` too); `FunctionReduceN.simplify` accepts both booleans (decided: `True` rejected); `LinMLPOut2ScalarTarget`
+`return_hidden_target` accepts only `null` (decided: ported); `ConstantScaleShiftTarget.atomic_shift_map` accepts only `null`
+(the sheet ports a map with keys `0 .. n-1`; a dict is seen only in `GRACE-3L-OMAT-large`). This PR does not change the
+option table.

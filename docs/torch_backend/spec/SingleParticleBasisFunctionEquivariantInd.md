@@ -183,9 +183,10 @@ fixtures (no 2L yaml sets them).
 
 ## For the reviewer
 
-1. **Unread keys.** The rule "reject keys that the class does not read" (README) would reject the shipped omat yaml,
-   which has `radia_basis` and `n_out` on this class. Proposal: a per-class allow-list of keys ignored by TF, accepted
-   with any value, everything else rejected. The list for this class is `radial_basis`, `hidden_layers`,
+1. **Unread keys.** Decided (owner, 2026-10-04). The rule "reject keys that the class does not read" (README) would reject
+   the shipped omat yaml, which has `radia_basis` and `n_out` on this class. Instead, a per-class allow-list of keys ignored
+   by TF, accepted with any value, everything else rejected. The list for this class is `radial_basis`, `hidden_layers`,
    `radia_basis`, `n_out`.
-2. **`dense_nbr`.** Proposal: the twin accepts `true` and `false` and computes the same sum; the TF dense layout is a
-   data-builder concern. The option then only changes reduction order (rounding), not the result.
+2. **`dense_nbr`.** Decided (owner, 2026-10-04): the twin accepts `true` and `false` and computes the same sum; the TF dense
+   layout is a data-builder concern. The option then only changes reduction order (rounding), not the result. It needs an
+   option-pair fixture (same weights, option off and on), as rule R3 asks.

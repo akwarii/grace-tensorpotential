@@ -191,12 +191,11 @@ polynomials of both kinds, Gaussians, orthonormality of the simplified spherical
 
 ## For the reviewer
 
+All decided (owner, 2026-10-04):
+
 1. **Scope of the bases.** Rule R3 says every option of an in-scope class is ported. The shipped models use only
-   `Cheb` with `kind = 1`, `reversed = False`, `normalized = False`. Proposal: port all four bases and both
-   Chebyshev kinds (they are short and have TF oracles), and say in the sheet of the ticket which of them the
-   2L gates exercise (`Cheb` only). Alternative: port `Cheb` first and reject the rest with an error until a model
-   needs them.
-2. **Proposal (section 7)**: reject unread keywords instead of ignoring them.
+   `Cheb` with `kind = 1`, `reversed = False`, `normalized = False`. All four bases and both Chebyshev kinds are ported
+   (they are short and have TF oracles); the 2L gates exercise `Cheb` only.
+2. **Section 7**: unread keywords are rejected instead of ignored, apart from the per-class allow-list of keys TF ignores.
 3. **`rc` in two precisions (section 6)** is a TF quirk the twin copies on purpose, so that float32 models agree
-   with TF. Alternative: use one precision and document the `5e-15` tail as a tolerated difference. It only
-   matters for a cutoff that is not exactly representable in float32.
+   with TF; it only matters for a cutoff that is not exactly representable in float32.

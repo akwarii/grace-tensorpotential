@@ -90,7 +90,7 @@ a consistent model.
 
 ## 7. Options rejected
 
-- `atomic_shift_map` whose keys are not exactly `0 .. n-1`: **Proposal**, rejected with a message (TF's sorted-position
+- `atomic_shift_map` whose keys are not exactly `0 .. n-1`: rejected with a message (decided, owner, 2026-10-04) (TF's sorted-position
   semantics differ from the key semantics and fail for gaps; no shipped model has gaps).
 - `atomic_shift_map` with `n` smaller than the number of elements of the model: the gather fails in TF for an element beyond
   `n`; the twin raises at load time.
@@ -109,4 +109,4 @@ shift, padding atoms).
 
 ## For the reviewer
 
-1. **Proposal (section 7)**: reject `atomic_shift_map` keys other than `0 .. n-1`.
+1. Decided (owner, 2026-10-04): `atomic_shift_map` keys other than `0 .. n-1` are rejected with a message (section 7). The option table of SPEC2 accepts only `null` for `atomic_shift_map` at present (a dict is seen only in `GRACE-3L-OMAT-large`): see the README, section "Decisions of the review".
