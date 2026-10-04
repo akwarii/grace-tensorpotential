@@ -784,16 +784,25 @@ class TensorPotential:
         self._ema_weights_in_model = False
 
     def enable_lora_adaptation(self, lora_config=None):
-        raise NotImplementedError("This functionality is not yet fully implemented")
-        self.model.enable_lora_adaptation(lora_config=lora_config)
+        """Create the LoRA update tensors of the selected instructions.
+
+        The original weights become non-trainable. The checkpoint tracks the model object, so
+        it saves the new variables without being rebuilt (and the step and epoch are kept).
+        """
         with self.strategy.scope():
-            self.setup_checkpoint()
+            self.model.enable_lora_adaptation(lora_config=lora_config)
 
     def finalize_lora_update(self):
-        raise NotImplementedError("This functionality is not yet fully implemented")
+        """Merge the LoRA updates into the original weights and drop the update tensors.
+
+        The optimizer is reset (its moments belong to variables that no longer exist); the step
+        and epoch counters are kept.
+        """
+        step, epoch = self.step, self.epoch
         self.model.finalize_lora_update()
         logging.info("Resetting optimizer after reducing LORA")
         self.reset_optimizer()
+        self.step, self.epoch = step, epoch
 
     def set_trainable_variables(self, only_trainable_names, verbose=False):
         with self.strategy.scope():

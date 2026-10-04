@@ -409,7 +409,7 @@ Data is saved into TF.Dataset format.
 Usually used in distributed training and called by `compute_distributed_data.sh` script (location: tests/data_distrib/compute_distributed_data.sh)
 
 ```
-grace_preprocess [-h] [-o OUTPUT] [--sharded-input] [-e ELEMENTS] [-b BATCH_SIZE] [-bu MAX_N_BUCKETS] [-c CUTOFF] [-cd CUTOFF_DICT] [--compression COMPRESSION] [--energy-col ENERGY_COL] [--forces-col FORCES_COL] [--stress-col STRESS_COL] [--is-fit-stress] [-s STRATEGY] [--task-id TASK_ID]
+grace_preprocess [-h] [-o OUTPUT] [--sharded-input] [-e ELEMENTS] [-b BATCH_SIZE] [-bu MAX_N_BUCKETS] [-c CUTOFF] [-cd CUTOFF_DICT] [--compression COMPRESSION] [--energy-col ENERGY_COL] [--forces-col FORCES_COL] [--stress-col STRESS_COL] [--is-fit-stress] [--stress-units {eV/A3,GPa,kbar,-kbar}] [-s STRATEGY] [--task-id TASK_ID]
                         [--total-task-num TOTAL_TASK_NUM] [--rerun] [--stage-1] [--stage-2] [--stage-3] [--stage-4] [--remove_stage1]
                         input [input ...]
 
@@ -434,6 +434,9 @@ options:
   --forces-col FORCES_COL
   --stress-col STRESS_COL
   --is-fit-stress
+  --stress-units {eV/A3,GPa,kbar,-kbar}
+                        Units of the stress column, converted to eV/A3 (default: eV/A3, no conversion).
+                        Write `--stress-units=-kbar` for the last value: a separate `-kbar` argument is read as an option
   -s STRATEGY, --strategy STRATEGY
                         Strategy to batch splitting. Possible values: structures (default), atoms, neighbours
   --task-id TASK_ID     ZERO based ID of task

@@ -9,8 +9,8 @@
 #              or never (depends on fork-only code or is a fork policy); the owner decides, a new row starts as pending
 
 - path: docs/gracemaker/utilities.md
-  reason: 'the aux_model help and usage describe what the command does (no --aux argument)'
-  milestone: [CLEAN5]
+  reason: 'documents the --stress-units option of grace_preprocess; the aux_model help and usage describe what the command does (no --aux argument)'
+  milestone: [DATA1, CLEAN5]
   upstream: pending
 
 - path: pyproject.toml
@@ -234,8 +234,8 @@
   upstream: pending
 
 - path: tensorpotential/scripts/grace_preprocess.py
-  reason: 'duplicated code folded into shared helpers; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [QUAL2, CORE1]
+  reason: 'duplicated code folded into shared helpers; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); --stress-units option passed to the reference data builder'
+  milestone: [QUAL2, CORE1, DATA1]
   upstream: pending
 
 - path: tensorpotential/scripts/grace_utils.py
@@ -244,13 +244,13 @@
   upstream: pending
 
 - path: tensorpotential/tensorpot.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA entry points of TensorPotential work (no NotImplementedError)'
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1]
   upstream: pending
 
 - path: tensorpotential/tpmodel.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation skips active instructions and leaves the config of the caller unedited'
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1]
   upstream: pending
 
 - path: tensorpotential/uq/artifact_builder.py
