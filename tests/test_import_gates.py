@@ -229,9 +229,9 @@ def _run_python(
     )
 
 
-# One interpreter imports ``tensorpotential`` (the package ``__init__`` always runs first when a
-# submodule is imported, and it loads TensorFlow, which costs seconds), then forks one child per
-# module.  A child starts from exactly the state of a fresh ``import tensorpotential.X`` and
+# One interpreter imports ``tensorpotential`` and ``tensorpotential._tf_options`` (which loads and
+# configures TensorFlow, costing seconds: the package ``__init__`` itself no longer does), then
+# forks one child per module.  A child starts from the state a TensorFlow-side import finds and
 # imports nothing else beforehand, so the modules are still checked independently of each other.
 _FORK_IMPORT_CODE = """
 import importlib, json, os, sys, traceback
@@ -240,6 +240,7 @@ root = sys.argv[1]
 names = json.load(sys.stdin)
 try:
     import tensorpotential
+    import tensorpotential._tf_options
 except BaseException:
     failure = {"returncode": 1, "stderr": traceback.format_exc()[-2000:]}
     print(json.dumps({name: failure for name in names}))
@@ -494,3 +495,99 @@ def test_is_absent_matches_package_and_submodules_only():
     assert _is_absent("tensorpotential.experimental.mag.databuilder")
     assert not _is_absent("tensorpotential.experimentalish")
     assert not _is_absent("tensorpotential.utils")
+
+
+# --------------------------------------------------------------------------------------
+# Gate 4: the TensorFlow-free entry points (D1: lazy imports, TF-free shared code in core/)
+# --------------------------------------------------------------------------------------
+# Modules and names that must work in an interpreter where ``import tensorflow`` and
+# ``import tf_keras`` raise ImportError.  Add the entry points of the TF-free code here.
+TF_FREE_MODULES = (
+    "tensorpotential",
+    "tensorpotential.core",
+    "tensorpotential.core.cutoffs",
+    "tensorpotential.core.lazy",
+    "tensorpotential.constants",
+    "tensorpotential.poly",
+    "tensorpotential.functions.couplings",
+    "tensorpotential.calculator",
+    "tensorpotential.calculator.foundation_models",
+)
+
+_TF_BLOCKED_CODE = """
+import importlib, json, sys, traceback
+
+class RefuseTensorFlow:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in ("tensorflow", "tf_keras"):
+            raise ImportError(f"No module named {name!r} (refused by the test)", name=name)
+
+sys.meta_path.insert(0, RefuseTensorFlow())
+failures = {}
+for name in json.load(sys.stdin):
+    try:
+        importlib.import_module(name)
+    except ImportError as exc:
+        frames = [f for f in traceback.extract_tb(exc.__traceback__) if f.filename.startswith(sys.argv[1])]
+        where = [f"{f.filename[len(sys.argv[1]):]}:{f.lineno}" for f in frames]
+        failures[name] = {"error": str(exc), "where": where}
+grace_fm = None
+tf_error = ""
+try:
+    from tensorpotential.calculator import grace_fm
+    import tensorpotential.calculator
+    tensorpotential.calculator.TPCalculator
+except ImportError as exc:
+    tf_error = str(exc)
+print(json.dumps({"failures": failures, "loaded": sorted(m for m in sys.modules if m.split(".")[0] in ("tensorflow", "tf_keras")), "tf_error": tf_error, "grace_fm": callable(grace_fm)}))
+"""
+
+
+@pytest.fixture(scope="module")
+def tf_blocked_run(tmp_path_factory):
+    result = _run_python(
+        _TF_BLOCKED_CODE,
+        tmp_path_factory.mktemp("tf_blocked"),
+        args=(str(REPO_ROOT) + os.sep,),
+        stdin=json.dumps(list(TF_FREE_MODULES)),
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_tf_free_entry_points_import_without_tensorflow(tf_blocked_run):
+    """Each failure names the offending file and line, the first of the chain that reaches TensorFlow."""
+    assert tf_blocked_run["failures"] == {}, "\n".join(
+        f"{name}: {info['error']} via {' <- '.join(reversed(info['where']))}"
+        for name, info in tf_blocked_run["failures"].items()
+    )
+
+
+def test_tf_free_entry_points_never_load_tensorflow(tf_blocked_run):
+    assert tf_blocked_run["loaded"] == []
+
+
+def test_tf_free_names_work_and_tf_names_explain_what_is_missing(tf_blocked_run):
+    assert tf_blocked_run["grace_fm"] is True
+    assert "'TPCalculator' needs TensorFlow" in tf_blocked_run["tf_error"]
+    assert "tensorpotential[tf]" in tf_blocked_run["tf_error"]
+
+
+def test_the_import_contract_is_kept():
+    """``lint-imports`` reads ``[tool.importlinter]`` of pyproject.toml: no path from the TF-free modules to TensorFlow."""
+    result = subprocess.run(
+        [sys.executable, "-c", "from importlinter.cli import lint_imports_command as main; main()"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=IMPORT_TIMEOUT_S,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-1000:]
+    assert "1 kept, 0 broken" in result.stdout
+
+
+def test_the_contract_lists_torch_backend_once_it_exists():
+    config = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    if (PACKAGE_DIR / "torch_backend").is_dir():
+        assert '"tensorpotential.torch_backend"' in config
