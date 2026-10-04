@@ -98,12 +98,38 @@
      3.3
     ]
    ]
+  },
+  "periodic_triple": {
+   "n_atoms": 3,
+   "formula": "CuMgO",
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     4.4,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     4.7,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     5.0
+    ]
+   ]
   }
  },
  "library": {
-  "library_git_sha": "ca947af569c2fd7f50f9accd1f1fd8bf411465d9",
+  "library_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
   "library_dirty": false,
-  "generator_git_sha": "ca947af569c2fd7f50f9accd1f1fd8bf411465d9",
+  "generator_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
   "generator_dirty": false,
   "versions": {
    "tensorflow": "2.20.0",
@@ -1533,14 +1559,14 @@
    "trainable": true
   }
  ],
- "n_arrays": 275,
+ "n_arrays": 325,
  "weights_from": null,
  "option_pair": null,
  "files": {
   "arrays": {
    "name": "omat_tiny_f64.npz",
-   "bytes": 212344,
-   "sha256": "7e59569c84ea121d50ddfe76c6de71e744789e6517c0cda08d49d9c87f380d8b"
+   "bytes": 369809,
+   "sha256": "d118a666b02dc7ffda9f3a664e161ca697a4c4fa3115358ac563cf5b99e448c9"
   },
   "weights": {
    "name": "omat_tiny_f64.weights.npz",
@@ -1548,5 +1574,5 @@
    "sha256": "3c43ac01b3abc8c007c263396005f0a382667dbd3d06704cf4e14eb10b226eb0"
   }
  },
- "total_bytes": 347759
+ "total_bytes": 505224
 }

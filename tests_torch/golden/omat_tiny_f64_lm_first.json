@@ -98,12 +98,38 @@
      3.3
     ]
    ]
+  },
+  "periodic_triple": {
+   "n_atoms": 3,
+   "formula": "CuMgO",
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     4.4,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     4.7,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     5.0
+    ]
+   ]
   }
  },
  "library": {
-  "library_git_sha": "ca947af569c2fd7f50f9accd1f1fd8bf411465d9",
+  "library_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
   "library_dirty": false,
-  "generator_git_sha": "ca947af569c2fd7f50f9accd1f1fd8bf411465d9",
+  "generator_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
   "generator_dirty": false,
   "versions": {
    "tensorflow": "2.20.0",
@@ -1533,7 +1559,7 @@
    "trainable": true
   }
  ],
- "n_arrays": 275,
+ "n_arrays": 325,
  "weights_from": "omat_tiny_f64",
  "option_pair": {
   "results_max_abs_diff": {
@@ -1549,6 +1575,12 @@
    "isolated_atom/res/pair_f": 0.0,
    "isolated_atom/res/stress": 0.0,
    "isolated_atom/res/virial": 0.0,
+   "periodic_triple/res/atomic_energy": 0.0,
+   "periodic_triple/res/energy": 0.0,
+   "periodic_triple/res/forces": 0.0,
+   "periodic_triple/res/pair_f": 1.2407709188295415e-24,
+   "periodic_triple/res/stress": 0.0,
+   "periodic_triple/res/virial": 0.0,
    "self_image_cell/res/atomic_energy": 0.0,
    "self_image_cell/res/energy": 0.0,
    "self_image_cell/res/forces": 0.0,
@@ -1582,6 +1614,18 @@
     "isolated_atom/out_after/MLPOut2ScalarTarget",
     "isolated_atom/out_before/ConstantScaleShiftTarget",
     "isolated_atom/out_before/MLPOut2ScalarTarget",
+    "periodic_triple/ins/BondLength",
+    "periodic_triple/ins/R",
+    "periodic_triple/ins/R1",
+    "periodic_triple/ins/RadialBasis",
+    "periodic_triple/ins/ScaledBondVector",
+    "periodic_triple/ins/Y",
+    "periodic_triple/ins/Z",
+    "periodic_triple/ins/atomic_energy",
+    "periodic_triple/out_after/ConstantScaleShiftTarget",
+    "periodic_triple/out_after/MLPOut2ScalarTarget",
+    "periodic_triple/out_before/ConstantScaleShiftTarget",
+    "periodic_triple/out_before/MLPOut2ScalarTarget",
     "self_image_cell/ins/BondLength",
     "self_image_cell/ins/R",
     "self_image_cell/ins/R1",
@@ -1753,6 +1797,25 @@
     "isolated_atom/ins/I0",
     "isolated_atom/ins/I_out",
     "isolated_atom/ins/YI",
+    "periodic_triple/ins/A",
+    "periodic_triple/ins/A1",
+    "periodic_triple/ins/AA",
+    "periodic_triple/ins/AA1",
+    "periodic_triple/ins/AA2",
+    "periodic_triple/ins/AAA",
+    "periodic_triple/ins/AAAA",
+    "periodic_triple/ins/B",
+    "periodic_triple/ins/B0",
+    "periodic_triple/ins/B1",
+    "periodic_triple/ins/BB",
+    "periodic_triple/ins/BB1",
+    "periodic_triple/ins/BB2",
+    "periodic_triple/ins/BBB",
+    "periodic_triple/ins/BBBB",
+    "periodic_triple/ins/I",
+    "periodic_triple/ins/I0",
+    "periodic_triple/ins/I_out",
+    "periodic_triple/ins/YI",
     "self_image_cell/ins/A",
     "self_image_cell/ins/A1",
     "self_image_cell/ins/AA",
@@ -1793,9 +1856,9 @@
  "files": {
   "arrays": {
    "name": "omat_tiny_f64_lm_first.npz",
-   "bytes": 210118,
-   "sha256": "794aa23bb7b160d3662b0b542a3a788704a649cabecac981ad4995c2effc67d1"
+   "bytes": 367587,
+   "sha256": "4af2374f02ed07aeb2eb781ea88ee098adad89a8500495711322a8ffa1b9611d"
   }
  },
- "total_bytes": 210118
+ "total_bytes": 367587
 }

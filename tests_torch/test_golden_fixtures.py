@@ -473,3 +473,13 @@ def test_a_local_faithful_file_is_the_one_the_manifest_describes(name):
                 f"{entry['name']} is generated locally (python tools/make_golden.py write --tier faithful)"
             )
         assert mg._sha256(path) == entry["sha256"]
+
+
+@pytest.mark.parametrize("name", BASE_NAMES)
+def test_a_periodic_anchor_has_non_zero_forces_and_stress(name):
+    # the symmetric cells have zero forces; without this structure a wrong force path through periodic images would pass
+    arrays = arrays_of(name)
+    assert np.abs(arrays["periodic_triple/res/forces"]).max() > 1e-5
+    assert np.abs(arrays["periodic_triple/res/stress"]).max() > 1e-6
+    assert np.abs(arrays["dimer/res/forces"]).max() > 1e-5
+    assert np.abs(arrays["self_image_cell/res/stress"]).max() > 1e-6
