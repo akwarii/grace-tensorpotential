@@ -11,7 +11,9 @@ For a model built from a test yaml (random weights, CPU), or from a yaml plus a 
   a real forward pass: the float dtype of its operations, its casts, and for every captured
   variable and constant the operations that read it with the dtype they compute in (creation and
   use side by side);
-* ``timings``: neighbour list (``extract_from_ase_atoms``) against the compiled model, per structure.
+* ``timings``: neighbour list (``extract_from_ase_atoms``) against the compiled model, per structure,
+  with ``timings_foreign_cpu_cores``, the average number of cores that other processes used while
+  they were measured (near 0: the machine was idle and the timings can be quoted).
 
 Usage (from the repository root)::
 
@@ -489,6 +491,53 @@ def environment() -> dict[str, Any]:
     }
 
 
+def machine_busy_seconds(stat: Path = Path("/proc/stat")) -> float | None:
+    """CPU seconds the whole machine has spent busy (all cores, idle and I/O wait excluded), or ``None``."""
+    try:
+        fields = stat.read_text().splitlines()[0].split()[1:]
+        ticks = os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        return None
+    user, nice, system, idle, iowait, irq, softirq, steal = (int(f) for f in fields[:8])
+    del idle, iowait
+    return (user + nice + system + irq + softirq + steal) / ticks
+
+
+def foreign_cores(
+    machine_before: float | None,
+    machine_after: float | None,
+    own_seconds: float,
+    wall_seconds: float,
+) -> float | None:
+    """Average number of cores used by processes other than this one over a run, or ``None``.
+
+    ``own_seconds`` is this process's CPU time over the same interval; a result near 0 means the
+    machine was otherwise idle, so a timing taken in it can be trusted.
+    """
+    if machine_before is None or machine_after is None or wall_seconds <= 0:
+        return None
+    return max(machine_after - machine_before - own_seconds, 0.0) / wall_seconds
+
+
+def timed_with_load(
+    model, structures, repeats: int
+) -> tuple[list[dict[str, Any]], float | None]:
+    """``time_model`` and the average cores that other processes used while it ran."""
+    before, cpu0, wall0 = (
+        machine_busy_seconds(),
+        time.process_time(),
+        time.perf_counter(),
+    )
+    rows = time_model(model, structures, repeats)
+    foreign = foreign_cores(
+        before,
+        machine_busy_seconds(),
+        time.process_time() - cpu0,
+        time.perf_counter() - wall0,
+    )
+    return rows, foreign
+
+
 def probe_label(
     label: str,
     yaml_path: Path,
@@ -510,7 +559,9 @@ def probe_label(
         section = probe_model(model, atoms)
         if not settings.no_timing:
             structures = timing_structures(settings.n_structures, settings.supercells)
-            section["timings"] = time_model(model, structures, settings.repeats)
+            rows, foreign = timed_with_load(model, structures, settings.repeats)
+            section["timings"] = rows
+            section["timings_foreign_cpu_cores"] = foreign
         result["dtypes"][dtype] = section
     result["environment"] = environment()
     return result

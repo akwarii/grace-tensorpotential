@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -87,6 +88,41 @@ def test_a_checkpoint_needs_exactly_one_yaml_and_one_dtype():
     gp._check_checkpoint_args(  # noqa: SLF001
         argparse.Namespace(checkpoint=None, yamls=["a", "b"], dtypes=["float32"] * 2)
     )
+
+
+def test_foreign_cores_is_machine_cpu_minus_own_cpu_per_wall_second():
+    assert gp.foreign_cores(100.0, 140.0, 30.0, 5.0) == pytest.approx(2.0)
+    assert gp.foreign_cores(100.0, 130.0, 30.0, 5.0) == 0.0
+    # accounting jitter must not give a negative core count
+    assert gp.foreign_cores(100.0, 129.0, 30.0, 5.0) == 0.0
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "wall"), [(None, 1.0, 1.0), (1.0, None, 1.0), (1.0, 2.0, 0.0)]
+)
+def test_foreign_cores_is_none_when_it_cannot_be_measured(before, after, wall):
+    assert gp.foreign_cores(before, after, 0.1, wall) is None
+
+
+def test_machine_busy_seconds_reads_the_first_line_of_proc_stat(tmp_path):
+    stat = tmp_path / "stat"
+    # user nice system idle iowait irq softirq steal: idle and iowait are left out
+    stat.write_text("cpu  100 20 30 9999 8888 4 5 6 0 0\ncpu0 1 1 1 1 1 1 1 1\n")
+    ticks = os.sysconf("SC_CLK_TCK")
+    assert gp.machine_busy_seconds(stat) == pytest.approx(
+        (100 + 20 + 30 + 4 + 5 + 6) / ticks
+    )
+    assert gp.machine_busy_seconds(tmp_path / "missing") is None
+    stat.write_text("")
+    assert gp.machine_busy_seconds(stat) is None
+
+
+def test_busy_seconds_of_this_machine_only_grow():
+    first = gp.machine_busy_seconds()
+    sum(i * i for i in range(2_000_000))
+    second = gp.machine_busy_seconds()
+    assert first is not None and second is not None
+    assert second >= first
 
 
 class _Stub(tf.Module):
