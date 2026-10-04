@@ -239,13 +239,13 @@
   upstream: pending
 
 - path: tensorpotential/tensorpot.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA entry points of TensorPotential work (no NotImplementedError)'
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1]
   upstream: pending
 
 - path: tensorpotential/tpmodel.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation skips active instructions and leaves the config of the caller unedited'
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1]
   upstream: pending
 
 - path: tensorpotential/uq/artifact_builder.py
