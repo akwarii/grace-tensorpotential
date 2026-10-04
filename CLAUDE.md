@@ -30,6 +30,7 @@ uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the n
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
 uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
+uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also a test in tests/test_import_gates.py
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)
@@ -66,7 +67,7 @@ Procedures, planted mutants and speed tips are in the `grace-torch-tests` skill.
 
 - A function or class you **modify** must already be covered at 90% or more (line and branch). Below that, write characterization tests
   first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
-- **A test goes in the file named after the source module it covers** (`tests/test_<module>.py` for `tensorpotential/<...>/<module>.py`, for example `tests/test_tp_model.py` for `tpmodel.py`, `tests/test_process_df.py` for `data/process_df.py`); `tests/` stays flat. Do not group tests by the issue or the kind of change that added them, and do not move existing test files unless an issue says so (owner, 2026-10-03).
+- **A test goes in the file named after the source module it covers** (`tests/test_<module>.py` for `tensorpotential/<...>/<module>.py`, for example `tests/test_tp_model.py` for `tpmodel.py`, `tests/test_process_df.py` for `data/process_df.py`); `tests/` stays flat, except that the tests of the TF-free shared package `tensorpotential/core/` live in `tests/core/` (`tests/core/test_<module>.py`; owner, 2026-10-04). Do not group tests by the issue or the kind of change that added them, and do not move existing test files unless an issue says so (owner, 2026-10-03).
 - Two layers: **logic** (branches, errors, shapes, edge cases) and **physical values** from an oracle that does not call the unit under test
   (finite differences, rotation/translation/permutation invariance, extensivity, sympy or scipy references, hand-computed numbers). A refactor may change the logic and the physics tests must still pass.
 - Prefer real objects to mocks; a mock or `monkeypatch` only at an external boundary (network, clock, absent hardware), with a comment saying what it replaces, never for the unit under test or a numeric path.
@@ -119,6 +120,10 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
   give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or Keras 3 is used.
+- **The package no longer imports TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve their public names on first access (`core/lazy.py`); the TF options
+  (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`. **A new module with a module-level `import tensorflow` starts with
+  `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt, out of scope). A module that must stay TF-free goes in the
+  `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`. Because the root no longer preloads the classes, import cycles that it hid now show: `tests/test_import_gates.py` imports every module first in its own interpreter.
 - `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` anywhere, `__cls__` strings, every module imported on its own, the two `__getattr__` shims).
   Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
 - A coverage run writes `.coverage*` into the working directory; a second `--cov` run in the same directory while a full run is going is combined into its report. Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
@@ -149,6 +154,7 @@ The procedure (board commands, PR text, findings, Definition of Done) is in the 
 - **An issue is resolved only once a pull request that references it (`Refs #<issue>`) is merged into `torch-backend` on this fork.** `tools/board.py done` checks that and
   refuses otherwise; `--waive-pr` only when the user says so. Work follows the issue's protocol: Todo to In Progress when starting, unexpected findings commented on the issue,
   and the **Definition of Done checkboxes ticked every time a task of the issue is finished** (`tools/board.py check`), with evidence.
+- **Mind the GraphQL budget** (5,000 points an hour for the whole account, shared by all agents): use `tools/board.py` for the board, never `gh project item-list` or `gh project field-list` (about 100 and 150 points a call) and never loops of `gh` calls; `python tools/board.py budget` shows what is left. Details in the `grace-torch-ticket` skill.
 - **Keep the issues current: fix stale text.** When a task changes something an issue mentions (a path, command, count, decision, tool, dependency line or exit criterion), update that issue in the same task; run `python tools/board.py lint` and fix every `STALE` finding.
 - **The fork is public: sanitise everything you post** (issues, comments, PR descriptions, commit messages). `tools/board.py` sanitises automatically what it posts;
   pass any other text through `python tools/board.py sanitise FILE`. Sanitising means: no personal data, institution names, e-mail addresses, absolute local

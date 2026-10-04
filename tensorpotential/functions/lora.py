@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 MODE_LORA = "lora"  # default

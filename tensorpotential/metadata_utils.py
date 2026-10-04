@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import yaml
 import logging
+from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.dtypes import float32, float64, DType
 
 

@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any, Iterator, List, Optional
 
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential import constants

@@ -9,6 +9,7 @@ import os
 from collections import defaultdict
 
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential.instructions.base import load_instructions

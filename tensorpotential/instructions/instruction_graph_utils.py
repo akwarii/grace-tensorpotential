@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, List, Tuple, Optional
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 if TYPE_CHECKING:

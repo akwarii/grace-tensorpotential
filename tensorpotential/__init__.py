@@ -46,7 +46,7 @@ def _configure_keras_backend(verbose=True):
 def _configure_tf_options(verbose=True):
     """
     Globally disables TensorFloat-32 execution for accurate mathematical operations.
-    Runs immediately on package initialize.
+    Runs once, when the first TensorFlow-side module imports ``tensorpotential._tf_options``.
     """
     try:
         import tensorflow as tf
@@ -67,12 +67,22 @@ def _configure_tf_options(verbose=True):
         pass
 
 
-# Run immediately on import
+# Run immediately on import. This does not import TensorFlow: the TensorFlow options are applied by
+# ``tensorpotential._tf_options``, which every TensorFlow-side module imports before TensorFlow.
 _configure_keras_backend(verbose=True)
-_configure_tf_options(verbose=True)
 
-from tensorpotential.tensorpot import TensorPotential  # noqa: E402
-from tensorpotential.tpmodel import TPModel  # noqa: E402
-from tensorpotential.loss import LossFunction, L2Loss  # noqa: E402
+from tensorpotential.core.lazy import lazy_exports  # noqa: E402
 
 __all__ = ["TensorPotential", "TPModel", "LossFunction", "L2Loss"]
+
+# The classes are imported on first access (PEP 562), so that ``import tensorpotential`` works
+# without TensorFlow; a missing TensorFlow raises an ImportError that names the ``tf`` extra.
+__getattr__, __dir__ = lazy_exports(
+    __name__,
+    {
+        "TensorPotential": "tensorpotential.tensorpot",
+        "TPModel": "tensorpotential.tpmodel",
+        "LossFunction": "tensorpotential.loss",
+        "L2Loss": "tensorpotential.loss",
+    },
+)

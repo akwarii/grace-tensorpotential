@@ -4,6 +4,7 @@ from typing import Literal, Any
 
 import numpy as np
 import pandas as pd
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 
@@ -47,7 +48,7 @@ from tensorpotential.instructions.base import (
     active_dense_nbr,
 )
 from tensorpotential.poly import init_coupling_symbols
-from tensorpotential.utils import process_cutoff_dict
+from tensorpotential.core.cutoffs import process_cutoff_dict
 
 # Compute equivariant SPBF CG couple as dense matmul instead of sparce elemwise.
 # Wastes FLOPS, but forces XLA to a better layout of the backward pass.

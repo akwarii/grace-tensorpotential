@@ -10,6 +10,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.keras.callbacks import CallbackList
 from scipy.optimize import minimize
 from tqdm import tqdm
