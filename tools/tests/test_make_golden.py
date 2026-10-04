@@ -657,6 +657,10 @@ def test_fixture_manifests_are_complete_and_hashes_match(tiny_dir):
         assert manifest["format_version"] == mg.FORMAT_VERSION
         assert manifest["seed"] == mg.SEED
         assert manifest["elements"] == ["Cu", "H", "Mg", "O"]
+        # the order of the instructions is the order they run in: the manifest keeps the order of the yaml
+        parent = yaml.safe_load((tiny_dir / "yamls" / manifest["yaml"]).read_text())
+        assert list(manifest["instructions"]) == list(parent)
+        assert list(manifest["structures"]) == list(mg.TIERS["tiny"].structures)
         assert isinstance(manifest["library"]["use_gemm_couple"], bool)
         assert {"tensorflow", "numpy", "pandas"} <= set(manifest["library"]["versions"])
         assert (

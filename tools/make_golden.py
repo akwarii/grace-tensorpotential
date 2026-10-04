@@ -785,9 +785,7 @@ def make_fixture(
     if base is not None and weights_report is not None:
         pair = option_pair_report(base.arrays, arrays, weights_report)
     manifest = _manifest(request, model, cases, ypath, files, pair, len(arrays), seed)
-    stem.with_suffix(".json").write_text(
-        json.dumps(manifest, indent=1, sort_keys=True) + "\n"
-    )
+    stem.with_suffix(".json").write_text(json.dumps(manifest, indent=1) + "\n")
     return MadeFixture(manifest, weights, arrays)
 
 
