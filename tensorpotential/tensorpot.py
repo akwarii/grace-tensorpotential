@@ -786,14 +786,11 @@ class TensorPotential:
     def enable_lora_adaptation(self, lora_config=None):
         """Create the LoRA update tensors of the selected instructions.
 
-        The original weights become non-trainable and the checkpoint is rebuilt so that it
-        tracks the new variables. The step and epoch counters are kept.
+        The original weights become non-trainable. The checkpoint tracks the model object, so
+        it saves the new variables without being rebuilt (and the step and epoch are kept).
         """
-        step, epoch = self.step, self.epoch
         with self.strategy.scope():
             self.model.enable_lora_adaptation(lora_config=lora_config)
-            self.setup_checkpoint()
-        self.step, self.epoch = step, epoch
 
     def finalize_lora_update(self):
         """Merge the LoRA updates into the original weights and drop the update tensors.

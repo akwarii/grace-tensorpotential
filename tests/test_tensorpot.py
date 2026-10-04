@@ -288,16 +288,15 @@ def _variables_by_name(tp: TensorPotential) -> dict[str, np.ndarray]:
     return {v.name: v.numpy().copy() for v in tp.model.variables if v.dtype == tf.float64}
 
 
-def test_enabling_lora_makes_the_checkpoint_track_the_update_tensors():
-    tp = _lora_tp()
-    n_before = len(tp.model.variables)
-
+def test_enabling_lora_makes_the_checkpoint_save_the_update_tensors(tmp_path):
+    tp = _lora_tp(fit_config={"optimizer": "Adam"})
     tp.enable_lora_adaptation(dict(LORA_CONFIG))
+    prefix = str(tmp_path / "checkpoint")
 
-    assert tp.is_lora_enabled()
-    assert tp.checkpoint.model is tp.model
-    assert any("LORA" in v.name for v in tp.model.trainable_variables)
-    assert len(tp.model.variables) > n_before
+    tp.save_checkpoint(checkpoint_name=prefix)
+
+    saved = {name for name, _ in tf.train.list_variables(prefix)}
+    assert any("lora_tensors" in name for name in saved)
 
 
 def test_enabling_and_reducing_lora_keep_the_step_and_epoch_counters():
