@@ -1,0 +1,409 @@
+# Divergence ledger (BOARD2, D17 b): one row per file of upstream/master that the fork modifies or deletes.
+# Files the fork only adds (the fork-only paths of tools/check_pr_branch.py, tests, packages) need no row.
+# tools/divergence.py check recomputes the list from `git diff --name-only --no-renames --diff-filter=MD upstream/master...HEAD`
+# and fails on a modified file without a row and on a row whose file no longer differs from upstream.
+#   path       the file, relative to the repository root
+#   reason     why the fork differs, in one sentence
+#   milestone  the issue ids whose merged pull requests changed it
+#   upstream   pending (could be offered, not yet), merged (offered and merged, the row goes when the fork takes the upstream file),
+#              or never (depends on fork-only code or is a fork policy); the owner decides, a new row starts as pending
+
+- path: pyproject.toml
+  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor'
+  milestone: [TOOL1, QUAL1, CORE1]
+  upstream: never
+
+- path: pytest.ini
+  reason: 'registers the slow marker'
+  milestone: [TEST4]
+  upstream: never
+
+- path: tensorpotential/__init__.py
+  reason: 'resolves public names on first access so that importing the package does not import TensorFlow'
+  milestone: [CORE1]
+  upstream: never
+
+- path: tensorpotential/calculator/__init__.py
+  reason: 'resolves public names on first access so that importing the package does not import TensorFlow'
+  milestone: [CORE1]
+  upstream: never
+
+- path: tensorpotential/calculator/asecalculator.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/calculator/foundation_models.py
+  reason: 'commented-out code removed'
+  milestone: [CLEAN2]
+  upstream: pending
+
+- path: tensorpotential/cli/data.py
+  reason: 'commented-out code removed; duplicated code folded into shared helpers; copy=False dropped from the joint train and test concat; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL2, DEPS2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/cli/gracemaker.py
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/cli/metrics.py
+  reason: 'commented-out code removed'
+  milestone: [CLEAN2]
+  upstream: pending
+
+- path: tensorpotential/cli/prepare.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/cli/train.py
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/cli/train_callbacks.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/data/__init__.py
+  reason: 'commented-out code removed'
+  milestone: [CLEAN2]
+  upstream: pending
+
+- path: tensorpotential/data/databuilder.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); pandas 3 readiness; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, DEPS1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/data/process_df.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [CLEAN2, QUAL1]
+  upstream: pending
+
+- path: tensorpotential/data/streaming.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/data/symbols.py
+  reason: 'deleted: unused module'
+  milestone: [QUAL3]
+  upstream: pending
+
+- path: tensorpotential/data/tpatoms.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tensorpotential/data/weighting.py
+  reason: 'commented-out code removed'
+  milestone: [CLEAN2]
+  upstream: pending
+
+- path: tensorpotential/export.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [CLEAN2, QUAL1]
+  upstream: pending
+
+- path: tensorpotential/extra/gen_tensor/ewald.py
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/extra/gen_tensor/loss.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/extra/gen_tensor/metrics.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/extra/gen_tensor/model.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/functions/couplings.py
+  reason: 'commented-out code removed; CPU quick wins (Clebsch-Gordan cache, dictionary join); code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [CLEAN2, CPU1, QUAL1]
+  upstream: pending
+
+- path: tensorpotential/functions/lora.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/functions/nn.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/functions/radial.py
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/functions/spherical_harmonics.py
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/instructions/base.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); FunctionReduce methods consolidated, unused symbols module removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, QUAL3, CORE1]
+  upstream: pending
+
+- path: tensorpotential/instructions/compute.py
+  reason: 'commented-out code removed; CPU quick wins (Clebsch-Gordan cache, dictionary join); code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); FunctionReduce methods consolidated, unused symbols module removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CPU1, QUAL1, QUAL3, CORE1]
+  upstream: pending
+
+- path: tensorpotential/instructions/instruction_graph_utils.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/instructions/output.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/loss.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/metadata_utils.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/metrics.py
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/poly.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tensorpotential/potentials/__init__.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tensorpotential/potentials/presets.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tensorpotential/potentials/registry.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tensorpotential/scripts/_kokkos_export.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/scripts/df2extxyz.py
+  reason: 'duplicated code folded into shared helpers'
+  milestone: [QUAL2]
+  upstream: pending
+
+- path: tensorpotential/scripts/extxyz2df.py
+  reason: 'duplicated code folded into shared helpers'
+  milestone: [QUAL2]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_predict.py
+  reason: 'commented-out code removed; pandas 3 readiness'
+  milestone: [CLEAN2, DEPS1]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_preprocess.py
+  reason: 'duplicated code folded into shared helpers; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [QUAL2, CORE1]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_utils.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/tensorpot.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/tpmodel.py
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CLEAN2, QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/uq/artifact_builder.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/build/workers.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/uq/compute.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/uq/factories.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/uq/feature_extraction.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [QUAL1, CORE1]
+  upstream: pending
+
+- path: tensorpotential/uq/gmmuq.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/uq/instructions.py
+  reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
+  milestone: [CORE1]
+  upstream: pending
+
+- path: tensorpotential/utils.py
+  reason: 'process_cutoff_dict and the cutoff presets moved to tensorpotential.core, sizeof_fmt to tensorpotential.formatting, commented-out code removed'
+  milestone: [CLEAN2, CORE1]
+  upstream: pending
+
+- path: tests/MoNbTaW-CUSTOM/model.py
+  reason: 'commented-out code removed'
+  milestone: [CLEAN2]
+  upstream: pending
+
+- path: tests/conftest.py
+  reason: 'slow tier marked and read-only models shared between tests'
+  milestone: [TEST4]
+  upstream: never
+
+- path: tests/data_distrib/check_stats.py
+  reason: 'commented-out code removed'
+  milestone: [CLEAN2]
+  upstream: pending
+
+- path: tests/test_calculator.py
+  reason: 'commented-out code removed; paths resolved relative to the test file and outputs written to tmp_path; slow tier marked and read-only models shared between tests'
+  milestone: [CLEAN2, TEST1, TEST4]
+  upstream: pending
+
+- path: tests/test_databuilder.py
+  reason: 'commented-out code removed; unused imports, redefinitions and variables removed; slow tier marked and read-only models shared between tests; characterization tests of the neighbour list'
+  milestone: [CLEAN2, CLEAN3, TEST4, TEST7]
+  upstream: pending
+
+- path: tests/test_dataset_plotter.py
+  reason: 'paths resolved relative to the test file and outputs written to tmp_path'
+  milestone: [TEST1]
+  upstream: pending
+
+- path: tests/test_distrib.py
+  reason: 'commented-out code removed; paths resolved relative to the test file and outputs written to tmp_path; thread budget per pytest-xdist worker; slow tier marked and read-only models shared between tests'
+  milestone: [CLEAN2, TEST1, TEST2, TEST4]
+  upstream: pending
+
+- path: tests/test_export.py
+  reason: 'paths resolved relative to the test file and outputs written to tmp_path'
+  milestone: [TEST1]
+  upstream: pending
+
+- path: tests/test_export_to_yaml.yaml
+  reason: 'deleted: a file the test wrote into the source tree; the test now writes into tmp_path'
+  milestone: [TEST1]
+  upstream: pending
+
+- path: tests/test_fm_shift_auto.py
+  reason: 'slow tier marked and read-only models shared between tests'
+  milestone: [TEST4]
+  upstream: pending
+
+- path: tests/test_grace_utils_export.py
+  reason: 'characterization tests of the yaml round trip and constructor defaults'
+  milestone: [TEST8]
+  upstream: pending
+
+- path: tests/test_graph_split.py
+  reason: 'thread budget per pytest-xdist worker; slow tier marked and read-only models shared between tests'
+  milestone: [TEST2, TEST4]
+  upstream: pending
+
+- path: tests/test_instructions.py
+  reason: 'commented-out code removed; unused imports, redefinitions and variables removed; duplicated code folded into shared helpers'
+  milestone: [CLEAN2, CLEAN3, QUAL2]
+  upstream: pending
+
+- path: tests/test_integration_test.py
+  reason: 'duplicated code folded into shared helpers; slow tier marked and read-only models shared between tests'
+  milestone: [QUAL2, TEST4]
+  upstream: pending
+
+- path: tests/test_loss_piecewise_linear.py
+  reason: 'duplicated code folded into shared helpers'
+  milestone: [QUAL2]
+  upstream: pending
+
+- path: tests/test_presets.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tests/test_process_df.py
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [QUAL1]
+  upstream: pending
+
+- path: tests/test_spbf.py
+  reason: 'unused imports, redefinitions and variables removed'
+  milestone: [CLEAN3]
+  upstream: pending
+
+- path: tests/test_spbf_layout_opt.py
+  reason: 'unused imports, redefinitions and variables removed; duplicated code folded into shared helpers'
+  milestone: [CLEAN3, QUAL2]
+  upstream: pending
+
+- path: tests/test_streaming_pipeline.py
+  reason: 'unused imports, redefinitions and variables removed; duplicated code folded into shared helpers; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
+  milestone: [CLEAN3, QUAL2, QUAL1]
+  upstream: pending
+
+- path: tests/test_structured_grid.py
+  reason: 'paths resolved relative to the test file and outputs written to tmp_path; unused imports, redefinitions and variables removed'
+  milestone: [TEST1, CLEAN3]
+  upstream: pending
+
+- path: tests/test_tp_model.py
+  reason: 'commented-out code removed; paths resolved relative to the test file and outputs written to tmp_path; slow tier marked and read-only models shared between tests; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); characterization tests of the yaml round trip and constructor defaults'
+  milestone: [CLEAN2, TEST1, TEST4, QUAL1, TEST8]
+  upstream: pending
+
+- path: tests/test_wizard.py
+  reason: 'duplicated code folded into shared helpers'
+  milestone: [QUAL2]
+  upstream: pending
+
+- path: tests/utils.py
+  reason: 'paths resolved relative to the test file and outputs written to tmp_path'
+  milestone: [TEST1]
+  upstream: pending

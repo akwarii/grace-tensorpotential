@@ -55,3 +55,8 @@ FLOAT32_ELEMENTWISE = Tolerance(rtol=1e-6, atol=1e-7)
 # (``pos[j] + n @ cell - pos[i]``) in a few additions of order 1 to 10 A: the observed error is about
 # 2e-15 A, and a component that is exactly zero in one of them can be a few 1e-15 in the other.
 NEIGHBOUR_VECTOR_F64 = Tolerance(rtol=1e-12, atol=1e-12)
+
+# A distance computed from Cartesian coordinates stored with 8 decimals (``tests_torch/structures``): each
+# coordinate is off by at most 5e-9 A, so a difference of two of them by 1e-8 and a norm of three by at most
+# 1.7e-8 A; compared with a distance fixed by construction (a bond length, a lattice constant).
+STORED_COORDINATE_DISTANCE = Tolerance(rtol=0.0, atol=2e-8)
