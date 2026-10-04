@@ -40,6 +40,9 @@ class InstructionSpec:
         Names of the instructions referenced by ``options``, in order of first appearance, without repeats.
     index
         Position in the file (and in execution order).
+    defaulted
+        The keys of ``options`` that the yaml omits and the pinned defaults filled in; the registry words its error
+        for such a key differently (the user did not write the value).
     """
 
     name: str
@@ -47,6 +50,7 @@ class InstructionSpec:
     options: Mapping[str, Any]
     depends_on: tuple[str, ...]
     index: int
+    defaulted: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

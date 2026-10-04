@@ -159,13 +159,14 @@ def test_the_module_does_not_import_tensorflow_or_torch():
 def test_supported_and_rejected_classes_are_disjoint_and_named_by_full_path():
     assert not set(opt.SUPPORTED_OPTIONS) & set(opt.REJECTED_CLASSES)
     assert len(opt.SUPPORTED_OPTIONS) == 17
+    assert all(c.startswith((opt.COMPUTE, opt.OUTPUT)) for c in opt.SUPPORTED_OPTIONS)
     for cls in (
         *opt.SUPPORTED_OPTIONS,
         *opt.REJECTED_CLASSES,
         *opt.DEFAULTS,
         *opt.REJECTED_OPTIONS,
     ):
-        assert cls.startswith((opt.COMPUTE, opt.OUTPUT))
+        assert cls.startswith((opt.BASE, opt.COMPUTE, opt.OUTPUT, opt.UQ))
     assert set(opt.DEFAULTS) <= set(opt.SUPPORTED_OPTIONS)
     assert set(opt.REJECTED_OPTIONS) <= set(opt.SUPPORTED_OPTIONS)
 

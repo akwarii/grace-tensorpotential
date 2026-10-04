@@ -35,6 +35,7 @@ from tensorpotential.torch_backend.spec.loader import (
     InstructionSpec,
     ModelSpec,
     load_model_spec,
+    _resolve,
     parse_model_spec,
 )
 
@@ -68,8 +69,15 @@ COMPUTE = opt.COMPUTE
 OUTPUT = opt.OUTPUT
 
 # Options that a yaml of the shipped models always writes although the class has a default, and that the TF
-# constructor cannot do without or builds differently when absent: not removed in the defaults test.
+# constructor cannot do without or builds differently when absent, or whose default the strict loader rejects: not
+# removed in the defaults test.
 KEPT_WHEN_STRIPPING = {
+    # defaults that the option rules do not accept (tests/test_options.py::DEFAULTS_NOT_ACCEPTED): without the key
+    # the strict loader rejects the model
+    ("ProductFunction", "normalize"),
+    ("SingleParticleBasisFunctionEquivariantInd", "normalize"),
+    ("FCRight2Left", "n_out"),
+    ("FCRight2Left", "norm_out"),
     ("MLPRadialFunction", "basis"),
     ("MLPRadialFunction", "hidden_layers"),
     ("MLPRadialFunction", "activation"),
@@ -102,6 +110,18 @@ def entry(
     name: str, cls: str = COMPUTE + "BondLength", **options: Any
 ) -> dict[str, Any]:
     return {"__cls__": cls, "name": name, **options}
+
+
+def reduce_entry(name: str, instructions: Any) -> dict[str, Any]:
+    """A ``FunctionReduceN`` with the options the class needs, over ``instructions`` (a list or a mapping of references)."""
+    return entry(
+        name,
+        COMPUTE + "FunctionReduceN",
+        instructions=instructions,
+        ls_max=0,
+        n_out=1,
+        allowed_l_p=[[0, 1]],
+    )
 
 
 def chain() -> list[dict[str, Any]]:
@@ -327,12 +347,7 @@ def test_references_become_refs_and_depends_on_lists_each_target_once_in_order()
     raw = [
         entry("A"),
         entry("B"),
-        entry(
-            "F",
-            COMPUTE + "FunctionReduceN",
-            instructions=[ref("B"), ref("A"), ref("B")],
-            n_out=1,
-        ),
+        reduce_entry("F", [ref("B"), ref("A"), ref("B")]),
     ]
     spec = parse_model_spec(raw)
     f = spec["F"]
@@ -346,13 +361,11 @@ def test_references_become_refs_and_depends_on_lists_each_target_once_in_order()
 
 
 def test_a_reference_nested_in_a_mapping_is_resolved():
-    raw = [
-        entry("A"),
-        entry("B", COMPUTE + "FunctionReduceN", instructions={"x": [ref("A")]}),
-    ]
-    spec = parse_model_spec(raw)
-    assert spec["B"].options["instructions"] == {"x": [InstructionRef("A")]}
-    assert spec["B"].depends_on == ("A",)
+    """No supported class takes a mapping of references, so the resolver is called directly."""
+    refs: list[str] = []
+    resolved = _resolve({"x": [ref("A")], "y": {"z": ref("B")}}, refs, "F.instructions")
+    assert resolved == {"x": [InstructionRef("A")], "y": {"z": InstructionRef("B")}}
+    assert refs == ["A", "B"]
 
 
 def test_a_dangling_reference_names_both_instructions():
@@ -404,7 +417,7 @@ def test_a_diamond_is_not_a_cycle():
         entry("A"),
         entry("B", COMPUTE + "ScaledBondVector", bond_length=ref("A")),
         entry("C", COMPUTE + "ScaledBondVector", bond_length=ref("A")),
-        entry("D", COMPUTE + "FunctionReduceN", instructions=[ref("B"), ref("C")]),
+        reduce_entry("D", [ref("B"), ref("C")]),
     ]
     assert parse_model_spec(raw)["D"].depends_on == ("B", "C")
 
@@ -417,11 +430,7 @@ def test_a_ladder_of_diamonds_is_checked_in_linear_time():
         raw += [
             entry(f"a{i}", COMPUTE + "ScaledBondVector", bond_length=ref(f"r{i - 1}")),
             entry(f"b{i}", COMPUTE + "ScaledBondVector", bond_length=ref(f"r{i - 1}")),
-            entry(
-                f"r{i}",
-                COMPUTE + "FunctionReduceN",
-                instructions=[ref(f"a{i}"), ref(f"b{i}")],
-            ),
+            reduce_entry(f"r{i}", [ref(f"a{i}"), ref(f"b{i}")]),
         ]
     assert len(parse_model_spec(raw).instructions) == 3 * levels + 1
 
@@ -516,6 +525,94 @@ def test_a_cls_string_is_looked_up_never_executed():
         parse_model_spec([entry("A", sentinel)])
 
 
+def test_the_3l_model_lists_every_kind_of_finding_in_one_error():
+    """Real yaml, every rejection kind at once: 14 instructions of rejected classes and 7 rejected option values."""
+    with pytest.raises(UnsupportedModelError) as caught:
+        load_model_spec(YAMLS / "GRACE-3L-OMAT-large.yaml")
+    kinds = {}
+    for problem in caught.value.problems:
+        kinds.setdefault(problem.kind, set()).add(problem.cls.rsplit(".", 1)[-1])
+    assert kinds == {
+        "rejected_class": {"SPBF", "GeneralProductFunction", "EquivariantRMSNorm"},
+        "rejected_value": {"FCRight2Left", "ConstantScaleShiftTarget"},
+    }
+    assert len(caught.value.problems) == 21
+    assert str(caught.value).count("\n  instruction ") == 21
+
+
+def test_an_unknown_option_of_a_supported_class_is_rejected_naming_the_nearest_key():
+    raw = chain()
+    raw[2]["lmaxx"] = 3
+    with pytest.raises(
+        UnsupportedModelError, match=r"unknown option 'lmaxx'; did you mean 'lmax'"
+    ) as caught:
+        parse_model_spec(raw)
+    assert [(p.kind, p.instruction) for p in caught.value.problems] == [
+        ("unknown_option", "Y")
+    ]
+
+
+def test_a_missing_required_option_is_rejected_naming_it():
+    raw = chain()
+    del raw[1]["bond_length"]
+    with pytest.raises(
+        UnsupportedModelError, match="required option 'bond_length' is missing"
+    ):
+        parse_model_spec(raw)
+
+
+def test_an_unsupported_value_is_rejected_with_the_supported_ones():
+    raw = chain()
+    raw[2]["lmax"] = "two"
+    with pytest.raises(
+        UnsupportedModelError,
+        match=r"option 'lmax' = 'two' \(str\) is not supported \(supported kinds: int\)",
+    ):
+        parse_model_spec(raw)
+
+
+def test_a_class_is_matched_by_its_exact_name():
+    """A subclass of a supported class (here a class of another module with the same short name) is not supported."""
+    raw = chain()
+    raw[0]["__cls__"] = "mypackage.instructions.BondLength"
+    with pytest.raises(
+        UnsupportedModelError, match="classes are matched by exact name"
+    ) as caught:
+        parse_model_spec(raw)
+    assert caught.value.problems[0].kind == "unknown_class"
+
+
+def test_findings_of_several_instructions_are_all_listed():
+    raw = chain()
+    raw[0]["__cls__"] = COMPUTE + "SPBF"
+    raw[2]["lmax"] = "two"
+    raw[2]["extra"] = 1
+    with pytest.raises(UnsupportedModelError) as caught:
+        parse_model_spec(raw)
+    assert [(p.instruction, p.kind) for p in caught.value.problems] == [
+        ("BondLength", "rejected_class"),
+        ("Y", "unknown_option"),
+        ("Y", "unsupported_value"),
+    ]
+
+
+def test_the_keys_the_defaults_filled_in_are_recorded():
+    spec = parse_model_spec(chain())
+    assert spec["BondLength"].defaulted == {"instruction_with_bonds"}
+    assert spec["ScaledBondVector"].defaulted == {"bonds"}
+    assert spec["Y"].defaulted == frozenset()
+    raw = chain()
+    raw[0]["instruction_with_bonds"] = None
+    assert parse_model_spec(raw)["BondLength"].defaulted == frozenset()
+
+
+def test_a_key_the_tf_constructor_ignores_still_loads():
+    """The shipped yamls carry ``radia_basis`` and ``init_norm`` (accepted, never read by TF)."""
+    spec = load_model_spec(OMAT)
+    assert "init_norm" in spec["MLPOut2ScalarTarget"].options
+    assert "radia_basis" in spec["YI"].options
+
+
 def test_python_tags_in_the_file_are_refused_by_the_safe_loader(tmp_path):
     path = tmp_path / "model.yaml"
     path.write_text("A: !!python/object/apply:os.getcwd []\n")
@@ -590,7 +687,13 @@ def test_a_value_written_as_null_is_not_replaced_by_the_default():
             left_coefs=None,
         ),
     ]
-    assert parse_model_spec(raw)["L"].options["left_coefs"] is None
+    # left_coefs accepts only a bool, so the written null is reported (it would be silently True had the default
+    # replaced it)
+    with pytest.raises(UnsupportedModelError, match=r"left_coefs.* = None") as caught:
+        parse_model_spec(raw)
+    (problem,) = [p for p in caught.value.problems if p.option == "left_coefs"]
+    assert problem.kind == "unsupported_value"
+    assert "absent from the yaml" not in problem.message
 
 
 def test_a_class_without_defaults_gets_no_extra_keys():

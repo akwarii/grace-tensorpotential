@@ -16,9 +16,10 @@ Three yaml layouts are read, as ``load_instructions`` reads them (``instructions
 The loader reads the file with ``yaml.safe_load`` and never executes a string of the file: ``__cls__`` is looked
 up in tables, not imported (TF's ``str_to_class`` runs ``exec`` on it, a defect the twins must not copy).
 
-Out of scope here (the registry and strict-loader checks of the issue that follows): the value of each option
-against :data:`~tensorpotential.torch_backend.spec.options.SUPPORTED_OPTIONS`, unknown or missing keys. A class
-that is not supported is rejected, and the model-level ``param_dtype`` is checked.
+The loader is strict (rule R3): :func:`~tensorpotential.torch_backend.spec.registry.check_supported` lists every
+unsupported class, unknown or missing option and unsupported option value of the model in one
+:class:`~tensorpotential.torch_backend.spec.errors.UnsupportedModelError`, and the model-level ``param_dtype`` is
+checked too.
 
 The module imports neither TensorFlow nor torch.
 """
@@ -50,9 +51,8 @@ from tensorpotential.torch_backend.spec.options import (
     DEFAULTS,
     MODEL_DEFAULTS,
     MODEL_OPTIONS,
-    REJECTED_CLASSES,
-    SUPPORTED_OPTIONS,
 )
+from tensorpotential.torch_backend.spec.registry import check_supported
 
 __all__ = [
     "InstructionRef",
@@ -87,13 +87,13 @@ def parse_model_spec(raw: object) -> ModelSpec:
 
     The checks run in this order, and the first failing one raises: layout and keys
     (:class:`MalformedModelError`), references (:class:`DanglingReferenceError`, :class:`CyclicReferenceError`,
-    :class:`ForwardReferenceError`), then the model-level options and the classes
-    (:class:`UnsupportedModelError`, which lists every offending class at once).
+    :class:`ForwardReferenceError`), then the classes and their options
+    (:class:`UnsupportedModelError`, which lists every finding at once) and the model-level options.
     """
     entries, metadata, layout = _split_layout(raw)
     specs = _build_specs(entries)
     _check_references(specs)
-    _check_supported(specs)
+    check_supported(specs)
     return ModelSpec(
         instructions=specs,
         param_dtype=_resolve_param_dtype(metadata),
@@ -151,14 +151,14 @@ def _build_spec(entry: Any, index: int) -> InstructionSpec:
         for key, value in entry.items()
         if key not in (_CLASS_KEY, _NAME_KEY)
     }
-    defaults = DEFAULTS.get(cls, {})
-    options = {**given, **{k: v for k, v in defaults.items() if k not in given}}
+    filled = {k: v for k, v in DEFAULTS.get(cls, {}).items() if k not in given}
     return InstructionSpec(
         name=name,
         cls=cls,
-        options=MappingProxyType(options),
+        options=MappingProxyType({**given, **filled}),
         depends_on=tuple(dict.fromkeys(refs)),
         index=index,
+        defaulted=frozenset(filled),
     )
 
 
@@ -218,25 +218,6 @@ def _visit(
         _visit(target, graph, path, done)
     path.pop()
     done.add(node)
-
-
-def _check_supported(specs: tuple[InstructionSpec, ...]) -> None:
-    problems = [
-        f"instruction {spec.name!r}: class {spec.cls} {_why_unsupported(spec.cls)}"
-        for spec in specs
-        if spec.cls not in SUPPORTED_OPTIONS
-    ]
-    if problems:
-        msg = "the model cannot be loaded by the torch backend:\n  " + "\n  ".join(
-            problems
-        )
-        raise UnsupportedModelError(msg)
-
-
-def _why_unsupported(cls: str) -> str:
-    if cls in REJECTED_CLASSES:
-        return "is not supported: " + REJECTED_CLASSES[cls]
-    return "is unknown to the torch backend (no twin and no entry in the option table)"
 
 
 def _resolve_param_dtype(metadata: Mapping[str, Any]) -> str:

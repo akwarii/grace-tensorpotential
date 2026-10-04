@@ -7,6 +7,46 @@ there is one, the class or the key involved: nothing is skipped or approximated 
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
+
+ProblemKind = Literal[
+    "unknown_class",
+    "rejected_class",
+    "unknown_option",
+    "missing_option",
+    "unsupported_value",
+    "rejected_value",
+]
+
+
+@dataclass(frozen=True)
+class Problem:
+    """One reason a model cannot be loaded: what kind, where, and the sentence that says it.
+
+    Parameters
+    ----------
+    kind
+        ``unknown_class`` (no entry in the registry), ``rejected_class`` (a registry entry with a reason),
+        ``unknown_option`` (a key the class does not have), ``missing_option`` (a key the class needs and the
+        yaml and the pinned defaults both lack), ``unsupported_value`` (a value outside what the twin accepts) or
+        ``rejected_value`` (a value seen in a shipped yaml that has no twin, with the reason).
+    instruction
+        Name of the instruction.
+    cls
+        Dotted path of its class, as written in ``__cls__``.
+    option
+        The key, for the four kinds that concern one.
+    message
+        The sentence, which names the instruction, the class and the option.
+    """
+
+    kind: ProblemKind
+    instruction: str
+    cls: str
+    option: str | None
+    message: str
+
 
 class SpecError(ValueError):
     """A ``model.yaml`` cannot be turned into a :class:`~tensorpotential.torch_backend.spec.loader.ModelSpec`."""
@@ -37,4 +77,12 @@ class ForwardReferenceError(InstructionReferenceError):
 
 
 class UnsupportedModelError(SpecError):
-    """The model uses a class (or a model-level value) that the torch twins do not cover."""
+    """The model uses a class, an option or a model-level value that the torch twins do not cover.
+
+    ``problems`` holds every finding of the check as :class:`Problem` records (empty for a model-level value):
+    the message lists them all, so a user fixes a yaml in one pass, and a test asks for the kind.
+    """
+
+    def __init__(self, message: str, problems: tuple[Problem, ...] = ()) -> None:
+        super().__init__(message)
+        self.problems = problems
