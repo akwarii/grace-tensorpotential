@@ -2,6 +2,7 @@ from tensorpotential.metrics import AbstractMetrics
 from tensorpotential.extra.gen_tensor import constants as cc
 from tensorpotential import constants
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 

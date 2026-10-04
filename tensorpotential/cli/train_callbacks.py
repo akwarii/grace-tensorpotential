@@ -3,6 +3,7 @@ from abc import abstractmethod
 from typing import Any, Dict, Union, Protocol
 
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential import TensorPotential

@@ -142,6 +142,9 @@ class FakeGH:
         self.text_fields = False  # whether the project has the Blocked by / PR columns
         self.text = {}  # (item key, column name) -> text
         self.cell_writes = 0
+        self.page_size = 100  # items per page of the table query
+        self.remaining = 4990  # what the rate-limit fields of the fake report
+        self.draft_items = 0  # table rows that are not issues
         self.options = {
             "opt-todo": "Todo",
             "opt-prog": "In Progress",
@@ -151,6 +154,41 @@ class FakeGH:
 
     def issue(self, number):
         return next(i for i in self.issues if i["number"] == number)
+
+    def rate(self, cost):
+        return {
+            "limit": 5000,
+            "cost": cost,
+            "remaining": self.remaining,
+            "used": 5000 - self.remaining,
+            "resetAt": "2099-01-01T00:00:00Z",
+        }
+
+    def items_page(self, args):
+        """The response of the table query: one node per issue on the board, in pages of `page_size`."""
+        kv = dict(a.split("=", 1) for a in args[3::2] if "=" in a)
+        nodes = []
+        for issue in self.issues:
+            key = board.item_id_of(str(issue["title"]))
+            if key in self.status:
+                node = {
+                    "id": f"item-{key}",
+                    "content": {"number": issue["number"], "title": issue["title"]},
+                    "status": {"name": self.status[key]},
+                }
+                for alias, column in (("blocked", "Blocked by"), ("pr", "PR")):
+                    if (key, column) in self.text:
+                        node[alias] = {"text": self.text[key, column]}
+                nodes.append(node)
+        nodes += [{"id": f"draft-{n}", "content": {}} for n in range(self.draft_items)]
+        start = int(kv.get("cursor", 0))
+        end = start + self.page_size
+        page = {
+            "pageInfo": {"hasNextPage": end < len(nodes), "endCursor": str(end)},
+            "nodes": nodes[start:end],
+        }
+        data = {"rateLimit": self.rate(cost=1), "node": {"items": page}}
+        return json.dumps({"data": data})
 
     def __call__(self, *args):
         self.calls.append(args)
@@ -189,23 +227,12 @@ class FakeGH:
                     {"name": "PR", "id": "fp"},
                 ]
             return json.dumps({"fields": fields})
-        if head == ("project", "item-list"):
-            items = []
-            for issue in self.issues:
-                key = board.item_id_of(str(issue["title"]))
-                if key in self.status:
-                    item = {
-                        "title": issue["title"],
-                        "id": f"item-{key}",
-                        "status": self.status[key],
-                    }
-                    for column in ("Blocked by", "PR"):
-                        if (key, column) in self.text:
-                            item[column[:1].lower() + column[1:]] = self.text[key, column]
-                    items.append(item)
-            return json.dumps({"items": items})
         if head == ("api", "graphql"):
             query = args[3]
+            if "items(first" in query:
+                return self.items_page(args)
+            if "rateLimit" in query:
+                return json.dumps({"data": {"rateLimit": self.rate(cost=1)}})
             if "$field" in query:  # a text cell: set, or cleared when there is no $text
                 kv = dict(a.split("=", 1) for a in args[3::2])
                 key = kv["item"].removeprefix("item-")
@@ -232,10 +259,14 @@ class FakeGH:
 
 
 @pytest.fixture
-def fake(monkeypatch):
+def fake(monkeypatch, tmp_path):
     f = FakeGH()
     monkeypatch.setattr(board, "gh", f)  # external boundary: the GitHub CLI
     monkeypatch.setattr(board, "private_terms", lambda: [])
+    # the project cache lives in a temporary directory, never in the real git directory
+    monkeypatch.setattr(board, "git_dir_file", lambda name: tmp_path / name)
+    monkeypatch.delenv("BOARD_NO_CACHE", raising=False)
+    board.reset_cache()
     return f
 
 
@@ -513,6 +544,7 @@ def test_cmd_next_lists_only_ready_items_best_first(fake, capsys):
     assert "SAFE1" in out
     assert "CLEAN1" not in out  # blocked by SAFE1, which is not Done
     fake.status["SAFE1"] = "Done"
+    board.reset_cache()  # the next command line starts without what this one read
     board.cmd_next(ns())
     assert capsys.readouterr().out.split()[0] == "CLEAN1"
 
@@ -836,6 +868,7 @@ def test_refresh_writes_only_the_cells_that_changed(columns, capsys):
     assert columns.cell_writes == 6
     assert "refresh: 0 cell(s) written" in capsys.readouterr().out
     columns.status["SAFE1"] = "Done"  # a blocker is resolved: that cell is cleared
+    board.reset_cache()  # by someone else, between two command lines
     assert board.refresh_links() == 1
     assert ("CLEAN1", "Blocked by") not in columns.text
 
@@ -926,3 +959,259 @@ def test_main_done_and_pr_commands(fake, monkeypatch, tmp_path, capsys):
     assert REPO_ROOT.joinpath(
         ".github", "PULL_REQUEST_TEMPLATE", "torch-backend.md"
     ).exists()
+
+
+# ---------------------------------------------------------------- GraphQL budget
+
+
+def calls_of(fake, *head):
+    return [c for c in fake.calls if c[: len(head)] == head]
+
+
+def table_queries(fake):
+    return [c for c in calls_of(fake, "api", "graphql") if "items(first" in c[3]]
+
+
+def test_the_table_is_read_with_one_narrow_graphql_query_not_item_list(fake):
+    items = board.board_items()
+    assert not calls_of(fake, "project", "item-list")
+    assert len(table_queries(fake)) == 1
+    assert items["SAFE1"] == {
+        "id": "item-SAFE1",
+        "title": "SAFE1 — Safety net",
+        "number": 2,
+        "status": "Todo",
+    }
+
+
+def test_the_table_query_asks_only_for_the_columns_the_tool_reads():
+    q = board.ITEMS_QUERY
+    assert q.count("fieldValueByName") == 3  # no `fieldValues(first: ...)` connection, no labels, no assignees
+    assert "fieldValues" not in q and "labels" not in q and "assignees" not in q
+    for name in ("Status", board.BLOCKED_FIELD, board.PR_FIELD):
+        assert f'name: "{name}"' in q
+
+
+def test_the_table_is_read_in_pages_and_keeps_text_cells(columns):
+    columns.page_size = 2
+    columns.text["CLEAN1", "PR"] = "#11 open"
+    items = board.board_items()
+    assert set(items) == {"SAFE1", "CLEAN1", "CLEAN2", "GATE-CLEAN", "Decisions"}
+    assert len(table_queries(columns)) == 3  # five items, two per page
+    assert items["CLEAN1"][board.item_key("PR")] == "#11 open"
+    assert board.item_key("Blocked by") not in items["CLEAN1"]  # an empty cell has no key
+
+
+def test_rows_that_are_not_issues_are_skipped_and_a_missing_status_means_todo(fake):
+    fake.draft_items = 3
+    del fake.status["GATE-CLEAN"]
+    items = board.board_items()
+    assert not any(k.startswith("draft") for k in items) and len(items) == 4
+    assert board.statuses()["SAFE1"] == "Todo"
+
+
+def test_a_row_without_a_status_value_defaults_to_todo(fake, monkeypatch):
+    real = fake.items_page
+
+    def without_status(args):
+        data = json.loads(real(args))
+        for node in data["data"]["node"]["items"]["nodes"]:
+            node["status"] = None
+        return json.dumps(data)
+
+    monkeypatch.setattr(fake, "items_page", without_status)
+    assert set(board.statuses().values()) == {"Todo"}
+
+
+def test_one_command_reads_each_thing_once(columns):
+    columns.status["SAFE1"] = "In Progress"
+    board.cmd_status(ns(id="CLEAN1", status="PR Open"))
+    assert len(table_queries(columns)) == 1  # the status write and the column writes update the copy
+    assert len(calls_of(columns, "pr", "list")) == 1  # "open" is filtered from the one read
+    assert len(calls_of(columns, "issue", "list")) == 1
+    assert len(calls_of(columns, "project", "list")) == 1
+    assert len(calls_of(columns, "project", "field-list")) == 1
+
+
+def test_done_reads_the_issues_again_only_after_it_edited_one(columns):
+    columns.status["SAFE1"] = "In Progress"
+    board.cmd_done(ns(id="SAFE1", evidence="ok", waive="boxes", pr=None, waive_pr=None))
+    assert len(table_queries(columns)) == 1
+    assert len(calls_of(columns, "pr", "list")) == 1
+    assert len(calls_of(columns, "issue", "list")) == 2  # once, and once after the PR box was ticked
+
+
+def test_start_reads_the_table_once(fake):
+    board.cmd_start(ns(id="SAFE1", force=False))
+    assert len(table_queries(fake)) == 1
+    assert fake.status["SAFE1"] == "In Progress"
+
+
+def test_put_body_invalidates_the_issues_and_set_status_updates_the_table_copy(fake):
+    info = board.issues()
+    assert board.issues() is info  # read once
+    board.put_body(info, "SAFE1", "new body")
+    assert board.issues()["SAFE1"]["body"] == "new body"
+    board.set_status("SAFE1", "In Progress")
+    assert board.statuses()["SAFE1"] == "In Progress"
+    assert len(table_queries(fake)) == 1
+
+
+def test_pull_requests_are_filtered_by_state_from_one_read(fake):
+    assert [p["number"] for p in board.pull_requests()] == [10, 11, 12]
+    assert [p["number"] for p in board.pull_requests("merged")] == [10, 12]
+    assert [p["number"] for p in board.pull_requests("open")] == [11]
+    assert len(calls_of(fake, "pr", "list")) == 1
+
+
+def test_project_metadata_is_written_to_the_git_directory_and_reused(fake, tmp_path):
+    board.project()
+    assert (tmp_path / "board-cache.json").exists()
+    assert len(calls_of(fake, "project", "list")) == len(calls_of(fake, "project", "field-list")) == 1
+    board.reset_cache()  # the next command line
+    number, proj, field = board.project()
+    assert (number, proj, field["name"]) == ("2", "P2", "Status")
+    assert len(calls_of(fake, "project", "list")) == 1  # read from the file
+
+
+@pytest.mark.parametrize("how", ["stale", "other project", "corrupt", "disabled"])
+def test_project_metadata_file_is_ignored_when_stale_foreign_corrupt_or_disabled(
+    fake, tmp_path, monkeypatch, how
+):
+    board.project()
+    path = tmp_path / "board-cache.json"
+    saved = json.loads(path.read_text())
+    if how == "stale":
+        saved["saved"] -= board.CACHE_TTL + 1
+    if how == "other project":
+        saved["key"] = "someone/else|Other"
+    path.write_text("{not json" if how == "corrupt" else json.dumps(saved))
+    if how == "disabled":
+        monkeypatch.setenv("BOARD_NO_CACHE", "1")
+    board.reset_cache()
+    board.project()
+    assert len(calls_of(fake, "project", "list")) == 2
+
+
+def test_project_metadata_without_a_git_directory_or_with_a_read_only_one(fake, tmp_path, monkeypatch):
+    monkeypatch.setattr(board, "git_dir_file", lambda name: None)
+    assert board.project()[0] == "2"
+    monkeypatch.setattr(board, "git_dir_file", lambda name: tmp_path / "missing-dir" / name)
+    board.reset_cache()
+    assert board.project()[0] == "2"  # the file cannot be written; nothing breaks
+
+
+def test_a_status_option_added_after_the_file_was_written_is_found_by_reading_again(fake):
+    board.project()
+    fake.options["opt-new"] = "In Progress"  # the fake gains the option the cached copy lacks
+    del fake.options["opt-prog"]
+    board.project_meta()["fields"]["Status"]["options"] = [
+        o for o in board.project_meta()["fields"]["Status"]["options"] if o["name"] != "In Progress"
+    ]
+    board.set_status("SAFE1", "In Progress")
+    assert fake.status["SAFE1"] == "In Progress"
+    assert len(calls_of(fake, "project", "list")) == 2
+
+
+def test_a_column_created_after_the_file_was_written_is_found_by_reading_again(fake):
+    board.project()  # written without the text columns
+    fake.text_fields = True
+    board.reset_cache()
+    assert board.refresh_links() == 6
+    assert len(calls_of(fake, "project", "list")) == 2
+
+
+def test_the_budget_command_reports_points_and_reset(fake, capsys):
+    board.cmd_budget(ns())
+    out = capsys.readouterr().out
+    assert "4990 of 5000 points left" in out and "resets at" in out
+
+
+def test_verbose_prints_the_cost_and_low_budgets_warn_or_stop(fake, capsys, monkeypatch):
+    monkeypatch.setattr(board, "VERBOSE", True)
+    board.board_items()
+    err = capsys.readouterr().err
+    assert "this query cost 1, 4990 points left" in err
+    monkeypatch.setattr(board, "VERBOSE", False)
+    board.reset_cache()
+    fake.remaining = board.LOW_BUDGET - 1
+    board.board_items()
+    warned = capsys.readouterr().err
+    assert "warning" in warned and f"{board.LOW_BUDGET - 1} GraphQL points left" in warned
+    board.reset_cache()
+    fake.remaining = board.MIN_BUDGET - 1
+    with pytest.raises(SystemExit, match="budget nearly spent"):
+        board.board_items()
+    board.note_rate(None)  # a query that reports nothing is silent
+
+
+def test_the_budget_thresholds_are_exclusive(fake, capsys):
+    fake.remaining = board.LOW_BUDGET  # exactly the limit: no warning yet
+    board.board_items()
+    assert capsys.readouterr().err == ""
+    board.reset_cache()
+    fake.remaining = board.MIN_BUDGET  # exactly the minimum: a warning, no stop
+    board.board_items()
+    assert "warning" in capsys.readouterr().err
+
+
+def test_a_comfortable_budget_prints_nothing(fake, capsys):
+    board.board_items()
+    assert capsys.readouterr().err == ""
+
+
+def test_main_accepts_the_verbose_flag_and_the_budget_command(fake, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["board.py", "--verbose", "budget"])
+    monkeypatch.setattr(board, "VERBOSE", False)
+    board.main()
+    assert board.VERBOSE is True
+    assert "GraphQL budget" in capsys.readouterr().out
+    monkeypatch.setattr(board, "VERBOSE", False)
+
+
+def test_each_command_line_run_starts_without_what_the_last_one_read(fake, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["board.py", "list", "Done"])
+    board.main()
+    assert "SAFE1" not in capsys.readouterr().out
+    fake.status["SAFE1"] = "Done"  # changed by someone else between two runs
+    board.main()
+    assert "SAFE1" in capsys.readouterr().out
+
+
+def test_a_rate_limit_failure_says_when_the_budget_resets(monkeypatch):
+    now = 1_000_000
+    monkeypatch.setattr(board.time, "time", lambda: now)
+
+    def run(args, **kwargs):
+        if "-i" in args:  # the hint reads the response headers
+            return subprocess.CompletedProcess(args, 1, f"HTTP/2.0 200 OK\nX-Ratelimit-Reset: {now + 754}\n", "")
+        return subprocess.CompletedProcess(args, 1, "", "GraphQL: API rate limit exceeded for user ID 1.")
+
+    monkeypatch.setattr(board.subprocess, "run", run)
+    with pytest.raises(SystemExit) as e:
+        board.gh("issue", "list")
+    text = str(e.value)
+    assert "rate limit exceeded" in text and "in 12 min 34 s" in text and "nothing that needs GraphQL" in text
+
+
+def test_a_rate_limit_failure_without_headers_still_gives_advice(monkeypatch):
+    monkeypatch.setattr(
+        board.subprocess,
+        "run",
+        lambda args, **k: subprocess.CompletedProcess(args, 1, "", "API rate limit exceeded"),
+    )
+    with pytest.raises(SystemExit, match="per hour"):
+        board.gh("issue", "list")
+
+
+def test_other_failures_do_not_query_the_rate_limit(monkeypatch):
+    seen = []
+
+    def run(args, **kwargs):
+        seen.append(args)
+        return subprocess.CompletedProcess(args, 1, "", "boom")
+
+    monkeypatch.setattr(board.subprocess, "run", run)
+    with pytest.raises(SystemExit, match="boom"):
+        board.gh("issue", "list")
+    assert len(seen) == 1

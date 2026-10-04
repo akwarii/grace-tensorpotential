@@ -12,6 +12,7 @@ import logging
 import os
 
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 import yaml
 

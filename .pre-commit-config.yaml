@@ -22,3 +22,9 @@ repos:
         language: system
         pass_filenames: false
         files: \.(py|ipynb)$|^pyproject\.toml$|^baselines/lint_ratchet\.json$
+      - id: import-contract
+        name: import-linter (TensorFlow-free modules)
+        entry: uv run --frozen --no-sync lint-imports
+        language: system
+        pass_filenames: false
+        files: ^(tensorpotential/.*\.py|pyproject\.toml)$

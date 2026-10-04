@@ -16,6 +16,7 @@ Two flavours are exported:
 
 from __future__ import annotations
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential import constants

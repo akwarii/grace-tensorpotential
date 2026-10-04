@@ -22,7 +22,8 @@ from tqdm import tqdm
 
 from tensorpotential import constants
 from tensorpotential.data.process_df import ENERGY_CORRECTED_COL, FORCES_COL, STRESS_COL
-from tensorpotential.utils import process_cutoff_dict, enforce_pbc
+from tensorpotential.core.cutoffs import process_cutoff_dict
+from tensorpotential.utils import enforce_pbc
 
 
 def symbols_to_indices(symbols, sym_to_idx, *, default=None) -> np.ndarray:

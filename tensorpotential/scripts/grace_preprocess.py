@@ -9,6 +9,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 import tqdm
 

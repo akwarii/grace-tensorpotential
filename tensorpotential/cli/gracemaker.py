@@ -38,6 +38,7 @@ from tensorpotential.utils import (
 )
 from tensorpotential.metadata_utils import read_model_metadata
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 MODEL_CONFIG_YAML = "model.yaml"

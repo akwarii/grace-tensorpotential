@@ -6,6 +6,7 @@ import time
 from typing import Iterator
 
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential.tpmodel import ComputeStructureEnergyAndForcesAndVirial

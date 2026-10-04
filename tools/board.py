@@ -20,6 +20,7 @@ usage (from anywhere inside the repository):
     python tools/board.py pr-body ID                 print a pull-request description for ID from the fork's template, pre-filled (Refs, exit criterion, DoD state)
     python tools/board.py pr-check ID FILE          check a pull-request description against the rules (Refs #N, no Closes, sections filled, comments removed, sanitised)
     python tools/board.py refresh                   write the "Blocked by" and "PR" columns of the project table (only the cells that changed)
+    python tools/board.py budget                    what is left of the hourly GraphQL budget (5,000 points, shared by every agent and the app)
     python tools/board.py lint                      find stale text in the issues (removed files, unknown ids, missing appendices, old counts, second person)
     python tools/board.py sanitise [FILE]           print FILE (or stdin) made safe for a public tracker; use it for any PR or issue text you write yourself
 
@@ -30,6 +31,11 @@ listed in `<git-dir>/board-private-terms.txt` (lines `term => replacement`, neve
 ID is a milestone or gate id such as CLEAN1 or GATE-CLEAN (or Decisions); the legacy ids of the first numbering (M0.2, G0, ...) are still accepted
 and resolve to the new id (each issue carries a `- Legacy id:` line). The target repository is the fork below (override with the environment
 variable BOARD_REPO); any ICAMS repository is refused. The project is found by its title.
+
+GitHub's GraphQL budget is 5,000 points an hour for the whole account. The project table is read with one narrow query (about the cost of one
+`gh issue list`), the issues, the pull requests and the table once per command, and the project's id and columns are kept for a day in
+`<git-dir>/board-cache.json` (BOARD_NO_CACHE=1 ignores it). `--verbose` (or BOARD_VERBOSE=1) prints the cost of each table query; below 200 points
+left every table query warns, below 10 the command stops and says when the budget resets.
 """
 
 from __future__ import annotations
@@ -41,6 +47,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime
 from pathlib import Path
 
 REPO = os.environ.get("BOARD_REPO", "akwarii/grace-tensorpotential")
@@ -51,6 +59,23 @@ STATUSES = ["Todo", "In Progress", "PR Open", "Done"]
 DOD_HEADING = "## Definition of Done"
 BLOCKED_FIELD = "Blocked by"  # text columns of the project table, written by `refresh`
 PR_FIELD = "PR"
+CACHE_TTL = 24 * 3600  # seconds the project's id, columns and Status options are kept in the git directory
+LOW_BUDGET = 200  # GraphQL points left below which every query that reports them prints a warning
+MIN_BUDGET = 10  # ... and below which a command stops instead of failing half-way
+VERBOSE = bool(os.environ.get("BOARD_VERBOSE"))
+RATE_QUERY = "{ rateLimit { limit cost remaining used resetAt } }"
+# One request for the whole table, asking only for what the tool reads. `gh project item-list` fetches every field,
+# label and assignee of every item as nested connections: 103 points per call on this 97-item, 22-field project, and
+# `gh project field-list` about 110 to 150 (measured 2026-10-04 with a pause before each reading, the counter lags);
+# this query costs 1, and the project metadata is kept in a file, so a command costs about 3 points.
+ITEMS_QUERY = (
+    "query($project: ID!, $cursor: String) { rateLimit { cost remaining resetAt } "
+    "node(id: $project) { ... on ProjectV2 { items(first: 100, after: $cursor) { "
+    "pageInfo { hasNextPage endCursor } nodes { id content { ... on Issue { number title } } "
+    'status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } '
+    'blocked: fieldValueByName(name: "Blocked by") { ... on ProjectV2ItemFieldTextValue { text } } '
+    'pr: fieldValueByName(name: "PR") { ... on ProjectV2ItemFieldTextValue { text } } } } } } }'
+)
 LEGACY_LINE = re.compile(r"^- Legacy id: (\S+)[ \t]*\n?", re.M)
 LEGACY_ID = re.compile(r"(?<![\w.])(?:M\d+\.\d+(?!\d)|G\d(?!\w))")
 
@@ -58,16 +83,17 @@ if REPO.lower().startswith("icams/"):
     sys.exit("refusing to act on an ICAMS repository")
 
 
-def private_terms() -> list[tuple[str, str]]:
-    """Terms to generalise, read from <git-dir>/board-private-terms.txt (kept out of the repository on purpose)."""
+def git_dir_file(name: str) -> Path | None:
+    """A file in the git directory (kept out of the repository on purpose), or None outside a repository."""
     r = subprocess.run(
         ["git", "rev-parse", "--git-dir"], capture_output=True, text=True
     )
-    path = (
-        Path(r.stdout.strip()) / "board-private-terms.txt"
-        if r.returncode == 0
-        else None
-    )
+    return Path(r.stdout.strip()) / name if r.returncode == 0 else None
+
+
+def private_terms() -> list[tuple[str, str]]:
+    """Terms to generalise, read from <git-dir>/board-private-terms.txt (kept out of the repository on purpose)."""
+    path = git_dir_file("board-private-terms.txt")
     if path is None or not path.exists():
         return []
     out = []
@@ -132,11 +158,73 @@ def sanitise(text: str, known: set[int] | None = None) -> str:
     return out
 
 
+def reset_text(epoch: float) -> str:
+    """Local time of day of a reset, with the minutes left."""
+    wait = max(0, int(epoch - time.time()))
+    clock = time.strftime("%H:%M:%S", time.localtime(epoch))
+    return f"{clock} (in {wait // 60} min {wait % 60} s)"
+
+
+def rate_limit_hint() -> str:
+    """When the GraphQL window resets, read from the response headers (`gh api rate_limit` was found to lag behind them)."""
+    r = subprocess.run(
+        ["gh", "api", "-i", "graphql", "-f", "query={ __typename }"],
+        capture_output=True,
+        text=True,
+    )
+    m = re.search(r"^x-ratelimit-reset:\s*(\d+)", r.stdout, re.I | re.M)
+    if not m:
+        return "The GraphQL budget is per hour; try again later."
+    return (
+        f"The GraphQL budget resets at {reset_text(int(m.group(1)))}; "
+        "nothing that needs GraphQL (every `gh issue`, `gh pr` and `gh project` command) works until then."
+    )
+
+
 def gh(*args: str) -> str:
     r = subprocess.run(["gh", *args], capture_output=True, text=True)
     if r.returncode != 0:
-        sys.exit(f"gh {' '.join(args[:4])} failed: {r.stderr.strip()[:400]}")
+        err = r.stderr.strip()
+        hint = f"\n{rate_limit_hint()}" if "rate limit" in err.lower() else ""
+        sys.exit(f"gh {' '.join(args[:4])} failed: {err[:400]}{hint}")
     return r.stdout.strip()
+
+
+_CACHE: dict[str, object] = {}  # what this run has read; a command line is one run
+
+
+def reset_cache() -> None:
+    """Forget what this run has read (a caller that changed the board behind the tool's back)."""
+    _CACHE.clear()
+
+
+def cached(key: str, fetch):
+    """Read once per run: the table, the issues and the pull requests are each needed by several steps of a command."""
+    if key not in _CACHE:
+        _CACHE[key] = fetch()
+    return _CACHE[key]
+
+
+def note_rate(rate: dict | None) -> None:
+    """Report what a query cost and warn, or stop, when the hourly GraphQL budget is nearly spent."""
+    if not rate:
+        return
+    reset = datetime.fromisoformat(rate["resetAt"].replace("Z", "+00:00")).timestamp()
+    if VERBOSE:
+        print(
+            f"[graphql: this query cost {rate['cost']}, {rate['remaining']} points left, resets at {reset_text(reset)}]",
+            file=sys.stderr,
+        )
+    if rate["remaining"] < MIN_BUDGET:
+        sys.exit(
+            f"GraphQL budget nearly spent ({rate['remaining']} points left); it resets at {reset_text(reset)}. Stop and wait."
+        )
+    if rate["remaining"] < LOW_BUDGET:
+        print(
+            f"[warning: {rate['remaining']} GraphQL points left, resets at {reset_text(reset)}; "
+            "avoid anything that is not needed now]",
+            file=sys.stderr,
+        )
 
 
 def item_id_of(title: str) -> str:
@@ -145,7 +233,11 @@ def item_id_of(title: str) -> str:
 
 
 def issues() -> dict[str, dict]:
-    """id -> {number, title, body, state, needs (ids), score}."""
+    """id -> {number, title, body, state, needs (ids), score}; read once per run (`put_body` invalidates it)."""
+    return cached("issues", fetch_issues)
+
+
+def fetch_issues() -> dict[str, dict]:
     raw = json.loads(
         gh(
             "issue",
@@ -206,8 +298,7 @@ def resolve(item_id: str, known: dict[str, dict]) -> str:
     return wanted
 
 
-def project() -> tuple[str, str, dict]:
-    """(project number, project node id, Status field)."""
+def fetch_project_meta() -> dict:
     projects = json.loads(gh("project", "list", "--owner", OWNER, "--format", "json"))[
         "projects"
     ]
@@ -218,42 +309,99 @@ def project() -> tuple[str, str, dict]:
     fields = json.loads(
         gh("project", "field-list", number, "--owner", OWNER, "--format", "json")
     )["fields"]
-    return number, p["id"], next(f for f in fields if f["name"] == "Status")
+    return {"number": number, "id": p["id"], "fields": {f["name"]: f for f in fields}}
 
 
-def board_items(number: str) -> dict[str, dict]:
-    items = json.loads(
-        gh(
-            "project",
-            "item-list",
-            number,
-            "--owner",
-            OWNER,
-            "--format",
-            "json",
-            "--limit",
-            "500",
-        )
-    )["items"]
-    return {item_id_of(i["title"]): i for i in items}
+def load_project_meta(refresh: bool) -> dict:
+    """The project's number, node id and columns: from <git-dir>/board-cache.json when it is fresh, else from GitHub."""
+    key = f"{REPO}|{PROJECT_TITLE}"
+    path = git_dir_file("board-cache.json")
+    use_file = path is not None and not os.environ.get("BOARD_NO_CACHE")
+    if use_file and not refresh and path.exists():
+        try:
+            saved = json.loads(path.read_text())
+            if saved["key"] == key and time.time() - saved["saved"] < CACHE_TTL:
+                return saved["meta"]
+        except (ValueError, KeyError, TypeError, OSError):
+            pass  # unreadable or stale: read it again
+    meta = fetch_project_meta()
+    if use_file:
+        try:
+            path.write_text(json.dumps({"key": key, "saved": time.time(), "meta": meta}))
+        except OSError:
+            pass  # a read-only git directory only costs the next command two requests
+    return meta
+
+
+def project_meta(refresh: bool = False) -> dict:
+    """Project metadata, read once per run; `refresh` ignores the file (a column or option was added since)."""
+    if refresh:
+        _CACHE.pop("meta", None)
+    return cached("meta", lambda: load_project_meta(refresh))
+
+
+def project() -> tuple[str, str, dict]:
+    """(project number, project node id, Status field)."""
+    m = project_meta()
+    return m["number"], m["id"], m["fields"]["Status"]
+
+
+def fetch_items() -> dict[str, dict]:
+    """item id of the issue -> {id, title, number, status, <text columns>}; one request per 100 items."""
+    project_id = project_meta()["id"]
+    items: dict[str, dict] = {}
+    cursor = None
+    while True:
+        args = ["api", "graphql", "-f", f"query={ITEMS_QUERY}", "-f", f"project={project_id}"]
+        if cursor:
+            args += ["-f", f"cursor={cursor}"]
+        data = json.loads(gh(*args))["data"]
+        note_rate(data.get("rateLimit"))
+        page = data["node"]["items"]
+        for node in page["nodes"]:
+            content = node.get("content") or {}
+            if "number" not in content:
+                continue  # a draft item or a pull request
+            row = {"id": node["id"], "title": content["title"], "number": content["number"]}
+            for alias, key in (
+                ("status", "status"),
+                ("blocked", item_key(BLOCKED_FIELD)),
+                ("pr", item_key(PR_FIELD)),
+            ):
+                value = node.get(alias)
+                if value:
+                    row[key] = value.get("name") or value.get("text") or ""
+            items[item_id_of(content["title"])] = row
+        if not page["pageInfo"]["hasNextPage"]:
+            return items
+        cursor = page["pageInfo"]["endCursor"]
+
+
+def board_items() -> dict[str, dict]:
+    """The project table, read once per run (`set_status` and the column writes keep it current)."""
+    return cached("items", fetch_items)
 
 
 def statuses() -> dict[str, str]:
-    number, _, _ = project()
-    return {k: v.get("status", "Todo") for k, v in board_items(number).items()}
+    return {k: v.get("status", "Todo") for k, v in board_items().items()}
 
 
 def set_status(item_id: str, status: str) -> None:
     if status not in STATUSES:
         sys.exit(f"status must be one of {STATUSES}")
-    number, proj, field = project()
-    item = board_items(number)[item_id]["id"]
+    _, proj, field = project()
+    if not any(o["name"] == status for o in field["options"]):
+        project_meta(refresh=True)  # an option may have been added since the file was written
+        _, proj, field = project()
+    row = board_items()[item_id]
+    item = row["id"]
     option = next(o["id"] for o in field["options"] if o["name"] == status)
     q = (
         f'mutation {{ updateProjectV2ItemFieldValue(input:{{projectId:"{proj}", itemId:"{item}", fieldId:"{field["id"]}", '
         f'value:{{singleSelectOptionId:"{option}"}}}}) {{ clientMutationId }} }}'
     )
     gh("api", "graphql", "-f", f"query={q}")
+    row["status"] = status
     print(f"{item_id}: Status -> {status}")
 
 
@@ -267,11 +415,8 @@ CLEAR_FIELD = (
 )
 
 
-def project_fields(number: str) -> dict[str, dict]:
-    fields = json.loads(
-        gh("project", "field-list", number, "--owner", OWNER, "--format", "json")
-    )["fields"]
-    return {f["name"]: f for f in fields}
+def project_fields() -> dict[str, dict]:
+    return project_meta()["fields"]
 
 
 def item_key(field_name: str) -> str:
@@ -318,16 +463,19 @@ def link_columns(
 
 def refresh_links(strict: bool = True) -> int:
     """Write the Blocked by and PR columns for every item whose cell is out of date; returns the number of cells written."""
-    number, proj, _ = project()
-    fields = project_fields(number)
+    _, proj, _ = project()
+    fields = project_fields()
     missing = [n for n in (BLOCKED_FIELD, PR_FIELD) if n not in fields]
+    if missing:  # the column may have been created after the file was written
+        fields = project_meta(refresh=True)["fields"]
+        missing = [n for n in (BLOCKED_FIELD, PR_FIELD) if n not in fields]
     if missing:
         msg = f"project has no text column {missing}; create it (Text field) first"
         if strict:
             sys.exit(msg)
         print(f"[refresh skipped: {msg}]", file=sys.stderr)
         return 0
-    items = board_items(number)
+    items = board_items()
     info = issues()
     sts = {k: v.get("status", "Todo") for k, v in items.items()}
     written = 0
@@ -338,26 +486,39 @@ def refresh_links(strict: bool = True) -> int:
         ):
             if items[item_id].get(key, "") != value:
                 set_text_field(proj, items[item_id]["id"], fields[name]["id"], value)
+                if value:
+                    items[item_id][key] = value
+                else:
+                    items[item_id].pop(key, None)
                 written += 1
     print(f"refresh: {written} cell(s) written")
     return written
 
 
 def pull_requests(state: str = "all") -> list[dict]:
-    return json.loads(
-        gh(
-            "pr",
-            "list",
-            "--repo",
-            REPO,
-            "--state",
-            state,
-            "--limit",
-            "300",
-            "--json",
-            "number,title,body,baseRefName,mergedAt,state,url,isDraft",
-        )
+    """The pull requests of the fork (`state`: all, open or merged), read once per run and filtered here."""
+    everything = cached(
+        "prs",
+        lambda: json.loads(
+            gh(
+                "pr",
+                "list",
+                "--repo",
+                REPO,
+                "--state",
+                "all",
+                "--limit",
+                "300",
+                "--json",
+                "number,title,body,baseRefName,mergedAt,state,url,isDraft",
+            )
+        ),
     )
+    if state == "merged":
+        return [p for p in everything if p["mergedAt"]]
+    if state == "open":
+        return [p for p in everything if p["state"] == "OPEN"]
+    return everything
 
 
 def known_numbers(info: dict) -> set[int]:
@@ -402,6 +563,7 @@ def put_body(info: dict, item_id: str, body: str) -> None:
         )
     finally:
         Path(path).unlink(missing_ok=True)
+    _CACHE.pop("issues", None)  # the body just written is what the next read must show
 
 
 def dod_lines(body: str) -> list[int]:
@@ -620,6 +782,13 @@ def cmd_refresh(_a) -> None:
     refresh_links()
 
 
+def cmd_budget(_a) -> None:
+    """What is left of the hourly GraphQL budget (one point; `gh api rate_limit` lags behind the real count)."""
+    r = json.loads(gh("api", "graphql", "-f", f"query={RATE_QUERY}"))["data"]["rateLimit"]
+    reset = datetime.fromisoformat(r["resetAt"].replace("Z", "+00:00")).timestamp()
+    print(f"GraphQL budget: {r['remaining']} of {r['limit']} points left, resets at {reset_text(reset)}")
+
+
 def cmd_sanitise(a) -> None:
     text = Path(a.file).read_text() if a.file else sys.stdin.read()
     sys.stdout.write(sanitise(text, known_numbers(issues())))
@@ -802,6 +971,7 @@ def main() -> None:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    p.add_argument("--verbose", action="store_true", help="print what each GraphQL table query cost and what is left")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("next").set_defaults(fn=cmd_next)
     s = sub.add_parser("list")
@@ -840,6 +1010,7 @@ def main() -> None:
     s.set_defaults(fn=cmd_na)
     sub.add_parser("lint").set_defaults(fn=cmd_lint)
     sub.add_parser("refresh").set_defaults(fn=cmd_refresh)
+    sub.add_parser("budget").set_defaults(fn=cmd_budget)
     s = sub.add_parser("pr-body")
     s.add_argument("id")
     s.set_defaults(fn=cmd_pr_body)
@@ -858,6 +1029,9 @@ def main() -> None:
     s.add_argument("--waive-pr")
     s.set_defaults(fn=cmd_done)
     a = p.parse_args()
+    global VERBOSE
+    VERBOSE = VERBOSE or a.verbose
+    reset_cache()
     a.fn(a)
 
 

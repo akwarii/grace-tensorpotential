@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 from tensorpotential.loss import LossFunction

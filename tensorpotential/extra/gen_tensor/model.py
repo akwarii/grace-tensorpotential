@@ -30,6 +30,7 @@ from tensorpotential.tpmodel import (
     execute_instructions,
 )
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 

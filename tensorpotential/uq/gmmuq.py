@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import warnings
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 from tqdm.auto import tqdm
 
