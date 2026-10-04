@@ -160,3 +160,30 @@ has to reconcile (the sheets are the specification): `FunctionReduceN.init_targe
 `return_hidden_target` accepts only `null` (decided: ported); `ConstantScaleShiftTarget.atomic_shift_map` accepts only `null`
 (the sheet ports a map with keys `0 .. n-1`; a dict is seen only in `GRACE-3L-OMAT-large`). This PR does not change the
 option table.
+
+## Registry and completeness checks (SPEC5)
+
+`tensorpotential/torch_backend/spec/registry.py` holds one entry for every `TPInstruction` subclass of the TF source (39 today):
+17 `supported` (these sheets, the option rules of `options.py`) and 22 `rejected` with a reason (`REJECTED_CLASSES`). The loader calls
+`check_supported`, which lists every unsupported class and option in one `UnsupportedModelError`; its `problems` carry the kind:
+
+| Kind | When | Message names |
+|---|---|---|
+| `unknown_class` | the `__cls__` path is not in the registry; classes match by exact name, so a subclass of a supported class is unknown too | instruction, class, the nearest registry class |
+| `rejected_class` | the class has no twin | instruction, class, the reason |
+| `unknown_option` | a key the class does not have (a key TF ignores is accepted) | instruction, class, the nearest valid key |
+| `missing_option` | a parameter without a default that neither the yaml nor `DEFAULTS` gives | instruction, class, option |
+| `unsupported_value` | a value outside the rule; for a default the yaml omits, the message says the default applies | instruction, class, option, what is supported |
+| `rejected_value` | a value seen in a shipped yaml that has no twin | instruction, class, option, the reason |
+
+`tools/instruction_ast.py` reads the same classes from the source with `ast` (no TensorFlow). `python tools/instruction_ast.py check` fails on an
+instruction class without a registry entry, a registry entry for a class that no longer exists, a constructor parameter without an option rule,
+a pinned default that differs from the source (`RadialBasis` takes its defaults from the Chebyshev basis it forwards to: `DEFAULTS_ORIGIN`), a
+default that is not a literal, and a supported class that lost `capture_init_args`. `tests/test_registry.py` runs it on the tree and on copies
+with a planted change; `.github/workflows/upstream-completeness.yml` runs it weekly on the current upstream master (it needs Actions enabled on
+the fork and, for the schedule, the file on the default branch; `workflow_dispatch` runs it by hand). It passed on the local `upstream/master`
+(`cc1bb38`, 2026-09-03). A new upstream class goes into `SUPPORTED_OPTIONS` (with a sheet) or `REJECTED_CLASSES` (with a reason).
+
+`GOLDEN_TESTS` in `registry.py` maps a supported class to the test that compares its twin with the golden fixtures; it is empty, and
+`EXPECTED_WITHOUT_GOLDEN` in `tests/test_registry.py` lists the 17 classes without one. A twin issue adds its classes to the first and removes
+them from the second in the same pull request; the test fails in both directions, so the list can only shrink.

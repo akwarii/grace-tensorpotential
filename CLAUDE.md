@@ -36,6 +36,7 @@ uv run --frozen --no-sync ty check path/to/new_package     # strict in the new p
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also tests/test_import_gates.py
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # every upstream file the fork modifies has a row in tools/divergence.yaml (add it in the same PR as the change, drop it when the file equals upstream again); no fork-only path on a local pr/U* branch
+uv run --frozen --no-sync python tools/instruction_ast.py check    # TF-free: every TPInstruction subclass has a registry entry (torch_backend/spec/registry.py) and the pinned defaults equal the source; `table` prints the constructor table
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)
@@ -108,6 +109,7 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
 
 - `capture_init_args` writes constructor defaults into the saved `model.yaml`, so a default value is part of every saved model. Changing a
   constructor signature or default changes models that already exist; treat them as persisted API.
+- **A new `TPInstruction` subclass needs a registry entry.** `tests/test_registry.py` (and `tools/instruction_ast.py check`, which the scheduled job runs on upstream master) fails on an instruction class that is neither in `SUPPORTED_OPTIONS` (with a spec sheet) nor in `REJECTED_CLASSES` (with a reason) of `torch_backend/spec/options.py`, and on a pinned default that differs from the source. `capture_init_args` is a **class** decorator (the extractor reads it there); a class that inherits its constructor reports the parent's parameters. The scheduled job runs only when Actions is enabled on the fork and the workflow file is on the default branch.
 - Output instructions overwrite `input_data[target.name]` **in place** (`instructions/output.py`); instruction order in the yaml matters, and
   a dump must snapshot the key before and after.
 - `tpmodel.__getattr__` and `instructions.__getattr__` look unused but saved yamls import classes through them. Dead-code tools flag them; keep them.

@@ -22,8 +22,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
+BASE: Final = "tensorpotential.instructions.base."
 COMPUTE: Final = "tensorpotential.instructions.compute."
 OUTPUT: Final = "tensorpotential.instructions.output."
+UQ: Final = "tensorpotential.uq.instructions."
 
 
 @dataclass(frozen=True)
@@ -250,6 +252,11 @@ _OUTSIDE = (
     "not one of the instruction classes the first twin set covers (decision D2: the 2L OMAT and "
     "large models first); needed by {models}"
 )
+_UNSEEN = (
+    "not one of the instruction classes the first twin set covers (decision D2) and named by none of the scanned "
+    "model.yaml files"
+)
+_BASE = "a base class of the instruction hierarchy, not an instruction that a model.yaml names"
 REJECTED_CLASSES: Final[Mapping[str, str]] = {
     COMPUTE + "BondSpecificRadialBasisFunction": _OUTSIDE.format(
         models="the SMAX models (1L and 2L)"
@@ -269,6 +276,22 @@ REJECTED_CLASSES: Final[Mapping[str, str]] = {
     OUTPUT + "MLPOut2ScalarTarget": _OUTSIDE.format(
         models="the legacy list-format model_grace.yaml (and its lm_first=True fails in TF)"
     ),
+    # Classes of the TF source that no scanned yaml names (SPEC5: the registry knows every TPInstruction subclass).
+    COMPUTE + "BondAvgSphericalHarmonic": _UNSEEN,
+    COMPUTE + "CollectInvarBasis": _UNSEEN
+    + " (and it cannot be instantiated as shipped: it lacks the abstract upd_init_args_new_elements)",
+    COMPUTE + "EquivariantGate": _UNSEEN,
+    COMPUTE + "FunctionReduceParticular": _UNSEEN,
+    COMPUTE + "ZBLPotential": _UNSEEN,
+    OUTPUT + "LinMLPScalarReadOut": _UNSEEN,
+    OUTPUT + "LinearOut2EquivarTarget": _UNSEEN,
+    OUTPUT + "TrainableShiftTarget_v2": _UNSEEN,
+    UQ
+    + "RandomProjectedBasisFeatures": "added to a model by the uncertainty (GMM) tools to extract features; not part of the force-field "
+    "model.yaml that the first twin set covers",
+    BASE + "TPInstruction": _BASE,
+    BASE + "TPEquivariantInstruction": _BASE,
+    OUTPUT + "TPOutputInstruction": _BASE,
 }
 
 _ONLY_3L = (
@@ -311,6 +334,13 @@ MODEL_OPTIONS: Final[Mapping[str, OptionRule]] = {
 # A yaml without a metadata block is an old model: metadata_utils.resolve_param_dtype reads it as float64 (the
 # value TensorPotential and gracemaker use for a new training run is float32, which does not apply to loading).
 MODEL_DEFAULTS: Final[Mapping[str, Any]] = {"param_dtype": "float64"}
+
+# A pinned default that is not the default of the class's own constructor: ``RadialBasis`` forwards ``**kwargs`` to
+# the basis function, and the pinned values are those of the Chebyshev one (the only kind the 2L models use).
+DEFAULTS_ORIGIN: Final[Mapping[str, str]] = {
+    COMPUTE
+    + "RadialBasis": "tensorpotential.functions.radial.ChebSqrRadialBasisFunction",
+}
 
 _C = COMPUTE
 _O = OUTPUT
