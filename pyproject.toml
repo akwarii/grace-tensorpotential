@@ -18,11 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    # for windows and macos
-    "tensorflow<=2.20; sys_platform == 'win32' or sys_platform == 'darwin'",
-    # for linux
-    "tensorflow[and-cuda]<=2.20; sys_platform == 'linux'",
-    "tf_keras",  # Required for legacy Keras API. Users may need to set TF_USE_LEGACY_KERAS=1
+    # TensorFlow-free base (D12): every dependency except TensorFlow, which comes with the 'tf' extra
     "scipy",
     "matscipy",
     "numpy<3.0.0",
@@ -36,6 +32,19 @@ dependencies = [
     "rich>=13.0",
     "scikit-learn>=1.1",
 ]
+
+[project.optional-dependencies]
+tf = [
+    # for windows and macos
+    "tensorflow<=2.20; sys_platform == 'win32' or sys_platform == 'darwin'",
+    # for linux
+    "tensorflow[and-cuda]<=2.20; sys_platform == 'linux'",
+    "tf_keras",  # Required for legacy Keras API. Users may need to set TF_USE_LEGACY_KERAS=1
+]
+torch = ["torch"]
+torch-sim = ["tensorpotential[torch]", "torch-sim-atomistic", "vesin"]
+all = ["tensorpotential[tf,torch,torch-sim]"]
+
 [project.urls]
 "Homepage" = "https://github.com/ICAMS/grace-tensorpotential"
 
@@ -50,6 +59,12 @@ grace_predict = "tensorpotential.scripts.grace_predict:main"
 grace_utils = "tensorpotential.scripts.grace_utils:main"
 grace_uq = "tensorpotential.scripts.grace_uq:main"
 grace_dashboard = "tensorpotential.scripts.grace_dashboard:main"
+
+[tool.setuptools.packages.find]
+include = ["tensorpotential*"]
+
+[tool.setuptools.package-data]
+tensorpotential = ["resources/input_template.yaml"]
 
 [tool.ruff]
 # One ruff configuration for the whole repository (D13). The strict set of the new packages is selected
@@ -97,6 +112,7 @@ convention = "numpy"
 
 [dependency-groups]
 dev = [
+    "tensorpotential[tf]",  # the test suite runs on the TensorFlow stack
     "pytest",
     "pytest-cov",
     "pytest-xdist",
