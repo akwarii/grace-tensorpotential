@@ -10,10 +10,11 @@ the fork. Run it from the repository root.
 
 ## Ids
 
-An issue id is a theme and a number, written as in the issue title: `SAFE1`, `CLEAN1`-`CLEAN4`, `DEPS1`, `TOOL1`, `AGENT1`, `QUAL1`-`QUAL2`, `CPU1`, `TEST1`-`TEST4` (Stage 0);
-`BOARD`, `SPEC`, `CORE`, `FIX`, `CI` (Stage 1); `TORCH`, `SH`, `RAD`, `DENSE`, `PLAN`, `ORACLE`, `NBR` (Stage 2); `TWIN`, `EXEC` (Stage 3); `MODEL` (4); `IO` (5); `EQUIV` (6);
-`SIM`, `DOC` (7); `PERF` (8); gates `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV`, `GATE-SIM`. Numbers restart in each theme and follow the dependency order: an issue never depends on a higher number of its own theme (`lint` reminds you). A new issue takes the next free number, and an insertion in the middle renumbers the later ones only when nobody is working on them. The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches
-and pull requests keep using it, and `lint` reports it in issue text. Write the new id everywhere new.
+An issue id is a theme and a number, written as in the issue title (`CLEAN1`, `SPEC3`, `TORCH2`, ...); the gates are `GATE-CLEAN`, `GATE-SPEC`, `GATE-MODEL`, `GATE-EQUIV` and `GATE-SIM`.
+`python tools/board.py list [Status]` prints every id with its issue number and status. Numbers restart in each theme and follow the dependency order: an issue never depends on a higher number of its own theme (`lint` reminds you).
+A new issue takes the next free number, and an insertion in the middle renumbers the later ones only when nobody is working on them (an id then resolves to a different issue, so tell the agents involved).
+The first numbering (`M0.2`, `G0`, ...) is retired: the helper still accepts it (each issue has a `- Legacy id:` line, and `resolve` prints the new id), old commits, branches and pull requests keep using it,
+and `lint` reports it in issue text. Write the new id everywhere new.
 
 ## Session ritual
 
@@ -39,11 +40,6 @@ Give the evidence (command, output, numbers), not only the conclusion, and name 
 finding. If you discover that the board itself is wrong (a day estimate, a dependency, a priority, a missing issue), say so in a finding and tell the user; the
 `Depends on` line of an issue and its native "blocked by" relations are the dependency data, and they are changed by the user or on the user's go.
 
-## New skills need validation
-
-Adding a line or a gotcha to an existing skill or to `CLAUDE.md` is part of the work. **Creating a new skill is not**: propose its name, description and outline to the
-user first, and create it only after the user validates it.
-
 ## Keep the issues current
 
 Issues go stale as the work moves: a file is renamed, a command changes, a count or a decision is superseded, a dependency is added. Fix the text of every issue
@@ -58,7 +54,7 @@ refresh the two text columns by themselves; after anything else that changes the
 
 ## The GraphQL budget
 
-GitHub allows 5,000 GraphQL points an hour for the whole account, shared by every agent and the desktop app, and every `gh issue`, `gh pr` and `gh project` command spends them. **`gh project item-list` (about 100 points per call on this 97-item board) and `gh project field-list` (about 150) are expensive**, because they fetch every field, label and assignee as nested connections; the old `board.py` spent 200 to 800 points per command on them. Never call them, and never loop over `gh` calls (an issue list or a pull-request list costs 1 to 3). `board.py` reads the table with one narrow query and reads the issues, the pull requests and the table once per command; the project's id and columns are kept for a day in `<git-dir>/board-cache.json` (`BOARD_NO_CACHE=1` ignores it). `python tools/board.py budget` shows what is left and when it resets (`gh api rate_limit` lags behind the real count; the `X-Ratelimit-*` headers of `GH_DEBUG=api` are correct); `--verbose` prints the cost of each table query. When a call fails with "API rate limit exceeded", stop using `gh` until the reset time the message gives.
+GitHub allows 5,000 GraphQL points an hour for the whole account, shared by every agent and the desktop app, and every `gh issue`, `gh pr` and `gh project` command spends them. **`gh project item-list` (about 100 points per call) and `gh project field-list` (about 150) are expensive**, because they fetch every field, label and assignee as nested connections. Never call them, and never loop over `gh` calls (an issue list or a pull-request list costs 1 to 3). `board.py` reads the table with one narrow query and reads the issues, the pull requests and the table once per command; the project's id and columns are kept for a day in `<git-dir>/board-cache.json` (`BOARD_NO_CACHE=1` ignores it). `python tools/board.py budget` shows what is left and when it resets (`gh api rate_limit` lags behind the real count; the `X-Ratelimit-*` headers of `GH_DEBUG=api` are correct); `--verbose` prints the cost of each table query. When a call fails with "API rate limit exceeded", stop using `gh` until the reset time the message gives.
 
 ## Keep the Definition of Done current
 
@@ -83,10 +79,10 @@ base:   torch-backend              (the integration branch on the fork; never ma
 
 - When the work is ready (see `CLAUDE.md`), open a **draft** PR yourself and ask the user to review it; marking it ready, auto-merge and merging are never yours. Its description contains `Refs #<issue number>` (not `Closes`: the issue is closed by `board.py done` after the merge) and the Verify
   output and per-unit coverage. Then `python tools/board.py status CLEAN1 "PR Open"` (it refuses unless an open PR references the issue). Make sure your `torch-backend` is current first.
-- **Work in your own worktree** (other agents may be running): `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` in it: git sets the upstream
-  to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. Do not use a tree that is not yours, and do not put two agents on one
-  issue (`board.py` rewrites the whole issue body when it ticks a box). **When the PR is merged** and `board.py done` has run, remove it: `git worktree remove ../<repository>-<id>` (no `--force`; a refusal
-  means uncommitted work, so report it), `git branch -d <branch>`; the remote branch stays unless the user says to delete it. `git worktree list` shows what is still around.
+- **Work in your own worktree** (rule in `CLAUDE.md`): `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` in it: git sets the upstream
+  to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. **When the PR is merged** and `board.py done` has run:
+  `git worktree remove ../<repository>-<id>` (no `--force`; a refusal means uncommitted work, so report it) and `git branch -d <branch>` (it refuses when your checkout of `torch-backend` lacks the merge: pull it, or check ancestry with
+  `git merge-base --is-ancestor <branch> origin/torch-backend`); the remote branch stays unless the user says to delete it. `git worktree list` shows what is still around.
 - **The issue's scope is binding.** If it turns out bigger than its estimate, propose a split with a finding. Do not expand silently and do not fold in
   an unrelated fix you noticed. A tolerance change, regenerating a golden reference, or reformatting existing files is never part of a feature PR.
 - **Units that could be offered upstream** (non-breaking, not about PyTorch, no new dependency) are cut from `upstream/master` as `pr/U<n>-<slug>` so the
@@ -126,8 +122,7 @@ Rules for the text:
    the tolerance row used), what could go wrong, and how to undo it (usually: revert).
 6. **Style.** Impersonal and concrete ("Adds ...", "Replaces ..."), short paragraphs, numbers with units, no first-person chatter, no marketing, no emoji. One concern per PR within the
    size budget (about 400 lines without fixtures), or the reason it is larger.
-7. **Sanitised.** `pr-check` fails on unsanitised text; the rules of `CLAUDE.md` apply (no personal data, local paths, e-mail addresses, stray `#N`, `@mentions`, links into other
-   repositories).
+7. **Sanitised.** `pr-check` fails on unsanitised text (rules in `CLAUDE.md`).
 8. **Keep it current.** When the diff changes after the description was written, update the description in the same step. After opening, `board.py status <ID> "PR Open"`.
    Attribution lines on fork PRs follow the environment's configuration; PR text for upstream (`pr/U*`) branches carries no AI attribution.
 

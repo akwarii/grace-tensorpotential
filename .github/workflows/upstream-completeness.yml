@@ -1,0 +1,47 @@
+# Reruns the TF-free instruction extractor (tools/instruction_ast.py) on the current upstream master and goes red on
+# an instruction class that the torch registry does not know, or on a constructor default that differs from the
+# pinned one (SPEC5; risks 7 and 8 of the plan). It needs no dependency: the extractor reads the source with ast and
+# the registry imports neither TensorFlow nor torch.
+#
+# Two conditions before it runs: GitHub Actions is enabled on the fork (CI1), and, for the schedule, this file is on
+# the default branch (GitHub runs scheduled workflows from there only). `workflow_dispatch` runs it by hand from any
+# branch. Locally the same check is:
+#   git clone --depth 1 https://github.com/ICAMS/grace-tensorpotential /tmp/upstream
+#   python tools/instruction_ast.py check --root /tmp/upstream
+
+name: Upstream completeness
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  instruction-classes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the fork (the registry and the extractor)
+        uses: actions/checkout@v4.2.2
+        with:
+          ref: torch-backend
+          path: fork
+          persist-credentials: false
+
+      - name: Check out upstream master (the source to read)
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: ICAMS/grace-tensorpotential
+          ref: master
+          path: upstream
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Compare the upstream classes and defaults with the registry
+        run: python fork/tools/instruction_ast.py check --root upstream
