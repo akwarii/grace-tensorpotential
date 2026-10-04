@@ -8,6 +8,11 @@
 #   upstream   pending (could be offered, not yet), merged (offered and merged, the row goes when the fork takes the upstream file),
 #              or never (depends on fork-only code or is a fork policy); the owner decides, a new row starts as pending
 
+- path: docs/gracemaker/utilities.md
+  reason: 'documents the --stress-units option of grace_preprocess'
+  milestone: [DATA1]
+  upstream: pending
+
 - path: pyproject.toml
   reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor'
   milestone: [TOOL1, QUAL1, CORE1]
@@ -229,8 +234,8 @@
   upstream: pending
 
 - path: tensorpotential/scripts/grace_preprocess.py
-  reason: 'duplicated code folded into shared helpers; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [QUAL2, CORE1]
+  reason: 'duplicated code folded into shared helpers; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); --stress-units option passed to the reference data builder'
+  milestone: [QUAL2, CORE1, DATA1]
   upstream: pending
 
 - path: tensorpotential/scripts/grace_utils.py
