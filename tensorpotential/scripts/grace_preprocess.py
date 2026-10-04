@@ -15,6 +15,7 @@ import tqdm
 
 from tensorpotential import constants as tc
 from tensorpotential.data.databuilder import (
+    DEFAULT_STRESS_UNITS,
     GeometricalDataBuilder,
     ReferenceEnergyForcesStressesDataBuilder,
     split_batches_into_buckets,
@@ -34,6 +35,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 EQUI_STRUCTURE_STRATEGY = "structures"
 EQUI_ATOMS_STRATEGY = "atoms"
 EQUI_NEIGH_STRATEGY = "neighbours"
+
+# The units of the stress column that ReferenceEnergyForcesStressesDataBuilder converts to eV/A3
+# (same spelling as `data: stress_units` of the gracemaker input file).
+STRESS_UNITS_CHOICES = (DEFAULT_STRESS_UNITS, "GPa", "kbar", "-kbar")
 
 ALEXANDRIA_ELEMENTS = [
     "Ac",
@@ -445,6 +450,14 @@ def build_parser():
     parser.add_argument("--stress-col", type=str, default=STRESS_COL)
     parser.add_argument("--is-fit-stress", action="store_true", default=False)
     parser.add_argument(
+        "--stress-units",
+        type=str,
+        choices=STRESS_UNITS_CHOICES,
+        default=DEFAULT_STRESS_UNITS,
+        help="Units of the stress column, converted to eV/A3. Write `--stress-units=-kbar` "
+        "for the last value (a separate `-kbar` argument is read as an option).",
+    )
+    parser.add_argument(
         "--precision", type=str, default="float64"
     )  # can be float32 or float64
 
@@ -701,7 +714,7 @@ def get_databuilders(
         forces_col=args_parse.forces_col,
         stress_col=args_parse.stress_col,
         float_dtype=precision,
-        # stress_units=stress_units,
+        stress_units=args_parse.stress_units,
     )
     databuilders_list = [geom_db, ref_db]
     return databuilders_list
@@ -709,7 +722,6 @@ def get_databuilders(
 
 def main(args=None):
     # TODO: apply reference energy (esa_dict)
-    # TODO: is_fit_stress, stress_units?
     # TODO: if  shift -> compute esa_dict from lstsq (optional), scale (necessary!)
     # TODO: Extract elements and element_map
     # TODO: apply weighting

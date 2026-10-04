@@ -197,3 +197,96 @@ def test_stage_1_default_stores_the_input_stress_as_virial(
         )
         # The default path multiplies by exactly 1.0: the stored value is the unconverted product.
         assert np.array_equal(virial, hand_virial(atoms, VOIGT_STRESS))
+
+
+# ---------------------------------------------------------------------------------------------------
+# --stress-units
+# ---------------------------------------------------------------------------------------------------
+
+# Multiplier from the input units to eV/A3, computed by hand: 1 eV/A3 = 160.2176621 GPa = 1602.176621 kbar.
+STRESS_UNIT_FACTORS = {
+    "eV/A3": 1.0,
+    "GPa": 1 / 160.2176621,
+    "kbar": 1 / 1602.176621,
+    "-kbar": -1 / 1602.176621,
+}
+
+
+def parse(*argv: str):
+    return grace_preprocess.build_parser().parse_args(["data.pkl.gz", *argv])
+
+
+def test_stress_units_default_is_ev_per_a3():
+    assert parse().stress_units == "eV/A3"
+
+
+@pytest.mark.parametrize("units", sorted(STRESS_UNIT_FACTORS))
+def test_stress_units_accepts_every_documented_value(units):
+    # The `=` form is the only one that works for -kbar (see the next test).
+    assert parse(f"--stress-units={units}").stress_units == units
+
+
+def test_stress_units_choices_are_the_ones_the_builder_converts():
+    assert set(grace_preprocess.STRESS_UNITS_CHOICES) == set(STRESS_UNIT_FACTORS)
+    for units in STRESS_UNIT_FACTORS:
+        builder = ReferenceEnergyForcesStressesDataBuilder(stress_units=units)
+        assert builder.stress_conversion_factor == pytest.approx(
+            STRESS_UNIT_FACTORS[units],
+            rel=FLOAT64_ARITHMETIC.rtol,
+            abs=FLOAT64_ARITHMETIC.atol,
+        )
+
+
+def test_stress_units_rejects_other_values_and_lists_the_accepted_ones(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        parse("--stress-units", "psi")
+    assert exit_info.value.code == 2
+    message = capsys.readouterr().err
+    assert "invalid choice: 'psi'" in message
+    for units in STRESS_UNIT_FACTORS:
+        assert f"'{units}'" in message
+
+
+def test_stress_units_minus_kbar_needs_the_equals_form(capsys):
+    # argparse reads a separate `-kbar` as an option; the help text says to use `=`.
+    with pytest.raises(SystemExit) as exit_info:
+        parse("--stress-units", "-kbar")
+    assert exit_info.value.code == 2
+    assert "expected one argument" in capsys.readouterr().err
+    assert "--stress-units=-kbar" in grace_preprocess.build_parser().format_help()
+
+
+@pytest.mark.parametrize("units", sorted(STRESS_UNIT_FACTORS))
+def test_get_databuilders_passes_the_units_to_the_reference_builder(units):
+    args = parse("--is-fit-stress", f"--stress-units={units}")
+    _, ref_db = grace_preprocess.get_databuilders({"Cu": 0}, 4.0, args)
+    assert ref_db.stress_conversion_factor == pytest.approx(
+        STRESS_UNIT_FACTORS[units],
+        rel=FLOAT64_ARITHMETIC.rtol,
+        abs=FLOAT64_ARITHMETIC.atol,
+    )
+
+
+@pytest.mark.parametrize("units", ["GPa", "kbar", "-kbar"])
+def test_stage_1_converts_the_stress_to_ev_per_a3(
+    units, input_file, dataframe, tmp_path
+):
+    samples = run_stage_1(input_file, tmp_path / "out", f"--stress-units={units}")
+    assert len(samples) == N_STRUCTURES
+    for sample, atoms in zip(samples, dataframe["ase_atoms"], strict=True):
+        np.testing.assert_allclose(
+            sample[constants.DATA_REFERENCE_VIRIAL],
+            hand_virial(atoms, VOIGT_STRESS, STRESS_UNIT_FACTORS[units]),
+            rtol=FLOAT64_ARITHMETIC.rtol,
+            atol=FLOAT64_ARITHMETIC.atol,
+        )
+
+
+def test_stage_1_with_ev_per_a3_equals_stage_1_without_the_option(input_file, tmp_path):
+    omitted = run_stage_1(input_file, tmp_path / "omitted")
+    explicit = run_stage_1(input_file, tmp_path / "explicit", "--stress-units=eV/A3")
+    assert len(omitted) == len(explicit) == N_STRUCTURES
+    for before, after in zip(omitted, explicit, strict=True):
+        assert before.keys() == after.keys()
+        for key in before:
+            assert np.array_equal(before[key], after[key]), key
