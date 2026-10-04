@@ -1,0 +1,88 @@
+2
+Properties=species:S:1:pos:R:3 name=dimer purpose="Smallest non-trivial graph: two Cu atoms 2.5 A apart in vacuum, no cell, no pbc. Checks one bond in both directions, the force pair (equal and opposite) and the invented cube cell of an aperiodic input (zero stress)." pbc="F F F"
+Cu       0.00000000       0.00000000       0.00000000
+Cu       2.50000000       0.00000000       0.00000000
+2
+Lattice="3.0 0.0 0.0 0.8 3.1 0.0 0.5 0.9 3.3" Properties=species:S:1:pos:R:3 name=self_image_cell purpose="Two atoms (Cu, Au) in a skewed cell with all vectors 3.0-3.3 A, shorter than the cutoff: every atom is its own neighbour through nonzero cell shifts (i == j), and shifts of both signs and several shells occur. Checks the shift convention and the virial of image bonds." pbc="T T T"
+Cu       0.00000000       0.00000000       0.00000000
+Au       2.15000000       2.00000000       1.65000000
+4
+Lattice="3.61 0.0 0.0 0.0 3.61 0.0 0.0 0.0 3.61" Properties=species:S:1:pos:R:3 name=fcc4 purpose="Four-atom conventional fcc Cu cell (a = 3.61 A): perfect crystal with exact coordination shells (12, 6, 24, ...), equal neighbour counts, and a pair distance close to a shell edge. The reference for translation, rotation and permutation invariance." pbc="T T T"
+Cu       0.00000000       0.00000000       0.00000000
+Cu       0.00000000       1.80500000       1.80500000
+Cu       1.80500000       0.00000000       1.80500000
+Cu       1.80500000       1.80500000       0.00000000
+8
+Lattice="4.4 0.0 0.0 0.0 4.4 0.0 0.0 0.0 4.4" Properties=species:S:1:pos:R:3 name=rattled_multi8 purpose="Rocksalt cell of eight atoms with three species (Mg, Ca, O), two Mg sites replaced by Ca and all positions rattled (sigma 0.06 A, fixed seed): no symmetry, so forces are generic, and three element indices exercise the species embedding and the per-element tables." pbc="T T T"
+Ca      -0.05788423      -0.04113140      -0.10756545
+O        2.26708404      -0.07665057       0.02542562
+Ca      -0.00540307       2.23014307       2.29076349
+O        2.15763098       2.19493115       2.15953802
+Mg       2.26223654       0.10616182       2.23921633
+O        0.07987235      -0.00977661       2.07828481
+Mg       2.08631160       2.18653948      -0.04367184
+O       -0.00311934       2.13874674       0.03027200
+12
+Lattice="5.10531096 0.0 0.0 2.55265548 4.42132899 0.0 0.0 0.0 8.16846894" Properties=species:S:1:pos:R:3:tags:I:1 name=slab purpose="Cu(111) slab, 2x2 surface cell and three layers, with 2.0 A of vacuum on each side (gap 4.0 A, below the cutoff) and pbc (True, True, False). A surface gives unequal neighbour counts, and the edge list differs between the TF all-axes-periodic default and honouring the per-axis pbc (decision D18)." pbc="T T F"
+Cu       1.27632774       0.73688816       2.00000000        3
+Cu       3.82898322       0.73688816       2.00000000        3
+Cu       2.55265548       2.94755266       2.00000000        3
+Cu       5.10531096       2.94755266       2.00000000        3
+Cu      -0.00000000       1.47377633       4.08423447        2
+Cu       2.55265548       1.47377633       4.08423447        2
+Cu       1.27632774       3.68444082       4.08423447        2
+Cu       3.82898322       3.68444082       4.08423447        2
+Cu       0.00000000       0.00000000       6.16846894        1
+Cu       2.55265548       0.00000000       6.16846894        1
+Cu       1.27632774       2.21066449       6.16846894        1
+Cu       3.82898322       2.21066449       6.16846894        1
+1
+Lattice="20.0 0.0 0.0 0.0 20.0 0.0 0.0 0.0 20.0" Properties=species:S:1:pos:R:3 name=isolated_atom purpose="One Cu atom in a 20 A cubic cell: no neighbour within the cutoff. The TF builder adds a dummy bond (the atom never has zero bonds); the twin must reproduce or deliberately drop it. The energy is the free-atom term and the forces and stress are zero." pbc="T T T"
+Cu       0.00000000       0.00000000       0.00000000
+14
+Properties=species:S:1:pos:R:3:tags:I:1 name=icosahedron_satellite purpose="Thirteen-atom Cu icosahedron plus one detached Cu atom 3.6 A beyond its outer radius, no pbc: neighbour counts run from 2 (the satellite) to 12 (the centre), so padding and the per-atom segment sums see very unequal atoms, in a non-periodic cluster with nontrivial point symmetry." pbc="F F F"
+Cu       0.00000000       0.00000000       0.00000000        1
+Cu       2.17141845       0.00000000      -1.34201040        2
+Cu       2.17141845       0.00000000       1.34201040        2
+Cu      -2.17141845       0.00000000      -1.34201040        2
+Cu      -2.17141845       0.00000000       1.34201040        2
+Cu      -1.34201040       2.17141845       0.00000000        2
+Cu       1.34201040       2.17141845       0.00000000        2
+Cu      -1.34201040      -2.17141845       0.00000000        2
+Cu       1.34201040      -2.17141845       0.00000000        2
+Cu       0.00000000      -1.34201040       2.17141845        2
+Cu       0.00000000       1.34201040       2.17141845        2
+Cu       0.00000000      -1.34201040      -2.17141845        2
+Cu       0.00000000       1.34201040      -2.17141845        2
+Cu       0.00000000       0.00000000       6.15265548        0
+29
+Lattice="10.19 0.0 0.0 0.0 5.98 0.0 0.0 0.0 4.75" Properties=species:S:1:pos:R:3:spacegroup_kinds:I:1 name=mineral purpose="Forsterite (Mg2SiO4, Pnma, 28 atoms) with one Mg(1) vacancy and two hydroxyl H on neighbouring oxygens: 29 atoms of four species (Mg, Si, O, H) in an orthorhombic cell, the light element H with a short O-H bond (0.97 A), self-image pairs along the short axis, and unequal neighbour counts. Built from published room-temperature coordinates, not relaxed." pbc="T T T"
+Mg       5.09500000       0.00000000       2.37500000        0
+Mg       0.00000000       2.99000000       0.00000000        0
+Mg       5.09500000       2.99000000       2.37500000        0
+Mg       2.82670600       1.49500000       4.70962500        1
+Mg       2.26829400       4.48500000       2.33462500        1
+Mg       7.36329400       4.48500000       0.04037500        1
+Mg       7.92170600       1.49500000       2.41537500        1
+Si       0.95786000       1.49500000       2.02445000        2
+Si       4.13714000       4.48500000       4.39945000        2
+Si       9.23214000       4.48500000       2.72555000        2
+Si       6.05286000       1.49500000       0.35055000        2
+O        0.93340400       1.49500000       3.63707500        3
+O        4.16159600       4.48500000       1.26207500        3
+O        9.25659600       4.48500000       1.11292500        3
+O        6.02840400       1.49500000       3.48792500        3
+O        4.55900600       1.49500000       1.05307500        4
+O        0.53599400       4.48500000       3.42807500        4
+O        5.63099400       4.48500000       3.69692500        4
+O        9.65400600       1.49500000       1.32192500        4
+O        1.68644500       0.20152600       1.31955000        5
+O        3.40855500       5.77847400       3.69455000        5
+O        8.50355500       3.19152600       3.43045000        5
+O        6.78144500       2.78847400       1.05545000        5
+O        8.50355500       5.77847400       3.43045000        5
+O        6.78144500       0.20152600       1.05545000        5
+O        1.68644500       2.78847400       1.31955000        5
+O        3.40855500       3.19152600       3.69455000        5
+H        0.49904083       0.79929595       4.15497896        0
+H        9.69095917       5.18070405       0.59502104        0

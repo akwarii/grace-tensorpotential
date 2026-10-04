@@ -25,12 +25,17 @@ uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv      # one file, serial
 # fast loop: add -m "not slow" to the full command
 
+# The torch-backend tests live in tests_torch/ (not part of the command above; TF-free, seconds): structures.json/.xyz in tests_torch/structures/ are written by
+# python -m tests_torch.structures.build_structures, and test_build_structures.py fails when the committed files differ from what the generator writes
+uv run --frozen --no-sync pytest tests_torch -q
+
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
 uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also a test in tests/test_import_gates.py
+uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # divergence ledger: every upstream file the fork modifies has a row in tools/divergence.yaml (add the row in the same PR as the change; drop it when the file is identical to upstream again); also no fork-only path on a local pr/U* branch
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)

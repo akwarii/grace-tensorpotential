@@ -137,6 +137,7 @@ name = "TensorFlow-free modules do not import TensorFlow, not even indirectly"
 type = "forbidden"
 source_modules = [
     "tensorpotential.core",
+    "tensorpotential.torch_backend",
     "tensorpotential.constants",
     "tensorpotential.poly",
     "tensorpotential.functions.couplings",

@@ -1,0 +1,730 @@
+{
+ "format_version": 1,
+ "units": {
+  "length": "Angstrom"
+ },
+ "probe_cutoff": 5.0,
+ "structures": [
+  {
+   "name": "dimer",
+   "purpose": "Smallest non-trivial graph: two Cu atoms 2.5 A apart in vacuum, no cell, no pbc. Checks one bond in both directions, the force pair (equal and opposite) and the invented cube cell of an aperiodic input (zero stress).",
+   "features": [
+    "aperiodic"
+   ],
+   "formula": "Cu2",
+   "n_atoms": 2,
+   "symbols": [
+    "Cu",
+    "Cu"
+   ],
+   "pbc": [
+    false,
+    false,
+    false
+   ],
+   "cell": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ]
+   ],
+   "positions": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     2.5,
+     0.0,
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "self_image_cell",
+   "purpose": "Two atoms (Cu, Au) in a skewed cell with all vectors 3.0-3.3 A, shorter than the cutoff: every atom is its own neighbour through nonzero cell shifts (i == j), and shifts of both signs and several shells occur. Checks the shift convention and the virial of image bonds.",
+   "features": [
+    "self_image_pairs"
+   ],
+   "formula": "AuCu",
+   "n_atoms": 2,
+   "symbols": [
+    "Cu",
+    "Au"
+   ],
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     3.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.8,
+     3.1,
+     0.0
+    ],
+    [
+     0.5,
+     0.9,
+     3.3
+    ]
+   ],
+   "positions": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     2.15,
+     2.0,
+     1.65
+    ]
+   ]
+  },
+  {
+   "name": "fcc4",
+   "purpose": "Four-atom conventional fcc Cu cell (a = 3.61 A): perfect crystal with exact coordination shells (12, 6, 24, ...), equal neighbour counts, and a pair distance close to a shell edge. The reference for translation, rotation and permutation invariance.",
+   "features": [
+    "self_image_pairs"
+   ],
+   "formula": "Cu4",
+   "n_atoms": 4,
+   "symbols": [
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu"
+   ],
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     3.61,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     3.61,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     3.61
+    ]
+   ],
+   "positions": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     1.805,
+     1.805
+    ],
+    [
+     1.805,
+     0.0,
+     1.805
+    ],
+    [
+     1.805,
+     1.805,
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "rattled_multi8",
+   "purpose": "Rocksalt cell of eight atoms with three species (Mg, Ca, O), two Mg sites replaced by Ca and all positions rattled (sigma 0.06 A, fixed seed): no symmetry, so forces are generic, and three element indices exercise the species embedding and the per-element tables.",
+   "features": [
+    "self_image_pairs",
+    "unequal_neighbour_counts",
+    "multi_element",
+    "rattled"
+   ],
+   "formula": "Ca2Mg2O4",
+   "n_atoms": 8,
+   "symbols": [
+    "Ca",
+    "O",
+    "Ca",
+    "O",
+    "Mg",
+    "O",
+    "Mg",
+    "O"
+   ],
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     4.4,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     4.4,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     4.4
+    ]
+   ],
+   "positions": [
+    [
+     -0.05788423,
+     -0.0411314,
+     -0.10756545
+    ],
+    [
+     2.26708404,
+     -0.07665057,
+     0.02542562
+    ],
+    [
+     -0.00540307,
+     2.23014307,
+     2.29076349
+    ],
+    [
+     2.15763098,
+     2.19493115,
+     2.15953802
+    ],
+    [
+     2.26223654,
+     0.10616182,
+     2.23921633
+    ],
+    [
+     0.07987235,
+     -0.00977661,
+     2.07828481
+    ],
+    [
+     2.0863116,
+     2.18653948,
+     -0.04367184
+    ],
+    [
+     -0.00311934,
+     2.13874674,
+     0.030272
+    ]
+   ]
+  },
+  {
+   "name": "slab",
+   "purpose": "Cu(111) slab, 2x2 surface cell and three layers, with 2.0 A of vacuum on each side (gap 4.0 A, below the cutoff) and pbc (True, True, False). A surface gives unequal neighbour counts, and the edge list differs between the TF all-axes-periodic default and honouring the per-axis pbc (decision D18).",
+   "features": [
+    "partial_pbc",
+    "unequal_neighbour_counts",
+    "vacuum_gap_below_cutoff"
+   ],
+   "formula": "Cu12",
+   "n_atoms": 12,
+   "symbols": [
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu"
+   ],
+   "pbc": [
+    true,
+    true,
+    false
+   ],
+   "cell": [
+    [
+     5.10531096,
+     0.0,
+     0.0
+    ],
+    [
+     2.55265548,
+     4.42132899,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     8.16846894
+    ]
+   ],
+   "positions": [
+    [
+     1.27632774,
+     0.73688816,
+     2.0
+    ],
+    [
+     3.82898322,
+     0.73688816,
+     2.0
+    ],
+    [
+     2.55265548,
+     2.94755266,
+     2.0
+    ],
+    [
+     5.10531096,
+     2.94755266,
+     2.0
+    ],
+    [
+     -0.0,
+     1.47377633,
+     4.08423447
+    ],
+    [
+     2.55265548,
+     1.47377633,
+     4.08423447
+    ],
+    [
+     1.27632774,
+     3.68444082,
+     4.08423447
+    ],
+    [
+     3.82898322,
+     3.68444082,
+     4.08423447
+    ],
+    [
+     0.0,
+     0.0,
+     6.16846894
+    ],
+    [
+     2.55265548,
+     0.0,
+     6.16846894
+    ],
+    [
+     1.27632774,
+     2.21066449,
+     6.16846894
+    ],
+    [
+     3.82898322,
+     2.21066449,
+     6.16846894
+    ]
+   ]
+  },
+  {
+   "name": "isolated_atom",
+   "purpose": "One Cu atom in a 20 A cubic cell: no neighbour within the cutoff. The TF builder adds a dummy bond (the atom never has zero bonds); the twin must reproduce or deliberately drop it. The energy is the free-atom term and the forces and stress are zero.",
+   "features": [
+    "isolated_atom"
+   ],
+   "formula": "Cu",
+   "n_atoms": 1,
+   "symbols": [
+    "Cu"
+   ],
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     20.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     20.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     20.0
+    ]
+   ],
+   "positions": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "icosahedron_satellite",
+   "purpose": "Thirteen-atom Cu icosahedron plus one detached Cu atom 3.6 A beyond its outer radius, no pbc: neighbour counts run from 2 (the satellite) to 12 (the centre), so padding and the per-atom segment sums see very unequal atoms, in a non-periodic cluster with nontrivial point symmetry.",
+   "features": [
+    "aperiodic",
+    "unequal_neighbour_counts"
+   ],
+   "formula": "Cu14",
+   "n_atoms": 14,
+   "symbols": [
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu",
+    "Cu"
+   ],
+   "pbc": [
+    false,
+    false,
+    false
+   ],
+   "cell": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ]
+   ],
+   "positions": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     2.17141845,
+     0.0,
+     -1.3420104
+    ],
+    [
+     2.17141845,
+     0.0,
+     1.3420104
+    ],
+    [
+     -2.17141845,
+     0.0,
+     -1.3420104
+    ],
+    [
+     -2.17141845,
+     0.0,
+     1.3420104
+    ],
+    [
+     -1.3420104,
+     2.17141845,
+     0.0
+    ],
+    [
+     1.3420104,
+     2.17141845,
+     0.0
+    ],
+    [
+     -1.3420104,
+     -2.17141845,
+     0.0
+    ],
+    [
+     1.3420104,
+     -2.17141845,
+     0.0
+    ],
+    [
+     0.0,
+     -1.3420104,
+     2.17141845
+    ],
+    [
+     0.0,
+     1.3420104,
+     2.17141845
+    ],
+    [
+     0.0,
+     -1.3420104,
+     -2.17141845
+    ],
+    [
+     0.0,
+     1.3420104,
+     -2.17141845
+    ],
+    [
+     0.0,
+     0.0,
+     6.15265548
+    ]
+   ]
+  },
+  {
+   "name": "mineral",
+   "purpose": "Forsterite (Mg2SiO4, Pnma, 28 atoms) with one Mg(1) vacancy and two hydroxyl H on neighbouring oxygens: 29 atoms of four species (Mg, Si, O, H) in an orthorhombic cell, the light element H with a short O-H bond (0.97 A), self-image pairs along the short axis, and unequal neighbour counts. Built from published room-temperature coordinates, not relaxed.",
+   "features": [
+    "self_image_pairs",
+    "multi_element",
+    "four_elements",
+    "unequal_neighbour_counts"
+   ],
+   "formula": "H2Mg7O16Si4",
+   "n_atoms": 29,
+   "symbols": [
+    "Mg",
+    "Mg",
+    "Mg",
+    "Mg",
+    "Mg",
+    "Mg",
+    "Mg",
+    "Si",
+    "Si",
+    "Si",
+    "Si",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "H",
+    "H"
+   ],
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     10.19,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     5.98,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     4.75
+    ]
+   ],
+   "positions": [
+    [
+     5.095,
+     0.0,
+     2.375
+    ],
+    [
+     0.0,
+     2.99,
+     0.0
+    ],
+    [
+     5.095,
+     2.99,
+     2.375
+    ],
+    [
+     2.826706,
+     1.495,
+     4.709625
+    ],
+    [
+     2.268294,
+     4.485,
+     2.334625
+    ],
+    [
+     7.363294,
+     4.485,
+     0.040375
+    ],
+    [
+     7.921706,
+     1.495,
+     2.415375
+    ],
+    [
+     0.95786,
+     1.495,
+     2.02445
+    ],
+    [
+     4.13714,
+     4.485,
+     4.39945
+    ],
+    [
+     9.23214,
+     4.485,
+     2.72555
+    ],
+    [
+     6.05286,
+     1.495,
+     0.35055
+    ],
+    [
+     0.933404,
+     1.495,
+     3.637075
+    ],
+    [
+     4.161596,
+     4.485,
+     1.262075
+    ],
+    [
+     9.256596,
+     4.485,
+     1.112925
+    ],
+    [
+     6.028404,
+     1.495,
+     3.487925
+    ],
+    [
+     4.559006,
+     1.495,
+     1.053075
+    ],
+    [
+     0.535994,
+     4.485,
+     3.428075
+    ],
+    [
+     5.630994,
+     4.485,
+     3.696925
+    ],
+    [
+     9.654006,
+     1.495,
+     1.321925
+    ],
+    [
+     1.686445,
+     0.201526,
+     1.31955
+    ],
+    [
+     3.408555,
+     5.778474,
+     3.69455
+    ],
+    [
+     8.503555,
+     3.191526,
+     3.43045
+    ],
+    [
+     6.781445,
+     2.788474,
+     1.05545
+    ],
+    [
+     8.503555,
+     5.778474,
+     3.43045
+    ],
+    [
+     6.781445,
+     0.201526,
+     1.05545
+    ],
+    [
+     1.686445,
+     2.788474,
+     1.31955
+    ],
+    [
+     3.408555,
+     3.191526,
+     3.69455
+    ],
+    [
+     0.49904083,
+     0.79929595,
+     4.15497896
+    ],
+    [
+     9.69095917,
+     5.18070405,
+     0.59502104
+    ]
+   ]
+  }
+ ]
+}
