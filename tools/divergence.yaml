@@ -13,6 +13,11 @@
   milestone: [FIX2]
   upstream: never
 
+- path: docs/gracemaker/install.md
+  reason: 'documents the extras (tf, torch, torch-sim, all): TensorFlow is no longer installed by pip install tensorpotential'
+  milestone: [CI1]
+  upstream: never
+
 - path: docs/gracemaker/utilities.md
   reason: 'documents the --stress-units option of grace_preprocess; the aux_model help and usage describe what the command does (no --aux argument)'
   milestone: [DATA1, CLEAN5]

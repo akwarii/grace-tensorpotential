@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import zipfile
+from email.message import Message
 from email.parser import Parser
 from pathlib import Path
 
@@ -88,7 +89,7 @@ def wheel_names(path: Path) -> list[str]:
         return archive.namelist()
 
 
-def wheel_metadata(path: Path) -> object:
+def wheel_metadata(path: Path) -> Message:
     """The parsed ``METADATA`` of the wheel."""
     with zipfile.ZipFile(path) as archive:
         name = next(n for n in archive.namelist() if n.endswith(".dist-info/METADATA"))
