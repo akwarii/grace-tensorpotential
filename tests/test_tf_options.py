@@ -121,3 +121,33 @@ print(tf.config.experimental.tensor_float_32_execution_enabled(), hasattr(tf.con
     result = run_fresh_python(code, tmp_path)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip().splitlines()[-1] == "False True True"
+
+
+# The four console scripts that used to fail with a bare ModuleNotFoundError in an environment
+# without TensorFlow. A finder that refuses tensorflow and tf_keras stands in for the 'torch-only'
+# installation of the issue (the check never imports the packages, it asks the finders).
+SCRIPTS_NEEDING_TF = ["extxyz2df", "grace_preprocess", "grace_predict", "grace_utils"]
+
+NO_TF_SCRIPT = """
+import importlib, sys
+
+class Refuse:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in ("tensorflow", "tf_keras"):
+            raise ImportError(f"No module named {name!r}", name=name)
+
+sys.meta_path.insert(0, Refuse())
+script = importlib.import_module("tensorpotential.scripts." + sys.argv[1])
+script.main()
+"""
+
+
+@pytest.mark.parametrize("script", SCRIPTS_NEEDING_TF)
+def test_a_tf_console_script_without_tensorflow_prints_the_install_hint(
+    script: str, tmp_path: Path
+) -> None:
+    result = run_fresh_python(NO_TF_SCRIPT, tmp_path, args=[script, "--help"])
+    assert result.returncode != 0
+    last = result.stderr.strip().splitlines()[-1]
+    assert "pip install 'tensorpotential[tf]'" in last
+    assert "ModuleNotFoundError" not in last
