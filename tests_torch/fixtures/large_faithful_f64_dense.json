@@ -179,9 +179,9 @@
   }
  },
  "library": {
-  "library_git_sha": "ca947af569c2fd7f50f9accd1f1fd8bf411465d9",
+  "library_git_sha": "0b433f5cdddbb19597bd59da15893bbbb7ee9827",
   "library_dirty": false,
-  "generator_git_sha": "ca947af569c2fd7f50f9accd1f1fd8bf411465d9",
+  "generator_git_sha": "0b433f5cdddbb19597bd59da15893bbbb7ee9827",
   "generator_dirty": false,
   "versions": {
    "tensorflow": "2.20.0",
@@ -2159,9 +2159,9 @@
  "files": {
   "arrays": {
    "name": "large_faithful_f64_dense.npz",
-   "bytes": 23079314,
-   "sha256": "b087acdb1a3b0af18b882062bcfea0bb829064f60737c78e06fd10b08fe97a78"
+   "bytes": 23079282,
+   "sha256": "c1c77ce9f1a38ea955cbedbdbb221aac910b4ec3d402bba7bc9c611099cfca0d"
   }
  },
- "total_bytes": 23079314
+ "total_bytes": 23079282
 }
