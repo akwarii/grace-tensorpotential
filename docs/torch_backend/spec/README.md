@@ -1,4 +1,4 @@
-# Class spec sheets (SPEC1)
+# Class spec sheets (SPEC3)
 
 One sheet per TensorFlow instruction class that the PyTorch twins must reproduce: the 17 classes of the two
 2L foundation `model.yaml` files (`tests/model_grace_2L_omat.yaml`, `tests/model_grace_2L_omat_large_base.yaml`).
@@ -42,9 +42,9 @@ the eight sections of the template (Appendix C of the board):
 Three conventions:
 
 - **[I]** marks a variable name, shape or dtype that is *inferred*: read from the code, or seen in an ad hoc run of
-  the TF class. **[V]** marks one *verified* against a `probe_<model>.json` of SPEC5 (the TensorFlow probe of the
-  variables and tensor attributes of the test yamls). Every such item in these sheets is **[I]** until SPEC5
-  delivers the probe files; the issue that does it flips the tags (SPEC5 states that as its exit criterion).
+  the TF class. **[V]** marks one *verified* against a `probe_<model>.json` of SPEC2 (the TensorFlow probe of the
+  variables and tensor attributes of the test yamls). Every such item in these sheets is **[I]** until SPEC2
+  delivers the probe files; the issue that does it flips the tags (SPEC2 states that as its exit criterion).
 - **Measured** marks a behaviour obtained by running the TF class on the pinned commit, as opposed to a reading of
   the code. It is not a verification against a probe.
 - **Proposal** marks a decision the reviewer may overrule; the closing list "For the reviewer" of a sheet repeats
