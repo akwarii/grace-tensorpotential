@@ -9,7 +9,7 @@ an error, never a silent approximation).
 
 ``DEFAULTS`` repeats the constructor defaults of the TF classes: ``capture_init_args`` writes them into every
 saved yaml, so a yaml that omits a key means this value, and a changed TF default would silently change old
-models. They are compared with ``tests/data/instruction_constructor_defaults.json`` (and, in SPEC4, with the
+models. They are compared with ``tests/data/instruction_constructor_defaults.json`` (and, in SPEC5, with the
 source). Kinds are the type names of ``tools/scan_options.value_kind``: ``null``, ``bool``, ``int``, ``float``,
 ``str``, ``ref`` (an ``_instruction_`` reference), ``list[int]``, ``list[list[int]]``, ``dict[str,int]``.
 

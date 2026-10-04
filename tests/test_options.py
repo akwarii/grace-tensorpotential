@@ -2,7 +2,7 @@
 
 Two layers:
 
-- logic: every cell of the scanned yamls has a status (the exit criterion of SPEC2), the committed matrix is not
+- logic: every cell of the scanned yamls has a status (the exit criterion of SPEC1), the committed matrix is not
   stale, the module is TF-free, the rules are well formed, and planted changes to the decisions are caught;
 - physical values: the rules and defaults are compared with things the module does not call: the constructor
   signatures of the TF classes (``tests/data/instruction_constructor_defaults.json`` and ``inspect``), the
