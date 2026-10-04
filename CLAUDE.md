@@ -30,6 +30,7 @@ uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the n
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
 uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
+uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also a test in tests/test_import_gates.py
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
 # Coverage and baselines (procedures: skills grace-torch-tests and grace-torch-goldens; baselines/README.md)
@@ -118,6 +119,10 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
   give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or Keras 3 is used.
+- **The package no longer imports TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve their public names on first access (`core/lazy.py`); the TF options
+  (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`. **A new module with a module-level `import tensorflow` starts with
+  `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt, out of scope). A module that must stay TF-free goes in the
+  `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`. Because the root no longer preloads the classes, import cycles that it hid now show: `tests/test_import_gates.py` imports every module first in its own interpreter.
 - `tests/test_import_gates.py` fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name` anywhere, `__cls__` strings, every module imported on its own, the two `__getattr__` shims).
   Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
 - A coverage run writes `.coverage*` into the working directory; a second `--cov` run in the same directory while a full run is going is combined into its report. Run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
