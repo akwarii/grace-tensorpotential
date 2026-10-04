@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:346-415` (class at 347); the maths is in `functions/radial.py:10-357` |
+| Source | `instructions/compute.py:347-416` (class at 347); the maths is in `functions/radial.py:11-358` |
 | Family | geometry and radial |
-| Base | `TPInstruction` (`instructions/base.py:327`) |
+| Base | `TPInstruction` (`instructions/base.py:328`) |
 | Used in | both 2L yamls, name `RadialBasis`, `bonds` = `BondLength`, `basis_type: Cheb` (omat: `nfunc 8, p 5, rcut 6.0`; large_base: `nfunc 10, p 16, rcut 6.0`) |
 | Reads | the bond-length entry, `[n_bonds, 1]` |
 | Writes | `RadialBasis` `[n_bonds, nfunc]` |
@@ -14,43 +14,43 @@ Selects one of four radial bases, evaluates it on the bond lengths and sets it t
 
 ## 1. Constructor arguments
 
-`RadialBasis(bonds, basis_type, name="RadialBasis", **kwargs)` (`compute.py:366-393`). `kwargs` go to the basis
+`RadialBasis(bonds, basis_type, name="RadialBasis", **kwargs)` (`compute.py:367-394`). `kwargs` go to the basis
 class and are captured **flat** in the yaml (`nfunc`, `p`, `rcut`, ...).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
 | `bonds` | required | `TPInstruction` or `str` | Name of the length entry; anything else raises `ValueError`. |
-| `basis_type` | required | `"Cheb"`, `"RadSinBessel"`, `"SBessel"`, `"Gaussian"` | Selects the class (`compute.py:383-392`); any other value raises `ValueError`. Both 2L yamls use `Cheb`. |
+| `basis_type` | required | `"Cheb"`, `"RadSinBessel"`, `"SBessel"`, `"Gaussian"` | Selects the class (`compute.py:384-393`); any other value raises `ValueError`. Both 2L yamls use `Cheb`. |
 | `name` | `"RadialBasis"` | any unique `str` | Key of the output. |
-| `nfunc` | required | integer `>= 1` | Number of basis functions (the width of the output); `< 1` raises `ValueError` (`radial.py:34-39`). |
-| `rcut` | required | float `> 0` | Cutoff radius; `<= 0` raises `ValueError` (`radial.py:40-45`). |
+| `nfunc` | required | integer `>= 1` | Number of basis functions (the width of the output); `< 1` raises `ValueError` (`radial.py:35-40`). |
+| `rcut` | required | float `> 0` | Cutoff radius; `<= 0` raises `ValueError` (`radial.py:41-46`). |
 
 Basis-specific keywords. Unknown keywords are **accepted and ignored** (every basis class ends in `**kwargs`; a
 misspelt `normalised` is stored in the yaml and has no effect). Measured: `RadialBasis(..., bogus=1)` constructs.
 
 | `basis_type` | keyword | Default | Values / effect |
 |---|---|---|---|
-| `Cheb` (`radial.py:132-154`) | `p` | `5` | Order of the envelope polynomial (`cutoff_func_p_order_poly`). |
+| `Cheb` (`radial.py:133-155`) | `p` | `5` | Order of the envelope polynomial (`cutoff_func_p_order_poly`). |
 | | `normalized` | `False` | `True` multiplies the basis by `sqrt(1/pi)`. |
-| | `kind` | `1` | `1`: Chebyshev polynomials of the first kind; `2`: of the second kind. Any other value raises `ValueError("kind must be 1 or 2")` **at the first forward pass**, not at construction (`radial.py:321-323`). |
+| | `kind` | `1` | `1`: Chebyshev polynomials of the first kind; `2`: of the second kind. Any other value raises `ValueError("kind must be 1 or 2")` **at the first forward pass**, not at construction (`radial.py:322-324`). |
 | | `reversed` | `False` | `True` flips the sign of the rescaled argument. |
-| `RadSinBessel` (`radial.py:177-217`) | `p` | required | Envelope order. |
+| `RadSinBessel` (`radial.py:178-218`) | `p` | required | Envelope order. |
 | | `normalized` | `False` | `True` replaces the plain basis by a standardised one (section 5). |
-| `Gaussian` (`radial.py:72-100`) | `p` | required | Envelope order. |
+| `Gaussian` (`radial.py:73-101`) | `p` | required | Envelope order. |
 | | `rmin` | `0.0` | Lower end of the centre grid. |
 | | `init_gamma` | `1.0` | Width factor. |
 | | `trainable` | `False` | Whether `grid` and `scale` are trainable (no effect at inference). |
-| | `normalized` | `False` | Accepted and **ignored** (the code using it is commented out, `radial.py:98-100`). |
-| `SBessel` (`radial.py:256-267`) | none | | No `p`: this basis has no envelope. |
+| | `normalized` | `False` | Accepted and **ignored** (the code using it is commented out, `radial.py:99-101`). |
+| `SBessel` (`radial.py:257-268`) | none | | No `p`: this basis has no envelope. |
 
-`Gaussian` with `nfunc = 1` raises `IndexError` in the constructor (`grid[0, 1]`, `radial.py:94-95`; **Measured**).
+`Gaussian` with `nfunc = 1` raises `IndexError` in the constructor (`grid[0, 1]`, `radial.py:95-96`; **Measured**).
 
 ## 2. Derived tables
 
 None as tables. The Gaussian `grid` is `linspace(rmin, rcut, nfunc)` reshaped to `[1, nfunc]` and its `scale` is
-`-0.5 / (init_gamma * (grid[1] - grid[0]))**2`, both computed in the constructor (`radial.py:93-96`) and stored as
+`-0.5 / (init_gamma * (grid[1] - grid[0]))**2`, both computed in the constructor (`radial.py:94-97`) and stored as
 variables (below). For `RadSinBessel` with `normalized`, `mu[n]` and `sigma[n]` for `n = 1 .. nfunc` are
-computed in the constructor with `scipy.special.sici` (`radial.py:205-217`):
+computed in the constructor with `scipy.special.sici` (`radial.py:206-218`):
 
 ```
 mu[n]     = sqrt(2) * Si(n pi)
@@ -66,7 +66,7 @@ All non-trainable; none is a learned weight of a shipped model. Names, shapes an
 
 | Attribute | TF name | Shape | dtype | Notes |
 |---|---|---|---|---|
-| `basis_function.rc` (alias `RadialBasis.rc`, `compute.py:408`) | `RadialBasis/cutoff:0` | `[]` | `float_dtype` (the model's parameter dtype) | `Variable(rcut)` (`radial.py:51-53`, `224-226`). Present for all four bases. |
+| `basis_function.rc` (alias `RadialBasis.rc`, `compute.py:409`) | `RadialBasis/cutoff:0` | `[]` | `float_dtype` (the model's parameter dtype) | `Variable(rcut)` (`radial.py:52-54`, `225-227`). Present for all four bases. |
 | `basis_function.grid` | `RadialBasis/Variable:0` | `[1, nfunc]` | `float_dtype` | Gaussian only; `trainable` as given. |
 | `basis_function.scale` | `RadialBasis/Variable:0` | `[]` | `float_dtype` | Gaussian only; negative. |
 
@@ -75,20 +75,20 @@ The checkpoint therefore holds `rc` for every model: it is data, not a derived v
 
 ## 4. Runtime constants
 
-Created in `build` (`radial.py:48-55`, `219-234`); the dtypes are **[I]**:
+Created in `build` (`radial.py:49-56`, `220-235`); the dtypes are **[I]**:
 
 | Constant | Value | dtype | Used by |
 |---|---|---|---|
 | `PI` | `pi` | float64 always | `RadSinBessel`, `SBessel` |
-| `epsilon` | `1e-10` (base, used by `Cheb`, `Gaussian`, `SBessel`); **`1e-8` for `RadSinBessel`** (`radial.py:227`) | float64 always | the `r == 0` substitution below |
+| `epsilon` | `1e-10` (base, used by `Cheb`, `Gaussian`, `SBessel`); **`1e-8` for `RadSinBessel`** (`radial.py:228`) | float64 always | the `r == 0` substitution below |
 | `urc`, `mu`, `sigma` | `1.0`, the tables above | float64 | `RadSinBessel` with `normalized` |
-| `norm` | `sqrt(1/pi)` | float64 | `Cheb` with `normalized` (`radial.py:153-160`) |
+| `norm` | `sqrt(1/pi)` | float64 | `Cheb` with `normalized` (`radial.py:154-161`) |
 
 The envelope exponent `p` and `nfunc` are Python numbers fixed at construction.
 
 ## 5. Forward
 
-Entry point (`radial.py:64-69`), for the length tensor `r` of shape `[n_bonds, 1]`:
+Entry point (`radial.py:65-70`), for the length tensor `r` of shape `[n_bonds, 1]`:
 
 ```
 r'    = where(r == 0.0, r + epsilon, r)               # exact float comparison with 0
@@ -96,7 +96,7 @@ basis = compute_basis(r')                              # [n_bonds, nfunc]
 out   = where(r' > rcut, 0, basis)                     # strict >, rcut the Python float
 ```
 
-The envelope, used by `Cheb`, `RadSinBessel` and `Gaussian` (`radial.py:301-307`):
+The envelope, used by `Cheb`, `RadSinBessel` and `Gaussian` (`radial.py:302-308`):
 
 ```
 E(x; p) = 1 - (p + 1)(p + 2)/2 * x**p + p (p + 2) * x**(p + 1) - p (p + 1)/2 * x**(p + 2)
@@ -104,7 +104,7 @@ E(x; p) = 1 - (p + 1)(p + 2)/2 * x**p + p (p + 2) * x**(p + 1) - p (p + 1)/2 * x
 
 `E(0) = 1`, `E(1) = 0`, and `E` has zero first and second derivatives at `x = 1`.
 
-**Cheb** (`radial.py:163-174`), with `rc = cast(rc_variable, r.dtype)`, `x = r / rc`:
+**Cheb** (`radial.py:164-175`), with `rc = cast(rc_variable, r.dtype)`, `x = r / rc`:
 
 ```
 u     = 2 (1 - |1 - x|) - 1            (reversed: -u)             # in [-1, 1] for r <= 2 rc
@@ -112,21 +112,21 @@ T_k   = chebvander(u, nfunc + 1, kind)[:, 1:]                     # degrees 1 ..
 basis = T_k * E(x; p)         (normalized: * sqrt(1/pi))
 ```
 
-`chebvander` (`radial.py:314-331`) is the recurrence `T_0 = 1`, `T_1 = u` (`2u` for `kind = 2`),
+`chebvander` (`radial.py:315-332`) is the recurrence `T_0 = 1`, `T_1 = u` (`2u` for `kind = 2`),
 `T_k = 2u T_{k-1} - T_{k-2}`. Degree 0 is dropped. The exponent of `|1 - x|` is `lmbda = 1` (not an argument).
 
-**RadSinBessel** (`radial.py:236-253`), `n = 1 .. nfunc` (in `r.dtype`), `rc` the float variable:
+**RadSinBessel** (`radial.py:237-254`), `n = 1 .. nfunc` (in `r.dtype`), `rc` the float variable:
 
 ```
 plain:       sqrt(2 / rc) * sin(n pi r / rc) / r * E(r / rc; p)
 normalized:  s = r / rc;  ( sqrt(2) * sin(n pi s) / s - mu[n] ) / sigma[n] * E(s; p)
 ```
 
-**Gaussian** (`radial.py:120-129`): `exp(scale * (r - grid)**2) * E(r / rc; p)`, `grid` of shape `[1, nfunc]`.
+**Gaussian** (`radial.py:121-130`): `exp(scale * (r - grid)**2) * E(r / rc; p)`, `grid` of shape `[1, nfunc]`.
 
-**SBessel** (`radial.py:270-298`), no envelope. With `fn(r, n) = (-1)**n sqrt(2) pi / rc**(3/2) * (n+1)(n+2) /
+**SBessel** (`radial.py:271-299`), no envelope. With `fn(r, n) = (-1)**n sqrt(2) pi / rc**(3/2) * (n+1)(n+2) /
 sqrt((n+1)**2 + (n+2)**2) * ( sinc((n+1) pi r / rc) + sinc((n+2) pi r / rc) )`, `sinc(x) = sin(x)/x` with
-`sinc(0) = 1` (`radial.py:310-311`), and for `n = 0 .. nfunc - 1`:
+`sinc(0) = 1` (`radial.py:311-312`), and for `n = 0 .. nfunc - 1`:
 
 ```
 d_0 = 1,  e_n = n**2 (n + 2)**2 / (4 (n + 1)**4 + 1),  d_n = 1 - e_n / d_{n-1}
@@ -152,14 +152,14 @@ Behaviours that shape the twin (all **Measured** on the pinned commit unless a t
 - The output is float64 for float64 data whatever the parameter dtype: the float64 constants (`epsilon`, `PI`,
   `norm`, `mu`, `sigma`) promote the distance (G2; TEST6 finding 2, pinned at `tests/test_compute.py:1093`).
 - **The cutoff is stored in the parameter dtype and used in two precisions.** `rc` is a `float_dtype` variable.
-  `Cheb` casts it to the data dtype (`radial.py:164`), so a float32 model evaluates the basis with
+  `Cheb` casts it to the data dtype (`radial.py:165`), so a float32 model evaluates the basis with
   `float32(rcut)` widened to float64; the final `where` and `get_cutoff` for an unbuilt object use the Python
   float `rcut`. For `rcut = 6.0` the two are equal. For `rcut = 5.6` and float32 parameters, **Measured**: `rc =
   5.599999904632568`; at `r = 5.6` the `Cheb` basis is `5.3e-15` (not 0), because the `where` test (`r > 5.6`)
   does not fire and the envelope is evaluated at `x = 1.0000000170`. `RadSinBessel`, `Gaussian` and `SBessel`
   use `self.rc` (float32) directly, which promotes to float64 in the same way. The twin has to keep `rc` in the
   parameter dtype, cast it to float64 at the use, and keep the Python-float `rcut` for the strict `>` test.
-- `get_cutoff()` returns `float(rc)` once built and `float(rcut)` before (`compute.py:395-402`). For a float32
+- `get_cutoff()` returns `float(rc)` once built and `float(rcut)` before (`compute.py:396-403`). For a float32
   model it returns `5.599999904632568` for `rcut = 5.6`. The neighbour-list cutoff of a calculator comes from it.
 - A float32 **data** tensor raises `InvalidArgumentError` in the `r == 0` substitution (`r + epsilon` is float64
   against a float32 `r`; **Measured**, not pinned by a test). This does not occur with the default data dtype

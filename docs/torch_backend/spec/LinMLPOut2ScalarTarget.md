@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| Source | `instructions/output.py:311-439` (class at 312); `FullyConnectedMLP` in `functions/nn.py:347-433`, `scalar_rms_ln` in `functions/nn.py:464-470`; base `TPOutputInstruction` (`output.py:49-74`), `LORAInstructionMixin` (`instructions/base.py:393`) |
+| Source | `instructions/output.py:312-440` (class at 312); `FullyConnectedMLP` in `functions/nn.py:348-434`, `scalar_rms_ln` in `functions/nn.py:465-471`; base `TPOutputInstruction` (`output.py:50-75`), `LORAInstructionMixin` (`instructions/base.py:394`) |
 | Family | norm and output |
 | Used in | omat: name `MLPOut2ScalarTarget`, `origin [I_out]`, `hidden_layers [64]`, `normalize layer`, `activation null`. large_base: name `LinMLPOut2ScalarTarget`, `origin [I_nl_LN, I_0_LN]`, `hidden_layers [64]`, `normalize null`, `activation tanh`. Both `n_out 1`, `l 0`, target `atomic_energy`. |
 | Reads | the `origin` entries (`[n_atoms, n, 1]`), the target; `batch_tot_nat_real`, `batch_tot_nat` |
-| Writes | **`atomic_energy`** (the target's name), `[n_atoms, 1]` (`TPOutputInstruction.__call__`, `output.py:67-74`) |
+| Writes | **`atomic_energy`** (the target's name), `[n_atoms, 1]` (`TPOutputInstruction.__call__`, `output.py:68-75`) |
 | Variables | the MLP weights; `scale` with `normalize` |
 
 The energy readout: for each atom, channel 0 of the invariant features is added to the energy **linearly**, the other
@@ -14,7 +14,7 @@ channels (normalised if asked) go through a bias-free MLP, and the result is add
 
 ## 1. Constructor arguments
 
-`output.py:322-366`. All stored in the yaml (G3); `origin` and `target` are stored as names.
+`output.py:323-367`. All stored in the yaml (G3); `origin` and `target` are stored as names.
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -24,7 +24,7 @@ channels (normalised if asked) go through a bias-free MLP, and the result is add
 | `name` | `"LinMLPOut2ScalarTarget"` | any unique `str` | Names the MLP layers and `scale`. The omat yaml names it `MLPOut2ScalarTarget`. |
 | `n_out` | `1` | integer | MLP output width; `1` for an energy. |
 | `normalize` | `None` | `None`, `"layer"` | `"layer"` normalises the non-linear channels per atom (section 5); any other string fails an `assert`. |
-| `activation` | `None` | `None`, `"tanh"`, `"silu"`, `"sigmoid"` | `None`: `silu(x) * 1.6759` (`functions/nn.py:343-344`); a string: that plain function (`functions/nn.py:14`, `386-391`). |
+| `activation` | `None` | `None`, `"tanh"`, `"silu"`, `"sigmoid"` | `None`: `silu(x) * 1.6759` (`functions/nn.py:344-345`); a string: that plain function (`functions/nn.py:15`, `387-392`). |
 | `l` | `0` | integer | Must equal `target.l`. |
 | `lora_config` | `None` | dict or `None` | Section 7. |
 | `return_hidden_target` | `None` | a `str` or `None` | Names an extra data key that receives the hidden features (section 7). Both yamls: absent. |
@@ -45,13 +45,13 @@ Names, shapes and dtypes are **[I]**. Trainable, `float_dtype`.
 
 ## 4. Runtime constants
 
-- `DenseLayer.norm = 1 / sqrt(n_in_layer)` per MLP layer (`functions/nn.py:295`), not stored.
-- `epsilon = 1e-16` in `scalar_rms_ln` (a Python float, `functions/nn.py:464`); not configurable.
+- `DenseLayer.norm = 1 / sqrt(n_in_layer)` per MLP layer (`functions/nn.py:296`), not stored.
+- `epsilon = 1e-16` in `scalar_rms_ln` (a Python float, `functions/nn.py:465`); not configurable.
 - The `1.6759` of the default activation.
 
 ## 5. Forward
 
-`output.py:400-439`. For each origin `s`, `x = data[s]` (transposed to `[n_atoms, n, w]` when `s.lm_first` is true),
+`output.py:401-440`. For each origin `s`, `x = data[s]` (transposed to `[n_atoms, n, w]` when `s.lm_first` is true),
 `f = x[:, :, 0]` `[n_atoms, n]`:
 
 ```
@@ -84,9 +84,9 @@ constant in the dtype of the features.
 
 ## 7. Options rejected
 
-- `lora_config` not `None`: **Proposal**, rejected (`output.py:378-379`, `383-398`).
+- `lora_config` not `None`: **Proposal**, rejected (`output.py:379-380`, `384-399`).
 - `return_hidden_target` not `None`: **Proposal**, rejected. It writes the hidden features into the data dictionary from
-  inside the forward pass (a contract violation noted in the code, `output.py:429-434`) for the uncertainty tools; the
+  inside the forward pass (a contract violation noted in the code, `output.py:430-435`) for the uncertainty tools; the
   twin has no GMM-UQ feature path (out of scope).
 - `normalize` other than `None` and `"layer"`: rejected (TF asserts).
 - Several origins, `lm_first` origins, `hidden_layers` of any length, `activation` in `{tanh, silu, sigmoid}`, `n_out`:

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/output.py:658-787` (class at 659), bases `TPOutputInstruction` (`output.py:49-74`), `ElementsReduceInstructionMixin` (`instructions/base.py:417`) |
+| Source | `instructions/output.py:659-788` (class at 659), bases `TPOutputInstruction` (`output.py:50-75`), `ElementsReduceInstructionMixin` (`instructions/base.py:418`) |
 | Family | norm and output |
 | Used in | the omat yaml only: name `ConstantScaleShiftTarget`, `scale 1.892985414710868`, `shift 0` (an integer in the yaml), no `atomic_shift_map`, no chemical embedding, `l 0`, target `atomic_energy`. Not in the large_base yaml. |
 | Reads | the target; with a shift also `atomic_mu_i`, `batch_tot_nat_real` |
@@ -14,19 +14,19 @@ the chemical embedding. In omat it is a pure rescaling: the foundation-model sca
 
 ## 1. Constructor arguments
 
-`output.py:669-702`. All stored in the yaml (G3).
+`output.py:670-703`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
 | `target` | required | a `CreateOutputTarget` (stored as a name) | The accumulator to rescale. |
 | `scale` | `1.0` | float | Multiplies the target. |
 | `shift` | `0.0` | number | A constant added to **every real atom**. The yaml stores whatever it was given (`0`, an int, in omat). |
-| `atomic_shift_map` | `None` | `None` or dict `element index -> float` | A per-element shift. The map is turned into an array in the **sorted order of its keys** (`output.py:683-685`); the key is then not used as the index (below). Needs `shift == 0` (`assert`). |
+| `atomic_shift_map` | `None` | `None` or dict `element index -> float` | A per-element shift. The map is turned into an array in the **sorted order of its keys** (`output.py:684-686`); the key is then not used as the index (below). Needs `shift == 0` (`assert`). |
 | `chemical_embedding` | `None` | a `ScalarChemicalEmbedding` or `None` | Adds a shift `Z[mu_i] @ embedding_shift / sqrt(embedding_size)`. Needs `shift == 0` (`assert`). |
 | `name` | `"ConstantScaleShiftTarget"` | any unique `str` | Key of the instruction (the output goes to the target's name). |
 | `l` | `0` | integer | `l` of the target. |
 
-`apply_shift` is `False` when `shift == 0` and there is no map and no embedding (`output.py:690-702`); that is the omat case.
+`apply_shift` is `False` when `shift == 0` and there is no map and no embedding (`output.py:691-703`); that is the omat case.
 Note that `self.l` is not compared with the target here (no `assert_l_compatibility`).
 
 ## 2. Derived tables
@@ -48,7 +48,7 @@ Names, shapes and dtypes are **[I]**.
 
 ## 4. Runtime constants
 
-Created in `build` (`output.py:704-722`), in `float_dtype`: `scale` (`tf.constant`), `constant_shift` (only if non-zero),
+Created in `build` (`output.py:705-723`), in `float_dtype`: `scale` (`tf.constant`), `constant_shift` (only if non-zero),
 `atomic_shift_map` as `[n, 1]`, and with an embedding `embedding_norm = rsqrt(embedding_size)`. **The scale is rounded to
 `float_dtype`**: for float32 parameters `1.892985414710868` becomes `1.892985463142395` (**Measured**), a relative change
 of `2.6e-8` of the energy. The twin has to round the yaml constants to the parameter dtype in the same way (and not use a
@@ -56,7 +56,7 @@ float64 scale on a float32 energy).
 
 ## 5. Forward
 
-`output.py:724-770`. `target = data[target.name]`, `real[a] = (a < batch_tot_nat_real)`.
+`output.py:725-771`. `target = data[target.name]`, `real[a] = (a < batch_tot_nat_real)`.
 
 ```
 if apply_shift:
@@ -93,7 +93,7 @@ a consistent model.
   `n`; the twin raises at load time.
 - `chemical_embedding`, `atomic_shift_map` and a constant `shift`: **ported** (the formulas above); no 2L model uses them, so
   they need option fixtures.
-- `prepare_variables_for_selected_elements`, `upd_init_args_new_elements` (`output.py:772-787`): element restriction is out
+- `prepare_variables_for_selected_elements`, `upd_init_args_new_elements` (`output.py:773-788`): element restriction is out
   of scope (decision D19).
 - `local = True`: not applicable.
 

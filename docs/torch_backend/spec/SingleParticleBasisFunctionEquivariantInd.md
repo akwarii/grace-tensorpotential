@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:1302-1526` (class at 1303); helpers `_dense_reshape_einsum` (58-70), `_resolve_dense_nbr` (73-76), `_equiv_cg_couple` (79-123); tables from `functions/couplings.py:2285-2562` (`real_coupling_metainformation`) |
+| Source | `instructions/compute.py:1303-1527` (class at 1303); helpers `_dense_reshape_einsum` (58-70), `_resolve_dense_nbr` (73-76), `_equiv_cg_couple` (79-123); tables from `functions/couplings.py:2285-2562` (`real_coupling_metainformation`) |
 | Family | embedding and single-particle basis |
-| Base | `TPEquivariantInstruction` (`instructions/base.py:492`) |
+| Base | `TPEquivariantInstruction` (`instructions/base.py:493`) |
 | Used in | both 2L yamls, name `YI`, `radial R1`, `angular Y`, `indicator I`, `lmax 4`, `sum_neighbors true`, `avg_n_neigh 39.773345702648434`, `normalize true`. omat: `Lmax 4`, natural-parity `keep_parity` up to `L = 6`; large_base: `Lmax 3`, both parities of every `L` up to 6. |
 | Reads | the radial, angular and indicator entries; `ind_i`, `ind_j`, `atomic_mu_i`; `mu_j` and the chemical embedding when given |
 | Writes | `YI` `[n_atoms, n_rad_max, n_func]` (`[n_func, n_atoms, n_rad_max]` with `lm_first`); omat `n_func = 65`, large_base `n_func = 190` |
@@ -16,8 +16,8 @@ Clebsch-Gordan coefficients to functions of definite `(L, M, parity)`.
 
 ## 1. Constructor arguments
 
-`compute.py:1311-1441`. All stored in the yaml (G3); `dense_nbr` is written into the saved arguments after
-resolution (`compute.py:1441`).
+`compute.py:1312-1442`. All stored in the yaml (G3); `dense_nbr` is written into the saved arguments after
+resolution (`compute.py:1442`).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -26,7 +26,7 @@ resolution (`compute.py:1441`).
 | `name` | required | any unique `str` | Key of the output. |
 | `lmax` | required | integer `<= angular.lmax` | Highest degree of the angular part **and of the indicator** (`l1 > lmax or l2 > lmax` skips a pair, `couplings.py:2390`; TEST6 finding 6). |
 | `Lmax` | required | integer `>= 0` | Highest degree `L` of the output; stored as `self.lmax`. |
-| `radial` | required | an `MLPRadialFunction(_v2)` | `radial.lmax == lmax` if `angular.lmax > lmax`, else `radial.lmax == angular.lmax` (`assert`s, `compute.py:1372-1383`). |
+| `radial` | required | an `MLPRadialFunction(_v2)` | `radial.lmax == lmax` if `angular.lmax > lmax`, else `radial.lmax == angular.lmax` (`assert`s, `compute.py:1373-1384`). |
 | `keep_parity` | `None` | list of `[L, parity]` | Output components kept; `None` means natural parity, `[[L, (-1)**L] for L in 0 .. Lmax]`. |
 | `history_drop_list` | `None` | list of `[hist, L]` | Extra `(history, L)` pairs to drop from the coupling table. Both yamls: `null`. |
 | `l_max_ind` | `None` | integer or `None` | Extra cap on the indicator's `l` (`lmax_B`). Both yamls: `null`. |
@@ -37,7 +37,7 @@ resolution (`compute.py:1441`).
 | `radial_basis`, `hidden_layers` | `None` | any | **Never read**: accepted and ignored. Both yamls store them as `null`. |
 | `chemical_embedding` | `None` | a `ScalarChemicalEmbedding` or `None` | Adds a species-dependent `L = 0` term to the indicator of the neighbour (section 5). Both yamls: none. |
 | `lm_first` | `False` | bool | Layout of the indicator input and of the output. |
-| `dense_nbr` | `None` | `None`, `True`, `False` | Neighbour-sum mode; `None` takes the default of the active `InstructionManager` (`False` outside one) (`compute.py:73-76`, `1439`). The two shipped yamls predate the key; loaded without a manager they resolve to `False`. |
+| `dense_nbr` | `None` | `None`, `True`, `False` | Neighbour-sum mode; `None` takes the default of the active `InstructionManager` (`False` outside one) (`compute.py:74-77`, `1440`). The two shipped yamls predate the key; loaded without a manager they resolve to `False`. |
 | `**kwargs` | | | Swallowed. The omat yaml stores two such keys, `radia_basis: null` (a misspelling of `radial_basis`) and `n_out: null`; **both have no effect**. |
 
 Because the omat yaml carries keys that the constructor does not read, a loader that rejects unread keys cannot
@@ -45,12 +45,12 @@ load a shipped model: see "For the reviewer".
 
 ## 2. Derived tables
 
-All built in `__init__` from the two meta tables (`compute.py:1393-1431`); the twin builds them with numpy and
+All built in `__init__` from the two meta tables (`compute.py:1394-1432`); the twin builds them with numpy and
 checks them against TF dumps (decision D7: duplicated plan code with table-equality tests).
 
 **`coupling_meta_data`** `[n_func, 10]`, from `real_coupling_metainformation(A=angular meta, B=indicator meta, lmax,
 lmax_B=l_max_ind, Lmax, history_drop_list, max_sum_l, keep_parity, normalize, optimize_ms_comb=False)`
-(`couplings.py:2285-2562`; the call is `compute.py:1393-1404`). Columns `l, m, hist, left_inds, right_inds, l1, l2,
+(`couplings.py:2285-2562`; the call is `compute.py:1394-1405`). Columns `l, m, hist, left_inds, right_inds, l1, l2,
 parity, sum_of_ls, cg_list`. The algorithm, in the order of the code:
 
 1. Group each input table by `(l, hist, parity, sum_of_ls)` and index its rows by `(l, m, hist, parity)`, which has to
@@ -80,7 +80,7 @@ The real CG tensor (`couplings.py:2582-2623`): the complex Clebsch-Gordan coeffi
 `c2r_harm_matrix` (`couplings.py:2565-2576`). `CG_normalization_dict` (120 entries, `couplings.py:11-134`) maps
 `(l1, l2, L)` to a float; the code multiplies the real CG by it.
 
-**Index tables** (`compute.py:1407-1431`):
+**Index tables** (`compute.py:1408-1432`):
 
 - `lr_inds` `[n_cg, 2]`, int32: column 0 is `np.concatenate(left_inds)`, column 1 `np.concatenate(right_inds)`; the
   position in the flattened `(lm_Y, lm_I)` plane is `left * lm_I + right`.
@@ -95,23 +95,23 @@ have 4 rows (omat, `L <= 1`) and 16 rows (large_base, `L <= 3`).
 **Other attributes**: `slice_angular = (lmax + 1)**2` if `angular.lmax > lmax`, else `None`;
 `coupling_origin = [angular.name, indicator.name]`; `n_out = radial.n_rad_max`; `inv_avg_n_neigh = 1 / avg_n_neigh`.
 With a chemical embedding: `chem_l0_idx`, the row of the indicator table with `(l, m, parity) = (0, 0, +1)` (an `assert`
-that it is unique, `compute.py:1356-1364`) and `n_lm_indicator`.
+that it is unique, `compute.py:1357-1365`) and `n_lm_indicator`.
 
 ## 3. Parameters
 
 None in the shipped yamls. With a `chemical_embedding` there is one `Linear` `chem_linear`
 (`<name>_ChemProj`, `n_in = embedding_size`, `n_out = indicator.n_out`, no bias, `normalize = True`, so the factor
-`1 / sqrt(embedding_size)` applies; `functions/nn.py:17-147`), whose names, shapes and dtypes are **[I]**.
+`1 / sqrt(embedding_size)` applies; `functions/nn.py:18-148`), whose names, shapes and dtypes are **[I]**.
 
 ## 4. Runtime constants
 
-Created in `build` (`compute.py:1444-1459`), in `float_dtype`: `inv_avg_n_neigh`, `cg`, and with a chemical
+Created in `build` (`compute.py:1445-1460`), in `float_dtype`: `inv_avg_n_neigh`, `cg`, and with a chemical
 embedding `chem_l0_mask = one_hot(chem_l0_idx, n_lm_indicator)`. `lr_inds` and `m_sum_ind` are int32 constants made in
 `__init__`. None is in the checkpoint; the twin recomputes them. (dtypes **[I]**)
 
 ## 5. Forward
 
-`compute.py:1461-1526`. `I = data[indicator]`, `Y = data[angular]`, `R = data[radial]` `[n_bonds, n, lm]`,
+`compute.py:1462-1527`. `I = data[indicator]`, `Y = data[angular]`, `R = data[radial]` `[n_bonds, n, lm]`,
 `lm = (lmax + 1)**2`, `lm_I` the indicator's `lm` count.
 
 ```
@@ -131,14 +131,14 @@ out[a, n, f] = sum_{k : m_sum_ind[k] = f} prod[a, n, lr_inds[k, 0], lr_inds[k, 1
 if lm_first:  out = transpose(out, [2, 0, 1])                    # [n_func, n_atoms, n]
 ```
 
-- **Coupling** (`_equiv_cg_couple`, `compute.py:79-123`): with `_USE_GEMM_COUPLE = True` (`compute.py:55`) it builds the
+- **Coupling** (`_equiv_cg_couple`, `compute.py:80-124`): with `_USE_GEMM_COUPLE = True` (`compute.py:56`) it builds the
   dense matrix `W[lm_Y * lm_I, n_func]` by `scatter_nd` of `cg` at `(lr_inds[:, 0] * lm_I + lr_inds[:, 1], m_sum_ind)`
   (duplicates add) and computes `prod_flat @ W`. The fallback branch (`gather_nd`, multiply by `cg`, segment sum)
   is stated to be bit-identical in value; it is not executed. `cg` is cast to `prod.dtype`, `inv_avg_n_neigh` too.
-- **`dense_nbr = True`** replaces the segment sum by `_dense_reshape_einsum` (`compute.py:58-70`): it reshapes the bond
+- **`dense_nbr = True`** replaces the segment sum by `_dense_reshape_einsum` (`compute.py:59-71`): it reshapes the bond
   tensors to `[n_atoms, max_neigh, n, ...]` with `max_neigh = n_bonds // n_atoms` and contracts `"amnl,amnr->anlr"`.
   This needs a bond layout with exactly `max_neigh` consecutive bonds per atom (padding bonds at a distance beyond
-  the cutoff, so the radial envelope zeroes them: `data/databuilder.py:690-707`). It adds no input and gives the same
+  the cutoff, so the radial envelope zeroes them: `data/databuilder.py:691-708`). It adds no input and gives the same
   value as the segment sum for such a layout (**Measured**: difference 0.0 on a random uniform layout).
 - Written out: `YI[i, n, f] = (1/avg) * sum_k cg_k * sum_{j in N(i)} R[j, n, l_k] Y[j, l_k] I[j_atom, n, r_k]`, with
   `(l_k, r_k) = lr_inds[k]` and `f = m_sum_ind[k]`.
@@ -160,7 +160,7 @@ values enter float32 models as float32 numbers (`cg` is created in `float_dtype`
 
 ## 7. Options rejected
 
-- `chemical_embedding.is_per_atom` true (`compute.py:1477-1478`): never true for a shipped embedding; rejected.
+- `chemical_embedding.is_per_atom` true (`compute.py:1478-1479`): never true for a shipped embedding; rejected.
 - A `dict` `avg_n_neigh`: TF fails; rejected.
 - The unread keys `radial_basis`, `hidden_layers`, `radia_basis`, `n_out`: **accepted and ignored** (allow-list),
   because the omat yaml has them. Any other unknown key is rejected (see the README, "Unread keywords").

@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:2020-2168` (class at 2021); tables from `functions/couplings.py:2285-2562` (`real_coupling_metainformation`, called with `legacy_format=True`) |
+| Source | `instructions/compute.py:2021-2169` (class at 2021); tables from `functions/couplings.py:2285-2562` (`real_coupling_metainformation`, called with `legacy_format=True`) |
 | Family | product and reduce |
-| Base | `TPEquivariantInstruction` (`instructions/base.py:492`) |
+| Base | `TPEquivariantInstruction` (`instructions/base.py:493`) |
 | Used in | both 2L yamls: `AA`, `AAA`, `AAAA` (products of the `A` basis) and `BB`, `BBB`, `BBBB` (of the `B` basis); `normalize true`, natural-parity `keep_parity` (large_base `BB` also keeps `[0, -1]`) |
 | Reads | the `left` and `right` entries, each `[n_atoms, n_channels, lm]` (`[lm, n_atoms, n_channels]` with `lm_first`) |
 | Writes | `<name>` `[n_atoms, n_channels, n_func]` |
@@ -16,7 +16,7 @@ axis is not mixed). It builds the higher body orders `AA`, `AAA`, `AAAA` from `A
 
 ## 1. Constructor arguments
 
-`compute.py:2026-2092`. All stored in the yaml (G3).
+`compute.py:2027-2093`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -34,11 +34,11 @@ axis is not mixed). It builds the higher body orders `AA`, `AAA`, `AAAA` from `A
 | `lm_first` | `False` | bool | Layout. |
 | `**kwargs` | | | Swallowed. The omat yaml stores `n_out: null`, `chemical_embedding: null`, `downscale_embedding_size: 16`, all **ignored** (allow-list of this class). |
 
-The constructor fails an `assert` when no coupling channel survives (`compute.py:2112-2114`).
+The constructor fails an `assert` when no coupling channel survives (`compute.py:2113-2115`).
 
 ## 2. Derived tables
 
-Built in `init_coupling` (`compute.py:2094-2138`). The twin builds them with numpy and checks them against TF dumps
+Built in `init_coupling` (`compute.py:2095-2139`). The twin builds them with numpy and checks them against TF dumps
 (decision D7).
 
 **`coupling_meta_data`**, from `real_coupling_metainformation(A = left meta, B = right meta, lmax, lmax_A, lmax_B,
@@ -67,7 +67,7 @@ legacy_format = True)` with the default `optimize_ms_comb = True`. The algorithm
 Columns, ordering and the final sort are as in the other sheet (`l, m, hist, left_inds, right_inds, l1, l2, parity,
 sum_of_ls, cg_list`, sorted by `["l", "parity", "hist", "m"]`).
 
-**Index tables** (`compute.py:2116-2138`):
+**Index tables** (`compute.py:2117-2139`):
 
 - `left_ind`, `right_ind` `[n_cg]`, int32: `np.concatenate(left_inds)`, `np.concatenate(right_inds)`.
 - `m_sum_ind` `[n_cg]`, int32: row `i` repeated `len(cg_list[i])` times.
@@ -84,7 +84,7 @@ validates the description, not the data tables.
 
 ## 3. Parameters
 
-None. `build` only converts `cg` (`compute.py:2140-2144`).
+None. `build` only converts `cg` (`compute.py:2141-2145`).
 
 ## 4. Runtime constants
 
@@ -93,7 +93,7 @@ checkpoint.
 
 ## 5. Forward
 
-`compute.py:2146-2165`, for `lm_first = False`:
+`compute.py:2147-2166`, for `lm_first = False`:
 
 ```
 lft   = gather(data[left],  left_ind,  axis=2)           # [n_atoms, n, n_cg]

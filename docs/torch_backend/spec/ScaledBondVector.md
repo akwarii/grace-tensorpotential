@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:196-237` (class at 197), base `TPInstruction` (`instructions/base.py:327`) |
+| Source | `instructions/compute.py:197-238` (class at 197), base `TPInstruction` (`instructions/base.py:328`) |
 | Family | geometry and radial |
 | Used in | both 2L yamls, name `ScaledBondVector`, `bond_length` = the `BondLength` instruction |
 | Reads | `bond_vector` `[n_bonds, 3]` and the bond-length entry `[n_bonds, 1]` |
@@ -16,8 +16,8 @@ within `5e-11` for `r = 1 A`. It is the direction that `SphericalHarmonic` consu
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
-| `bond_length` | required | a `TPInstruction` or a `str` | Name of the data entry holding the lengths (`compute.py:217-220`). |
-| `bonds` | `None` | `None`, a `TPInstruction` or a `str` | Name of the vector entry: `bond_vector` when `None` (`compute.py:221-227`). |
+| `bond_length` | required | a `TPInstruction` or a `str` | Name of the data entry holding the lengths (`compute.py:218-221`). |
+| `bonds` | `None` | `None`, a `TPInstruction` or a `str` | Name of the vector entry: `bond_vector` when `None` (`compute.py:222-228`). |
 | `name` | `"ScaledBondVector"` | any unique `str` | Key of the output. |
 
 The omat yaml stores only `bond_length`; the large_base yaml also stores `bonds: null`. Both mean the default.
@@ -32,7 +32,7 @@ None.
 
 ## 3. Parameters
 
-None. `build` only sets `is_built` (`compute.py:229-232`).
+None. `build` only sets `is_built` (`compute.py:230-233`).
 
 ## 4. Runtime constants
 
@@ -44,7 +44,7 @@ None of its own. The `1e-10` it depends on is inside the bond length (see the sh
 vhat[b, :] = v[b, :] / d[b, 0]            v = data[bonds], d = data[bond_length]
 ```
 
-`compute.py:234-237`: a broadcast division `[n_bonds, 3] / [n_bonds, 1]`. No `where`, no epsilon of its own.
+`compute.py:235-238`: a broadcast division `[n_bonds, 3] / [n_bonds, 1]`. No `where`, no epsilon of its own.
 
 A zero vector gives exactly `0 / 1e-5 = 0`, and the gradient there is finite, because `d` is never 0. The
 output of a zero vector is the zero vector, which is not a unit vector; `SphericalHarmonic` then returns the

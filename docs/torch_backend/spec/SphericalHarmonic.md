@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:240-276` (class at 241); the maths is `functions/spherical_harmonics.py:7-271` (`SphericalHarmonics`) |
+| Source | `instructions/compute.py:241-277` (class at 241); the maths is `functions/spherical_harmonics.py:8-272` (`SphericalHarmonics`) |
 | Family | geometry and radial |
-| Base | `TPEquivariantInstruction` (`instructions/base.py:492`) |
+| Base | `TPEquivariantInstruction` (`instructions/base.py:493`) |
 | Used in | both 2L yamls, name `Y`, `vhat` = `ScaledBondVector`, `lmax: 4` |
 | Reads | the entry named by `vhat`, `[n_bonds, 3]` |
 | Writes | `Y` `[n_bonds, (lmax + 1)**2]` |
@@ -17,26 +17,26 @@ Real spherical harmonics of the bond direction, up to degree `lmax`, in the layo
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
-| `vhat` | required | a `TPInstruction` or a `str` | Name of the entry with the unit directions (`compute.py:258-263`); anything else raises `ValueError`. |
+| `vhat` | required | a `TPInstruction` or a `str` | Name of the entry with the unit directions (`compute.py:259-264`); anything else raises `ValueError`. |
 | `name` | required | any unique `str` | Key of the output. |
 | `lmax` | required | integer `>= 0` | Highest degree; the output has `(lmax + 1)**2` columns. Stored as `self.lmax`. |
-| `norm` | `False` | `False`, `True` | Passed to `SphericalHarmonics` through `**kwargs` (`compute.py:265`). `False` multiplies by `sqrt(4 pi)` (`Y_00 = 1`); `True` leaves the orthonormal harmonics (`Y_00 = 1/sqrt(4 pi) = 0.28209`). The flag name is the reverse of what the docstring says (`spherical_harmonics.py:16-17`). |
+| `norm` | `False` | `False`, `True` | Passed to `SphericalHarmonics` through `**kwargs` (`compute.py:266`). `False` multiplies by `sqrt(4 pi)` (`Y_00 = 1`); `True` leaves the orthonormal harmonics (`Y_00 = 1/sqrt(4 pi) = 0.28209`). The flag name is the reverse of what the docstring says (`spherical_harmonics.py:17-18`). |
 | `type` | `"real"` | `"real"`, `"complex"` | `"complex"` constructs, but the forward pass fails (below). |
 
-Any other keyword raises `TypeError` from `SphericalHarmonics.__init__` (`spherical_harmonics.py:25`). Because
+Any other keyword raises `TypeError` from `SphericalHarmonics.__init__` (`spherical_harmonics.py:26`). Because
 `**kwargs` is captured, `norm` and `type` appear as flat keys of the instruction in `model.yaml` when given. Both
 2L yamls give neither, so `norm = False`, `type = "real"`.
 
 ## 2. Derived tables
 
-Metadata table `coupling_meta_data` (pandas, built in `__init__`, `compute.py:266`, by
-`init_uncoupled_meta_data`, `instructions/base.py:515-527`): one row per output column with `l`, `m`, `hist = ""`,
+Metadata table `coupling_meta_data` (pandas, built in `__init__`, `compute.py:267`, by
+`init_uncoupled_meta_data`, `instructions/base.py:516-528`): one row per output column with `l`, `m`, `hist = ""`,
 `parity = (-1)**l`, `sum_of_ls = l`; shape `((lmax + 1)**2, 5)`. Downstream instructions (`SingleParticleBasisFunction*`)
 read `l`, `m` and `parity` from it to build their own coupling tables. The twin builds the same table with numpy.
 `coupling_origin` is `None`.
 
-Recursion tables `alm`, `blm` (`spherical_harmonics.py:59-82`), built in `build`, indexed by
-`lm1d(l, m) = m + l (l + 1) / 2` for `0 <= m <= l` (`spherical_harmonics.py:48-50`). For `l >= 1` and `m < l`
+Recursion tables `alm`, `blm` (`spherical_harmonics.py:60-83`), built in `build`, indexed by
+`lm1d(l, m) = m + l (l + 1) / 2` for `0 <= m <= l` (`spherical_harmonics.py:49-51`). For `l >= 1` and `m < l`
 
 ```
 a[l, m] = sqrt( (4 l**2 - 1) / (l**2 - m**2) )
@@ -54,12 +54,12 @@ None.
 ## 4. Runtime constants
 
 (dtypes **[I]**) `PI = float64(pi)`, `factor4pi = sqrt(4 pi)`, `l_tile` (int32), `alm`, `blm`, all created in `build`
-(`spherical_harmonics.py:35-46`). **`build` ignores its `float_dtype` argument**: `float_dtype` is set to `tf.float64`
-whatever the model's parameter dtype (`spherical_harmonics.py:36`; pinned at `tests/test_compute.py:558`).
+(`spherical_harmonics.py:36-47`). **`build` ignores its `float_dtype` argument**: `float_dtype` is set to `tf.float64`
+whatever the model's parameter dtype (`spherical_harmonics.py:37`; pinned at `tests/test_compute.py:558`).
 
 ## 5. Forward
 
-`compute.py:274-276` calls `SphericalHarmonics.__call__` (`spherical_harmonics.py:264-271`), which for
+`compute.py:275-277` calls `SphericalHarmonics.__call__` (`spherical_harmonics.py:265-272`), which for
 `type = "real"` runs `_compute_rsh` (241-262).
 
 1. The input is converted to float64 (`_compute_sph_harm`, 163-198) and `(x, y, z) = rhat`. The input has to be a
@@ -99,7 +99,7 @@ Cost note for the twin: the TF graph is Python-unrolled over `(l, m)`; there are
 ## 6. Dtype and promotion
 
 Always float64: the input is converted with `convert_to_tensor(..., dtype=float64)` and every constant is
-float64 (`spherical_harmonics.py:36`, `164`). A float32 model therefore gets float64 harmonics (TEST6 finding 2).
+float64 (`spherical_harmonics.py:37`, `165`). A float32 model therefore gets float64 harmonics (TEST6 finding 2).
 A float32 **tensor** input would raise at the conversion; this does not occur (G1). The twin computes the
 harmonics in float64 whatever the parameter dtype, and downstream classes decide whether to cast them (see
 `SingleParticleBasisFunctionScalarInd` and `...EquivariantInd`).
@@ -107,7 +107,7 @@ harmonics in float64 whatever the parameter dtype, and downstream classes decide
 ## 7. Options rejected
 
 - `type = "complex"`. The constructor accepts it, and the forward pass raises `InvalidArgumentError`
-  (`_compute_ylm` applies a rank-3 permutation to a rank-2 stack, `spherical_harmonics.py:229-234`; TEST6
+  (`_compute_ylm` applies a rank-3 permutation to a rank-2 stack, `spherical_harmonics.py:230-235`; TEST6
   finding 9, pinned at `tests/test_compute.py:608`). No shipped model uses it and TF cannot run it. Proposal:
   the twin raises an actionable error naming the option when the yaml has `type: complex`.
 - `norm = True` is supported (a factor), although no shipped model uses it.

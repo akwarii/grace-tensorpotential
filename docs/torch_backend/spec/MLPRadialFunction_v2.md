@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:826-978` (class at 827); layers in `functions/nn.py:17-147` (`Linear`) |
+| Source | `instructions/compute.py:827-979` (class at 827); layers in `functions/nn.py:18-148` (`Linear`) |
 | Family | geometry and radial |
-| Bases | `TPInstruction`, `LORAInstructionMixin` (`instructions/base.py:327`, `393`) |
+| Bases | `TPInstruction`, `LORAInstructionMixin` (`instructions/base.py:328`, `394`) |
 | Used in | the large_base yaml: `R` (`n_rad_max 42`) and `R1` (`n_rad_max 32`), both `lmax 4, hidden_layers [64, 64], activation [silu, silu], init_type normal, normalize true, chem_embedding null, embed_i false, embed_j true`. Not in the omat yaml. |
 | Reads | the basis entry `[n_bonds, nfunc]`; with a chemical embedding also its table and `mu_i`, `mu_j` |
 | Writes | `<name>` `[n_bonds, n_rad_max, (lmax + 1)**2]` |
@@ -16,19 +16,19 @@ Output layout and shape are those of `MLPRadialFunction`.
 
 ## 1. Constructor arguments
 
-`compute.py:833-922`. All stored in the yaml (G3).
+`compute.py:834-923`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
 | `n_rad_max` | required | integer `>= 1` | Radial functions per `l`. |
 | `lmax` | required | integer `>= 0` | Highest `l`; `n_out = n_rad_max * (lmax + 1)`. |
 | `name` | `"MLPRadialFunction"` | any unique `str` | Key of the output (same default as v1). |
-| `basis` | `None` | `RadialBasis`, another `TPInstruction`, `str`, `None` | As for v1 (`compute.py:868-886`); `None` with an `input_shape` builds but never sets `basis_name` (finding 11). |
+| `basis` | `None` | `RadialBasis`, another `TPInstruction`, `str`, `None` | As for v1 (`compute.py:869-887`); `None` with an `input_shape` builds but never sets `basis_name` (finding 11). |
 | `input_shape` | `None` | integer | Width of the basis when `basis` is a name. **No embedding width is added** (unlike v1). |
 | `hidden_layers` | `None` | list of ints | `None` means `[64, 64]` (v1: `[64, 64, 64]`). |
-| `activation` | `None` | `None`; a `str`; a list of `str` | `None` gives `"silu"` per hidden layer; a string is repeated for every hidden layer; a list must have one entry per hidden layer (`assert`, `compute.py:860-866`). Names are looked up in `ACTIVATION_DICT = {tanh, silu, sigmoid}` (`functions/nn.py:14`) **at the first forward pass**: an unknown name is a bare `KeyError` (finding 11, pinned at `tests/test_compute.py:1571`). `silu` here is the plain `tf.nn.silu`, without the `1.6759` of v1's default. |
+| `activation` | `None` | `None`; a `str`; a list of `str` | `None` gives `"silu"` per hidden layer; a string is repeated for every hidden layer; a list must have one entry per hidden layer (`assert`, `compute.py:861-867`). Names are looked up in `ACTIVATION_DICT = {tanh, silu, sigmoid}` (`functions/nn.py:15`) **at the first forward pass**: an unknown name is a bare `KeyError` (finding 11, pinned at `tests/test_compute.py:1571`). `silu` here is the plain `tf.nn.silu`, without the `1.6759` of v1's default. |
 | `no_weight_decay` | `True` | bool | Only the weight names (G8). |
-| `init_type` | `"normal"` | `"normal"`, `"uniform"`, `"zeros"` | Initialiser of every `Linear` (`functions/nn.py:33-34`, an `assert`). No effect on a loaded model **except** through `normalize` below. |
+| `init_type` | `"normal"` | `"normal"`, `"uniform"`, `"zeros"` | Initialiser of every `Linear` (`functions/nn.py:34-35`, an `assert`). No effect on a loaded model **except** through `normalize` below. |
 | `normalize` | `True` | bool | Selects where the `1/sqrt(n_in)` lives: see sections 3 and 4. |
 | `chem_embedding` | `None` | a `ScalarChemicalEmbedding` or `None` | Enables the gate. |
 | `embed_i` | `False` | bool | Include the central atom's embedding in the gate. |
@@ -39,15 +39,15 @@ Output layout and shape are those of `MLPRadialFunction`.
 
 ## 2. Derived tables
 
-`l_tile` as in `MLPRadialFunction` (`compute.py:888-894`): `np.repeat(np.arange(lmax + 1), 2 * np.arange(lmax + 1) + 1)`,
+`l_tile` as in `MLPRadialFunction` (`compute.py:889-895`): `np.repeat(np.arange(lmax + 1), 2 * np.arange(lmax + 1) + 1)`,
 int32, not a variable.
 
 Layer widths `[input_shape] + hidden_layers + [n_rad_max * (lmax + 1)]`, one `Linear` per consecutive pair
-(`compute.py:895-910`), so `len(hidden_layers) + 1` layers.
+(`compute.py:896-911`), so `len(hidden_layers) + 1` layers.
 
 ## 3. Parameters
 
-All in `float_dtype`, trainable, created in `build` (`compute.py:924-934`; `functions/nn.py:46-107`). `use_bias` is
+All in `float_dtype`, trainable, created in `build` (`compute.py:925-935`; `functions/nn.py:47-108`). `use_bias` is
 `False` (no bias). Weights are `[n_in, n_out]`.
 
 | Attribute | Shape | TF name (**Measured**, `name = MLPRadialFunction`) |
@@ -58,28 +58,28 @@ All in `float_dtype`, trainable, created in `build` (`compute.py:924-934`; `func
 All names, shapes and dtypes of this section are **[I]**.
 
 Initial distribution (training only; a loaded model overwrites it): `normal` is `N(0, s)` with `s = 1` if
-`normalize` and `s = 1/sqrt(n_in)` if not; `uniform` is `U(-s, s)`; `zeros` is zero (`functions/nn.py:50-101`).
+`normalize` and `s = 1/sqrt(n_in)` if not; `uniform` is `U(-s, s)`; `zeros` is zero (`functions/nn.py:51-102`).
 
 ## 4. Runtime constants
 
-(dtypes **[I]**) `Linear.norm` (`functions/nn.py:36-37`, `56-60`, `102`): `1 / sqrt(n_in)` if `normalize`, else `1.0`; a tensor in the
+(dtypes **[I]**) `Linear.norm` (`functions/nn.py:37-38`, `57-61`, `103`): `1 / sqrt(n_in)` if `normalize`, else `1.0`; a tensor in the
 weight dtype, **not in the checkpoint**. The twin recomputes it from the layer's `n_in` and from `normalize`
 (which it reads from the yaml). The embedding transform is always built with `normalize = True`, so its factor is
 `1 / sqrt(embedding_size)`.
 
 ## 5. Forward
 
-`compute.py:955-978`. `b` is the basis `[n_bonds, nfunc]`.
+`compute.py:956-979`. `b` is the basis `[n_bonds, nfunc]`.
 
 ```
 for i in 0 .. L-1:   b = act_i( b @ (w_i * norm_i) )            # L = len(hidden_layers); act_i from ACTIVATION_DICT
 y = b @ (w_L * norm_L)                                           # last layer, no activation, [n_bonds, n_out]
 ```
 
-`Linear.__call__` (`functions/nn.py:124-147`): `w * norm`, cast of the input to the weight dtype if different,
+`Linear.__call__` (`functions/nn.py:125-148`): `w * norm`, cast of the input to the weight dtype if different,
 `matmul` over the flattened leading axes, no bias.
 
-With `chem_embedding` (raises `NotImplementedError` if `local` is true, `compute.py:963-964`):
+With `chem_embedding` (raises `NotImplementedError` if `local` is true, `compute.py:964-965`):
 
 ```
 z         = embed_transform(data[chem_embedding.name])           # [n_elem, n_out]  (a Linear, no activation)
@@ -89,7 +89,7 @@ if embed_i:  embedding = embedding * gather(z, mu_i);  embedding = tanh(embeddin
 y = y * embedding
 ```
 
-The `tanh` sits inside the `if embed_i` block (`compute.py:970-973`): with `embed_j` alone the gate is the
+The `tanh` sits inside the `if embed_i` block (`compute.py:971-974`): with `embed_j` alone the gate is the
 plain gathered embedding, with `embed_i` it is the `tanh` of the product. This is the code as it is; TEST6 did not
 list it as a finding, and no test pins the `embed_j`-only case with `tanh` absent. With both flags false the gate
 is `1.0` (a no-op).
@@ -116,13 +116,13 @@ Gate-less case, the shipped one: a plain MLP, `silu` on both hidden layers, no b
 ## 7. Options rejected
 
 - `lora_config` not `None`: as for v1. **Proposal**: reject with a message that tells to merge first
-  (`compute.py:931-932`, `936-953`).
+  (`compute.py:932-933`, `937-954`).
 - `init_type`: accepted and irrelevant to a loaded model; `zeros` and `uniform` parse. Not rejected.
 - `basis = None`: rejected at load time (TF fails at the first forward pass).
 - An activation name outside `{tanh, silu, sigmoid}`: rejected at load time (TF raises `KeyError` at the first
   forward pass).
-- `local = True` with a `chem_embedding` (TF raises `NotImplementedError`, `compute.py:963-964`). `local` is the TF
-  flag of the domain-decomposed execution path (`tpmodel.py:388-400`, `609-617`); the twin has no such mode, so the
+- `local = True` with a `chem_embedding` (TF raises `NotImplementedError`, `compute.py:964-965`). `local` is the TF
+  flag of the domain-decomposed execution path (`tpmodel.py:389-401`, `610-618`); the twin has no such mode, so the
   case does not arise. **Proposal**; a decision for the reviewer.
 
 ## 8. Golden-fixture keys

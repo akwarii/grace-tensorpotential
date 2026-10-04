@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:3774-3870` (class at 3775), base `TPInstruction` (`instructions/base.py:327`) |
+| Source | `instructions/compute.py:3775-3871` (class at 3775), base `TPInstruction` (`instructions/base.py:328`) |
 | Family | norm and output |
 | Used in | the large_base yaml only: `I_nl_LN` (`inpt rho`, `type only_nonlin`) and `I_0_LN` (`inpt I2`, `type full`), both `init zeros`. Not in the omat yaml. |
 | Reads | the entry of `inpt`, `[n_atoms, n_out, 1]` (invariant features); `atomic_mu_i`, `batch_tot_nat_real` |
@@ -15,11 +15,11 @@ other channels are normalised.
 
 ## 1. Constructor arguments
 
-`compute.py:3780-3798`. All stored in the yaml (G3).
+`compute.py:3781-3799`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
-| `inpt` | required | an instruction with `n_out` (stored as a name) | Source; `n_out` of this instruction is `inpt.n_out`. If `inpt.lm_first` is true its output is `[lm, n_atoms, n_out]` and is transposed first (`compute.py:3837-3839`). |
+| `inpt` | required | an instruction with `n_out` (stored as a name) | Source; `n_out` of this instruction is `inpt.n_out`. If `inpt.lm_first` is true its output is `[lm, n_atoms, n_out]` and is transposed first (`compute.py:3838-3840`). |
 | `name` | required | any unique `str` | Key of the output. |
 | `type` | `"only_nonlin"` | `"full"`, `"only_nonlin"`, `"sep_lin_gate"` | Section 5. The check is an `assert` in the constructor, so a value set after construction is not checked (TEST6 finding 15). |
 | `init` | `"zeros"` | `"zeros"`, `"ones"`, `"random"`, `"near_zero"` | Training only (initial `scale`); an `assert`. |
@@ -49,12 +49,12 @@ finding 15).
 
 ## 4. Runtime constants
 
-`epsilon = 1e-10`, a tensor in `float_dtype` (`compute.py:3832`), cast to the data dtype where used. Not in the checkpoint
+`epsilon = 1e-10`, a tensor in `float_dtype` (`compute.py:3833`), cast to the data dtype where used. Not in the checkpoint
 and not configurable: hard-code it. (dtype **[I]**)
 
 ## 5. Forward
 
-`compute.py:3835-3870`. `x = data[inpt]` as `[n_atoms, n, w]` (here `w = 1`: `lm` has one entry). `n_real` is
+`compute.py:3836-3871`. `x = data[inpt]` as `[n_atoms, n, w]` (here `w = 1`: `lm` has one entry). `n_real` is
 `batch_tot_nat_real`, `n_total` the length of `atomic_mu_i`, and `real[a] = (a < n_real)`.
 
 ```

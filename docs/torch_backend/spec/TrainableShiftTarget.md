@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/output.py:862-915` (class at 863), bases `TPOutputInstruction` (`output.py:49-74`), `ElementsReduceInstructionMixin` (`instructions/base.py:417`) |
+| Source | `instructions/output.py:863-916` (class at 863), bases `TPOutputInstruction` (`output.py:50-75`), `ElementsReduceInstructionMixin` (`instructions/base.py:418`) |
 | Family | norm and output |
 | Used in | the large_base yaml only: name `TrainableShiftTarget`, `number_of_atom_types 89`, `l 0`, target `atomic_energy`; the last instruction of the model. Not in the omat yaml. |
 | Reads | the target, `atomic_mu_i`, `batch_tot_nat_real` |
@@ -13,7 +13,7 @@ A learned energy offset per chemical element (the "atomic reference energy"), ad
 
 ## 1. Constructor arguments
 
-`output.py:869-877`. All stored in the yaml (G3).
+`output.py:870-878`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -42,7 +42,7 @@ None.
 
 ## 5. Forward
 
-`output.py:888-905`:
+`output.py:889-906`:
 
 ```
 shift         = gather(at_shifts, atomic_mu_i, axis=0)                    # [n_atoms, 1]
@@ -64,7 +64,7 @@ pinned at `tests/test_output.py:1323`). A consistent model does not meet it.
 ## 7. Options rejected
 
 - `upd_init_args_new_elements` changes only `_init_args`, not `number_of_atom_types`, and
-  `prepare_variables_for_selected_elements` (`output.py:907-915`) is element restriction: out of scope (decision D19; TEST6
+  `prepare_variables_for_selected_elements` (`output.py:908-916`) is element restriction: out of scope (decision D19; TEST6
   finding 18).
 - `local = True`: not applicable.
 - `TrainableShiftTarget_v2` (same file, a shift as a projection of the chemical embedding) is not used by the 2L models and has

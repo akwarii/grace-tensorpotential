@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:3044-3340` (class at 3045); `collect_functions` in `instructions/base.py:567-612`; helpers `_lmp_lookup`, `_lmp_matches` (`compute.py:126-153`) |
+| Source | `instructions/compute.py:3045-3341` (class at 3045); `collect_functions` in `instructions/base.py:568-613`; helpers `_lmp_lookup`, `_lmp_matches` (`compute.py:127-154`) |
 | Family | product and reduce |
-| Bases | `TPEquivariantInstruction`, `SimplifyingReduceMixin`, `LORAInstructionMixin` (`instructions/base.py:492`, `441`, `393`) |
+| Bases | `TPEquivariantInstruction`, `SimplifyingReduceMixin`, `LORAInstructionMixin` (`instructions/base.py:493`, `442`, `394`) |
 | Used in | both 2L yamls. omat: `I0`, `I`, `B`, `I_out`. large_base: `I1`, `I`, `rho`, `B`, `I2`. Per-element weights in `I0`, `I_out`, `I1`, `rho`, `I2` (89 element types). |
 | Reads | the collected instructions (several), each `[n_atoms, n_in, lm]`; `atomic_mu_i` |
 | Writes | `<name>` `[n_atoms, n_out, n_lm_out]` (`[n_lm_out, n_atoms, n_out]` with `lm_first`) |
@@ -18,7 +18,7 @@ first-layer equivariant indicator `I` that feeds the second layer.
 
 ## 1. Constructor arguments
 
-`compute.py:3052-3151`. All stored in the yaml (G3).
+`compute.py:3053-3152`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -41,22 +41,22 @@ first-layer equivariant indicator `I` that feeds the second layer.
 
 ## 2. Derived tables
 
-All in `__init__` (`compute.py:3105-3151`); numpy in the twin, checked against TF dumps (D7). Groupings use `groupby(...).indices`,
+All in `__init__` (`compute.py:3106-3152`); numpy in the twin, checked against TF dumps (D7). Groupings use `groupby(...).indices`,
 that is, groups in **ascending order of the key tuple** (**Measured**: this is the order of the keys for every table of both
 yamls), `hist` compared as a string.
 
-**Output layout** `coupling_meta_data` (`compute.py:3111-3123`): for `p` in `[-1, 1]`, for `l` in `0 .. lmax`, if
+**Output layout** `coupling_meta_data` (`compute.py:3112-3124`): for `p` in `[-1, 1]`, for `l` in `0 .. lmax`, if
 `[l, p]` is in `allowed_l_p`, for `m` in `-l .. l`, a row `(l, m, hist = "", parity = p, sum_of_ls = l)`; then sorted by
 `["l", "parity", "hist", "m"]` (so by `l`, then parity `-1` before `+1`, then `m`). `n_lm_out` is the number of rows.
 `lmax = max(ls_max)`. Examples: omat `I0`, `I`: `l = 0 (+)`, `l = 1 (-)`, 4 rows; large_base `I1`, `I`: `l <= 3` natural
 parity, 16 rows; the scalar reductions: 1 row.
 
-**Per source** `s` (`collect_functions(max_l = ls_max[s], l_p_list = allowed_l_p)`, `instructions/base.py:567-612`):
+**Per source** `s` (`collect_functions(max_l = ls_max[s], l_p_list = allowed_l_p)`, `instructions/base.py:568-613`):
 
 1. Group the source's table by `(parity, l, hist)`; keep the groups with `l <= max_l` and `[l, parity]` in `allowed_l_p`;
    `func_collect_ind` = the concatenated row indices of the kept groups, in group order (then within a group in table order).
    (`np.concatenate` of an empty list fails with a bare `ValueError` when nothing is kept; TF comment at
-   `base.py:587-589`.)
+   `base.py:588-590`.)
 2. `collect_meta_df` = the source table's rows `func_collect_ind`; group it again by `(parity, l, hist)`:
    `w_shape` = the number of groups; `w_l_tile[row]` = the position of the row's group among them (ascending key order).
 3. `total_sum_ind[row]` = the index of the output row with the same `(l, m, parity)` (`_lmp_matches`; the output rows are
@@ -84,14 +84,14 @@ Examples (**Measured**): omat `I0/reducing_A` `[89, 16, 32, 2]`, `I0/reducing_AA
 
 ## 4. Runtime constants
 
-Created in `build` (`compute.py:3153-3228`), `float_dtype`, none in the checkpoint (dtypes **[I]**):
+Created in `build` (`compute.py:3154-3229`), `float_dtype`, none in the checkpoint (dtypes **[I]**):
 
 - `norm_<s> = scale / sqrt(n_in(s))` if `normalize`, else `1.0` (a scalar per source).
 - `norm_map`: with `out_norm`, the table of section 2 reshaped to `[n_lm_out, 1, 1]`; without it the scalar `1`.
 
 ## 5. Forward
 
-`compute.py:3258-3337`, `lm_first = False`:
+`compute.py:3259-3338`, `lm_first = False`:
 
 ```
 acc = zeros (or ones if init_target_value = "ones") of shape [n_lm_out (1 if only_invar), n_atoms, n_out]   # dtype of the first source cast to its weight dtype
@@ -116,7 +116,7 @@ out = transpose(acc, [1, 2, 0])                                            # [n_
   effect at inference.
 - With `lm_first` the gather axis is 0, the einsums read `"knw,wan->wak"` and `"aknw,wan->wak"`, and the accumulator is returned
   as `[n_lm_out, n_atoms, n_out]` without a transpose. Consumers that need a scalar then transpose themselves
-  (`compute.py:3332-3336`).
+  (`compute.py:3333-3337`).
 - Written out for an invariant output: `out[a, k] = sum_s norm_s sum_{n, w} reducing_s[mu_a, k, n, g(w)] A_s[a, n, w]`.
 
 The formula was re-implemented in numpy from the instruction's variables and tables and compared with the TF output for all
@@ -124,21 +124,21 @@ nine instances: maximum difference `5.3e-22` on outputs up to `3e-6` (float64, s
 
 ## 6. Dtype and promotion
 
-Each source is **cast to the weight dtype** (`tf.cast(A_r, w.dtype)`, `compute.py:3287`) and the accumulator takes the dtype of
+Each source is **cast to the weight dtype** (`tf.cast(A_r, w.dtype)`, `compute.py:3288`) and the accumulator takes the dtype of
 the first cast source, so the output has the parameter dtype whatever the input dtype (TEST6 finding 1;
 **Measured** float32 for all instances of a float32 model). `norm_<s>` and `norm_map` are in `float_dtype`. The twin casts each
 source to the weight dtype before the contraction, as TF does.
 
 ## 7. Options rejected
 
-- `lora_config` not `None`: **Proposal**, rejected (`compute.py:3225-3226`, `3230-3250`).
+- `lora_config` not `None`: **Proposal**, rejected (`compute.py:3226-3227`, `3231-3251`).
 - `simplify = True`: **Proposal**, rejected. With a plain `ProductFunction` TF raises `TypeError` (the other class combination
   runs but leaves the tables unchanged: `drop_unused` is a no-op on them, `tests/test_compute.py:4119`, `4168`); no
   shipped model has it.
 - `init_vars`: accepted, no effect. `init_target_value` is **ported** (see section 5). `is_central_atom_type_dependent`,
   `normalize = False`, `out_norm = True`, `scale != 1`, `lm_first`: ported; those not set by a 2L yaml need option-pair
   fixtures.
-- `upd_init_args_new_elements` and the element-selection mixin (`compute.py:3339-3340`): element restriction is out of
+- `upd_init_args_new_elements` and the element-selection mixin (`compute.py:3340-3341`): element restriction is out of
   scope (D19).
 - A source with no kept group (empty `func_collect_ind`): TF fails with a bare `ValueError`; the twin raises a typed error
   naming the instruction and the source.

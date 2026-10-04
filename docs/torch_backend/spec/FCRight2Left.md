@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:3442-3771` (class at 3443), bases `TPEquivariantInstruction`, `ElementsReduceInstructionMixin`, `LORAInstructionMixin` (`instructions/base.py:492`, `417`, `393`) |
+| Source | `instructions/compute.py:3443-3772` (class at 3443), bases `TPEquivariantInstruction`, `ElementsReduceInstructionMixin`, `LORAInstructionMixin` (`instructions/base.py:493`, `418`, `394`) |
 | Family | product and reduce |
 | Used in | both 2L yamls: `A1`, `AA1`, `AA2`, `B1`, `BB1`, `BB2`; always `left_coefs true`, `init_vars random`, `norm_out true`, `is_central_atom_type_dependent` null or false (omat: `normalize` absent, so `true`; large_base: `normalize true`) |
 | Reads | the `left` and `right` entries; `atomic_mu_i` |
@@ -15,7 +15,7 @@ operands of the next product (`A -> A1`, `AA -> AA1`).
 
 ## 1. Constructor arguments
 
-`compute.py:3450-3548`. All stored in the yaml (G3).
+`compute.py:3451-3549`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -34,7 +34,7 @@ operands of the next product (`A -> A1`, `AA -> AA1`).
 
 ## 2. Derived tables
 
-All in `__init__` (`compute.py:3514-3548`); numpy in the twin, checked against TF dumps (D7). Groups are taken with
+All in `__init__` (`compute.py:3515-3549`); numpy in the twin, checked against TF dumps (D7). Groups are taken with
 `groupby(["l", "parity", "hist"]).indices`, i.e. in **ascending order of the key tuple** `(l, parity, hist)` with `hist`
 compared as a string (**Measured**: this equals the order of the group keys for every table of both yamls); each group is
 the array of row indices of the operand's table.
@@ -43,15 +43,15 @@ Let `L_groups` be the groups of `left.coupling_meta_data` and `R_groups` those o
 
 - `coupling_meta_data` = a copy of the left table: the output has the layout of `left`; `lmax = left.lmax`.
 - `w_tile_left` `[lm_left]`, int: for every left row the number (position in `L_groups`) of its group;
-  `w_shape_left = len(L_groups)` (`compute.py:3516-3524`).
+  `w_shape_left = len(L_groups)` (`compute.py:3517-3525`).
 - For each left group in order, and for each right group in order with the same `l` and the same `parity`
-  (**any** history) (`compute.py:3526-3540`): append the left group's rows to `collect_to`, the right group's rows to
+  (**any** history) (`compute.py:3527-3541`): append the left group's rows to `collect_to`, the right group's rows to
   `collect_from`, `count` repeated `len(right rows)` times to `w_tile_right`, then `count += 1` and add 1 to the
   left group's entry of `norms` (initialised to 1). Right groups with no left partner are not used. The right and left
   groups must have the same number of rows (`2 l + 1`); `tensor_scatter_nd_add` would fail otherwise.
 - `collect_to`, `collect_from` int32, `np.concatenate` of the lists; `w_tile_right` int32;
   `w_shape_right = max(w_tile_right) + 1 = count`.
-- `norm_map[row] = 1 / sqrt(norms[w_tile_left[row]])`, `[lm_left]` (`compute.py:3542-3543`). It is the number of terms added
+- `norm_map[row] = 1 / sqrt(norms[w_tile_left[row]])`, `[lm_left]` (`compute.py:3543-3544`). It is the number of terms added
   to a left entry (its own and one per matching right group), to the power `-1/2`. It is used only with `norm_out`.
 
 These tables were re-derived with an independent numpy implementation (group order, matching, `norms`) and compared with
@@ -73,12 +73,12 @@ Examples (**Measured**): omat `A1` `[32, 32, 5]` both, `AA1` `[32, 32, 27]`; lar
 ## 4. Runtime constants
 
 `norm_left = 1/sqrt(left.n_out)` (or 1), `norm_right = 1/sqrt(right.n_out)` (or 1), scalars in `float_dtype`
-(`compute.py:3578-3649`); with `norm_out` the tensor `norm_map` reshaped to `[lm, 1, 1]` in `float_dtype`
-(`norm_out_factor`, `compute.py:3651-3654`). None is in the checkpoint. dtypes **[I]**.
+(`compute.py:3579-3650`); with `norm_out` the tensor `norm_map` reshaped to `[lm, 1, 1]` in `float_dtype`
+(`norm_out_factor`, `compute.py:3652-3655`). None is in the checkpoint. dtypes **[I]**.
 
 ## 5. Forward
 
-`compute.py:3699-3763`, for `lm_first = False` (axis `-1` is the angular one):
+`compute.py:3700-3764`, for `lm_first = False` (axis `-1` is the angular one):
 
 ```
 if left_coefs:
@@ -115,10 +115,10 @@ does not need to reproduce the failure, but must not silently promote a mixed in
 
 ## 7. Options rejected
 
-- `lora_config` not `None`: **Proposal**, rejected (`compute.py:3656-3657`, `3661-3691`).
+- `lora_config` not `None`: **Proposal**, rejected (`compute.py:3657-3658`, `3662-3692`).
 - `is_central_atom_type_dependent` with any `true`: **ported** (a gather by `atomic_mu_i`); no 2L model uses it, so it needs
   an option-pair fixture. `prepare_variables_for_selected_elements` and `upd_init_args_new_elements` raise
-  `NotImplementedError` for it in TF (`compute.py:3765-3771`); element restriction is out of scope (decision D19).
+  `NotImplementedError` for it in TF (`compute.py:3766-3772`); element restriction is out of scope (decision D19).
 - `left_coefs = False`, `normalize = False`, `norm_out = False`: ported.
 - `init_vars`: accepted and ignored.
 - No common `(l, parity)` between the operands ends in a bare numpy `ValueError` in TF (finding 14, pinned at

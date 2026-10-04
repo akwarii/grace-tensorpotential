@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/output.py:29-46` (class at 30), base `TPInstruction` (`instructions/base.py:327`) |
+| Source | `instructions/output.py:30-47` (class at 30), base `TPInstruction` (`instructions/base.py:328`) |
 | Family | norm and output |
 | Used in | both 2L yamls: `atomic_energy` with `initial_value 0.0`, `l 0`; always the first output instruction |
 | Reads | nothing |
@@ -14,13 +14,13 @@ targets) read it, add their term and write the result **back under the same name
 
 ## 1. Constructor arguments
 
-`output.py:31-37`. All stored in the yaml (G3).
+`output.py:32-38`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
-| `name` | required | any unique `str` | For the energy it has to be `atomic_energy`: the model reads `data["atomic_energy"]` (`constants.py:59`, `tpmodel.py:295`). |
+| `name` | required | any unique `str` | For the energy it has to be `atomic_energy`: the model reads `data["atomic_energy"]` (`constants.py:59`, `tpmodel.py:296`). |
 | `initial_value` | `0.0` | a number or `None` | The starting value; `None` becomes `0.0`. Both yamls: `0.0`. |
-| `l` | `0` | integer | Tensor rank of the target; compared by the dependants (`assert self.l == target.l`, `output.py:59-62`). Both yamls: `0`. |
+| `l` | `0` | integer | Tensor rank of the target; compared by the dependants (`assert self.l == target.l`, `output.py:60-63`). Both yamls: `0`. |
 
 ## 2. Derived tables
 
@@ -32,14 +32,14 @@ None.
 
 ## 4. Runtime constants
 
-`value`: `reshape(constant(initial_value, float_dtype), [])`, built in `build` (`output.py:39-43`). Not in the checkpoint
+`value`: `reshape(constant(initial_value, float_dtype), [])`, built in `build` (`output.py:40-44`). Not in the checkpoint
 (it comes from the yaml). dtype **[I]**: `float_dtype`.
 
 ## 5. Forward
 
-`output.py:45-46`: `return self.value`, a **scalar** (shape `[]`), not a per-atom tensor. The first output instruction that
+`output.py:46-47`: `return self.value`, a **scalar** (shape `[]`), not a per-atom tensor. The first output instruction that
 follows broadcasts it: `target + origin` with `origin` of shape `[n_atoms, 1]` gives `[n_atoms, 1]`. The model then reads
-`atomic_energy` as `[n_atoms, 1]` (`tpmodel.py:295`, `reshape(..., [-1, 1])`) and sums it per structure. In the twin
+`atomic_energy` as `[n_atoms, 1]` (`tpmodel.py:296`, `reshape(..., [-1, 1])`) and sums it per structure. In the twin
 `atomic_energy` is therefore `initial_value + sum of the output terms`, per atom.
 
 Output chain of the two 2L models (the order of the yaml is the order of execution, and every output instruction

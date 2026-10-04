@@ -8,8 +8,9 @@ and the code disagree, the code wins and the sheet is wrong.
 
 ## Pinned source
 
-Every citation refers to `torch-backend` at commit `ae456fe` (TensorFlow 2.20.0, `tf_keras`). A citation reads
-`instructions/compute.py:186-193`: a path **relative to `tensorpotential/`**, then the line range. Tests are
+Every citation refers to `torch-backend` at commit `683ebd0` (TensorFlow 2.20.0, `tf_keras`; this branch was first
+written on `ae456fe` and re-pinned after merging `683ebd0`, which added one import line to most of the cited modules). A citation reads
+`instructions/compute.py:187-194`: a path **relative to `tensorpotential/`**, then the line range. Tests are
 cited as `tests/test_compute.py:399` (relative to the repository root). Inside a sheet the directory is dropped
 from the files that occur often, and the bare name stands for: `compute.py`, `base.py`, `output.py`
 (`instructions/`); `radial.py`, `spherical_harmonics.py`, `nn.py`, `lora.py`, `couplings.py` (`functions/`);
@@ -55,45 +56,46 @@ Three conventions:
 These hold for all 17 classes and are not repeated in each sheet.
 
 - **G1. Two dtypes.** The model has a parameter dtype (`param_dtype`, passed to every `build`:
-  `tpmodel.py:830-838`) and a data dtype (`input_signature_float_dtype`, default `tf.float64`:
-  `tpmodel.py:831`). Bond vectors and everything computed from them are float64 in every shipped use; the
+  `tpmodel.py:831-839`) and a data dtype (`input_signature_float_dtype`, default `tf.float64`:
+  `tpmodel.py:832`). Bond vectors and everything computed from them are float64 in every shipped use; the
   parameters are float64 or float32.
-- **G2. Implicit promotion is on.** Importing `tensorpotential` calls
+- **G2. Implicit promotion is on.** The first TensorFlow-side module of `tensorpotential` that is imported runs
   `tf.experimental.numpy.experimental_enable_numpy_behavior(dtype_conversion_mode="all")`
-  (`__init__.py:46-65`), so a float32 tensor times a float64 tensor silently gives float64, and TF32 is
+  (`_configure_tf_options`, `__init__.py:46-67`, applied through the import of `tensorpotential/_tf_options.py`, which
+  every such module makes before `import tensorflow`; the package itself no longer imports TensorFlow), so a float32 tensor times a float64 tensor silently gives float64, and TF32 is
   disabled. Whether a result is float32 or float64 is therefore decided class by class, in section 6 of each
   sheet, and a twin that follows PyTorch's promotion rules by default will agree only where the sheet says so.
 - **G3. Defaults are part of the model.** `capture_init_args` stores the constructor arguments, defaults
-  included, in `model.yaml` (`instructions/base.py:157-224`, `to_dict` at 206-212). A twin reads the arguments
+  included, in `model.yaml` (`instructions/base.py:158-225`, `to_dict` at 206-212). A twin reads the arguments
   from the yaml and must not apply its own defaults to a key that is present; for an absent key the pinned
   default of section 1 applies.
   The two shipped 2L yamls are in the old flat format (one entry per instruction, no `metadata` block, so no
   `param_dtype`); `load_instructions` reads that format, the wrapped one and the oldest list format
-  (`instructions/base.py:273-324`). The twin reads the parameter dtype from the weights it is given, not from the yaml.
+  (`instructions/base.py:274-325`). The twin reads the parameter dtype from the weights it is given, not from the yaml.
 - **G4. Call convention.** `TPInstruction.__call__` runs `frwrd` and stores the result under the instruction's
-  own name in the data dictionary; it fails if the name is already there (`instructions/base.py:374-382`).
+  own name in the data dictionary; it fails if the name is already there (`instructions/base.py:375-383`).
   Instructions run in the order of the yaml. Consumers refer to producers by name (`bonds`, `basis`, `vhat`, ...).
 - **G5. Data keys.** `bond_vector` `[n_bonds, 3]`, `mu_i` and `mu_j` (element index of the central and the
   neighbouring atom of each bond), `ind_i` and `ind_j` (atom index of each bond), `batch_tot_nat`
   (`constants.py:29-33`, `13-14`).
 - **G6. Forces come from autograd.** `tape.watch(bond_vector)`, the atomic energies are differentiated with
-  respect to it, and the negative gradient is the pair force (`tpmodel.py:292-296`). Every instruction between
+  respect to it, and the negative gradient is the pair force (`tpmodel.py:293-297`). Every instruction between
   `bond_vector` and the energy has to be differentiable in the twin, and the constants that shape the gradient
   (the `1e-10` softening of the bond length, the `r == 0` substitutions of the radial bases) are part of the
   specification.
 - **G7. Angular index.** A tensor with an `lm` axis lists `l = 0, 1, ...` in blocks, and `m = -l, ..., l`
   inside a block; the index is `l*l + l + m`, the axis has `(lmax + 1)**2` entries
-  (`instructions/base.py:515-527`).
+  (`instructions/base.py:516-528`).
 - **G8. Variable names carry the weight-decay flag.** `no_weight_decay=True` puts `no_decay` in a weight's name
-  and `False` puts `_` (`functions/nn.py:39-42`, `271-274`). The flag has no effect at inference, but the
+  and `False` puts `_` (`functions/nn.py:40-43`, `272-275`). The flag has no effect at inference, but the
   checkpoint keys differ between the two spellings, and the extractor has to follow the names of the model.
 - **G9. Variable names are not unique keys.** Some variables are created without a name scope or a name:
   the two `InvariantLayerRMSNorm.scale` of large_base are both called `Variable:0`. The extractor keys weights by the
   attribute path of the instruction (`<instruction>/<attribute>`), as rule R6 says, never by the TF variable name.
 - **G10. The energy chain.** `CreateOutputTarget` makes `atomic_energy`; every output instruction after it reads that key
-  and writes the result back under the same key (`instructions/output.py:67-74`). A dump of the data dictionary therefore
+  and writes the result back under the same key (`instructions/output.py:68-75`). A dump of the data dictionary therefore
   holds only the last value; an intermediate value needs a snapshot before and after each output instruction. The model
-  reads `atomic_energy` as `[n_atoms, 1]` (`tpmodel.py:295`).
+  reads `atomic_energy` as `[n_atoms, 1]` (`tpmodel.py:296`).
 
 ## Unread keywords
 

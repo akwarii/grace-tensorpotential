@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:1125-1299` (class at 1126), bases `TPEquivariantInstruction`, `LORAInstructionMixin` (`instructions/base.py:492`, `393`) |
+| Source | `instructions/compute.py:1126-1300` (class at 1126), bases `TPEquivariantInstruction`, `LORAInstructionMixin` (`instructions/base.py:493`, `394`) |
 | Family | embedding and single-particle basis |
 | Used in | both 2L yamls: `A` (radial `R`) and `B0` (radial `R1`), both with `indicator Z`, `indicator_l_depend false`, `sum_neighbors true`, `avg_n_neigh 39.773345702648434`, `angular Y`, no `lmax` (omat) or `lmax null` (large_base) |
-| Reads | the radial and angular entries, the indicator table; `ind_i`, `mu_j`, `atomic_mu_i` (`compute.py:1134-1138`) |
+| Reads | the radial and angular entries, the indicator table; `ind_i`, `mu_j`, `atomic_mu_i` (`compute.py:1135-1139`) |
 | Writes | `<name>` `[n_atoms, n_rad_max, (lmax + 1)**2]` (`[lm, n_atoms, n_rad_max]` with `lm_first`) |
 | Variables | one `DenseLayer` weight when there is an indicator |
 
@@ -15,7 +15,7 @@ and divided by the average neighbour count.
 
 ## 1. Constructor arguments
 
-`compute.py:1140-1214`. All stored in the yaml (G3).
+`compute.py:1141-1215`. All stored in the yaml (G3).
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
@@ -25,19 +25,19 @@ and divided by the average neighbour count.
 | `indicator` | `None` | a `ScalarChemicalEmbedding` or `None` | `None`: no species weight. Per-atom indicators (`is_per_atom`) do not exist (see the sheet of the embedding). |
 | `indicator_l_depend` | `False` | bool | `True`: the species weight depends on `l` as well (`n_out = n_rad_max * (lmax + 1)` instead of `n_rad_max`). Ignored without an indicator. |
 | `sum_neighbors` | `True` | bool | `False` returns the per-bond tensor and applies **no** averaging (section 5). |
-| `avg_n_neigh` | `1.0` | a `float`, or a `dict` element index `->` mean neighbour count | A **`float`** (an `int` raises `TypeError`, TEST6 finding 13, pinned at `tests/test_compute.py:2389`; `np.float64` is accepted because it is a `float`). A dict switches to a per-central-element factor; keys are element indices used to index a `[len(dict), 1]` array, so they must be `0 .. len(dict) - 1`; a value `<= 0` becomes `1.0` (`compute.py:1166-1176`). Both 2L yamls use one float. |
+| `avg_n_neigh` | `1.0` | a `float`, or a `dict` element index `->` mean neighbour count | A **`float`** (an `int` raises `TypeError`, TEST6 finding 13, pinned at `tests/test_compute.py:2389`; `np.float64` is accepted because it is a `float`). A dict switches to a per-central-element factor; keys are element indices used to index a `[len(dict), 1]` array, so they must be `0 .. len(dict) - 1`; a value `<= 0` becomes `1.0` (`compute.py:1167-1177`). Both 2L yamls use one float. |
 | `lora_config` | `None` | dict or `None` | Section 7. |
 | `lmax` | `None` | `None` or integer `<= angular.lmax` | Highest `l` used; `None` means `angular.lmax`. A larger value fails an `assert`. The yaml stores `lmax: null` in large_base and no key in omat; both mean `angular.lmax = 4`. |
 | `lm_first` | `False` | bool | Output layout (section 5). |
 
-Further checks: `radial.lmax` has to equal `lmax` (`assert`, `compute.py:1202-1204`). Neither yaml passes any
+Further checks: `radial.lmax` has to equal `lmax` (`assert`, `compute.py:1203-1205`). Neither yaml passes any
 keyword that the constructor does not read.
 
 ## 2. Derived tables
 
-- `slice_angular = (lmax + 1)**2` when `angular.lmax > lmax`, else `None` (`compute.py:1198-1201`): the number of
+- `slice_angular = (lmax + 1)**2` when `angular.lmax > lmax`, else `None` (`compute.py:1199-1202`): the number of
   leading columns of `Y` that are used.
-- `coupling_meta_data` (`compute.py:1206-1214`): the table of the angular entry, restricted to `l <= lmax` when
+- `coupling_meta_data` (`compute.py:1207-1215`): the table of the angular entry, restricted to `l <= lmax` when
   sliced, with a column `symbol` added by `init_coupling_symbols` (`poly.py:166-173`). Columns `l, m, hist, parity,
   sum_of_ls`; for `Y` with `lmax = 4` it has 25 rows, `hist = ""`, `parity = (-1)**l`. This table is what the
   product instructions (`ProductFunction`, `FunctionReduceN`) read to build their own coupling tables; the twin
@@ -45,7 +45,7 @@ keyword that the constructor does not read.
   `coupling_origin` is copied from the angular entry (`None` for `SphericalHarmonic`).
 - `inv_avg_n_neigh`: `1 / avg_n_neigh` for a float; for a dict an array `[len(dict), 1]` with `1 / v`, or `1` where
   `v <= 0`.
-- `n_out = radial.n_rad_max` (`compute.py:1196`): the channel count downstream instructions read.
+- `n_out = radial.n_rad_max` (`compute.py:1197`): the channel count downstream instructions read.
 
 ## 3. Parameters
 
@@ -57,14 +57,14 @@ Names, shapes and dtypes are **[I]**.
 
 ## 4. Runtime constants
 
-- `inv_avg_n_neigh`, a tensor in `float_dtype` (`compute.py:1221-1224`), **not in the checkpoint**: the twin
+- `inv_avg_n_neigh`, a tensor in `float_dtype` (`compute.py:1222-1225`), **not in the checkpoint**: the twin
   recomputes it from the yaml.
 - `DenseLayer.norm = 1 / sqrt(embedding_size)`, a tensor in the weight dtype made in `build`
-  (`functions/nn.py:295`), also not stored. The stored weight is the unscaled one.
+  (`functions/nn.py:296`), also not stored. The stored weight is the unscaled one.
 
 ## 5. Forward
 
-`compute.py:1227-1287`. Let `R = data[radial]` `[n_bonds, n, lm]`, `Y = data[angular]` `[n_bonds, lm_Y]`, `n = n_rad_max`,
+`compute.py:1228-1288`. Let `R = data[radial]` `[n_bonds, n, lm]`, `Y = data[angular]` `[n_bonds, lm_Y]`, `n = n_rad_max`,
 `lm = (lmax + 1)**2`.
 
 ```
@@ -106,7 +106,7 @@ off, `lm_first`) and compared with TF: maximum absolute difference `8.9e-16` (fl
 **Measured** on the two 2L yamls with float32 parameters and float64 data (energy and all instruction outputs):
 `R`, `A`, `B0` are float32, `Y` is float64. The class follows the radial function: `Y` is cast **down** to the
 dtype of `R`, `z` is cast to it, the weight is in the parameter dtype, and `a` is cast to the weight dtype
-(`compute.py:1233-1242`). The result has the parameter dtype in a real model. TEST6 finding 1: the bond tensors
+(`compute.py:1234-1243`). The result has the parameter dtype in a real model. TEST6 finding 1: the bond tensors
 are cast to the parameter dtype, so float32 parameters with float64 data give float32 output.
 
 The twin therefore rounds `Y` to float32 before the product in a float32 model; computing the product in float64
@@ -116,8 +116,8 @@ from TF, not derived from the float64 one).
 ## 7. Options rejected
 
 - `lora_config` not `None`: **Proposal**, rejected as for the radial MLPs; `enable_lora_adaptation` and
-  `finalize_lora_update` (`compute.py:1289-1299`) are training-side.
-- `indicator_is_per_atom = True` (`compute.py:1246-1247`): never true for a shipped embedding; the twin rejects it.
+  `finalize_lora_update` (`compute.py:1290-1300`) are training-side.
+- `indicator_is_per_atom = True` (`compute.py:1247-1248`): never true for a shipped embedding; the twin rejects it.
 - `avg_n_neigh` of any type other than `float` or `dict`: `TypeError` in TF; the twin raises at load time. An
   `int` in a yaml (YAML `40` instead of `40.0`) is rejected by TF too, so no saved model has one.
 - `local = True`: not applicable (no such mode).

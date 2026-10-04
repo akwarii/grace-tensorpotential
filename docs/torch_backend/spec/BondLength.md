@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:156-193` (class at 157), base `TPInstruction` (`instructions/base.py:327`) |
+| Source | `instructions/compute.py:157-194` (class at 157), base `TPInstruction` (`instructions/base.py:328`) |
 | Family | geometry and radial |
 | Used in | both 2L yamls, name `BondLength`, as `BondLength(instruction_with_bonds=None)` |
-| Reads | `bond_vector` `[n_bonds, 3]` (`compute.py:163`) |
+| Reads | `bond_vector` `[n_bonds, 3]` (`compute.py:164`) |
 | Writes | `BondLength` `[n_bonds, 1]` |
 | Variables | none |
 
@@ -16,7 +16,7 @@ a finite value and a zero gradient at the zero vector.
 
 | Argument | Default | Values | Effect |
 |---|---|---|---|
-| `instruction_with_bonds` | `None` | `None`, a `TPInstruction`, or a `str` | Name of the data entry that holds the vectors: `bond_vector` when `None`, else the name of the instruction or the string (`compute.py:165-178`). Any other type raises `TypeError`. |
+| `instruction_with_bonds` | `None` | `None`, a `TPInstruction`, or a `str` | Name of the data entry that holds the vectors: `bond_vector` when `None`, else the name of the instruction or the string (`compute.py:166-179`). Any other type raises `TypeError`. |
 | `name` | `"BondLength"` | any unique `str` | Key under which the output is stored. Consumers refer to it by this name. |
 
 Both shipped yamls store `instruction_with_bonds: null` and no `name`, so the pinned default name applies.
@@ -27,11 +27,11 @@ None.
 
 ## 3. Parameters
 
-None. `build` only sets `is_built` (`compute.py:180-182`).
+None. `build` only sets `is_built` (`compute.py:181-183`).
 
 ## 4. Runtime constants
 
-`1e-10`, a Python float written into the forward pass (`compute.py:192`). It takes the dtype of the tensor it is
+`1e-10`, a Python float written into the forward pass (`compute.py:193`). It takes the dtype of the tensor it is
 added to. It is not stored in the yaml and not configurable: a twin has to hard-code it.
 
 ## 5. Forward
@@ -40,7 +40,7 @@ added to. It is not stored in the yaml and not configurable: a twin has to hard-
 d[b] = sqrt( sum_k v[b, k]**2 + 1e-10 )          v = data[<instruction_with_bonds or "bond_vector">]
 ```
 
-`compute.py:186-193`, `reduce_sum(..., axis=1, keepdims=True)`. Output `[n_bonds, 1]`.
+`compute.py:187-194`, `reduce_sum(..., axis=1, keepdims=True)`. Output `[n_bonds, 1]`.
 
 Consequences, all pinned by `tests/test_compute.py:251-376`:
 
