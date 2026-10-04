@@ -60,3 +60,8 @@ NEIGHBOUR_VECTOR_F64 = Tolerance(rtol=1e-12, atol=1e-12)
 # coordinate is off by at most 5e-9 A, so a difference of two of them by 1e-8 and a norm of three by at most
 # 1.7e-8 A; compared with a distance fixed by construction (a bond length, a lattice constant).
 STORED_COORDINATE_DISTANCE = Tolerance(rtol=0.0, atol=2e-8)
+
+# A bond vector divided by its softened length ``sqrt(r**2 + 1e-10)`` (``BondLength``): a unit vector is short of
+# unit length by 5e-11 / r**2, so a sum of squares of its components, or of harmonics built from it, deviates from
+# its exact value by at most 2e-11 relative for bonds of 2.5 A or more (observed 1.7e-11).
+SOFTENED_UNIT_VECTOR_F64 = Tolerance(rtol=1e-10, atol=0.0)
