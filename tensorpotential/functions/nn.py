@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Any
 
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 

@@ -100,6 +100,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "import-linter",
     "ruff==0.16.7",
     "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
 ]
@@ -123,3 +124,31 @@ unsupported-operator = "ignore"
 branch = true
 source = ["tensorpotential"]
 # fail_under is set per package in CI (M2.1)
+
+# Import contract (D1, D16, R2): the TensorFlow-free modules never reach tensorflow or tf_keras, directly or through
+# another module of the package. tests/test_import_gates.py runs `lint-imports` and fails when tensorpotential.torch_backend
+# exists but is not in source_modules. To change the allowlist (ignore_imports), say why.
+[tool.importlinter]
+root_package = "tensorpotential"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "TensorFlow-free modules do not import TensorFlow, not even indirectly"
+type = "forbidden"
+source_modules = [
+    "tensorpotential.core",
+    "tensorpotential.constants",
+    "tensorpotential.poly",
+    "tensorpotential.functions.couplings",
+    "tensorpotential.calculator.foundation_models",
+]
+forbidden_modules = ["tensorflow", "tf_keras"]
+# The allowlist of modules that may cross is empty for core, and for torch_backend once it exists (the TF-side
+# extractor lives in tensorpotential/scripts). One import is allowed: grace_fm imports the TF calculator inside
+# the function, when a model is loaded, never at import time; and the package __init__ imports tensorflow only inside
+# _configure_tf_options, which runs when a TensorFlow-side module imports tensorpotential._tf_options (the TensorFlow-free
+# modules above never do).
+ignore_imports = [
+    "tensorpotential.calculator.foundation_models -> tensorpotential.calculator.asecalculator",
+    "tensorpotential -> tensorflow",
+]

@@ -13,6 +13,7 @@ from ase.calculators.calculator import PropertyNotImplementedError
 
 import numpy as np
 import pandas as pd
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 from tensorpotential.utils import get_dtype_by_name
 from tensorpotential.formatting import sizeof_fmt

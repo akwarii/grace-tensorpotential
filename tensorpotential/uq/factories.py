@@ -3,6 +3,7 @@
 from __future__ import annotations
 import os
 import numpy as np
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 from typing import Any
 

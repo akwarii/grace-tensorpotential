@@ -21,6 +21,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import yaml
+from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 from tensorflow.python.trackable.data_structures import ListWrapper
 

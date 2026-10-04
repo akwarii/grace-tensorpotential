@@ -329,3 +329,12 @@ def test_reduced_element_model_reproduces_energy_and_forces_of_the_full_model(tm
     assert np.abs(f_full).max() > 1e-6
     np.testing.assert_allclose(e_reduced, e_full, **FLOAT64_ARITHMETIC._asdict())
     np.testing.assert_allclose(f_reduced, f_full, **FLOAT64_ARITHMETIC._asdict())
+
+
+def test_cutoff_helpers_are_reexported_from_utils_unchanged() -> None:
+    """The code moved to ``tensorpotential.core.cutoffs``; the old import path gives the same objects."""
+    import tensorpotential.utils as legacy
+    from tensorpotential.core import cutoffs
+
+    assert legacy.process_cutoff_dict is cutoffs.process_cutoff_dict
+    assert legacy.CUTOFF_PRESETS is cutoffs.CUTOFF_PRESETS

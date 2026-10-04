@@ -8,6 +8,7 @@ import bisect
 from collections import deque
 from dataclasses import dataclass
 
+from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.data import Dataset
 
 from typing import Any, Dict, Tuple, Optional, List, NamedTuple

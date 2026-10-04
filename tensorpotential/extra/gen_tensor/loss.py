@@ -1,6 +1,7 @@
 from tensorpotential.loss import LossComponent, huber
 from tensorpotential.extra.gen_tensor import constants as tensor_constants
 from tensorpotential.extra.gen_tensor.metrics import TensorMetrics
+from tensorpotential import _tf_options  # noqa: F401
 from tensorflow import reduce_sum, reduce_mean, Tensor
 
 
