@@ -36,7 +36,8 @@ None. `n_in = origin[0].n_out - 1` is the MLP input width; the MLP layer sizes a
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**. Trainable, `float_dtype`.
+Names, shapes and dtypes are **[V]** against the three probe files, both parameter dtypes (checkpoint keys
+`model/instructions/<name>/mlp/layer<i>/w/...` and `.../scale/...`). Trainable, `float_dtype`.
 
 | Attribute | TF name | Shape | Notes |
 |---|---|---|---|
@@ -45,7 +46,8 @@ Names, shapes and dtypes are **[I]**. Trainable, `float_dtype`.
 
 ## 4. Runtime constants
 
-- `DenseLayer.norm = 1 / sqrt(n_in_layer)` per MLP layer (`functions/nn.py:296`), not stored.
+- `DenseLayer.norm = 1 / sqrt(n_in_layer)` per MLP layer (`functions/nn.py:296`), not stored (**[V]**: `mlp/layer<i>/norm`, a scalar tensor
+  in the parameter dtype, no checkpoint key).
 - `epsilon = 1e-16` in `scalar_rms_ln` (a Python float, `functions/nn.py:465`); not configurable.
 - The `1.6759` of the default activation.
 

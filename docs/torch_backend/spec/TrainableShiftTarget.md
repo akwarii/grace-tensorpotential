@@ -28,7 +28,9 @@ None.
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**.
+Name, shape, dtype and trainability are **[V]** against `probe_model_grace_2L_omat_large_base.json`, both parameter dtypes (name
+`tr_atomic_shift:0`, `[89, 1]`, parameter dtype, trainable, checkpoint key `model/instructions/TrainableShiftTarget/at_shifts/...`).
+The initial value (zeros) is read from the code, not from the probe, which uses random weights.
 
 | Attribute | TF name | Shape | dtype | Init |
 |---|---|---|---|---|

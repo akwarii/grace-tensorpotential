@@ -55,12 +55,16 @@ not pass it.
 | `mlp.layer<i>.w`, `i = 0 .. len(hidden_layers)` | `[layers_config[i], layers_config[i+1]]`, e.g. `[8, 64]`, `[64, 64]`, `[64, 160]` | `R_MLP_layer<i>/DenseLayer_R_MLP_layer<i>_no_decay:0` |
 | `gamma` (only if `norm`) | `[1, n_out]`, `N(0, 1)` | unnamed variable |
 
-All names, shapes and dtypes of this section are **[I]**. The names were **Measured** for
-`name = "MLPRadialFunction"` and carry the instruction name twice (name scope, then the explicit variable name).
+The `mlp.layer<i>.w` row is **[V]** against the three probe files (`R_MLP_layer<i>/DenseLayer_R_MLP_layer<i>_no_decay:0`; shapes
+`[2, 64]`, `[64, 64]`, `[64, 6]` for `model_grace` and `[8, 64]`, `[64, 64]`, `[64, 160]` for the 2L models; dtype equal to the
+parameter dtype; trainable; saved under `model/instructions/R/mlp/layer<i>/w/...`). The TF names carry the instruction
+name twice (name scope, then the explicit variable name). `gamma` is **[I]**: no probed yaml sets `norm`.
 
 ## 4. Runtime constants
 
-(The dtypes of this section are **[I]**.)
+`l_tile` and `DenseLayer.norm` are **[V]**: `l_tile` is an int32 vector of length `(lmax + 1)**2` (9 and 25 in the probed
+models), and `mlp/layer<i>/norm` is a scalar tensor in the parameter dtype with no checkpoint key. `epsilon` is **[I]**
+(not created in the probed yamls, which do not set `norm`).
 
 - `DenseLayer.norm = 1 / sqrt(n_in)` per layer, a tensor in the weight dtype made in `build`
   (`functions/nn.py:296`). It is **not stored in the checkpoint**; the twin recomputes it from the layer's

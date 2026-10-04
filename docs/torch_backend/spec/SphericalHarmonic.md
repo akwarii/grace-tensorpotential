@@ -53,7 +53,9 @@ None.
 
 ## 4. Runtime constants
 
-(dtypes **[I]**) `PI = float64(pi)`, `factor4pi = sqrt(4 pi)`, `l_tile` (int32), `alm`, `blm`, all created in `build`
+(**[V]**: names, dtypes and shapes agree with the three probe files for both parameter dtypes; `PI`, `factor4pi`, `alm` and `blm` are
+float64 even when the parameters are float32, `l_tile` is an int32 vector of length `(lmax + 1)**2`, `alm` and `blm` have
+one entry per pair `0 <= m <= l`, that is `(lmax + 1)(lmax + 2)/2`, here 6 and 15 for `lmax` 2 and 4) `PI = float64(pi)`, `factor4pi = sqrt(4 pi)`, `l_tile` (int32), `alm`, `blm`, all created in `build`
 (`spherical_harmonics.py:36-47`). **`build` ignores its `float_dtype` argument**: `float_dtype` is set to `tf.float64`
 whatever the model's parameter dtype (`spherical_harmonics.py:37`; pinned at `tests/test_compute.py:558`).
 

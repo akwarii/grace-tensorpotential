@@ -49,7 +49,8 @@ keyword that the constructor does not read.
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**.
+Names, shapes and dtypes are **[V]** against the three probe files, both parameter dtypes (checkpoint key
+`model/instructions/A/lin_transform/w/...`; the weight is trainable and has the parameter dtype).
 
 | Attribute | TF name (omat, `name = A`) | Shape | Notes |
 |---|---|---|---|
@@ -58,9 +59,10 @@ Names, shapes and dtypes are **[I]**.
 ## 4. Runtime constants
 
 - `inv_avg_n_neigh`, a tensor in `float_dtype` (`compute.py:1222-1225`), **not in the checkpoint**: the twin
-  recomputes it from the yaml.
+  recomputes it from the yaml. **[V]** for the scalar form (shape `[]`, parameter dtype, no checkpoint key, in all probed yamls);
+  the `[len(dict), 1]` form is **[I]**.
 - `DenseLayer.norm = 1 / sqrt(embedding_size)`, a tensor in the weight dtype made in `build`
-  (`functions/nn.py:296`), also not stored. The stored weight is the unscaled one.
+  (`functions/nn.py:296`), also not stored (**[V]**: `lin_transform/norm`, a scalar tensor in the parameter dtype, no checkpoint key). The stored weight is the unscaled one.
 
 ## 5. Forward
 

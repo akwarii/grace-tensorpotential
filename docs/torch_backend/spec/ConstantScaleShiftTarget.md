@@ -38,7 +38,7 @@ for which position and key agree.
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**.
+`embedding_shift` is **[I]**: no probed yaml sets `chemical_embedding`.
 
 | Attribute | TF name | Shape | Present when |
 |---|---|---|---|
@@ -49,7 +49,10 @@ Names, shapes and dtypes are **[I]**.
 ## 4. Runtime constants
 
 Created in `build` (`output.py:705-723`), in `float_dtype`: `scale` (`tf.constant`), `constant_shift` (only if non-zero),
-`atomic_shift_map` as `[n, 1]`, and with an embedding `embedding_norm = rsqrt(embedding_size)`. **The scale is rounded to
+`atomic_shift_map` as `[n, 1]`, and with an embedding `embedding_norm = rsqrt(embedding_size)`. Against the probe files only
+`scale` is **[V]**: a scalar tensor in the parameter dtype, with the nested target's `target/value` (also a scalar in the
+parameter dtype). The probed yamls use `shift = 0`, no map and no embedding, so `constant_shift`, `atomic_shift_map` and
+`embedding_norm` never appear in their attributes and stay **[I]**. **The scale is rounded to
 `float_dtype`**: for float32 parameters `1.892985414710868` becomes `1.892985463142395` (**Measured**), a relative change
 of `2.6e-8` of the energy. The twin has to round the yaml constants to the parameter dtype in the same way (and not use a
 float64 scale on a float32 energy).

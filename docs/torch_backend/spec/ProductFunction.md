@@ -88,8 +88,10 @@ None. `build` only converts `cg` (`compute.py:2141-2145`).
 
 ## 4. Runtime constants
 
-`cg` in `float_dtype` (**[I]**). `left_ind`, `right_ind`, `m_sum_ind`, `nfunc` are int32 constants. None is in the
-checkpoint.
+`cg` in `float_dtype`, `left_ind`, `right_ind`, `m_sum_ind` and `nfunc` int32 constants. None is in the checkpoint. **[V]** against the
+three probe files, both parameter dtypes (`lm_first = False` in every probed yaml): `cg` has shape `[1, 1, n_cg]` and the
+parameter dtype, `left_ind`, `right_ind` and `m_sum_ind` are int32 vectors of length `n_cg` (156 to 3161 in the probed models),
+`nfunc` is a scalar int32. The `lm_first = True` layout (`[n_cg, 1, 1]`) is **[I]**.
 
 ## 5. Forward
 

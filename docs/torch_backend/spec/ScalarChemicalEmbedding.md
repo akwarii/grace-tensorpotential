@@ -35,7 +35,8 @@ the calculators use it to turn atomic numbers into element indices and to find t
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]** (the names below also appear in an ad hoc run of the omat yaml).
+Names, shapes, dtypes and trainability are **[V]** against the three probe files, both parameter dtypes. The checkpoint keys are
+`model/instructions/<name>/w/...`, `.../element_map_symbols/...` and `.../element_map_index/...` (here `<name> = Z`).
 
 | Attribute | TF name | Shape | dtype | Trainable | Notes |
 |---|---|---|---|---|---|

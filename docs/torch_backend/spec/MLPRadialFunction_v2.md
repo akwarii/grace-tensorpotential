@@ -55,14 +55,17 @@ All in `float_dtype`, trainable, created in `build` (`compute.py:925-935`; `func
 | `layers[i].w`, `i = 0 .. len(hidden_layers)` | `[widths[i], widths[i+1]]`, e.g. `[8, 64]`, `[64, 64]`, `[64, 210]` | `MLPRadialFunction_Linear_<i>/Linear_MLPRadialFunction_Linear_<i>_no_decay:0` |
 | `embed_transform.w` (only with `chem_embedding`) | `[embedding_size, n_out]` | `<name>_ChemEmb_Linear`, weight-decay flag `_` (this `Linear` is made with the default `no_weight_decay = False`) |
 
-All names, shapes and dtypes of this section are **[I]**.
+The `layers[i].w` row is **[V]** against the probe file `probe_model_grace_2L_omat_large_base.json`
+(`R_Linear_<i>/Linear_R_Linear_<i>_no_decay:0`, shapes `[10, 64]`, `[64, 64]`, `[64, 210]` for `R` and `[10, 64]`, `[64, 64]`,
+`[64, 160]` for `R1`; dtype equal to the parameter dtype; trainable; saved under `model/instructions/R/layers/<i>/w/...`).
+`embed_transform.w` is **[I]**: the probed yaml does not set `chem_embedding`.
 
 Initial distribution (training only; a loaded model overwrites it): `normal` is `N(0, s)` with `s = 1` if
 `normalize` and `s = 1/sqrt(n_in)` if not; `uniform` is `U(-s, s)`; `zeros` is zero (`functions/nn.py:51-102`).
 
 ## 4. Runtime constants
 
-(dtypes **[I]**) `Linear.norm` (`functions/nn.py:37-38`, `57-61`, `103`): `1 / sqrt(n_in)` if `normalize`, else `1.0`; a tensor in the
+(**[V]** for the dtype and the absence from the checkpoint: a scalar tensor in the parameter dtype, `layers[i]/norm`, no checkpoint key) `Linear.norm` (`functions/nn.py:37-38`, `57-61`, `103`): `1 / sqrt(n_in)` if `normalize`, else `1.0`; a tensor in the
 weight dtype, **not in the checkpoint**. The twin recomputes it from the layer's `n_in` and from `normalize`
 (which it reads from the yaml). The embedding transform is always built with `normalize = True`, so its factor is
 `1 / sqrt(embedding_size)`.

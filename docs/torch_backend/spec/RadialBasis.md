@@ -62,7 +62,10 @@ sigma[n]  = sqrt(sigma2[n])                   (urcut = 1.0)
 
 ## 3. Parameters
 
-All non-trainable; none is a learned weight of a shipped model. Names, shapes and dtypes are **[I]**.
+All non-trainable; none is a learned weight of a shipped model. `rc` is **[V]** against the three probe files (SBessel in
+`model_grace`, Cheb in the two 2L models; both parameter dtypes: `RadialBasis/cutoff:0`, shape `[]`, `float32` for a float32
+model and `float64` for a float64 one, `trainable = False`, saved under `model/instructions/RadialBasis/rc/...`). `grid` and
+`scale` are **[I]**: no probed yaml uses the Gaussian basis.
 
 | Attribute | TF name | Shape | dtype | Notes |
 |---|---|---|---|---|
@@ -75,7 +78,10 @@ The checkpoint therefore holds `rc` for every model: it is data, not a derived v
 
 ## 4. Runtime constants
 
-Created in `build` (`radial.py:49-56`, `220-235`); the dtypes are **[I]**:
+Created in `build` (`radial.py:49-56`, `220-235`). `PI` and `epsilon` are **[V]** for the bases the probed yamls use (`basis_function/PI` and
+`basis_function/epsilon`, scalar tensors of dtype float64 for both parameter dtypes; the value `1e-10` is read from the code). `urc`, `mu`, `sigma`
+and `norm` are **[I]**: no probed yaml uses `RadSinBessel`, or `Cheb` with `normalized = True` (`norm` does not appear in
+the probed attributes of the `normalized: false` Cheb):
 
 | Constant | Value | dtype | Used by |
 |---|---|---|---|

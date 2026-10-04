@@ -101,13 +101,17 @@ that it is unique, `compute.py:1357-1365`) and `n_lm_indicator`.
 
 None in the shipped yamls. With a `chemical_embedding` there is one `Linear` `chem_linear`
 (`<name>_ChemProj`, `n_in = embedding_size`, `n_out = indicator.n_out`, no bias, `normalize = True`, so the factor
-`1 / sqrt(embedding_size)` applies; `functions/nn.py:18-148`), whose names, shapes and dtypes are **[I]**.
+`1 / sqrt(embedding_size)` applies; `functions/nn.py:18-148`), whose names, shapes and dtypes are **[I]**: no probed yaml
+sets `chemical_embedding` for this class.
 
 ## 4. Runtime constants
 
 Created in `build` (`compute.py:1445-1460`), in `float_dtype`: `inv_avg_n_neigh`, `cg`, and with a chemical
 embedding `chem_l0_mask = one_hot(chem_l0_idx, n_lm_indicator)`. `lr_inds` and `m_sum_ind` are int32 constants made in
-`__init__`. None is in the checkpoint; the twin recomputes them. (dtypes **[I]**)
+`__init__`. None is in the checkpoint; the twin recomputes them. **[V]** against the three probe files for the models without a
+chemical embedding, both parameter dtypes: `cg` has shape `[n_cg, 1, 1]` and the parameter dtype (`n_cg` = 37, 157 and 877 for
+`model_grace`, omat and large_base), `inv_avg_n_neigh` is a scalar in the parameter dtype, `lr_inds` `[n_cg, 2]`, `m_sum_ind`
+`[n_cg]` and the scalar `nfunc` are int32, and none has a checkpoint key. `chem_l0_mask` is **[I]**.
 
 ## 5. Forward
 

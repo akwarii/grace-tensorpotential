@@ -60,7 +60,9 @@ omat `A1 5/5/25`, `AA1 27/27/141`, `B1 5/5/25`; large_base `A1 5/5/25`, `AA1 27/
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**. Both are trainable, `float_dtype`, initialised `N(0, 1)` (`normalize`), not zero.
+Names, shapes and dtypes are **[V]** against the three probe files, both parameter dtypes (names `A1/w_left_FC:0`, `A1/w_right_FC:0`;
+checkpoint keys `model/instructions/A1/w_left/...` and `.../w_right/...`; shapes as in the examples below). The variants with a
+leading `n_types` (`is_central_atom_type_dependent`) are **[I]**: no probed yaml sets it. Both are trainable, `float_dtype`, initialised `N(0, 1)` (`normalize`), not zero.
 
 | Attribute | TF name | Shape |
 |---|---|---|
@@ -74,7 +76,10 @@ Examples (**Measured**): omat `A1` `[32, 32, 5]` both, `AA1` `[32, 32, 27]`; lar
 
 `norm_left = 1/sqrt(left.n_out)` (or 1), `norm_right = 1/sqrt(right.n_out)` (or 1), scalars in `float_dtype`
 (`compute.py:3579-3650`); with `norm_out` the tensor `norm_map` reshaped to `[lm, 1, 1]` in `float_dtype`
-(`norm_out_factor`, `compute.py:3652-3655`). None is in the checkpoint. dtypes **[I]**.
+(`norm_out_factor`, `compute.py:3652-3655`). None is in the checkpoint. **[V]** against the probe files: `norm_left` and `norm_right` are
+scalars and `norm_out_factor` is `[lm, 1, 1]`, all in the parameter dtype; `norm_map` itself stays a float64 numpy array, also
+for float32 parameters, and it is `norm_out_factor`, not `norm_map`, that the forward pass multiplies by. `collect_from`,
+`collect_to`, `w_tile_left` and `w_tile_right` are int32 vectors.
 
 ## 5. Forward
 
@@ -90,7 +95,7 @@ right = gather(data[right], collect_from, axis=-1)                      # [n_ato
 wr    = gather(w_right, w_tile_right, axis=-1)                          # [n_out, n_in_r, n_collected]
 right = einsum("knw,anw->wak", wr, right) * norm_right                  # [n_collected, n_atoms, n_out]
 left  = scatter_nd_add(left, collect_to[:, None], right)                # add the right terms to the left rows
-if norm_out:  left = left * norm_map[:, None, None]
+if norm_out:  left = left * norm_out_factor                             # = norm_map[:, None, None]
 out   = transpose(left, [1, 2, 0])                                      # [n_atoms, n_out, lm_left]
 ```
 

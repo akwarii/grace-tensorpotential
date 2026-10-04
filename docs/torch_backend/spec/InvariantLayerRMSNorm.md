@@ -31,7 +31,9 @@ None. `n_out = inpt.n_out`; the channel count of the output equals that of the i
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**. Trainable, `float_dtype`; the variables are created **unnamed** by `tf.Variable(...)`.
+`scale` is **[V]** against `probe_model_grace_2L_omat_large_base.json`, both parameter dtypes (name `Variable:0`, parameter dtype,
+trainable; shapes `[1, 17, 1]` and `[1, 16, 1]`; checkpoint keys `model/instructions/I_0_LN/scale/...` and
+`.../I_nl_LN/scale/...`). `lin_scale` is **[I]**: no probed yaml uses `sep_lin_gate`. Trainable, `float_dtype`; the variables are created **unnamed** by `tf.Variable(...)`.
 
 | Attribute | Shape | Present when | Init |
 |---|---|---|---|
@@ -40,7 +42,7 @@ Names, shapes and dtypes are **[I]**. Trainable, `float_dtype`; the variables ar
 
 **The TF name is just `Variable:0`** for every instance: `build` has no name scope (it is not decorated with
 `tf.Module.with_name_scope`) and the variables carry no name, so the two instances of large_base (`[1, 17, 1]` and
-`[1, 16, 1]`) have the **same** variable name (**Measured**, `model.variables`). A name-based extractor cannot tell them
+`[1, 16, 1]`) have the **same** variable name (**Measured**, `model.variables`; **[V]**, `probe_model_grace_2L_omat_large_base.json`). A name-based extractor cannot tell them
 apart; the extractor has to key by attribute path (`<instruction>/scale`, `<instruction>/lin_scale`) from the object
 tree, never by variable name. Examples: large_base `I_nl_LN.scale` `[1, 16, 1]` (input `rho` has 17 channels),
 `I_0_LN.scale` `[1, 17, 1]`.
@@ -50,7 +52,7 @@ finding 15).
 ## 4. Runtime constants
 
 `epsilon = 1e-10`, a tensor in `float_dtype` (`compute.py:3833`), cast to the data dtype where used. Not in the checkpoint
-and not configurable: hard-code it. (dtype **[I]**)
+and not configurable: hard-code it. (**[V]**: `epsilon` is a scalar tensor in the parameter dtype, no checkpoint key.)
 
 ## 5. Forward
 

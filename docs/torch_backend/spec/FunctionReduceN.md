@@ -71,7 +71,8 @@ large_base: `I1`: `A 16/4`, `AA 87/21`, `AAA 637/133`, `AAAA 378/172`; `B`: `YI 
 
 ## 3. Parameters
 
-Names, shapes and dtypes are **[I]**. Trainable, `float_dtype`, `N(0, scale)` if `normalize` (not zero).
+Names, shapes and dtypes are **[V]** against the three probe files, both parameter dtypes, including the variant with a leading `n_types`
+(`I0`, `I1`, `I2`, `I_out` and `rho` have `[89, ...]`; `I` and `B` do not; checkpoint keys `model/instructions/<name>/reducing_<s>/...`). Trainable, `float_dtype`, `N(0, scale)` if `normalize` (not zero).
 
 | Attribute | TF name | Shape |
 |---|---|---|
@@ -84,7 +85,8 @@ Examples (**Measured**): omat `I0/reducing_A` `[89, 16, 32, 2]`, `I0/reducing_AA
 
 ## 4. Runtime constants
 
-Created in `build` (`compute.py:3154-3229`), `float_dtype`, none in the checkpoint (dtypes **[I]**):
+Created in `build` (`compute.py:3154-3229`), `float_dtype`, none in the checkpoint (**[V]** for `norm_<s>`, scalar tensors in the parameter dtype,
+and for the scalar form of `norm_map`; the `[n_lm_out, 1, 1]` form with `out_norm` is **[I]**, no probed yaml sets `out_norm`):
 
 - `norm_<s> = scale / sqrt(n_in(s))` if `normalize`, else `1.0` (a scalar per source).
 - `norm_map`: with `out_norm`, the table of section 2 reshaped to `[n_lm_out, 1, 1]`; without it the scalar `1`.

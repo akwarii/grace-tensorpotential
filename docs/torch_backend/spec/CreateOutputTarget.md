@@ -33,7 +33,7 @@ None.
 ## 4. Runtime constants
 
 `value`: `reshape(constant(initial_value, float_dtype), [])`, built in `build` (`output.py:40-44`). Not in the checkpoint
-(it comes from the yaml). dtype **[I]**: `float_dtype`.
+(it comes from the yaml). **[V]** against the three probe files: `value` is a scalar tensor (`[]`) in the parameter dtype.
 
 ## 5. Forward
 

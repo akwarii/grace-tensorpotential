@@ -44,8 +44,16 @@ Three conventions:
 
 - **[I]** marks a variable name, shape or dtype that is *inferred*: read from the code, or seen in an ad hoc run of
   the TF class. **[V]** marks one *verified* against a `probe_<model>.json` of SPEC2 (the TensorFlow probe of the
-  variables and tensor attributes of the test yamls). Every such item in these sheets is **[I]** until SPEC2
-  delivers the probe files; the issue that does it flips the tags (SPEC2 states that as its exit criterion).
+  variables and tensor attributes of the test yamls, `baselines/probes/`). The sheets were written before the probe
+  existed and the tags have been flipped since: **[V]** now covers every name, shape, dtype and trainability that
+  `model_grace`, `model_grace_2L_omat` or `model_grace_2L_omat_large_base` exercises, in both parameter dtypes
+  (float32 and float64). **[I]** remains only for what no probed yaml exercises: the Gaussian and `RadSinBessel`
+  bases, `Cheb` with `normalized`, `norm` in the radial MLPs, `MLPRadialFunction_v2` with `chem_embedding`,
+  `chemical_embedding` in `SingleParticleBasisFunctionEquivariantInd` and `ConstantScaleShiftTarget`, a non-zero
+  `shift` or an `atomic_shift_map`, `lm_first = True`, `out_norm`, `is_central_atom_type_dependent` for
+  `FCRight2Left`, a dict `avg_n_neigh`, and `sep_lin_gate`. Each of those items says so where it occurs. The probe
+  confirmed every name, shape and dtype that the sheets stated; it corrected one description (`FCRight2Left.norm_map`
+  stays a float64 numpy array and `norm_out_factor` is the tensor used in the forward pass).
 - **Measured** marks a behaviour obtained by running the TF class on the pinned commit, as opposed to a reading of
   the code. It is not a verification against a probe.
 - **Proposal** marks a decision the reviewer may overrule; the closing list "For the reviewer" of a sheet repeats
