@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 import sys
 from collections.abc import Callable, Mapping
+from typing import Any
 
 TF_PACKAGES = frozenset({"tensorflow", "tf_keras"})
 
@@ -40,7 +41,7 @@ def missing_tf_error(name: str, exc: ImportError) -> ImportError:
 
 def lazy_exports(
     package: str, exports: Mapping[str, str]
-) -> tuple[Callable[[str], object], Callable[[], list[str]]]:
+) -> tuple[Callable[[str], Any], Callable[[], list[str]]]:
     """Build the module-level ``__getattr__`` and ``__dir__`` of ``package``.
 
     Parameters
@@ -59,7 +60,7 @@ def lazy_exports(
         not in ``exports`` raises ``AttributeError`` as usual.
     """
 
-    def __getattr__(name: str) -> object:
+    def __getattr__(name: str) -> Any:
         module_name = exports.get(name)
         if module_name is None:
             msg = f"module {package!r} has no attribute {name!r}"
