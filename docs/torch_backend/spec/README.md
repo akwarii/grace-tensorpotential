@@ -22,7 +22,7 @@ numbers move with it; the sheets are re-pinned by the issue that changes the uni
 |---|---|---|
 | Geometry and radial | [BondLength](BondLength.md), [ScaledBondVector](ScaledBondVector.md), [RadialBasis](RadialBasis.md), [SphericalHarmonic](SphericalHarmonic.md), [MLPRadialFunction](MLPRadialFunction.md), [MLPRadialFunction_v2](MLPRadialFunction_v2.md) | draft; proposals accepted, review pending |
 | Embedding and single-particle basis | [ScalarChemicalEmbedding](ScalarChemicalEmbedding.md), [SingleParticleBasisFunctionScalarInd](SingleParticleBasisFunctionScalarInd.md), [SingleParticleBasisFunctionEquivariantInd](SingleParticleBasisFunctionEquivariantInd.md) | draft, awaiting review |
-| Product and reduce | ProductFunction, FCRight2Left, FunctionReduceN | not written |
+| Product and reduce | [ProductFunction](ProductFunction.md), [FCRight2Left](FCRight2Left.md), [FunctionReduceN](FunctionReduceN.md) | draft, awaiting review |
 | Norm and output | InvariantLayerRMSNorm, CreateOutputTarget, LinMLPOut2ScalarTarget, ConstantScaleShiftTarget, TrainableShiftTarget | not written |
 
 ## Layout of a sheet

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Source | `instructions/compute.py:981-1122` (class at 982), bases `TPInstruction`, `LORAInstructionMixin`, `ElementsReduceInstructionMixin` (`instructions/base.py:327`, `393`, `430`) |
+| Source | `instructions/compute.py:981-1122` (class at 982), bases `TPInstruction`, `LORAInstructionMixin`, `ElementsReduceInstructionMixin` (`instructions/base.py:327`, `393`, `417`) |
 | Family | embedding and single-particle basis |
 | Used in | both 2L yamls, name `Z`, `embedding_size 128`, `is_trainable true`, `init random`; read by both `SingleParticleBasisFunctionScalarInd` instructions (`A`, `B0`) |
 | Reads | nothing |
