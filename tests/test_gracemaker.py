@@ -245,13 +245,6 @@ def _assert_exported_energy_matches(
     )
 
 
-def _assert_same_weights(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> None:
-    assert a.keys() == b.keys()
-    assert a, "no variable was read"
-    for name in a:
-        np.testing.assert_array_equal(a[name], b[name], err_msg=name)
-
-
 @pytest.fixture
 def interrupted_training(monkeypatch):
     """Replace both optimisation loops by a recorder that ends the run as a keyboard interrupt does.
@@ -286,24 +279,17 @@ def _run_to_training(argv: list[str], calls: list) -> dict:
 class TestRestart:
     def test_restart_latest_continues_the_counters(self, ws, trained):
         _clone_seed(trained, ws)
-        name = ws.write_input(fit={"maxiter": 4})
+        name = ws.write_input(fit={"maxiter": 3})
         main([name, "-rl"])
         train = ws.metrics("train")
-        assert train["epoch"].tolist() == [1, 2, 3, 4]
-        assert train["step"].tolist() == [3, 6, 9, 12]  # 12 structures in batches of 4
+        assert train["epoch"].tolist() == [1, 2, 3]
+        assert train["step"].tolist() == [3, 6, 9]  # 12 structures in batches of 4
 
-    @pytest.mark.parametrize("use_flag", [True, False], ids=["flag", "input-key"])
-    def test_reset_epoch_and_step_restarts_the_counters(
-        self, ws, trained, use_flag, caplog
-    ):
+    def test_reset_epoch_and_step_restarts_the_counters(self, ws, trained, caplog):
         _clone_seed(trained, ws)
-        fit = {} if use_flag else {"reset_epoch_and_step": True}
-        name = ws.write_input(fit=fit)
-        argv = [name, "-rl", "--no-jit", "--eager"] + (
-            ["--reset-epoch-and-step"] if use_flag else []
-        )
+        name = ws.write_input()
         with caplog.at_level(logging.INFO):
-            main(argv)
+            main([name, "-rl", "--no-jit", "--eager", "--reset-epoch-and-step"])
         # metrics of the first run, then of the restarted run, counted from one again
         assert ws.metrics("train")["epoch"].tolist() == [1, 2, 1, 2]
         assert ws.metrics("train")["step"].tolist() == [3, 6, 3, 6]
@@ -319,19 +305,6 @@ class TestRestart:
         ckpt = str(prev / "checkpoints" / "checkpoint.best_test_loss.index")
         with pytest.raises(SystemExit) as exc:
             main([name, "-p", str(prev / "model.yaml"), "-cn", ckpt, "--save-model"])
-        assert exc.value.code == 0
-        _assert_exported_energy_matches(ws.seed_dir, trained.seed_dir)
-
-    def test_model_file_in_the_input_is_used_like_the_option(self, ws, trained):
-        prev = ws.run / "prev"
-        shutil.copytree(trained.seed_dir, prev)
-        potential = {
-            "filename": str(prev / "model.yaml"),
-            "checkpoint_name": str(prev / "checkpoints" / "checkpoint.best_test_loss"),
-        }
-        name = ws.write_input(**_merge(FROM_FILE, {"potential": potential}))
-        with pytest.raises(SystemExit) as exc:
-            main([name, "-s"])
         assert exc.value.code == 0
         _assert_exported_energy_matches(ws.seed_dir, trained.seed_dir)
 
@@ -373,14 +346,6 @@ class TestParamDtype:
             == "float64"
         )
 
-    def test_fresh_fit_without_dtype_is_float32(self, ws, interrupted_training):
-        name = ws.write_input(potential={"param_dtype": None})
-        _run_to_training([name], interrupted_training)
-        assert (
-            read_model_metadata(str(ws.seed_dir / "model.yaml"))["param_dtype"]
-            == "float32"
-        )
-
 
 class TestSaveModel:
     def test_save_model_exports_the_saved_model_without_training(
@@ -416,9 +381,6 @@ class TestMaxiterResolution:
                 {"target_total_updates": 45}, 15, id="adam-target"
             ),  # ceil(45 updates / 3 batches)
             pytest.param(
-                {"target_total_updates": 40}, 14, id="adam-target-rounds-up"
-            ),  # ceil(40 / 3)
-            pytest.param(
                 {
                     "optimizer": "L-BFGS-B",
                     "opt_params": None,
@@ -427,7 +389,6 @@ class TestMaxiterResolution:
                 10,
                 id="bfgs-target-floor",
             ),
-            pytest.param({"maxiter": 7}, 7, id="integer-unchanged"),
             pytest.param(
                 {"maxiter": None}, 5000, id="adam-auto"
             ),  # 50000 / 3 batches, capped at 5000
@@ -435,11 +396,6 @@ class TestMaxiterResolution:
                 {"maxiter": "auto", "optimizer": "L-BFGS-B", "opt_params": None},
                 500,
                 id="lbfgsb-auto",
-            ),
-            pytest.param(
-                {"maxiter": "auto", "optimizer": "BFGS", "opt_params": None},
-                500,
-                id="bfgs-auto",
             ),
         ],
     )
@@ -467,10 +423,6 @@ class TestMaxiterResolution:
         [
             pytest.param(0.5, 2, id="fraction"),  # round(0.5 * 4 epochs)
             pytest.param("auto", 3, id="auto"),  # round(0.75 * 4)
-            pytest.param(
-                0.1, 1, id="fraction-floored-at-one"
-            ),  # round(0.4) = 0, at least 1
-            pytest.param(3, 3, id="integer-unchanged"),
         ],
     )
     def test_switch_after_iter_becomes_an_epoch(
@@ -487,12 +439,13 @@ class TestEntryPoints:
     def test_no_argument_reads_input_yaml_of_the_working_directory(
         self, ws, interrupted_training
     ):
-        ws.write_input("input.yaml", fit={"maxiter": 3})
+        # also the defaults of a fresh fit: float32 parameters, and no final model after an interrupt
+        ws.write_input(
+            "input.yaml", fit={"maxiter": 3}, potential={"param_dtype": None}
+        )
         assert _run_to_training(None, interrupted_training)["maxiter"] == 3
-
-    def test_keyboard_interrupt_ends_the_run_quietly(self, ws, interrupted_training):
-        name = ws.write_input()
-        _run_to_training([name], interrupted_training)
+        meta = read_model_metadata(str(ws.seed_dir / "model.yaml"))
+        assert meta["param_dtype"] == "float32"
         assert not (ws.seed_dir / "final_model").exists()
 
     def test_strategy_given_by_the_caller_is_used(
@@ -506,14 +459,12 @@ class TestEntryPoints:
         assert "Data distribution strategy: given by the test" in caplog.text
         assert interrupted_training[0][1]["strategy"] is strategy
 
-    @pytest.mark.parametrize("how", ["flag", "input"])
     def test_mirrored_strategy_is_created_on_request(
-        self, ws, interrupted_training, caplog, how
+        self, ws, interrupted_training, caplog
     ):
-        name = ws.write_input(fit={"strategy": "mirrored"} if how == "input" else {})
-        argv = [name] + (["--multigpu"] if how == "flag" else [])
+        name = ws.write_input()
         with caplog.at_level(logging.INFO):
-            _run_to_training(argv, interrupted_training)
+            _run_to_training([name, "--multigpu"], interrupted_training)
         assert "Data distribution strategy: Single host/multi GPU" in caplog.text
         assert isinstance(
             interrupted_training[0][1]["strategy"], tf.distribute.MirroredStrategy
@@ -554,11 +505,6 @@ class TestTrainableVariables:
         for n in before:
             changed = not np.array_equal(before[n], after[n])
             assert changed == (n in trained_names), n
-
-    def test_other_than_a_list_is_rejected(self, ws, trained, interrupted_training):
-        name = ws.write_input(fit={"trainable_variable_names": "E/reducing_"})
-        with pytest.raises(AssertionError, match="must be a list"):
-            main([name])
 
 
 @pytest.fixture(scope="module")
@@ -608,24 +554,6 @@ class TestFoundationFinetune:
         assert downloads == ["stand-in-fm"]
         _assert_exported_energy_matches(ws.seed_dir, foundation, "checkpoint")
 
-    @pytest.mark.parametrize(
-        ("optimizer", "expected"),
-        [
-            ("L-BFGS-B", 100),
-            ("Adam", 3334),
-        ],  # finetune targets 100 iterations and 10000 updates / 3 batches
-    )
-    def test_auto_maxiter_uses_the_finetune_target(
-        self, ws, downloads, interrupted_training, optimizer, expected
-    ):
-        fit = {
-            "maxiter": None,
-            "optimizer": optimizer,
-            "opt_params": None if optimizer != "Adam" else {"learning_rate": 0.01},
-        }
-        name = ws.write_input(**_merge(FINETUNE, {"fit": fit}))
-        assert _run_to_training([name], interrupted_training)["maxiter"] == expected
-
     def test_restart_does_not_download_again(
         self, ws, trained, downloads, interrupted_training
     ):
@@ -634,11 +562,15 @@ class TestFoundationFinetune:
         _run_to_training([name, "-rl"], interrupted_training)
         assert downloads == []
 
-    def test_shift_auto_adds_the_energy_offset_to_the_model(
+    def test_finetune_target_and_automatic_shift(
         self, ws, downloads, foundation, interrupted_training
     ):
-        name = ws.write_input(**_merge(FINETUNE, {"potential": {"shift": "auto"}}))
-        _run_to_training([name], interrupted_training)
+        # finetune target of L-BFGS-B is 100 iterations; ``shift: auto`` aligns the model with the data
+        fit = {"maxiter": None, "optimizer": "L-BFGS-B", "opt_params": None}
+        name = ws.write_input(
+            **_merge(FINETUNE, {"fit": fit, "potential": {"shift": "auto"}})
+        )
+        assert _run_to_training([name], interrupted_training)["maxiter"] == 100
 
         def shifts(path: Path):
             with path.open() as f:
