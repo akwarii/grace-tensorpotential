@@ -140,9 +140,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    args.python = Path(
-        os.path.abspath(args.python)
-    )  # not resolve(): a venv python is a symlink to the base one
+    # not resolve(): a venv python is a symlink to the base one
+    args.python = Path(os.path.abspath(args.python))
     have = installed_packages(args.python)
     print(
         f"environment has: {sorted(have) or 'none of tensorflow, tf_keras, torch, flask'}"

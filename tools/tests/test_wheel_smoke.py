@@ -6,6 +6,7 @@ functions that ask a real environment (``installed_packages``, ``console_scripts
 the interpreter of the test environment, which has ``tensorpotential`` installed.
 """
 
+import os
 import stat
 import sys
 import textwrap
@@ -188,12 +189,17 @@ def test_main_reports_a_core_that_loads_tensorflow(
 def test_main_accepts_a_relative_path_to_the_python(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
     python = scripted_env(
-        tmp_path,
+        env_dir,
         packages="tensorflow,tf_keras,flask",
         core="echo 'LOADED '",
         names=SCRIPT_NAMES,
     )
-    monkeypatch.chdir(tmp_path)
-    assert ws.main([str(python.relative_to(tmp_path)), "--expect", "tf"]) == 0
+    (tmp_path / "elsewhere").mkdir()
+    monkeypatch.chdir(
+        tmp_path / "elsewhere"
+    )  # as in CI: the venv is a sibling of the working directory
+    assert ws.main([os.path.relpath(python), "--expect", "tf"]) == 0
     assert "FAIL" not in capsys.readouterr().out
