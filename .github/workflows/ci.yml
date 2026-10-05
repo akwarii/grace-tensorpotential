@@ -45,6 +45,10 @@ jobs:
       - name: ty (new packages)
         run: uv run --frozen --no-sync ty check tensorpotential/core tensorpotential/torch_backend tests_torch
       - name: Lint ratchet (legacy counts may not rise)
+        # the baseline was recorded with PYTHONPATH on the repository root (the worktree rule of CLAUDE.md); ty resolves
+        # `import oracle_snapshot` of tools/tests differently without it and counts one more finding
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: uv run --frozen --no-sync python tools/lint_ratchet.py check
       - name: Import contract (TensorFlow-free modules)
         run: uv run --frozen --no-sync lint-imports

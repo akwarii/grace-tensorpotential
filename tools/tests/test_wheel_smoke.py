@@ -183,3 +183,17 @@ def test_main_reports_a_core_that_loads_tensorflow(
     )
     assert ws.main([str(python)]) == 1
     assert "importing the core loaded tensorflow" in capsys.readouterr().err
+
+
+def test_main_accepts_a_relative_path_to_the_python(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    python = scripted_env(
+        tmp_path,
+        packages="tensorflow,tf_keras,flask",
+        core="echo 'LOADED '",
+        names=SCRIPT_NAMES,
+    )
+    monkeypatch.chdir(tmp_path)
+    assert ws.main([str(python.relative_to(tmp_path)), "--expect", "tf"]) == 0
+    assert "FAIL" not in capsys.readouterr().out
