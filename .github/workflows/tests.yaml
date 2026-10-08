@@ -171,4 +171,5 @@ jobs:
         with:
           name: test-durations
           path: tests/.test_durations
+          include-hidden-files: true  # upload-artifact v4 skips dot files by default
           if-no-files-found: warn
