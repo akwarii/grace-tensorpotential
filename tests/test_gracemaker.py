@@ -754,15 +754,22 @@ class TestLoraFit:
         for ckpt in ("checkpoint.best_test_loss", "checkpoint"):
             assert _lora_names(_weights(lora_run.seed_dir, f"checkpoints/{ckpt}"))
 
-    def test_the_final_model_holds_no_update_tensors(self, lora_run):
-        ckpt = str(lora_run.seed_dir / "final_model" / "variables" / "variables")
-        names = {name for name, _ in tf.train.list_variables(ckpt)}
-        assert names
-        assert not any("LORA" in n for n in names), names
+    def test_the_final_model_holds_no_update_tensors(self, lora_run, trained):
+        # checkpoint keys of an export are object paths, not variable names: compare the counts
+        # with the export of the base run, which has no update tensors
+        assert _exported_variable_count(
+            lora_run.seed_dir / "final_model"
+        ) == _exported_variable_count(trained.seed_dir / "final_model")
 
     def test_model_yaml_keeps_the_parameter_dtype(self, lora_run):
         meta = read_model_metadata(str(lora_run.seed_dir / "model.yaml"))
         assert meta["param_dtype"] == "float64"
+
+
+def _exported_variable_count(model_dir: Path) -> int:
+    """Number of variables stored in an exported ``saved_model`` directory."""
+    ckpt = str(model_dir / "variables" / "variables")
+    return len([n for n, _ in tf.train.list_variables(ckpt) if "VARIABLE_VALUE" in n])
 
 
 def _assert_exported_energy_matches_final(seed_dir: Path, expected: float) -> None:
@@ -835,7 +842,7 @@ class TestLoraReduction:
 
 class TestLoraSaveModel:
     def test_save_model_exports_the_reduced_model_and_leaves_the_seed_directory(
-        self, ws, lora_run
+        self, ws, lora_run, trained
     ):
         _clone_seed(lora_run, ws)
         name = _lora_input(ws, from_file=False)
@@ -843,8 +850,9 @@ class TestLoraSaveModel:
             main([name, "-r", "--save-model"])
         assert exc.value.code == 0
         _assert_exported_energy_matches(ws.seed_dir, lora_run.seed_dir)
-        ckpt = str(ws.seed_dir / "saved_model" / "variables" / "variables")
-        assert not any("LORA" in n for n, _ in tf.train.list_variables(ckpt))
+        assert _exported_variable_count(
+            ws.seed_dir / "saved_model"
+        ) == _exported_variable_count(trained.seed_dir / "final_model")
         assert _model_is_lora(
             ws.seed_dir
         )  # the seed directory keeps the update tensors
