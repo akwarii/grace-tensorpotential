@@ -1,0 +1,54 @@
+# Static checks on every pull request and on every push to the integration branch (CI1, D17a):
+# ruff (strict set of the new packages), ty, the lint ratchet, the import contract (TensorFlow-free modules),
+# registry completeness and the tests of the packaging tools.
+# Every action is pinned to a commit; the token has read access only.
+
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [torch-backend]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.5"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install the development environment (the dev group includes the tf extra)
+        run: uv sync --frozen --group dev
+      - name: ruff, strict set (new packages)
+        run: uv run --frozen --no-sync ruff check tensorpotential/core tensorpotential/torch_backend tests_torch
+      - name: ty (new packages)
+        run: uv run --frozen --no-sync ty check tensorpotential/core tensorpotential/torch_backend tests_torch
+      - name: Lint ratchet (legacy counts may not rise)
+        # the baseline was recorded with PYTHONPATH on the repository root (the worktree rule of CLAUDE.md); ty resolves
+        # `import oracle_snapshot` of tools/tests differently without it and counts one more finding
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: uv run --frozen --no-sync python tools/lint_ratchet.py check
+      - name: Import contract (TensorFlow-free modules)
+        run: uv run --frozen --no-sync lint-imports
+      - name: Registry completeness (instruction classes and pinned defaults)
+        run: uv run --frozen --no-sync python tools/instruction_ast.py check
+      - name: Tests of the packaging tools (the environment has the tf extra and tensorpotential installed)
+        run: uv run --frozen --no-sync pytest tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py -q -p no:cacheprovider

@@ -13,14 +13,24 @@
   milestone: [FIX2]
   upstream: never
 
+- path: docs/gracemaker/install.md
+  reason: 'documents the extras (tf, torch, torch-sim, all): TensorFlow is no longer installed by pip install tensorpotential'
+  milestone: [CI1]
+  upstream: never
+
 - path: docs/gracemaker/utilities.md
   reason: 'documents the --stress-units option of grace_preprocess; the aux_model help and usage describe what the command does (no --aux argument)'
   milestone: [DATA1, CLEAN5]
   upstream: pending
 
 - path: pyproject.toml
-  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor'
-  milestone: [TOOL1, QUAL1, CORE1]
+  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py'
+  milestone: [TOOL1, QUAL1, CORE1, CI1]
+  upstream: never
+
+- path: setup.py
+  reason: 'removed: package discovery and package data moved to [tool.setuptools] in pyproject.toml (the wheel file list is unchanged, tests/test_packaging.py)'
+  milestone: [CI1]
   upstream: never
 
 - path: pytest.ini

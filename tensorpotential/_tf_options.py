@@ -7,5 +7,8 @@ that is imported, instead of by the package ``__init__``.
 """
 
 import tensorpotential
+from tensorpotential.core.backends import require_backend
 
+# the one place where every console script and TensorFlow-side module learns that the 'tf' extra is missing
+require_backend("tf")
 tensorpotential._configure_tf_options(verbose=True)

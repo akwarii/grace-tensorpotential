@@ -1,0 +1,88 @@
+# The slow checks of CI1 (D17a), scheduled because they are heavy on hosted runners:
+#   both-stacks     one environment with the all extra: TensorFlow and torch import side by side
+#   torch-sim-main  the torch extra with torch-sim from its main branch, to see an upstream break early
+# The test suites (core, torch, TensorFlow) are in tests.yaml, which also runs every night.
+#
+# GitHub starts scheduled workflows from the default branch only, so the schedule is live once this file is there;
+# workflow_dispatch runs it by hand, and a pull request that changes this file runs it as a check of the change.
+# Every action is pinned to a commit; the token has read access only.
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "40 2 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths: [".github/workflows/nightly.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.5"
+
+jobs:
+  both-stacks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+      - name: Build the wheel and install it with every extra into one venv
+        run: |
+          uv build --wheel --out-dir dist
+          uv venv ../both-venv
+          uv pip install --python ../both-venv/bin/python "$(ls "$PWD"/dist/*.whl)[all]"
+      - name: torch, torch-sim and TensorFlow import in one process (torch first), the core loads none of them
+        run: |
+          ../both-venv/bin/python -c "
+          import sys
+          import tensorpotential.core, tensorpotential.functions.couplings
+          assert not {'tensorflow', 'torch'} & set(sys.modules), 'the core loaded a backend'
+          import torch, torch_sim, vesin, tensorflow
+          print('tensorflow', tensorflow.__version__, 'torch', torch.__version__)
+          "
+      - name: Known issue, reported as a warning (finding of CI1) - TensorFlow imported before triton crashes
+        # triton 3.8.0 (a torch dependency) segfaults in triton._C.libtriton when TensorFlow 2.20 was imported first;
+        # in the other order both load. The step turns red as a warning only; delete it when the crash is gone.
+        run: |
+          if ../both-venv/bin/python -c "import tensorflow, triton" > /dev/null 2>&1; then
+            echo "tensorflow before triton works now: remove this step and the notes of the CI1 finding"
+          else
+            echo "::warning::importing tensorflow before triton still crashes (exit status $?)"
+          fi
+      - name: Smoke test with both backends installed
+        run: python3 tools/wheel_smoke.py ../both-venv/bin/python --expect tf
+
+  torch-sim-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+      - name: Install the torch extra and torch-sim from its main branch
+        run: |
+          uv venv .venv-sim
+          uv pip install --python .venv-sim/bin/python ".[torch]" pytest vesin \
+            "torch-sim-atomistic @ git+https://github.com/TorchSim/torch-sim.git@main"
+      - name: Import torch-sim and run the torch-sim tests of this repository, if there are any
+        run: |
+          .venv-sim/bin/python -c "import torch_sim, torch; print('torch-sim', getattr(torch_sim, '__version__', 'main'), 'torch', torch.__version__)"
+          if compgen -G "tests_torch/test_torchsim*.py" > /dev/null; then
+            .venv-sim/bin/python -m pytest tests_torch -q -p no:cacheprovider -k torchsim
+          fi
