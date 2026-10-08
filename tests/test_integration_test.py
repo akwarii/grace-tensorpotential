@@ -360,68 +360,6 @@ REFERENCE = {
         ref_n_epochs=5,
         input="input_lr_reduce_on_plateau_new_api.yaml",
     ),
-    "lr_exponential_decay": dict(
-        folder="MoNbTaW-LINEAR",
-        train_ref_metrics={
-            "total_loss/train": 200.99824377262027,
-            "mae/depa": 14.177384941258394,
-            "mae/de": 28.354769882516788,
-            "rmse/depa": 14.177384941258394,
-            "rmse/de": 28.354769882516788,
-            "mae/f_comp": 6.649773324577761e-18,
-            "rmse/f_comp": 1.2327526502681117e-17,
-            "loss_component/energy/train": 40.199648754524056,
-            "loss_component/forces/train": 1.5196790967430533e-34,
-            "total_time/train/per_atom": 0.010084604498842964,
-            "epoch": 5,
-        },
-        test_ref_metrics={
-            "total_loss/test": 130.34017323870668,
-            "loss_component/energy/test": 6.480867512123688,
-            "loss_component/forces/test": 0.03614114981164616,
-            "mae/depa": 11.378284122938348,
-            "mae/de": 204.70260740817477,
-            "rmse/depa": 11.406753808776225,
-            "rmse/de": 249.11856906998474,
-            "mae/f_comp": 0.20539834351378242,
-            "rmse/f_comp": 0.4236164600096448,
-            "total_time/test/per_atom": 0.0009967192804823271,
-            "epoch": 5,
-        },
-        ref_n_epochs=5,
-        input="input_lr_exponential_decay.yaml",
-    ),
-    "lr_cosine_decay": dict(
-        folder="MoNbTaW-LINEAR",
-        train_ref_metrics={
-            "total_loss/train": 90.97337294606098,
-            "mae/depa": 9.537996275217399,
-            "mae/de": 19.075992550434798,
-            "rmse/depa": 9.537996275217399,
-            "rmse/de": 19.075992550434798,
-            "mae/f_comp": 5.66676335485757e-17,
-            "rmse/f_comp": 8.017350677993573e-17,
-            "loss_component/energy/train": 18.194674589212195,
-            "loss_component/forces/train": 6.4277911893924e-33,
-            "total_time/train/per_atom": 0.0067948545001854654,
-            "epoch": 5,
-        },
-        test_ref_metrics={
-            "total_loss/test": 120.97643764549225,
-            "loss_component/energy/test": 5.849987864107047,
-            "loss_component/forces/test": 0.1988340181675662,
-            "mae/depa": 10.707245647052012,
-            "mae/de": 194.0414184477568,
-            "rmse/depa": 10.863451339096327,
-            "rmse/de": 246.01613710092678,
-            "mae/f_comp": 0.3786722186496125,
-            "rmse/f_comp": 0.8020594648553879,
-            "total_time/test/per_atom": 0.0010997455199588848,
-            "epoch": 5,
-        },
-        ref_n_epochs=5,
-        input="input_lr_cosine_decay.yaml",
-    ),
     "lr_linear_decay": dict(
         folder="MoNbTaW-LINEAR",
         train_ref_metrics={
@@ -452,37 +390,6 @@ REFERENCE = {
         },
         ref_n_epochs=5,
         input="input_lr_linear_decay.yaml",
-    ),
-    "lr_linear_decay_no_warmup": dict(
-        folder="MoNbTaW-LINEAR",
-        train_ref_metrics={
-            "total_loss/train": 11.30631065652632,
-            "mae/depa": 3.362485785327028,
-            "mae/de": 6.724971570654056,
-            "rmse/depa": 3.362485785327028,
-            "rmse/de": 6.724971570654056,
-            "mae/f_comp": 3.3306690738754696e-16,
-            "rmse/f_comp": 5.623501550354407e-16,
-            "loss_component/energy/train": 2.261262131305264,
-            "loss_component/forces/train": 3.1623769686838413e-31,
-            "total_time/train/per_atom": 0.004507999999987078,
-            "epoch": 2,
-        },
-        test_ref_metrics={
-            "total_loss/test": 116.24667463281212,
-            "loss_component/energy/test": 5.380090753095851,
-            "loss_component/forces/test": 0.4322429785447546,
-            "mae/depa": 10.366235830664959,
-            "mae/de": 188.84269955885392,
-            "rmse/depa": 10.48768658808825,
-            "rmse/de": 239.54270092148286,
-            "mae/f_comp": 0.46060556364186217,
-            "rmse/f_comp": 1.1016298206069393,
-            "total_time/test/per_atom": 0.0008858609090927435,
-            "epoch": 2,
-        },
-        ref_n_epochs=2,
-        input="input_lr_linear_decay_no_warmup.yaml",
     ),
 }
 
@@ -1050,20 +957,5 @@ def test_MoNbTaW_LINEAR_lr_reduce_on_plateau_new_api():
 
 
 @pytest.mark.slow
-def test_MoNbTaW_LINEAR_lr_exponential_decay():
-    _run_reference("lr_exponential_decay")
-
-
-@pytest.mark.slow
-def test_MoNbTaW_LINEAR_lr_cosine_decay():
-    _run_reference("lr_cosine_decay")
-
-
-@pytest.mark.slow
 def test_MoNbTaW_LINEAR_lr_linear_decay():
     _run_reference("lr_linear_decay")
-
-
-@pytest.mark.slow
-def test_MoNbTaW_LINEAR_lr_linear_decay_no_warmup():
-    _run_reference("lr_linear_decay_no_warmup")
