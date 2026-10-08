@@ -34,6 +34,11 @@ uv run --frozen --no-sync python tools/make_golden.py write --tier tiny         
 uv run --frozen --no-sync python tools/make_golden.py verify tests_torch/golden  # reload every fixture in TF; also: compare DIR_A DIR_B, cells
 uv run --frozen --no-sync pytest tools/tests/test_make_golden.py -q              # the generator (TF, single thread, about 2 minutes); tests_torch/test_golden_fixtures.py checks the committed files without TF
 
+# CI shards the suite into 3 groups with pytest-split, balanced by tests/.test_durations (CI2). Regenerate that file after a large change
+# (an idle machine; times under -n are inflated but proportional, which is all the split needs), commit it, and run a group like CI does:
+uv run --frozen --no-sync pytest tests -n 2 --store-durations --durations-path=tests/.test_durations <same --ignore options>
+uv run --frozen --no-sync pytest tests --splits 3 --group 1 --splitting-algorithm=least_duration --durations-path=tests/.test_durations -n 2 --timeout=900 <same --ignore options>
+
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
@@ -139,6 +144,10 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
   and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` still needs `flask`, which no extra installs). Package discovery is
   `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package. TensorFlow and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before
   `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue). The CI set is `.github/workflows/lint.yaml` (lint), `tests.yaml` (test-core without TF, test-torch, test-tf; also nightly), `wheel.yaml` (wheel, wheel-smoke, extras-resolve) and `nightly.yml` (both stacks, torch-sim main).
+- **The hosted runner has 16 GB and a TensorFlow xdist worker's resident memory only grows (CI2).** One unchanged `test-tf` job (4 workers, whole suite) climbed from 8 GB to 15 GB used and died with "The runner has received a shutdown signal"
+  (no failing test, no kernel line when it survives) at 94 to 97% of the suite; a single runner with 2 workers on the whole suite still peaked at 14.9 GB, so the fix is **fewer tests per runner**: `test-tf` is three `pytest-split` groups with 2 workers each (peaks 10.1, 7.2 and 7.9 GB).
+  Every pytest in CI goes through `.github/actions/run-pytest` (per-test `--timeout=900` from `pytest-timeout`, workers, markers, shard); every job has `timeout-minutes`; `cancel-in-progress` is for pull requests only. A new heavy test file needs no edit; a new CI job that runs pytest uses the action.
+  Disk was never the problem (80 GB free after the suite), so there is no free-disk step.
 - **The package no longer imports TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve their public names on first access (`core/lazy.py`); the TF options
   (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`. **A new module with a module-level `import tensorflow` starts with
   `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt, out of scope). A module that must stay TF-free goes in the
