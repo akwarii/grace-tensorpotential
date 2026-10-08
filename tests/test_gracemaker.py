@@ -8,6 +8,7 @@ download of a foundation checkpoint, and the end of a run by a keyboard interrup
 
 from __future__ import annotations
 
+import argparse
 import copy
 import hashlib
 import logging
@@ -33,6 +34,7 @@ from tensorpotential.cli.gracemaker import main  # noqa: E402
 from tensorpotential.instructions.base import load_instructions  # noqa: E402
 from tensorpotential.metadata_utils import read_model_metadata  # noqa: E402
 from tensorpotential.tensorpot import TensorPotential  # noqa: E402
+from tensorpotential.tpmodel import TPModel  # noqa: E402
 from tensorpotential.utils import get_dtype_by_name  # noqa: E402
 from tests.tolerances import COVARIANCE_F64  # noqa: E402
 from tensorpotential.utils import load_metrics  # noqa: E402
@@ -647,3 +649,299 @@ class TestFsExport:
         with (trained_fs.seed_dir / "FS_model.yaml").open() as f:
             from_fit = yaml.safe_load(f)
         assert from_save == from_fit
+
+
+LORA = {"all": {"rank": 2, "alpha": 1}}
+"""``potential::lora``: rank-2 updates on every instruction that supports LoRA."""
+
+
+def _lora_input(
+    ws: Workspace, from_file: bool = True, fit: dict | None = None, **potential
+) -> str:
+    """An input with ``potential::lora``; ``from_file`` leaves no preset (the model comes from ``-p``)."""
+    overrides = {"potential": {"lora": LORA, **potential}, "fit": fit or {}}
+    return ws.write_input(**_merge(FROM_FILE if from_file else {}, overrides))
+
+
+def _run_lora(ws: Workspace, prev: Path, *extra: str) -> None:
+    """A LoRA fit started from the model.yaml and best checkpoint of ``prev`` (counters reset)."""
+    ckpt = str(prev / "checkpoints" / "checkpoint.best_test_loss")
+    main([
+        _lora_input(ws),
+        "-p",
+        str(prev / "model.yaml"),
+        "-cn",
+        ckpt,
+        "--reset-epoch-and-step",
+        *extra,
+    ])
+
+
+@pytest.fixture(scope="module")
+def lora_run(tmp_path_factory, data_dir, trained):
+    """A finished LoRA run on top of ``trained`` (``prev`` holds a copy of the base run); read-only."""
+    root = tmp_path_factory.mktemp("gracemaker_lora")
+    workspace = Workspace(root, data_dir)
+    prev = workspace.run / "prev"
+    shutil.copytree(trained.seed_dir, prev)
+    with pytest.MonkeyPatch.context() as mp, _own_log_handlers():
+        mp.chdir(workspace.run)
+        _run_lora(workspace, prev)
+    before = _fingerprint(workspace.run)
+    yield workspace
+    assert _fingerprint(workspace.run) == before, "a test modified the shared LoRA run"
+
+
+@pytest.fixture
+def training_probe(monkeypatch):
+    """Replace the Adam loop by a recorder of the ``TensorPotential`` it is given, then end the run.
+
+    Like ``interrupted_training`` but keeps ``tp``, so the model that ``main`` hands to the optimiser
+    (restored, activated and reduced as the input asks) can be inspected. Returns the recorded list.
+    """
+    seen: list[TensorPotential] = []
+
+    def _stop(tp, **kwargs):
+        seen.append(tp)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(gracemaker, "train_adam", _stop)
+    return seen
+
+
+def _run_to_probe(argv: list[str], seen: list) -> TensorPotential:
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 0
+    assert len(seen) == 1, "the optimisation loop was not reached exactly once"
+    return seen[0]
+
+
+def _lora_names(weights: dict[str, np.ndarray]) -> list[str]:
+    return sorted(n for n in weights if "/LORA/" in n)
+
+
+def _model_is_lora(seed_dir: Path) -> bool:
+    return TPModel(load_instructions(str(seed_dir / "model.yaml"))).is_lora_enabled()
+
+
+class TestLoraFit:
+    def test_only_the_update_tensors_are_trained(self, lora_run, trained):
+        base, new = _weights(trained.seed_dir), _weights(lora_run.seed_dir)
+        update = _lora_names(new)
+        assert update, "no LoRA tensor was created"
+        assert set(new) - set(base) == set(update)
+        # weights of instructions that LoRA adapts are frozen; those of instructions without LoRA
+        # support (here the reducing tensors) stay trainable and move
+        frozen = {n for n in base if n.startswith(("Z/", "A_ChemIndTransf/"))}
+        assert len(frozen) == 2
+        for n in frozen:
+            np.testing.assert_array_equal(new[n], base[n], err_msg=n)
+        assert not np.array_equal(new["E/reducing_A:0"], base["E/reducing_A:0"])
+        # the update starts at zero (B = 0), so a non-zero B means that it was trained
+        assert any(np.abs(new[n]).max() > 0 for n in update if n.endswith("/B:0"))
+
+    def test_the_final_model_equals_the_activated_model_of_the_seed_directory(
+        self, lora_run, trained
+    ):
+        activated = _checkpoint_energy(lora_run.seed_dir)
+        assert activated != _checkpoint_energy(trained.seed_dir)  # the update acts
+        # the final model is saved reduced: it predicts what the model with the update tensors does
+        _assert_exported_energy_matches_final(lora_run.seed_dir, activated)
+
+    def test_model_yaml_and_checkpoints_keep_the_update_tensors(self, lora_run):
+        assert _model_is_lora(lora_run.seed_dir)
+        for ckpt in ("checkpoint.best_test_loss", "checkpoint"):
+            assert _lora_names(_weights(lora_run.seed_dir, f"checkpoints/{ckpt}"))
+
+    def test_the_final_model_holds_no_update_tensors(self, lora_run):
+        ckpt = str(lora_run.seed_dir / "final_model" / "variables" / "variables")
+        names = {name for name, _ in tf.train.list_variables(ckpt)}
+        assert names
+        assert not any("LORA" in n for n in names), names
+
+    def test_model_yaml_keeps_the_parameter_dtype(self, lora_run):
+        meta = read_model_metadata(str(lora_run.seed_dir / "model.yaml"))
+        assert meta["param_dtype"] == "float64"
+
+
+def _assert_exported_energy_matches_final(seed_dir: Path, expected: float) -> None:
+    final = TPCalculator(model=str(seed_dir / "final_model")).get_potential_energy(
+        DIMER.copy()
+    )
+    assert final == pytest.approx(
+        expected, rel=COVARIANCE_F64.rtol, abs=COVARIANCE_F64.atol
+    )
+
+
+class TestLoraRestart:
+    def test_a_restart_keeps_the_trained_update_tensors(
+        self, ws, lora_run, training_probe, caplog
+    ):
+        _clone_seed(lora_run, ws)
+        name = _lora_input(ws, from_file=False)  # the input still asks for ``lora``
+        with caplog.at_level(logging.INFO):
+            tp = _run_to_probe([name, "-rl"], training_probe)
+        assert "LoRA is already active for Z, kept" in caplog.text
+        before = _weights(lora_run.seed_dir, "checkpoints/checkpoint")
+        after = {v.name: v.numpy() for v in tp.model.variables if v.dtype.is_floating}
+        assert _lora_names(before) == _lora_names(after)
+        for n in before:
+            np.testing.assert_array_equal(after[n], before[n], err_msg=n)
+        assert any(np.abs(after[n]).max() > 0 for n in _lora_names(after))
+        assert _model_is_lora(
+            ws.seed_dir
+        )  # model.yaml was re-saved with the LoRA state
+
+    def test_the_restarted_run_trains_on_and_exports_the_reduced_model(
+        self, ws, lora_run
+    ):
+        _clone_seed(lora_run, ws)
+        name = _lora_input(ws, from_file=False, fit={"maxiter": 3})
+        main([name, "-rl"])
+        assert ws.metrics("train")["epoch"].tolist() == [1, 2, 3]
+        expected = _checkpoint_energy(ws.seed_dir)
+        _assert_exported_energy_matches_final(ws.seed_dir, expected)
+        assert _model_is_lora(ws.seed_dir)
+
+
+class TestLoraReduction:
+    def test_reduce_lora_merges_the_update_into_the_model_file_and_keeps_the_energy(
+        self, ws, lora_run, training_probe
+    ):
+        _clone_seed(lora_run, ws)
+        activated = _checkpoint_energy(ws.seed_dir, "checkpoints/checkpoint")
+        name = _lora_input(ws, from_file=False, reduce_lora=True)
+        tp = _run_to_probe([name, "-rl"], training_probe)
+        assert not tp.is_lora_enabled()
+        assert not _model_is_lora(ws.seed_dir)
+        reduced = float(TPCalculator(tp.model).get_potential_energy(DIMER.copy()))
+        assert reduced == pytest.approx(
+            activated, rel=COVARIANCE_F64.rtol, abs=COVARIANCE_F64.atol
+        )
+
+    def test_reduce_lora_without_an_active_lora_warns_and_changes_nothing(
+        self, ws, trained, training_probe, caplog
+    ):
+        prev = ws.run / "prev"
+        shutil.copytree(trained.seed_dir, prev)
+        name = ws.write_input(**_merge(FROM_FILE, {"potential": {"reduce_lora": True}}))
+        with caplog.at_level(logging.WARNING):
+            tp = _run_to_probe([name, "-p", str(prev / "model.yaml")], training_probe)
+        assert "no LoRA is active" in caplog.text
+        assert not tp.is_lora_enabled()
+        assert not _model_is_lora(ws.seed_dir)
+
+
+class TestLoraSaveModel:
+    def test_save_model_exports_the_reduced_model_and_leaves_the_seed_directory(
+        self, ws, lora_run
+    ):
+        _clone_seed(lora_run, ws)
+        name = _lora_input(ws, from_file=False)
+        with pytest.raises(SystemExit) as exc:
+            main([name, "-r", "--save-model"])
+        assert exc.value.code == 0
+        _assert_exported_energy_matches(ws.seed_dir, lora_run.seed_dir)
+        ckpt = str(ws.seed_dir / "saved_model" / "variables" / "variables")
+        assert not any("LORA" in n for n, _ in tf.train.list_variables(ckpt))
+        assert _model_is_lora(
+            ws.seed_dir
+        )  # the seed directory keeps the update tensors
+        assert _lora_names(
+            _weights(ws.seed_dir, "checkpoints/checkpoint.best_test_loss")
+        )
+
+
+class TestLoraParamDtype:
+    def test_the_model_file_written_after_activation_keeps_float32(
+        self, ws, data_dir, tmp_path_factory
+    ):
+        base = Workspace(tmp_path_factory.mktemp("gracemaker_f32"), data_dir)
+        name = base.write_input(potential={"param_dtype": "float32"})
+        with pytest.MonkeyPatch.context() as mp, _own_log_handlers():
+            mp.chdir(base.run)
+            main([name])
+        assert (
+            read_model_metadata(str(base.seed_dir / "model.yaml"))["param_dtype"]
+            == "float32"
+        )
+        ckpt = str(base.seed_dir / "checkpoints" / "checkpoint.best_test_loss")
+        name = _lora_input(ws, fit={"maxiter": 1})
+        main([
+            name,
+            "-p",
+            str(base.seed_dir / "model.yaml"),
+            "-cn",
+            ckpt,
+            "--reset-epoch-and-step",
+        ])
+        meta = read_model_metadata(str(ws.seed_dir / "model.yaml"))
+        assert meta["param_dtype"] == "float32"
+        assert _model_is_lora(ws.seed_dir)
+
+
+class TestLoraRestartModelFile:
+    @staticmethod
+    def _args(**kwargs):
+        defaults = {
+            "restart_best_test": False,
+            "restart_latest": False,
+            "restart_suffix": None,
+        }
+        return argparse.Namespace(**{**defaults, **kwargs})
+
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            {"restart_best_test": True},
+            {"restart_latest": True},
+            {"restart_suffix": ".epoch_1"},
+        ],
+    )
+    def test_every_restart_kind_with_lora_reads_the_saved_model(self, tmp_path, flags):
+        (tmp_path / "model.yaml").write_text("x")
+        found = gracemaker.lora_restart_model_file(
+            self._args(**flags), {"lora": LORA}, str(tmp_path)
+        )
+        assert found == str(tmp_path / "model.yaml")
+
+    @pytest.mark.parametrize(
+        ("flags", "potential", "saved"),
+        [
+            ({}, {"lora": LORA}, True),  # not a restart
+            ({"restart_latest": True}, {}, True),  # no LoRA asked for
+            ({"restart_latest": True}, {"lora": {}}, True),  # an empty LoRA config
+            ({"restart_latest": True}, {"lora": LORA}, False),  # nothing saved yet
+        ],
+    )
+    def test_otherwise_the_model_is_built_as_before(
+        self, tmp_path, flags, potential, saved
+    ):
+        if saved:
+            (tmp_path / "model.yaml").write_text("x")
+        assert (
+            gracemaker.lora_restart_model_file(
+                self._args(**flags), potential, str(tmp_path)
+            )
+            is None
+        )
+
+
+class TestLoraDocumentedExample:
+    def test_the_example_of_the_input_file_documentation_activates(
+        self, ws, trained, training_probe
+    ):
+        """The ``lora`` line of ``docs/gracemaker/inputfile.md`` (``I`` names no instruction of this model)."""
+        doc = (
+            Path(__file__).resolve().parents[1] / "docs/gracemaker/inputfile.md"
+        ).read_text()
+        line = next(ln for ln in doc.splitlines() if ln.strip().startswith("# lora:"))
+        example = yaml.safe_load(line.split("# lora:", 1)[1])
+        prev = ws.run / "prev"
+        shutil.copytree(trained.seed_dir, prev)
+        name = ws.write_input(**_merge(FROM_FILE, {"potential": {"lora": example}}))
+        tp = _run_to_probe([name, "-p", str(prev / "model.yaml")], training_probe)
+        assert tp.is_lora_enabled()
+        ranks = {v.name: v.shape for v in tp.model.variables if "/LORA/" in v.name}
+        assert 8 in ranks["Z/w/LORA/A:0"]  # Z overrides `all` (rank 16)
