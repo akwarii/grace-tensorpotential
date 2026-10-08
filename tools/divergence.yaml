@@ -18,6 +18,16 @@
   milestone: [DATA1, CLEAN5]
   upstream: pending
 
+- path: docs/gracemaker/inputfile.md
+  reason: 'documents the lora and reduce_lora options as supported'
+  milestone: [LORA2]
+  upstream: pending
+
+- path: tensorpotential/constants.py
+  reason: 'adds the input keys potential::lora and potential::reduce_lora'
+  milestone: [LORA2]
+  upstream: pending
+
 - path: pyproject.toml
   reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor'
   milestone: [TOOL1, QUAL1, CORE1]
@@ -54,8 +64,8 @@
   upstream: pending
 
 - path: tensorpotential/cli/gracemaker.py
-  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CORE1]
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation, reduction and restart wired in (helpers apply_lora_options, finalize_lora_if_enabled, lora_restart_model_file)'
+  milestone: [CLEAN2, CORE1, LORA2]
   upstream: pending
 
 - path: tensorpotential/cli/metrics.py
@@ -69,8 +79,8 @@
   upstream: pending
 
 - path: tensorpotential/cli/train.py
-  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CORE1]
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation, reduction and restart wired in (helpers apply_lora_options, finalize_lora_if_enabled, lora_restart_model_file)'
+  milestone: [CLEAN2, CORE1, LORA2]
   upstream: pending
 
 - path: tensorpotential/cli/train_callbacks.py
@@ -119,8 +129,8 @@
   upstream: pending
 
 - path: tensorpotential/extra/gen_tensor/ewald.py
-  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CORE1]
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation, reduction and restart wired in (helpers apply_lora_options, finalize_lora_if_enabled, lora_restart_model_file)'
+  milestone: [CLEAN2, CORE1, LORA2]
   upstream: pending
 
 - path: tensorpotential/extra/gen_tensor/loss.py
@@ -159,8 +169,8 @@
   upstream: pending
 
 - path: tensorpotential/functions/spherical_harmonics.py
-  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CORE1]
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation, reduction and restart wired in (helpers apply_lora_options, finalize_lora_if_enabled, lora_restart_model_file)'
+  milestone: [CLEAN2, CORE1, LORA2]
   upstream: pending
 
 - path: tensorpotential/instructions/base.py
@@ -194,8 +204,8 @@
   upstream: pending
 
 - path: tensorpotential/metrics.py
-  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CORE1]
+  reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation, reduction and restart wired in (helpers apply_lora_options, finalize_lora_if_enabled, lora_restart_model_file)'
+  milestone: [CLEAN2, CORE1, LORA2]
   upstream: pending
 
 - path: tensorpotential/poly.py
