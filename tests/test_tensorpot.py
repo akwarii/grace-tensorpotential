@@ -395,3 +395,350 @@ def test_the_lora_variables_survive_a_checkpoint_round_trip(tmp_path):
     assert all(np.array_equal(expected[k], found[k]) for k in expected)
     assert _energy_forces(restored)[0] == pytest.approx(_energy_forces(tp)[0], rel=ARITH.rtol)
 
+
+
+# ------------------------------------------------------ the optimizer, against a numpy oracle
+#
+# Characterization of what the training loop relies on: the Adam update (with and without amsgrad), the
+# decoupled weight decay on the variables of ``WD_ALLOW_PATTERNS``, the exponential moving average (EMA) and
+# its swap with the weights, and the optimizer state in a checkpoint. The expected values are computed by
+# hand in numpy from the documented update rules, never by the optimizer under test.
+
+ADAM_LR = 0.5  # exactly representable: the optimizer keeps its learning rate in a float32 variable
+BETA_1, BETA_2, EPSILON = 0.9, 0.999, 1e-7  # the optimizer defaults
+
+
+def _through_float32(x: float) -> float:
+    """``x`` rounded to float32: what ``cast(python float, float64)`` gives in the bias correction.
+
+    The optimizer casts a Python float to the variable dtype through a float32 tensor, so its bias-correction
+    powers use ``float32(0.9)`` and ``float32(0.999)`` (relative error 6e-6 on ``sqrt(1 - beta_2)``), while
+    the moment updates use the exact Python floats. Both Keras versions do this; the oracle reproduces it.
+    """
+    return float(np.float32(x))
+EMA_MOMENTUM = 0.9
+# the gradient vanishes after the first step: the second moment then decays (by BETA_2 per step) while amsgrad
+# keeps the largest one seen, so the two variants differ (a growing gradient would make them equal)
+GRADIENT_SCALES = (1.0, 0.0, 0.0)
+
+
+def _gradients(variables, step: int) -> list[np.ndarray]:
+    """Reproducible gradients of one step: they depend on the step and the variable position only."""
+    scale = GRADIENT_SCALES[step]
+    return [
+        scale * np.random.default_rng([11, step, i]).standard_normal(v.shape)
+        for i, v in enumerate(variables)
+    ]
+
+
+def _apply_step(tp: TensorPotential, step: int) -> None:
+    variables = tp.model.variables_to_train
+    grads = [tf.constant(g, dtype=v.dtype) for g, v in zip(_gradients(variables, step), variables)]
+    tp.optimizer.apply_gradients(zip(grads, variables))
+
+
+def _adam_oracle(w0, grads, *, amsgrad: bool, decay: float = 0.0) -> list[np.ndarray]:
+    """Weights after each step of Adam: bias-corrected moments, optional amsgrad and decoupled decay.
+
+    The decay acts on the weights before the step, scaled by the learning rate: ``w -> w (1 - lr wd)``.
+    """
+    w = np.array(w0, dtype=np.float64)
+    m, v, v_max = np.zeros_like(w), np.zeros_like(w), np.zeros_like(w)
+    out = []
+    for t, g in enumerate(grads, start=1):
+        w = w - w * ADAM_LR * decay
+        m = BETA_1 * m + (1 - BETA_1) * g
+        v = BETA_2 * v + (1 - BETA_2) * g * g
+        v_max = np.maximum(v_max, v)
+        alpha = ADAM_LR * np.sqrt(1 - _through_float32(BETA_2) ** t) / (1 - _through_float32(BETA_1) ** t)
+        w = w - alpha * m / (np.sqrt(v_max if amsgrad else v) + EPSILON)
+        out.append(w)
+    return out
+
+
+def _adam_tp(**opt_params) -> TensorPotential:
+    params = {"learning_rate": ADAM_LR, "amsgrad": True, **opt_params}
+    return _tp(fit_config={"optimizer": "Adam", "opt_params": params})
+
+
+def _ema_tp(**opt_params) -> TensorPotential:
+    return _adam_tp(use_ema=True, ema_momentum=EMA_MOMENTUM, **opt_params)
+
+
+def _flat(arrays) -> np.ndarray:
+    return np.concatenate([np.asarray(a).ravel() for a in arrays])
+
+
+def _weights(tp: TensorPotential) -> np.ndarray:
+    return _flat(v.numpy() for v in tp.model.variables_to_train)
+
+
+def _averages(tp: TensorPotential) -> np.ndarray:
+    return _flat(a.numpy() for a in tp._get_ema_optimizer()._model_variables_moving_average)
+
+
+def _assert_close(found, expected) -> None:
+    np.testing.assert_allclose(found, expected, rtol=ARITH.rtol, atol=ARITH.atol)
+
+
+def test_the_gradient_sequence_tells_amsgrad_from_plain_adam():
+    w0 = np.ones(5)
+    grads = [np.full(5, s) for s in GRADIENT_SCALES]
+
+    plain = _adam_oracle(w0, grads, amsgrad=False)[-1]
+    amsgrad = _adam_oracle(w0, grads, amsgrad=True)[-1]
+
+    assert not np.allclose(plain, amsgrad, rtol=1e-5, atol=0.0)
+
+
+@pytest.mark.parametrize("amsgrad", [False, True])
+def test_adam_steps_follow_the_numpy_oracle(amsgrad):
+    tp = _adam_tp(amsgrad=amsgrad)
+    variables = tp.model.variables_to_train
+    start = [v.numpy().copy() for v in variables]
+    steps = range(len(GRADIENT_SCALES))
+    grads = [_gradients(variables, s) for s in steps]
+    expected = [_adam_oracle(w, [g[i] for g in grads], amsgrad=amsgrad) for i, w in enumerate(start)]
+
+    for s in steps:
+        _apply_step(tp, s)
+        _assert_close(_weights(tp), _flat(e[s] for e in expected))
+    assert int(tp.optimizer.iterations.numpy()) == len(GRADIENT_SCALES)
+
+
+def test_weight_decay_acts_before_the_step_and_only_on_the_allowed_variables():
+    wd = 0.25
+    tp = _adam_tp(weight_decay=wd)
+    variables = tp.model.variables_to_train
+    start = [v.numpy().copy() for v in variables]
+    grads = [_gradients(variables, s) for s in range(len(GRADIENT_SCALES))]
+    decayed = ["reducing_" in v.name for v in variables]
+    assert any(decayed)
+    assert not all(decayed)
+
+    for s in range(len(GRADIENT_SCALES)):
+        _apply_step(tp, s)
+    expected = [
+        _adam_oracle(w, [g[i] for g in grads], amsgrad=True, decay=wd if is_decayed else 0.0)[-1]
+        for i, (w, is_decayed) in enumerate(zip(start, decayed))
+    ]
+
+    _assert_close(_weights(tp), _flat(expected))
+
+
+def test_the_average_is_an_exponential_moving_average_started_from_the_initial_weights():
+    tp = _ema_tp()
+    average = _weights(tp)
+    for s in range(len(GRADIENT_SCALES)):
+        _apply_step(tp, s)
+        average = EMA_MOMENTUM * average + (1 - EMA_MOMENTUM) * _weights(tp)
+
+    _assert_close(_averages(tp), average)
+
+
+# ---- the swap of weights and average
+
+
+def _two_steps(tp: TensorPotential) -> None:
+    for s in range(2):
+        _apply_step(tp, s)
+
+
+def test_swap_variables_exchanges_weights_and_average_and_swapping_twice_restores_them():
+    tp = _ema_tp()
+    _two_steps(tp)
+    weights, average = _weights(tp), _averages(tp)
+    assert not np.allclose(weights, average)
+
+    tp.swap_variables()
+    np.testing.assert_array_equal(_weights(tp), average)
+    np.testing.assert_array_equal(_averages(tp), weights)
+
+    tp.swap_variables()
+    np.testing.assert_array_equal(_weights(tp), weights)
+    np.testing.assert_array_equal(_averages(tp), average)
+
+
+def test_the_on_device_swap_gives_the_same_exchange():
+    tp = _ema_tp()
+    _two_steps(tp)
+    weights, average = _weights(tp), _averages(tp)
+
+    tp._swap_variables_on_device(tp._get_ema_optimizer())
+
+    np.testing.assert_array_equal(_weights(tp), average)
+    np.testing.assert_array_equal(_averages(tp), weights)
+
+
+@pytest.mark.parametrize("built", [False, True])
+def test_swap_variables_without_ema_is_refused(built):
+    tp = _adam_tp()
+    if built:
+        _two_steps(tp)
+
+    with pytest.raises(ValueError, match="requires use_ema=True"):
+        tp.swap_variables()
+
+
+def test_swap_variables_before_the_first_step_is_refused_even_with_ema():
+    tp = _ema_tp()
+
+    with pytest.raises(ValueError, match="requires use_ema=True"):
+        tp.swap_variables()
+
+
+def test_the_ema_optimizer_is_the_optimizer_or_the_one_it_wraps():
+    tp = _ema_tp()
+    assert tp._get_ema_optimizer() is tp.optimizer
+
+    class Wrapper:  # stands in for a loss-scale wrapper: only the attribute name matters
+        inner_optimizer = tp.optimizer
+
+    tp.optimizer = Wrapper()
+    assert tp._get_ema_optimizer() is Wrapper.inner_optimizer
+
+
+def test_ema_scope_shows_the_average_inside_and_restores_the_weights_after():
+    tp = _ema_tp()
+    _two_steps(tp)
+    weights, average = _weights(tp), _averages(tp)
+
+    with tp.ema_scope():
+        np.testing.assert_array_equal(_weights(tp), average)
+        assert tp._ema_weights_in_model is True
+
+        with tp.ema_scope():  # nested: the inner scope does nothing
+            np.testing.assert_array_equal(_weights(tp), average)
+        np.testing.assert_array_equal(_weights(tp), average)
+
+    np.testing.assert_array_equal(_weights(tp), weights)
+    np.testing.assert_array_equal(_averages(tp), average)
+    assert tp._ema_weights_in_model is False
+
+
+def test_ema_scope_restores_the_weights_when_its_body_raises():
+    tp = _ema_tp()
+    _two_steps(tp)
+    weights = _weights(tp)
+
+    with pytest.raises(RuntimeError, match="boom"), tp.ema_scope():
+        raise RuntimeError("boom")
+
+    np.testing.assert_array_equal(_weights(tp), weights)
+    assert tp._ema_weights_in_model is False
+
+
+def test_ema_scope_does_nothing_without_ema_or_before_the_average_exists():
+    for tp, steps in ((_adam_tp(), 2), (_ema_tp(), 0)):
+        for s in range(steps):
+            _apply_step(tp, s)
+        weights = _weights(tp)
+
+        with tp.ema_scope():
+            np.testing.assert_array_equal(_weights(tp), weights)
+
+        np.testing.assert_array_equal(_weights(tp), weights)
+
+
+def test_prepare_for_training_swaps_the_average_out_of_the_model():
+    tp = _ema_tp()
+    _two_steps(tp)
+    weights, average = _weights(tp), _averages(tp)
+    tp._ema_weights_in_model = True  # a checkpoint stores the model holding the average
+
+    tp.prepare_for_training()
+
+    np.testing.assert_array_equal(_weights(tp), average)
+    np.testing.assert_array_equal(_averages(tp), weights)
+    assert tp._ema_weights_in_model is False
+
+
+def test_prepare_for_training_does_nothing_without_ema_or_before_the_average_exists():
+    for tp, steps in ((_adam_tp(), 2), (_ema_tp(), 0)):
+        for s in range(steps):
+            _apply_step(tp, s)
+        weights = _weights(tp)
+
+        tp.prepare_for_training()
+
+        np.testing.assert_array_equal(_weights(tp), weights)
+
+
+# ---- the optimizer state in a checkpoint
+
+
+def _checkpoint_path(tmp_path) -> str:
+    return str(tmp_path / "ckpt" / "checkpoint")
+
+
+def test_a_checkpoint_restores_weights_counters_and_the_optimizer_state(tmp_path):
+    saved = _ema_tp(weight_decay=0.25)
+    _two_steps(saved)
+    saved.step, saved.epoch = 2, 1
+    saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+
+    restored = _ema_tp(weight_decay=0.25)
+    restored.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path), expect_partial=True)
+
+    np.testing.assert_array_equal(_weights(restored), _weights(saved))
+    assert (restored.step, restored.epoch) == (2, 1)
+    assert int(restored.optimizer.iterations.numpy()) == 2
+    # the moments came back: the next step of both objects is the same, bit for bit
+    _apply_step(saved, 2)
+    _apply_step(restored, 2)
+    np.testing.assert_array_equal(_weights(restored), _weights(saved))
+    np.testing.assert_array_equal(_averages(restored), _averages(saved))
+
+
+def test_a_model_only_load_leaves_the_counters_and_the_optimizer_alone(tmp_path):
+    saved = _adam_tp()
+    _two_steps(saved)
+    saved.step = 2
+    saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+
+    restored = _adam_tp()
+    restored.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path), model_only=True)
+
+    np.testing.assert_array_equal(_weights(restored), _weights(saved))
+    assert restored.step == 0
+    assert int(restored.optimizer.iterations.numpy()) == 0
+
+
+def test_loading_a_checkpoint_that_does_not_exist(tmp_path, caplog):
+    tp = _adam_tp()
+    path = _checkpoint_path(tmp_path)
+    before = _weights(tp)
+
+    with pytest.raises(ValueError, match="No checkpoint index found"):
+        tp.load_checkpoint(checkpoint_name=path)
+
+    with caplog.at_level(logging.INFO):
+        tp.load_checkpoint(checkpoint_name=path, raise_errors=False, verbose=True)
+    assert any("FAILED" in r.message for r in caplog.records)
+    np.testing.assert_array_equal(_weights(tp), before)
+
+
+def test_strict_load_options_accept_a_matching_checkpoint(tmp_path):
+    saved = _adam_tp()
+    _two_steps(saved)
+    saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+    restored = _adam_tp()
+    restored.optimizer.build(restored.model.variables_to_train)
+
+    restored.load_checkpoint(
+        checkpoint_name=_checkpoint_path(tmp_path), assert_existing_objects_matched=True, verbose=True
+    )
+
+    np.testing.assert_array_equal(_weights(restored), _weights(saved))
+
+
+def test_assert_consumed_accepts_a_checkpoint_whose_objects_all_match(tmp_path):
+    saved = _tp()
+    saved.step = 4
+    saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+    restored = _tp()
+
+    restored.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path), assert_consumed=True)
+
+    assert restored.step == 4
+    np.testing.assert_array_equal(_weights(restored), _weights(saved))
