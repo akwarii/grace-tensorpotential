@@ -45,10 +45,6 @@ inputs:
     description: Extra pytest arguments appended verbatim
     required: false
     default: ""
-  memory-sampler:
-    description: TEMPORARY (CI2 diagnostics, removed after the diagnosis) - "true" prints total memory every 10 s into the step log
-    required: false
-    default: "false"
 
 runs:
   using: composite
@@ -66,7 +62,6 @@ runs:
         IN_GROUP: ${{ inputs.group }}
         IN_DURATIONS: ${{ inputs.durations-path }}
         IN_EXTRA: ${{ inputs.extra-args }}
-        IN_SAMPLER: ${{ inputs.memory-sampler }}
       run: |
         if [ -n "$IN_PATH" ]; then
           export PATH="$IN_PATH:$PATH"
@@ -84,11 +79,5 @@ runs:
         fi
         # shellcheck disable=SC2206
         args+=( $IN_EXTRA )
-        if [ "$IN_SAMPLER" = "true" ]; then  # TEMPORARY (CI2): same step as pytest, so the lines stream into the log if the runner dies
-          (while true; do
-            echo "[mem] $(date +%T) rss_total_mb=$(ps -eo rss= | awk '{s+=$1} END {print int(s/1024)}') $(free -m | awk 'NR==2 {print "used_mb="$3" avail_mb="$7}') top=$(ps -eo rss=,comm= --sort=-rss | head -3 | awk '{printf "%d:%s ", $1/1024, $2}')" | tee -a "${RUNNER_TEMP}/memory.log"
-            sleep 10
-          done) &
-        fi
         echo "+ $IN_PYTHON -m pytest ${args[*]}"
         "$IN_PYTHON" -m pytest "${args[@]}"

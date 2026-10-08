@@ -124,21 +124,4 @@ jobs:
           numprocs: "2"
           splits: "4"
           group: ${{ matrix.group }}
-          memory-sampler: "true"  # TEMPORARY (CI2 diagnostics)
           extra-args: --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
-      # TEMPORARY DIAGNOSTICS (CI2): removed once the cause of the shutdown-signal failures is stated.
-      - name: Memory peak, kernel out-of-memory lines and disk (temporary diagnostics)
-        if: always()
-        run: |
-          awk '{split($3,a,"="); if (a[2]+0>m) {m=a[2]+0; l=$0}} END {print "peak total rss (MB) line: " l}' "$RUNNER_TEMP/memory.log"
-          awk '{split($5,a,"="); if (min==""||a[2]+0<min) {min=a[2]+0; l=$0}} END {print "lowest available memory line: " l}' "$RUNNER_TEMP/memory.log"
-          echo "== kernel log (out-of-memory kills)"; sudo dmesg 2>/dev/null | grep -iE "out of memory|oom-kill|killed process" | tail -20 || true
-          echo "== free and df"; free -m; df -h / /tmp
-      - name: Upload the memory log (temporary diagnostics)
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: memory-log-group-${{ matrix.group }}
-          path: ${{ runner.temp }}/memory.log
-          if-no-files-found: ignore
-          retention-days: 7
