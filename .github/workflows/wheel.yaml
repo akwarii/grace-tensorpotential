@@ -17,7 +17,8 @@ permissions:
 
 concurrency:
   group: wheel-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # a push to the integration branch is never cancelled by the next one; a pull request run is
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   UV_VERSION: "0.12.5"
@@ -35,14 +36,23 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: "3.12"
       - name: Build the wheel
-        run: uv build --wheel --out-dir dist
-      - name: Check the wheel (file list against upstream, metadata, extras)
-        # --noconftest: tests/conftest.py imports TensorFlow, which the packaging tests do not need
+        id: build
+        run: |
+          uv build --wheel --out-dir dist
+          echo "wheel=$(ls dist | grep '\.whl$')" >> "$GITHUB_OUTPUT"
+      - name: Install pytest for the wheel checks
         run: |
           uv venv .venv-check
-          uv pip install --python .venv-check/bin/python pytest
-          TENSORPOTENTIAL_WHEEL="$(ls dist/*.whl)" .venv-check/bin/python -m pytest --noconftest -p no:cacheprovider -q \
-            tests/test_packaging.py
+          uv pip install --python .venv-check/bin/python pytest pytest-timeout
+      - name: Check the wheel (file list against upstream, metadata, extras)
+        # --noconftest: tests/conftest.py imports TensorFlow, which the packaging tests do not need
+        uses: ./.github/actions/run-pytest
+        with:
+          python: .venv-check/bin/python
+          tests: tests/test_packaging.py
+          extra-args: --noconftest
+        env:
+          TENSORPOTENTIAL_WHEEL: ${{ github.workspace }}/dist/${{ steps.build.outputs.wheel }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wheel
@@ -63,6 +73,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - if: matrix.extra == 'tf'
+        uses: ./.github/actions/free-disk-space
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: wheel

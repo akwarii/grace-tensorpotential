@@ -21,7 +21,8 @@ permissions:
 
 concurrency:
   group: nightly-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # a push to the integration branch is never cancelled by the next one; a pull request run is
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   UV_VERSION: "0.12.5"
@@ -34,6 +35,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - uses: ./.github/actions/free-disk-space
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: ${{ env.UV_VERSION }}
@@ -78,11 +80,11 @@ jobs:
       - name: Install the torch extra and torch-sim from its main branch
         run: |
           uv venv .venv-sim
-          uv pip install --python .venv-sim/bin/python ".[torch]" pytest vesin \
+          uv pip install --python .venv-sim/bin/python ".[torch]" pytest pytest-timeout vesin \
             "torch-sim-atomistic @ git+https://github.com/TorchSim/torch-sim.git@main"
       - name: Import torch-sim and run the torch-sim tests of this repository, if there are any
         run: |
           .venv-sim/bin/python -c "import torch_sim, torch; print('torch-sim', getattr(torch_sim, '__version__', 'main'), 'torch', torch.__version__)"
           if compgen -G "tests_torch/test_torchsim*.py" > /dev/null; then
-            .venv-sim/bin/python -m pytest tests_torch -q -p no:cacheprovider -k torchsim
+            .venv-sim/bin/python -m pytest tests_torch -v -p no:cacheprovider --timeout=900 -k torchsim
           fi

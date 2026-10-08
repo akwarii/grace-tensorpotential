@@ -16,7 +16,8 @@ permissions:
 
 concurrency:
   group: lint-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # a push to the integration branch is never cancelled by the next one; a pull request run is
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   UV_VERSION: "0.12.5"
@@ -29,6 +30,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - uses: ./.github/actions/free-disk-space
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: ${{ env.UV_VERSION }}
@@ -51,4 +53,7 @@ jobs:
       - name: Registry completeness (instruction classes and pinned defaults)
         run: uv run --frozen --no-sync python tools/instruction_ast.py check
       - name: Tests of the packaging tools (the environment has the tf extra and tensorpotential installed)
-        run: uv run --frozen --no-sync pytest tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py -q -p no:cacheprovider
+        uses: ./.github/actions/run-pytest
+        with:
+          python: .venv/bin/python
+          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py
