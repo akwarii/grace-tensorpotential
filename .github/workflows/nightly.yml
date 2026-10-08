@@ -1,8 +1,7 @@
 # The slow checks of CI1 (D17a), scheduled because they are heavy on hosted runners:
 #   both-stacks     one environment with the all extra: TensorFlow and torch import side by side
-#   tf-suite        the TensorFlow test suite of the repository (the same selection as the local baseline)
 #   torch-sim-main  the torch extra with torch-sim from its main branch, to see an upstream break early
-# If the hosted runners are too small for tf-suite, run it on the owner's machine instead (CLAUDE.md, "Development commands").
+# The test suites (core, torch, TensorFlow) are in tests.yaml, which also runs every night.
 #
 # GitHub starts scheduled workflows from the default branch only, so the schedule is live once this file is there;
 # workflow_dispatch runs it by hand, and a pull request that changes this file runs it as a check of the change.
@@ -64,24 +63,6 @@ jobs:
           fi
       - name: Smoke test with both backends installed
         run: python3 tools/wheel_smoke.py ../both-venv/bin/python --expect tf
-
-  tf-suite:
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
-        with:
-          version: ${{ env.UV_VERSION }}
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen --group dev
-      - name: Run the TensorFlow suite
-        run: |
-          PATH="$PWD/.venv/bin:$PATH" uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
-            --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
 
   torch-sim-main:
     runs-on: ubuntu-latest
