@@ -100,7 +100,7 @@ def test_importing_the_core_in_the_real_environment_loads_no_tensorflow() -> Non
 
 def test_installed_packages_reports_what_the_environment_can_import() -> None:
     have = ws.installed_packages(Path(sys.executable))
-    assert have <= {"tensorflow", "tf_keras", "torch", "flask"}
+    assert have <= {"tensorflow", "keras", "torch", "flask"}
     assert "tensorflow" in have  # the test environment is the TensorFlow one
 
 
@@ -148,7 +148,7 @@ def test_main_passes_on_a_environment_where_everything_behaves(
 ) -> None:
     python = scripted_env(
         tmp_path,
-        packages="tensorflow,tf_keras,flask",
+        packages="tensorflow,keras,flask",
         core="echo 'LOADED '",
         names=SCRIPT_NAMES,
     )
@@ -163,7 +163,7 @@ def test_main_reports_a_core_that_does_not_import_and_a_wrong_script_count(
 ) -> None:
     python = scripted_env(
         tmp_path,
-        packages="tensorflow,tf_keras",
+        packages="tensorflow,keras",
         core="echo 'ImportError: boom' >&2; exit 1",
         names=SCRIPT_NAMES[:9],
     )
@@ -178,7 +178,7 @@ def test_main_reports_a_core_that_loads_tensorflow(
 ) -> None:
     python = scripted_env(
         tmp_path,
-        packages="tensorflow,tf_keras",
+        packages="tensorflow,keras",
         core="echo 'LOADED tensorflow'",
         names=SCRIPT_NAMES,
     )
@@ -193,7 +193,7 @@ def test_main_accepts_a_relative_path_to_the_python(
     env_dir.mkdir()
     python = scripted_env(
         env_dir,
-        packages="tensorflow,tf_keras,flask",
+        packages="tensorflow,keras,flask",
         core="echo 'LOADED '",
         names=SCRIPT_NAMES,
     )

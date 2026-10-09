@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT))
 
-import tensorpotential  # noqa: E402, F401, I001 - before TensorFlow: it selects the legacy Keras backend
+import tensorpotential  # noqa: E402, F401, I001 - before TensorFlow: it applies the TensorFlow options (type promotion) first
 import make_golden as mg  # noqa: E402
 from tests.shared_models import weights_fingerprint  # noqa: E402
 from tests.tolerances import (  # noqa: E402

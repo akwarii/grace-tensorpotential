@@ -20,7 +20,7 @@ import pytest
 from tests.fresh_python import REPO_ROOT, run_fresh_python
 
 PACKAGE = REPO_ROOT / "tensorpotential"
-TF_ROOTS = {"tensorflow", "tf_keras"}
+TF_ROOTS = {"tensorflow", "keras"}
 # compat/pace is legacy code that this work may not change (owner decision, 2026-10-01).
 OUT_OF_SCOPE = (PACKAGE / "compat" / "pace",)
 
@@ -124,7 +124,7 @@ print(tf.config.experimental.tensor_float_32_execution_enabled(), hasattr(tf.con
 
 
 # The four console scripts that used to fail with a bare ModuleNotFoundError in an environment
-# without TensorFlow. A finder that refuses tensorflow and tf_keras stands in for the 'torch-only'
+# without TensorFlow. A finder that refuses tensorflow and keras stands in for the 'torch-only'
 # installation of the issue (the check never imports the packages, it asks the finders).
 SCRIPTS_NEEDING_TF = ["extxyz2df", "grace_preprocess", "grace_predict", "grace_utils"]
 
@@ -133,7 +133,7 @@ import importlib, sys
 
 class Refuse:
     def find_spec(self, name, path=None, target=None):
-        if name.split(".")[0] in ("tensorflow", "tf_keras"):
+        if name.split(".")[0] in ("tensorflow", "keras"):
             raise ImportError(f"No module named {name!r}", name=name)
 
 sys.meta_path.insert(0, Refuse())
