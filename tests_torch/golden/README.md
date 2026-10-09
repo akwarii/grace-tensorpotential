@@ -136,3 +136,10 @@ a = arrays["self_image_cell/ins/A"]        # output of instruction A, shape [n_a
 
 The option pairs hold no weights: 0.40 to 0.67 MB (tiny) and 10.6 to 23.1 MB (faithful). The faithful target of 25 MB holds
 for each file; the sum for `large_faithful_f64` is 41.7 MB because its float64 weights alone are 18.6 MB at the real widths.
+
+## Pitfalls of the generator
+
+* The instruction order of a manifest is the execution order: never write it with sorted keys.
+* The probe's `attribute_objects` walks into the instructions that an instruction refers to (`left`, `radial`, `indicator`), which repeats every table dozens of
+  times (2.3 MB instead of 0.1 MB for one tiny fixture); the fixture tables use their own walk (`_own_tables`).
+* A reload test must start from a seed other than the fixture's, or it reproduces the weights without reading them.
