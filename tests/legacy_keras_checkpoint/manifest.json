@@ -1,0 +1,113 @@
+{
+ "writer": "tf_keras 2.20.1",
+ "tensorflow": "2.20.0",
+ "model": {
+  "preset": "GRACE_1LAYER_v1_24",
+  "elements": {
+   "Be": 0,
+   "Li": 1
+  },
+  "lmax": 0,
+  "embedding_size": 4,
+  "n_rad_max": 3,
+  "n_rad_base": 4,
+  "n_mlp_dens": 2,
+  "max_order": 2
+ },
+ "param_dtype": "float32",
+ "optimizer": {
+  "learning_rate": 0.5,
+  "amsgrad": true,
+  "weight_decay": 0.1,
+  "use_ema": true,
+  "ema_momentum": 0.9
+ },
+ "steps": 3,
+ "epoch": 1,
+ "mid_epoch_save": true,
+ "variables": [
+  [
+   "A_ChemIndTransf/DenseLayer_A_ChemIndTransf__:0",
+   [
+    4,
+    3
+   ]
+  ],
+  [
+   "A1/w_left_FC:0",
+   [
+    3,
+    3,
+    1
+   ]
+  ],
+  [
+   "A1/w_right_FC:0",
+   [
+    3,
+    3,
+    1
+   ]
+  ],
+  [
+   "LinMLPOut2ScalarTarget_MLP_layer0/DenseLayer_LinMLPOut2ScalarTarget_MLP_layer0__:0",
+   [
+    2,
+    64
+   ]
+  ],
+  [
+   "LinMLPOut2ScalarTarget_MLP_layer1/DenseLayer_LinMLPOut2ScalarTarget_MLP_layer1__:0",
+   [
+    64,
+    1
+   ]
+  ],
+  [
+   "R_MLP_layer0/DenseLayer_R_MLP_layer0_no_decay:0",
+   [
+    4,
+    64
+   ]
+  ],
+  [
+   "R_MLP_layer1/DenseLayer_R_MLP_layer1_no_decay:0",
+   [
+    64,
+    64
+   ]
+  ],
+  [
+   "R_MLP_layer2/DenseLayer_R_MLP_layer2_no_decay:0",
+   [
+    64,
+    3
+   ]
+  ],
+  [
+   "Z/ChemicalEmbedding:0",
+   [
+    2,
+    4
+   ]
+  ],
+  [
+   "rho/reducing_A:0",
+   [
+    2,
+    3,
+    3,
+    1
+   ]
+  ],
+  [
+   "rho/reducing_AA:0",
+   [
+    2,
+    3,
+    3,
+    1
+   ]
+  ]
+ ]
+}

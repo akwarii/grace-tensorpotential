@@ -15,8 +15,6 @@ import os
 import subprocess
 import sys
 
-os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -1319,7 +1317,6 @@ def test_grace_uq_build_subprocess_smoke(tmp_path):
         capture_output=True,
         text=True,
         timeout=240,
-        env={**os.environ, "TF_USE_LEGACY_KERAS": "1"},
     )
     assert proc.returncode == 0, (
         f"grace_uq build failed (rc={proc.returncode}).\n"

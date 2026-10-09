@@ -13,6 +13,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+import warnings
 
 import numpy as np
 import pytest
@@ -22,12 +23,22 @@ from ase.build import bulk
 
 from tensorpotential.calculator import TPCalculator
 from tensorpotential.instructions import load_instructions, save_instructions_dict
+from tensorpotential.optimizer_layout import LegacyOptimizerStateWarning
 from tensorpotential.potentials import get_preset
 from tensorpotential.tensorpot import TensorPotential
 
-import tensorflow as tf  # after tensorpotential, which must set TF_USE_LEGACY_KERAS first
+import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
 
 from tests.tolerances import FINITE_DIFFERENCE_F64 as FD
+from tests.legacy_keras_checkpoint import (
+    LEGACY_CHECKPOINT,
+    LEGACY_EPOCH,
+    LEGACY_OPTIONS,
+    LEGACY_STEPS,
+    legacy_weights,
+    small_tp,
+)
+from tests.tolerances import FLOAT32_ELEMENTWISE as F32
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -526,14 +537,39 @@ def test_weight_decay_acts_before_the_step_and_only_on_the_allowed_variables():
     _assert_close(_weights(tp), _flat(expected))
 
 
-def test_the_average_is_an_exponential_moving_average_started_from_the_initial_weights():
-    tp = _ema_tp()
-    average = _weights(tp)
+def _ema_after_each_step(tp: TensorPotential) -> tuple[np.ndarray, np.ndarray, list[np.ndarray]]:
+    """The weights before the first step, the average after the last step, and the weights after each step."""
+    start = _weights(tp)
+    after = []
     for s in range(len(GRADIENT_SCALES)):
         _apply_step(tp, s)
-        average = EMA_MOMENTUM * average + (1 - EMA_MOMENTUM) * _weights(tp)
+        after.append(_weights(tp))
+    return start, _averages(tp), after
 
-    _assert_close(_averages(tp), average)
+
+def test_the_average_follows_the_keras_3_recursion_that_starts_at_the_first_updated_weights():
+    # Keras 3: the first update uses momentum 0 (average = weights after step 1), then
+    # average -> momentum * average + (1 - momentum) * weights. DOCUMENTED CHANGE from legacy Keras 2, see below.
+    start, average, after = _ema_after_each_step(_ema_tp())
+
+    expected = after[0]
+    for weights in after[1:]:
+        expected = EMA_MOMENTUM * expected + (1 - EMA_MOMENTUM) * weights
+
+    _assert_close(average, expected)
+
+
+def test_the_average_differs_from_the_legacy_keras_one_by_a_closed_form_that_decays_with_the_momentum():
+    # legacy Keras 2 started the recursion from the initial weights: avg_1 = m w_0 + (1 - m) w_1, so after n steps
+    # the legacy and the Keras 3 averages differ by exactly m**n (w_0 - w_1) (release notes of DEPS3).
+    start, average, after = _ema_after_each_step(_ema_tp())
+
+    legacy = start
+    for weights in after:
+        legacy = EMA_MOMENTUM * legacy + (1 - EMA_MOMENTUM) * weights
+
+    n = len(GRADIENT_SCALES)
+    _assert_close(legacy - average, EMA_MOMENTUM**n * (start - after[0]))
 
 
 # ---- the swap of weights and average
@@ -664,6 +700,63 @@ def test_prepare_for_training_does_nothing_without_ema_or_before_the_average_exi
         np.testing.assert_array_equal(_weights(tp), weights)
 
 
+# ---- the optimizer is built before training, and an average is only swapped in after a first step
+
+
+def test_prepare_for_training_builds_the_optimizer_variables():
+    for tp in (_adam_tp(), _ema_tp()):
+        assert not tp.optimizer.built
+
+        tp.prepare_for_training() if tp.use_ema else tp._build_optimizer()
+
+        assert tp.optimizer.built
+        assert len(tp.optimizer.variables) > 2  # the slots exist before the first traced step
+
+
+def test_a_built_optimizer_with_zero_averages_is_never_swapped_into_the_model():
+    # Keras 3 creates the averages filled with zeros and sets them at the first update
+    tp = _ema_tp()
+    weights = _weights(tp)
+
+    tp.prepare_for_training()
+
+    assert not np.any(_averages(tp))  # the averages are still zero
+    assert not tp._ema_ready(tp._get_ema_optimizer())
+    np.testing.assert_array_equal(_weights(tp), weights)
+    with tp.ema_scope():
+        np.testing.assert_array_equal(_weights(tp), weights)
+    with pytest.raises(ValueError, match="at least one optimizer step"):
+        tp.swap_variables()
+
+
+def test_the_average_is_ready_after_the_first_step():
+    tp = _ema_tp()
+    tp.prepare_for_training()
+
+    _apply_step(tp, 0)
+
+    assert tp._ema_ready(tp._get_ema_optimizer())
+
+
+def test_building_an_optimizer_that_is_already_built_changes_nothing():
+    tp = _adam_tp()
+    _two_steps(tp)
+    weights, iterations = _weights(tp), int(tp.optimizer.iterations.numpy())
+
+    tp._build_optimizer()
+
+    np.testing.assert_array_equal(_weights(tp), weights)
+    assert int(tp.optimizer.iterations.numpy()) == iterations
+
+
+def test_a_model_without_optimizer_has_nothing_to_build():
+    tp = _tp()
+
+    tp._build_optimizer()
+
+    assert tp.optimizer is None
+
+
 # ---- the optimizer state in a checkpoint
 
 
@@ -678,7 +771,9 @@ def test_a_checkpoint_restores_weights_counters_and_the_optimizer_state(tmp_path
     saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
 
     restored = _ema_tp(weight_decay=0.25)
-    restored.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path), expect_partial=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LegacyOptimizerStateWarning)  # a matching layout is restored silently
+        restored.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path), expect_partial=True)
 
     np.testing.assert_array_equal(_weights(restored), _weights(saved))
     assert (restored.step, restored.epoch) == (2, 1)
@@ -742,3 +837,125 @@ def test_assert_consumed_accepts_a_checkpoint_whose_objects_all_match(tmp_path):
 
     assert restored.step == 4
     np.testing.assert_array_equal(_weights(restored), _weights(saved))
+
+
+# ---- a checkpoint written with legacy Keras 2 by the tree before DEPS3
+#
+# The optimizer slots of such a checkpoint sit at other positions than the ones of a Keras 3 optimizer
+# (tests/legacy_keras_checkpoint/make_fixture.py): they must never be assigned to the wrong variables.
+
+
+def _restore_legacy(tp: TensorPotential, **options) -> None:
+    with pytest.warns(LegacyOptimizerStateWarning, match="not restored"):
+        tp.load_checkpoint(checkpoint_name=LEGACY_CHECKPOINT, **options)
+
+
+def test_a_legacy_keras_checkpoint_restores_the_model_and_resets_the_optimizer_with_a_warning():
+    tp = small_tp()
+    stored = legacy_weights()
+    assert not np.array_equal(_flat(stored), _weights(tp))
+
+    _restore_legacy(tp)
+
+    for variable, expected in zip(tp.model.variables_to_train, stored):
+        np.testing.assert_array_equal(variable.numpy(), expected)
+    assert (tp.step, tp.epoch) == (LEGACY_STEPS, LEGACY_EPOCH)
+    assert int(tp.optimizer.iterations.numpy()) == 0
+    assert not hasattr(tp._get_ema_optimizer(), "_model_variables_moving_average")
+
+
+def test_the_warning_for_a_legacy_checkpoint_names_the_checkpoint_and_what_is_lost(caplog):
+    tp = small_tp()
+
+    with caplog.at_level(logging.WARNING), pytest.warns(LegacyOptimizerStateWarning) as caught:
+        tp.load_checkpoint(checkpoint_name=LEGACY_CHECKPOINT)
+
+    message = str(caught[0].message)
+    assert LEGACY_CHECKPOINT in message
+    assert "start from scratch" in message
+    assert any("not restored" in r.message for r in caplog.records)  # also in the training log
+
+
+def test_the_mid_epoch_flag_of_a_legacy_checkpoint_is_cleared_with_the_optimizer_state():
+    tp = small_tp()
+
+    _restore_legacy(tp)
+
+    # the fixture was saved mid-epoch; a rewind would complete updates that lived in the discarded moments
+    assert tp.intra_epoch_save is False
+    assert tp.checkpoint.optimizer is tp.optimizer
+
+
+def test_the_first_step_after_a_legacy_restore_is_a_fresh_adam_step_from_the_stored_weights():
+    tp = small_tp()
+    _restore_legacy(tp)
+    variables = tp.model.variables_to_train
+    gradients = [np.random.default_rng([3, i]).standard_normal(v.shape) for i, v in enumerate(variables)]
+
+    tp.optimizer.apply_gradients(
+        [(tf.constant(g, dtype=v.dtype), v) for g, v in zip(gradients, variables)]
+    )
+
+    # moments, step count and averages restart from zero (learning rate 0.5, weight decay 0.1, amsgrad)
+    decay = LEGACY_OPTIONS["weight_decay"]
+    for variable, w0, g in zip(variables, legacy_weights(), gradients):
+        expected = _adam_oracle(w0, [g], amsgrad=True, decay=decay if "reducing_" in variable.name else 0.0)[-1]
+        np.testing.assert_allclose(variable.numpy(), expected, rtol=F32.rtol, atol=F32.atol)
+    assert int(tp.optimizer.iterations.numpy()) == 1
+
+
+def test_the_weight_decay_exclusions_survive_the_replacement_of_the_optimizer():
+    tp = small_tp()
+    _restore_legacy(tp)
+    variables = tp.model.variables_to_train
+    before = [v.numpy().copy() for v in variables]
+
+    # a zero gradient leaves only the decoupled decay
+    tp.optimizer.apply_gradients([(tf.zeros_like(v), v) for v in variables])
+
+    decay = 1.0 - LEGACY_OPTIONS["learning_rate"] * LEGACY_OPTIONS["weight_decay"]
+    for variable, w0 in zip(variables, before):
+        expected = w0 * decay if "reducing_" in variable.name else w0
+        np.testing.assert_allclose(variable.numpy(), expected, rtol=F32.rtol, atol=F32.atol)
+
+
+def test_strict_consumption_is_not_demanded_of_a_checkpoint_whose_optimizer_is_discarded():
+    _restore_legacy(small_tp(), assert_consumed=True)
+
+
+def test_a_model_only_load_of_a_legacy_checkpoint_is_silent():
+    tp = small_tp()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LegacyOptimizerStateWarning)
+        tp.load_checkpoint(checkpoint_name=LEGACY_CHECKPOINT, model_only=True)
+
+    np.testing.assert_array_equal(_weights(tp), _flat(legacy_weights()))
+
+
+def test_a_model_without_optimizer_loads_a_legacy_checkpoint_silently():
+    # the way foundation-model and fine-tuning tools read a checkpoint: no optimizer, partial read
+    tp = small_tp()
+    no_optimizer = TensorPotential(tp.model.instructions, param_dtype=tf.float32)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LegacyOptimizerStateWarning)
+        no_optimizer.load_checkpoint(checkpoint_name=LEGACY_CHECKPOINT, expect_partial=True)
+
+    np.testing.assert_array_equal(_weights(no_optimizer), _flat(legacy_weights()))
+    assert no_optimizer.step == LEGACY_STEPS
+
+
+def test_a_checkpoint_with_other_optimizer_options_is_treated_the_same_way(tmp_path):
+    saved = _adam_tp(amsgrad=True)
+    _two_steps(saved)
+    saved.step = 2
+    saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+    restored = _adam_tp(amsgrad=False)  # no velocity-hat slots: another layout
+
+    with pytest.warns(LegacyOptimizerStateWarning, match="options differ"):
+        restored.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+
+    np.testing.assert_array_equal(_weights(restored), _weights(saved))
+    assert restored.step == 2
+    assert int(restored.optimizer.iterations.numpy()) == 0
