@@ -79,6 +79,20 @@ def test_no_warning_when_the_variable_does_not_ask_for_legacy_keras(
         tensorpotential._warn_if_legacy_keras_is_requested()
 
 
+ENVIRONMENT_PROBE = """
+import os
+before = dict(os.environ)
+import tensorpotential
+import tensorpotential.tpmodel  # a TensorFlow-side import too: it configures TensorFlow without touching os.environ
+print(before == dict(os.environ))
+"""
+
+
+def test_importing_the_package_leaves_the_environment_untouched(tmp_path: Path) -> None:
+    assert last_stdout_line(ENVIRONMENT_PROBE, tmp_path, {FLAG: None}) == "True"
+    assert last_stdout_line(ENVIRONMENT_PROBE, tmp_path, {FLAG: "0"}) == "True"
+
+
 KERAS_SIDE_CHECK = """
 import sys
 import tensorpotential.tpmodel
