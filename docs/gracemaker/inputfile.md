@@ -71,10 +71,15 @@ potential:
   # finetune_foundation_model: GRACE-1L-OAM
   # reduce_elements: True #  default - False, reduce elements to those provided in dataset
   
-  ## Option 4a. LORA (experimental, not supported)
+  ## Option 4a. LORA (low-rank adaptation of selected instructions)
   # lora: {all: {rank: 16, alpha: 1}, Z: {rank: 8, alpha: 1}, I: {rank: 4, alpha: 1, keep_dims: 1} }
-  ## reduce_lora: True # reduce LORA model
-  
+  #   Activated after the checkpoint is loaded: the weights of the adapted instructions are frozen and only
+  #   their low-rank update tensors are trained (instructions without LoRA support are trained as usual).
+  #   `all` applies to every instruction that supports LoRA, other keys give instruction names.
+  #   seed/<n>/model.yaml and the checkpoints keep the update tensors, so `-r`/`-rl` continue the same
+  #   adaptation; `final_model` and `--save-model` export the reduced model (update merged into the weights).
+  # reduce_lora: True # merge the update into the weights before training (nothing happens, with a warning, if no LoRA is active)
+
   ## Other parameters:
   # shift: False # True/False/"auto" - automatic shift by energy
   #   True  — least-squares per-element shift on training energies (for training from scratch)

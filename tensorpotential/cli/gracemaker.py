@@ -292,6 +292,64 @@ def compute_maxiter(target_total_updates: int, num_batches: int, optimizer: str)
     return max(10, min(5000, rounded))  # clamped [10, 5000]
 
 
+def finalize_lora_if_enabled(tp):
+    """Merge the LoRA updates of ``tp`` into its weights when any are active (otherwise nothing)."""
+    if tp.is_lora_enabled():
+        log.info("LORA enabled, finalizing it.")
+        tp.finalize_lora_update()
+
+
+def apply_lora_options(tp, potential_config, model_file, param_dtype):
+    """Activate and/or reduce LoRA as ``potential::lora`` and ``potential::reduce_lora`` ask.
+
+    Instructions that already hold LoRA (a restart from a saved ``model.yaml``) keep their trained
+    tensors. ``model_file`` is re-saved with ``param_dtype`` after each step, so that a restart
+    rebuilds the model as it is now.
+    """
+    lora_config = potential_config.get(tc.INPUT_POTENTIAL_LORA)
+    if lora_config:
+        tp.enable_lora_adaptation(lora_config)
+        log.info(f"Saving model config to {model_file} after LoRA activation")
+        save_instructions_dict(
+            model_file, tp.model.instructions, param_dtype=param_dtype
+        )
+
+    if potential_config.get(tc.INPUT_POTENTIAL_REDUCE_LORA):
+        if not tp.is_lora_enabled():
+            log.warning(
+                "`reduce_lora` is set, but no LoRA is active: nothing to reduce"
+            )
+            return
+        tp.finalize_lora_update()
+        log.info(f"Saving model config to {model_file} after LoRA reduction")
+        save_instructions_dict(
+            model_file, tp.model.instructions, param_dtype=param_dtype
+        )
+
+
+def lora_restart_model_file(args_parse, potential_config, output_dir):
+    """The ``model.yaml`` of the run being restarted, when ``potential::lora`` asks for LoRA.
+
+    A restart (``-r``, ``-rl``, ``-rs``) otherwise rebuilds the model from the preset of the input,
+    which has no LoRA tensors, so the trained ones in the checkpoint would be replaced by new ones.
+    Returns ``None`` when the run is not a restart, asks for no LoRA, or has no saved model file.
+    """
+    restarting = (
+        args_parse.restart_best_test
+        or args_parse.restart_latest
+        or args_parse.restart_suffix is not None
+    )
+    saved = os.path.join(output_dir, MODEL_CONFIG_YAML)
+    if (
+        restarting
+        and potential_config.get(tc.INPUT_POTENTIAL_LORA)
+        and os.path.exists(saved)
+    ):
+        log.info(f"LoRA restart: the model is loaded from `{saved}`")
+        return saved
+    return None
+
+
 def main(argv=None, strategy=None, strategy_desc=""):
     if argv is None:
         argv = []
@@ -412,7 +470,11 @@ def main(argv=None, strategy=None, strategy_desc=""):
             + f"checkpoint to {potential_config[tc.INPUT_POTENTIAL_CHECKPOINT_NAME]}"
         )
 
-    potential_file_name = args_parse.potential or potential_config.get("filename")
+    potential_file_name = (
+        args_parse.potential
+        or potential_config.get("filename")
+        or lora_restart_model_file(args_parse, potential_config, output_dir)
+    )
     if potential_file_name:
         # model will be loaded from file,
         # need inject some parameters (cutoff, elements, scale, shift) into args_yaml
@@ -641,35 +703,21 @@ def main(argv=None, strategy=None, strategy_desc=""):
     )
 
     if args_parse.save_model:
-        # if tp.is_lora_enabled():
-        #     log.info("LORA enabled, finalizing it.")
-        #     tp.finalize_lora_update()
+        finalize_lora_if_enabled(tp)
 
         if args_parse.save_fs:
             log.info("Exporting FS-model to `saved_model.yaml`, please wait...")
             tp.export_to_yaml("saved_model.yaml")
             log.info("Exporting to `saved_model.yaml` done")
         log.info("Saving model to `saved_model` and exit.")
-        # TODO: first save with jit will convert function to JIT forever!
-        # tp.save_model("saved_model_no_jit", jit_compile=False)  # first - no-jit
+        # a save with jit_compile=True converts the compute function to JIT for the rest of the
+        # process, so this is the only export made here
         tp.save_model_with_aux_computes(
             "saved_model", jit_compile=True, communicated_keys=_communicated_keys
         )
         sys.exit(0)
 
-    # if potential_config.get("lora"):
-    #     tp.enable_lora_adaptation(potential_config.get("lora"))
-    #     log.info(
-    #         f"Saving model config to {target_potential_file_name} after LoRA activation"
-    #     )
-    #     save_instructions_dict(target_potential_file_name, tp.model.instructions)
-    #
-    # if potential_config.get("reduce_lora"):
-    #     tp.finalize_lora_update()
-    #     log.info(
-    #         f"Saving model config to {target_potential_file_name} after LoRA reduction"
-    #     )
-    #     save_instructions_dict(target_potential_file_name, tp.model.instructions)
+    apply_lora_options(tp, potential_config, target_potential_file_name, param_dtype)
 
     if fit_config.get("trainable_variable_names"):
         trainable_names = fit_config["trainable_variable_names"]
@@ -739,9 +787,7 @@ def main(argv=None, strategy=None, strategy_desc=""):
             )
         load_checkpoint_if_test_available(assert_consumed=True, verbose=True)
 
-        # if tp.is_lora_enabled():
-        #     log.info("LORA enabled, finalizing it.")
-        #     tp.finalize_lora_update()
+        finalize_lora_if_enabled(tp)
 
         save_tp_model(name="final_model")
         if args_parse.save_fs:
