@@ -1,4 +1,4 @@
-"""A checkpoint written by the tree before DEPS3, with legacy Keras 2 (``tf_keras``), and its model.
+"""A checkpoint written by the tree before DEPS3, with legacy Keras 2, and its model.
 
 ``make_fixture.py`` wrote ``checkpoint.*`` and ``weights.npz`` once; the tests only read them.
 """

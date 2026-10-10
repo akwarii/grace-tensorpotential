@@ -1,6 +1,6 @@
 """Whether the optimizer state of a checkpoint fits the optimizer that would restore it.
 
-A checkpoint written by a different Keras line (legacy Keras 2, ``tf_keras``) stores the optimizer variables in
+A checkpoint written by a different Keras line (legacy Keras 2) stores the optimizer variables in
 another order and number: the same ``_variables/<n>`` keys, other shapes behind them. ``tf.train.Checkpoint``
 does not refuse such a restore: it raises on a shape mismatch, or, when the shapes happen to agree, assigns
 every slot to the wrong variable. :func:`optimizer_state_fits` compares the saved layout with the one of a

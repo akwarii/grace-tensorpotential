@@ -1,5 +1,5 @@
 {
- "writer": "tf_keras 2.20.1",
+ "writer": "legacy Keras 2, package version 2.20.1",
  "tensorflow": "2.20.0",
  "model": {
   "preset": "GRACE_1LAYER_v1_24",
