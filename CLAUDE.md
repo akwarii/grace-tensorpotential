@@ -23,6 +23,10 @@ uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv    # one file, serial
 uv run --frozen --no-sync pytest tests_torch -q                     # torch-backend tests, TF-free, seconds
 
+# CI shards the suite into 4 groups (pytest-split, balanced by tests/.test_durations). After a large change regenerate that file on an idle machine (times under -n are inflated but proportional, which is all the split needs), commit it, and run a group as CI does:
+uv run --frozen --no-sync pytest tests -n 2 --store-durations --durations-path=tests/.test_durations <same --ignore options>
+uv run --frozen --no-sync pytest tests --splits 4 --group 1 --splitting-algorithm=least_duration --durations-path=tests/.test_durations -n 2 --timeout=900 <same --ignore options>
+
 # tests_torch/structures/structures.json/.xyz are written by python -m tests_torch.structures.build_structures (test_build_structures.py fails on a difference).
 # Golden fixtures (tests_torch/golden/README.md): the generator is the only thing allowed to write them, from a committed tree.
 uv run --frozen --no-sync python tools/make_golden.py write --tier tiny   # tests_torch/golden/ (committed); --tier faithful: tests_torch/fixtures/ (npz git-ignored)
@@ -117,6 +121,10 @@ Baseline pitfalls (probe checkpoint keys, junit and AST, snapshot reproducibilit
 - **Worktrees.** A worktree has no `.venv` (git-ignored): link it from the main checkout (`uv.lock` is tracked). Never run `uv sync` there: it repoints the shared `.venv`'s editable `tensorpotential` install to the worktree (repair with `uv sync --frozen --group dev` in the main checkout);
   `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe. Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree),
   give `ty` the environment with `--python <main>/.venv`, use `--cov=tensorpotential`, and in a scratch script import `tensorpotential` before `tensorflow` (or Keras 3 is used).
+- **The hosted runner has 16 GB and a TensorFlow xdist worker's resident memory only grows (CI2).** One unchanged `test-tf` job (4 workers, whole suite) climbed from 8 GB to 15 GB used and died with "The runner has received a shutdown signal"
+  (no failing test, no kernel line when it survives) at 94 to 97% of the suite; a single runner with 2 workers on the whole suite still peaked at 14.9 GB, so the fix is **fewer tests per runner**: `test-tf` is four `pytest-split` groups with 2 workers each (peak memory used 6.7, 6.5, 6.0 and 5.9 GB, 5 to 7 minutes each; three groups peaked at 7.1, 11.5 and 9.4 GB, too close to 16 GB).
+  Every pytest in CI goes through `.github/actions/run-pytest` (per-test `--timeout=900` from `pytest-timeout`, workers, markers, shard); every job has `timeout-minutes`; `cancel-in-progress` is for pull requests only. A new heavy test file needs no edit; a new CI job that runs pytest uses the action.
+  Disk was never the problem (80 GB free after the suite), so there is no free-disk step.
 - **TensorFlow is the `tf` extra, not a base dependency (D12).** `pip install tensorpotential` has none; extras are `tf`, `torch`, `torch-sim`, `all`; the `dev` group includes `tensorpotential[tf]`. `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first
   (`find_spec`, never imports TF), so every TF-side module, hence `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils` and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint without TF (`grace_dashboard` also needs `flask`, which no extra installs).
   Package discovery is `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package. TF and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before `tensorflow` in one process**:
