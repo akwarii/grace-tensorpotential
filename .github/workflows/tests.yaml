@@ -20,7 +20,8 @@ permissions:
 
 concurrency:
   group: tests-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # a push to the integration branch is never cancelled by the next one; a pull request run is
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   UV_VERSION: "0.12.5"
@@ -43,11 +44,15 @@ jobs:
       - name: Install the base package (no extra) and pytest
         run: |
           uv venv .venv-core
-          uv pip install --python .venv-core/bin/python . pytest
+          uv pip install --python .venv-core/bin/python . pytest pytest-timeout
+      - name: Check that TensorFlow is absent
+        run: .venv-core/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
       - name: Run tests/core without TensorFlow
-        run: |
-          .venv-core/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
-          .venv-core/bin/python -m pytest --noconftest tests/core -q -p no:cacheprovider -W always
+        uses: ./.github/actions/run-pytest
+        with:
+          python: .venv-core/bin/python
+          tests: tests/core
+          extra-args: --noconftest -W always
 
   test-torch:
     # Defined here, switched on by TORCH1, which creates tests_torch/ (the job is skipped while it has no test file).
@@ -75,19 +80,30 @@ jobs:
         name: Install the torch extra without TensorFlow, then pin pandas
         run: |
           uv venv .venv-torch
-          uv pip install --python .venv-torch/bin/python ".[torch]" pytest
+          uv pip install --python .venv-torch/bin/python ".[torch]" pytest pytest-timeout
           uv pip install --python .venv-torch/bin/python "pandas==${{ matrix.pandas }}"
       - if: steps.has-tests.outputs.found == 'true'
+        name: Check that TensorFlow is absent
+        run: .venv-torch/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
+      - if: steps.has-tests.outputs.found == 'true'
         name: Run tests_torch without TensorFlow
-        run: |
-          .venv-torch/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
-          .venv-torch/bin/python -m pytest tests_torch -q -p no:cacheprovider -W always
+        uses: ./.github/actions/run-pytest
+        with:
+          python: .venv-torch/bin/python
+          tests: tests_torch
+          extra-args: -W always
 
   test-tf:
-    # The TensorFlow suite of the repository (the same selection as the local baseline, tests/ with the two usual ignores).
-    # About 13 minutes on a hosted runner.
+    # The TensorFlow suite of the repository (tests/ with the two usual ignores), in groups of about equal duration
+    # (pytest-split, tests/.test_durations) with two xdist workers each: one TensorFlow worker holds several GB, and a
+    # hosted runner has about 16 GB. Regenerate the durations with the command in CLAUDE.md after a large change.
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 60
+    name: test-tf (group ${{ matrix.group }} of 4)
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -99,7 +115,13 @@ jobs:
           enable-cache: true
       - name: Install the development environment (the dev group includes the tf extra)
         run: uv sync --frozen --group dev
-      - name: Run the TensorFlow suite
-        run: |
-          PATH="$PWD/.venv/bin:$PATH" uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
-            --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py
+      - name: Run this group of the TensorFlow suite
+        uses: ./.github/actions/run-pytest
+        with:
+          python: .venv/bin/python
+          path-prepend: ${{ github.workspace }}/.venv/bin
+          tests: tests
+          numprocs: "2"
+          splits: "4"
+          group: ${{ matrix.group }}
+          extra-args: --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py

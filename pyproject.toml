@@ -115,6 +115,8 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "pytest-timeout",  # per-test limit in CI: a hang becomes a failing test, not a dead runner (CI2)
+    "pytest-split",    # shards the TensorFlow suite by measured duration (CI2)
     "import-linter",
     "ruff==0.16.7",
     "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
