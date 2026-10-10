@@ -58,8 +58,10 @@ python tools/coverage_ratchet.py check cov.json       # a file fails when its sh
 python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json     # also tools/ast_manifest.py and tools/check_clones.py
 ```
 
-**Rough runtime** (14 cores, 30 GB, about 1,340 tests; measured 2026-10-03): the full suite takes about 10 minutes with `-n 4` on an idle machine (12 with `--cov`), about 20 serially;
-`-m "not slow"` about 4 to 5 minutes; a second suite next to it about doubles that. Compare timings only between back-to-back runs.
+**Rough runtime** (14 cores, 30 GB, about 2,640 tests; measured 2026-10-09 on an idle machine): the full suite takes about 15 minutes with `-n 4` (19 with `--cov`); the
+longest single test is `test_distrib` (about 4 minutes), and the total, not one test, bounds the run at `-n 4`. The earlier figures (10 minutes, about 20 serially, `-m "not slow"` 4 to 5 minutes, for about 1,340 tests)
+were not re-measured and are lower bounds; a second suite next to it about doubles the time. The histogram PNGs of `load_and_prepare_datasets` cost about 1 s of a 15 to 48 s training run, so they are not worth a switch.
+Compare timings only between back-to-back runs.
 
 Two test files are not part of a normal run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; ignored above only so that
 counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.

@@ -313,6 +313,21 @@
   milestone: [CLEAN2]
   upstream: pending
 
+- path: tests/MoNbTaW-LINEAR/input_lr_cosine_decay.yaml
+  reason: 'deleted with the end-to-end run that used it; the schedule is checked by tests/test_train_callbacks.py'
+  milestone: [TEST10]
+  upstream: pending
+
+- path: tests/MoNbTaW-LINEAR/input_lr_exponential_decay.yaml
+  reason: 'deleted with the end-to-end run that used it; the schedule is checked by tests/test_train_callbacks.py'
+  milestone: [TEST10]
+  upstream: pending
+
+- path: tests/MoNbTaW-LINEAR/input_lr_linear_decay_no_warmup.yaml
+  reason: 'deleted with the end-to-end run that used it; the schedule is checked by tests/test_train_callbacks.py'
+  milestone: [TEST10]
+  upstream: pending
+
 - path: tests/conftest.py
   reason: 'slow tier marked and read-only models shared between tests'
   milestone: [TEST4]
@@ -374,8 +389,8 @@
   upstream: pending
 
 - path: tests/test_integration_test.py
-  reason: 'duplicated code folded into shared helpers; slow tier marked and read-only models shared between tests'
-  milestone: [QUAL2, TEST4]
+  reason: 'duplicated code folded into shared helpers; slow tier marked and read-only models shared between tests; three learning-rate end-to-end runs replaced by closed-form tests'
+  milestone: [QUAL2, TEST4, TEST10]
   upstream: pending
 
 - path: tests/test_loss_piecewise_linear.py
