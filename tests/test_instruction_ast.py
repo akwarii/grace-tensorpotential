@@ -291,7 +291,7 @@ def test_the_extractor_does_not_import_tensorflow():
         "sys.path.insert(0, 'tools')\n"
         "import instruction_ast as ia\n"
         "ia.extract('.')\n"
-        "assert 'tensorflow' not in sys.modules and 'tf_keras' not in sys.modules\n"
+        "assert 'tensorflow' not in sys.modules and 'keras' not in sys.modules\n"
     )
     done = subprocess.run(
         [sys.executable, "-c", code],
@@ -308,7 +308,7 @@ def test_the_check_command_runs_without_tensorflow_and_passes_on_this_tree():
         "import sys\n"
         "class Block:\n"
         "    def find_spec(self, name, path=None, target=None):\n"
-        "        if name.split('.')[0] in ('tensorflow', 'tf_keras', 'torch'):\n"
+        "        if name.split('.')[0] in ('tensorflow', 'keras', 'torch'):\n"
         "            raise ImportError(name)\n"
         "sys.meta_path.insert(0, Block())\n"
         "sys.path.insert(0, 'tools')\n"

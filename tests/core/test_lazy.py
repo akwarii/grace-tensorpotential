@@ -2,12 +2,12 @@
 
 A small package written into ``tmp_path`` stands in for ``tensorpotential``: its ``__init__`` calls
 ``lazy_exports`` exactly as the real ones do, one of its modules is fine, one needs a missing
-third-party module and one needs ``tf_keras``.
+third-party module and one needs ``keras``.
 
 Logic layer: the module is imported on first access and not before, the object is cached in the
 package, unknown names raise ``AttributeError``, ``dir`` lists the names without importing them,
 an ``ImportError`` that is not about TensorFlow passes through unchanged. Behaviour layer
-(fresh interpreter with a finder that refuses ``tensorflow`` and ``tf_keras``): the error names the
+(fresh interpreter with a finder that refuses ``tensorflow`` and ``keras``): the error names the
 requested object and the ``tf`` extra and keeps the original error as its cause.
 """
 
@@ -38,7 +38,7 @@ FILES = {
         )
     """,
     "fine.py": "class Thing:\n    pass\n",
-    "needs_tf.py": "import tf_keras\n\nclass NeedsTf:\n    pass\n",
+    "needs_tf.py": "import keras\n\nclass NeedsTf:\n    pass\n",
     "needs_other.py": "import no_such_module_for_tensorpotential_tests\n\nclass NeedsOther:\n    pass\n",
 }
 
@@ -110,7 +110,7 @@ import sys
 
 class Refuse:
     def find_spec(self, name, path=None, target=None):
-        if name.split(".")[0] in ("tensorflow", "tf_keras"):
+        if name.split(".")[0] in ("tensorflow", "keras"):
             raise ImportError(f"No module named {name!r}", name=name)
 
 sys.meta_path.insert(0, Refuse())
@@ -133,8 +133,8 @@ def test_a_missing_tensorflow_is_reported_with_the_name_and_the_extra(
     out = result.stdout
     assert "'NeedsTf' needs TensorFlow" in out
     assert "tensorpotential[tf]" in out
-    assert "NAME tf_keras" in out
-    assert "CAUSE ImportError No module named 'tf_keras'" in out
+    assert "NAME keras" in out
+    assert "CAUSE ImportError No module named 'keras'" in out
 
 
 @pytest.mark.parametrize(
@@ -142,8 +142,8 @@ def test_a_missing_tensorflow_is_reported_with_the_name_and_the_extra(
     [
         ("tensorflow", True),
         ("tensorflow.python.framework", True),
-        ("tf_keras", True),
-        ("tf_keras.src", True),
+        ("keras", True),
+        ("keras.src", True),
         ("tensorflowx", False),
         ("numpy", False),
         ("tensorpotential.tpmodel", False),
@@ -171,13 +171,13 @@ def test_lazy_exports_returns_two_functions() -> None:
 def test_missing_tf_error_does_not_wrap_an_error_that_already_carries_the_hint() -> (
     None
 ):
-    original = BackendNotInstalledError("tf", ("tensorflow", "tf_keras"), "text")
+    original = BackendNotInstalledError("tf", ("tensorflow", "keras"), "text")
     error = missing_tf_error("TPCalculator", original)
     assert isinstance(error, BackendNotInstalledError)
-    assert (error.backend, error.missing) == ("tf", ("tensorflow", "tf_keras"))
+    assert (error.backend, error.missing) == ("tf", ("tensorflow", "keras"))
     assert str(error).startswith(
         "'TPCalculator' needs TensorFlow, which is not installed"
     )
-    assert "missing: tensorflow, tf_keras" in str(error)
+    assert "missing: tensorflow, keras" in str(error)
     assert "could not be imported" not in str(error)
     assert "pip install 'tensorpotential[tf]'" in str(error)

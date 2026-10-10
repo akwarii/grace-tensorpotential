@@ -38,7 +38,7 @@ PYPROJECT = {
 @pytest.mark.parametrize(
     ("text", "name"),
     [
-        ("tf_keras", "tf-keras"),
+        ("torch_sim_atomistic", "torch-sim-atomistic"),
         ("tensorflow[and-cuda]<=2.20; sys_platform == 'linux'", "tensorflow"),
         ("Torch.Sim~=1.0", "torch-sim"),
         ("  numpy ", "numpy"),
@@ -135,7 +135,7 @@ def test_a_project_without_extras_fails(
 
 def test_the_repository_declares_the_four_extras_with_their_packages() -> None:
     pyproject = tomllib.loads((REPO / "pyproject.toml").read_text())
-    assert re_.extra_requirements(pyproject, "tf") == {"tensorflow", "tf-keras"}
+    assert re_.extra_requirements(pyproject, "tf") == {"tensorflow"}
     assert re_.extra_requirements(pyproject, "torch") == {"torch"}
     assert re_.extra_requirements(pyproject, "torch-sim") == {
         "torch",
@@ -143,5 +143,5 @@ def test_the_repository_declares_the_four_extras_with_their_packages() -> None:
         "vesin",
     }
     assert re_.extra_requirements(pyproject, "all") == {
-        "tensorflow", "tf-keras", "torch", "torch-sim-atomistic", "vesin"
+        "tensorflow", "torch", "torch-sim-atomistic", "vesin"
     }  # fmt: skip

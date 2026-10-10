@@ -8,7 +8,7 @@ and the code disagree, the code wins and the sheet is wrong.
 
 ## Pinned source
 
-Every citation refers to `torch-backend` at commit `683ebd0` (TensorFlow 2.20.0, `tf_keras`; this branch was first
+Every citation refers to `torch-backend` at commit `683ebd0` (TensorFlow 2.20.0 with legacy Keras 2; this branch was first
 written on `ae456fe` and re-pinned after merging `683ebd0`, which added one import line to most of the cited modules). A citation reads
 `instructions/compute.py:187-194`: a path **relative to `tensorpotential/`**, then the line range. Tests are
 cited as `tests/test_compute.py:399` (relative to the repository root). Inside a sheet the directory is dropped

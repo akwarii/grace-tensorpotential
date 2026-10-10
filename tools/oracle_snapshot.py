@@ -155,7 +155,7 @@ def configure_tensorflow(seed: int = SEED):
     """Import TensorFlow on CPU with a single thread and deterministic ops."""
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-    # tensorpotential must come first: it selects the legacy Keras backend
+    # tensorpotential must come first: it applies the TensorFlow options (type promotion) first
     import tensorpotential  # noqa: F401, I001
     import tensorflow as tf
 

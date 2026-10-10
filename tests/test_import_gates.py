@@ -479,7 +479,7 @@ def test_is_absent_matches_package_and_submodules_only():
 # Gate 4: the TensorFlow-free entry points (D1: lazy imports, TF-free shared code in core/)
 # --------------------------------------------------------------------------------------
 # Modules and names that must work in an interpreter where ``import tensorflow`` and
-# ``import tf_keras`` raise ImportError.  Add the entry points of the TF-free code here.
+# ``import keras`` raise ImportError.  Add the entry points of the TF-free code here.
 TF_FREE_MODULES = (
     "tensorpotential",
     "tensorpotential.core",
@@ -502,7 +502,7 @@ import importlib, json, sys, traceback
 
 class RefuseTensorFlow:
     def find_spec(self, name, path=None, target=None):
-        if name.split(".")[0] in ("tensorflow", "tf_keras"):
+        if name.split(".")[0] in ("tensorflow", "keras"):
             raise ImportError(f"No module named {name!r} (refused by the test)", name=name)
 
 sys.meta_path.insert(0, RefuseTensorFlow())
@@ -522,7 +522,7 @@ try:
     tensorpotential.calculator.TPCalculator
 except ImportError as exc:
     tf_error = str(exc)
-print(json.dumps({"failures": failures, "loaded": sorted(m for m in sys.modules if m.split(".")[0] in ("tensorflow", "tf_keras")), "tf_error": tf_error, "grace_fm": callable(grace_fm)}))
+print(json.dumps({"failures": failures, "loaded": sorted(m for m in sys.modules if m.split(".")[0] in ("tensorflow", "keras")), "tf_error": tf_error, "grace_fm": callable(grace_fm)}))
 """
 
 

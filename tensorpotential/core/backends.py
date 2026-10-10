@@ -17,7 +17,7 @@ from collections.abc import Mapping
 
 #: Importable top-level packages that each backend (and extra) needs.
 BACKEND_PACKAGES: Mapping[str, tuple[str, ...]] = {
-    "tf": ("tensorflow", "tf_keras"),
+    "tf": ("tensorflow", "keras"),
     "torch": ("torch",),
     "torch-sim": ("torch", "torch_sim", "vesin"),
 }

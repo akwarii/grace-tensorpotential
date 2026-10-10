@@ -18,11 +18,11 @@ from tensorpotential.core.backends import (
     backend_not_installed,
 )
 
-TF_PACKAGES = frozenset({"tensorflow", "tf_keras"})
+TF_PACKAGES = frozenset({"tensorflow", "keras"})
 
 
 def is_tf_import_error(exc: ImportError) -> bool:
-    """Whether ``exc`` was raised because ``tensorflow`` or ``tf_keras`` could not be imported."""
+    """Whether ``exc`` was raised because ``tensorflow`` or ``keras`` could not be imported."""
     return (exc.name or "").split(".")[0] in TF_PACKAGES
 
 

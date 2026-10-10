@@ -198,7 +198,7 @@ def test_the_base_requirements_have_no_tensorflow_and_the_extras_are_declared(
     assert {"scipy", "numpy", "pandas", "ase", "matscipy", "sympy"} <= base
     assert not base & {
         "tensorflow",
-        "tf-keras",
+        "keras",
         "torch",
         "torch-sim-atomistic",
         "vesin",
@@ -209,7 +209,7 @@ def test_the_base_requirements_have_no_tensorflow_and_the_extras_are_declared(
         "torch-sim",
         "all",
     }
-    assert requirements_of(requires, "tf") == {"tensorflow", "tf-keras"}
+    assert requirements_of(requires, "tf") == {"tensorflow"}
     assert requirements_of(requires, "torch") == {"torch"}
     assert requirements_of(requires, "torch-sim") == {
         "tensorpotential",
