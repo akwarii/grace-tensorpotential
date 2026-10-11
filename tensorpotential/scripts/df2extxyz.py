@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+from collections.abc import Sequence
 import logging
 
 import pandas as pd
@@ -47,9 +48,9 @@ def build_parser():
     return parser
 
 
-def main(args=None):
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args_parse = parser.parse_args(args)
+    args_parse = parser.parse_args(argv)
     input_fname = args_parse.input
     energy_col = args_parse.energy_column
     force_col = args_parse.force_column
@@ -92,6 +93,8 @@ def main(args=None):
     write(output_fname, atoms_list, format="extxyz")
     logging.info(f"Saved to {output_fname} ({sizeof_fmt(output_fname)})")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
 import pytest
+from tests import cli_help
 from ase import Atoms
 
 from tensorpotential.scripts import grace_collect
@@ -98,7 +100,7 @@ def run_collect(tmp_path: Path, working_dir: Path, *options: str) -> pd.DataFram
         str(output),
         *options,
     ])
-    return pd.read_pickle(output, compression="gzip")
+    return cast(pd.DataFrame, pd.read_pickle(output, compression="gzip"))
 
 
 @pytest.fixture
@@ -477,3 +479,35 @@ def test_get_free_atom_energy_picks_the_most_isolated_single_atom():
     })
     assert grace_collect.get_free_atom_energy(df, "Cu") == pytest.approx(-0.2)
     assert grace_collect.get_free_atom_energy(df.iloc[[2]], "Cu") == 0
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(
+    calc_dir, tmp_path, monkeypatch
+):
+    cli_help.poison_sys_argv(monkeypatch)
+    output = tmp_path / "out.pkl.gz"
+    assert (
+        grace_collect.main([
+            "-wd",
+            str(calc_dir),
+            "--output-dataset-filename",
+            str(output),
+        ])
+        == 0
+    )
+    assert output.is_file()
+
+
+def test_main_without_argv_reads_sys_argv(calc_dir, tmp_path, monkeypatch):
+    output = tmp_path / "out.pkl.gz"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "grace_collect",
+            "-wd",
+            str(calc_dir),
+            "--output-dataset-filename",
+            str(output),
+        ],
+    )
+    assert grace_collect.main() == 0

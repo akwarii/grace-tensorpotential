@@ -11,6 +11,7 @@ Subcommands:
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 
 _SUBCOMMANDS = {
     "build": ("tensorpotential.uq.cli.build", "build_main"),
@@ -142,9 +143,9 @@ Run `grace_uq <subcommand> --help` for subcommand-specific options.
     )
 
 
-def main():
-    raise SystemExit(_dispatch(sys.argv[1:]))
+def main(argv: Sequence[str] | None = None) -> int:
+    return _dispatch(list(sys.argv[1:] if argv is None else argv))
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -68,7 +69,7 @@ def predicted(structures, tmp_path) -> pd.DataFrame:
         "-m", str(SAVED_MODEL), "-d", str(source), "-o", str(target)
     )
     assert code == 0
-    return pd.read_pickle(target, compression="gzip")
+    return cast(pd.DataFrame, pd.read_pickle(target, compression="gzip"))
 
 
 def test_the_output_has_the_input_columns_without_the_structures_and_the_three_predictions(
@@ -264,3 +265,24 @@ def test_mag_mom_entries_are_applied_to_copies_and_none_leaves_the_structure_alo
         handed[1].arrays["initial_magmoms"][:, 2], np.full(n, 2.0)
     )
     assert "initial_magmoms" not in frame["ase_atoms"].iloc[1].arrays
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(
+    structures, tmp_path, monkeypatch
+):
+    source = tmp_path / "in.pkl.gz"
+    structures.head(1).to_pickle(source, compression="gzip")
+    cli_help.poison_sys_argv(monkeypatch)
+    output = tmp_path / "out.pkl.gz"
+    assert (
+        grace_predict.main([
+            "-m",
+            str(SAVED_MODEL),
+            "-d",
+            str(source),
+            "-o",
+            str(output),
+        ])
+        == 0
+    )
+    assert output.is_file()

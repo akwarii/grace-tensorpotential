@@ -1098,3 +1098,12 @@ def test_a_fit_without_a_test_set_trains_and_does_not_load_a_best_test_loss_chec
     assert ws.metrics("train")["epoch"].tolist() == [1, 2]
     assert not (ws.seed_dir / "test_metrics.yaml").exists()
     assert "Loading best test loss model" not in caplog.text
+
+
+def test_script_main_returns_zero_and_without_argv_reads_sys_argv(script_env, monkeypatch):
+    cli_help.poison_sys_argv(monkeypatch)
+    assert gracemaker_script.main(["input.yaml", "--seed", "3"]) == 0
+    assert script_env["runs"][-1]["argv"] == ["input.yaml", "--seed", "3"]
+    monkeypatch.setattr("sys.argv", ["gracemaker", "other.yaml"])
+    assert gracemaker_script.main() == 0
+    assert script_env["runs"][-1]["argv"] == ["other.yaml"]

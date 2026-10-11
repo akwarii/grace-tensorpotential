@@ -1,4 +1,5 @@
 import argparse
+from collections.abc import Sequence
 import logging
 import os
 import warnings
@@ -92,9 +93,9 @@ def build_parser():
     return parser
 
 
-def main(args=None):
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args_parse = parser.parse_args(args)
+    args_parse = parser.parse_args(argv)
 
     model_path = os.path.abspath(args_parse.model_path)
     dataset_file = args_parse.dataset_file
@@ -130,6 +131,8 @@ def main(args=None):
     logger.info(f"Saving dataset to {output_file}")
     df.drop(columns=["ase_atoms"]).to_pickle(output_file, compression="gzip")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

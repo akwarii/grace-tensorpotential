@@ -449,3 +449,15 @@ def test_a_seed_with_an_unusable_metrics_file_is_skipped_with_a_warning(
     payload = grace_dashboard.build_payload(str(tmp_path))
     assert payload["experiments"] == []
     assert "[warn] skipping" in capsys.readouterr().out
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(tmp_path, served, monkeypatch):
+    cli_help.poison_sys_argv(monkeypatch)
+    assert grace_dashboard.main(["--base", str(tmp_path), "--port", "8124"]) == 0
+    assert served["port"] == 8124
+
+
+def test_main_without_argv_reads_sys_argv(tmp_path, served, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["grace_dashboard", "--base", str(tmp_path), "--port", "8125"])
+    assert grace_dashboard.main() == 0
+    assert served["port"] == 8125

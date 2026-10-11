@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -72,7 +73,7 @@ def run_select(tmp_path: Path, *argv: str) -> pd.DataFrame:
     """Run ``select_main`` writing ``selected.pkl.gz`` in ``tmp_path`` and return the stored selection."""
     output = tmp_path / "selected.pkl.gz"
     assert select_main([*argv, "--output", str(output)]) == 0
-    return pd.read_pickle(output, compression="gzip")
+    return cast(pd.DataFrame, pd.read_pickle(output, compression="gzip"))
 
 
 # --- physical values: the gamma window --------------------------------------------------------------------------------

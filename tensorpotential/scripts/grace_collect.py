@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 import argparse
+from collections.abc import Sequence
 
 from ase import Atoms
 from ase.io import read
@@ -190,10 +191,10 @@ def build_parser():
     return parser
 
 
-def main(args=None):
+def main(argv: Sequence[str] | None = None) -> int:
     ##############################################################################################
     parser = build_parser()
-    args_parse = parser.parse_args(args)
+    args_parse = parser.parse_args(argv)
     working_dir = os.path.abspath(args_parse.working_dir)
     free_atom_energy_dict = args_parse.free_atom_energy
     output_dataset_filename = args_parse.output_dataset_filename
@@ -307,6 +308,8 @@ def main(args=None):
     logger.info('Minimum/maximum force magnitude: {:.3f}/{:.3f} eV/A'.format(df['magnitude_forces'].min(),
                                                                              df['magnitude_forces'].max()))
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

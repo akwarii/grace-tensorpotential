@@ -2,6 +2,7 @@
 import argparse
 import logging
 import sys
+from collections.abc import Sequence
 
 import numpy as np
 from ase import Atoms
@@ -712,11 +713,12 @@ def build_parser():
     return parser
 
 
-def main():
+def main(argv: Sequence[str] | None = None) -> int:
     # Parse arguments and execute the corresponding function
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
     args.func(args)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from collections import defaultdict
+from collections.abc import Sequence
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -942,7 +943,7 @@ def build_parser():
     return parser
 
 
-def build_main(argv=None):
+def build_main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1072,7 +1073,7 @@ def build_main(argv=None):
             expected, already_done = [], False
         if already_done:
             print(f"Worker {args.worker_id} Step {args.step} already completed, skipping.", flush=True)
-            return
+            return 0
         else:
             missing = [p for p in expected if not os.path.exists(p)]
             print(f"Worker {args.worker_id} Step {args.step}: {len(missing)} file(s) missing, running."
@@ -1189,3 +1190,4 @@ def build_main(argv=None):
             print(f"\nSUCCESS: SavedModel exported to {args.export_path}")
         else:
             run_master(args)
+    return 0

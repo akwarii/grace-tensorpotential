@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+from collections.abc import Sequence
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
@@ -64,8 +65,8 @@ def _detect_multigpu_intent(argv):
     return cfg.get("fit", {}).get("strategy") == "mirrored"
 
 
-def main():
-    argv = sys.argv[1:]
+def main(argv: Sequence[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
 
     strategy = None
     strategy_desc = ""
@@ -138,8 +139,9 @@ def main():
 
     from tensorpotential.cli.gracemaker import main as gracemaker_main
 
-    gracemaker_main(sys.argv[1:], strategy=strategy, strategy_desc=strategy_desc)
+    gracemaker_main(argv, strategy=strategy, strategy_desc=strategy_desc)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from tests import cli_help
 from ase.io import read
 
 from tensorpotential.scripts import df2extxyz
@@ -177,3 +178,16 @@ def test_build_parser_defaults():
         "stress",
         None,
     )
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(frame, tmp_path, monkeypatch):
+    source = _write(frame, tmp_path / "train.pkl.gz")
+    cli_help.poison_sys_argv(monkeypatch)
+    assert df2extxyz.main([str(source)]) == 0
+    assert (tmp_path / "train.xyz").is_file()
+
+
+def test_main_without_argv_reads_sys_argv(frame, tmp_path, monkeypatch):
+    source = _write(frame, tmp_path / "train.pkl.gz")
+    monkeypatch.setattr("sys.argv", ["df2extxyz", str(source)])
+    assert df2extxyz.main() == 0

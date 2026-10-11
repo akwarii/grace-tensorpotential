@@ -2,6 +2,7 @@
 import os
 import json
 import argparse
+from collections.abc import Sequence
 
 
 # ---------------------------------------------------------------------------
@@ -592,15 +593,17 @@ def build_parser():
     return parser
 
 
-def main(args=None):
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args_parse = parser.parse_args(args)
+    args_parse = parser.parse_args(argv)
 
     if args_parse.command:
         args_parse.func(args_parse)
     else:
         parser.print_help()
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

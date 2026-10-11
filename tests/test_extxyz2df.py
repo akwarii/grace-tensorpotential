@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from tests import cli_help
 from ase.build import bulk
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
@@ -110,3 +111,14 @@ def test_the_input_is_required(capsys):
         "the following arguments are required: extxyz_filename"
         in capsys.readouterr().err
     )
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(extxyz, tmp_path, monkeypatch):
+    cli_help.poison_sys_argv(monkeypatch)
+    assert extxyz2df.main([str(extxyz)]) == 0
+    assert (tmp_path / "frames.pkl.gz").is_file()
+
+
+def test_main_without_argv_reads_sys_argv(extxyz, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["extxyz2df", str(extxyz)])
+    assert extxyz2df.main() == 0

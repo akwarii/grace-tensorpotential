@@ -130,3 +130,10 @@ def test_the_verbose_list_differs_from_the_table():
     code_v, out_v, _ = run_models("list", "--verbose")
     assert code == code_v == 0
     assert out != out_v
+
+
+def test_main_returns_zero_with_and_without_a_command_and_does_not_read_sys_argv(monkeypatch, capsys):
+    cli_help.poison_sys_argv(monkeypatch)
+    assert grace_models.main([]) == 0
+    assert grace_models.main(["download", "no_such_model"]) == 0
+    assert "usage: grace_models" in capsys.readouterr().out

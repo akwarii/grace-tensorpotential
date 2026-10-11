@@ -67,3 +67,17 @@ def test_a_subcommand_usage_error_exits_2():
     code, _, err = run_grace_uq("info", "--no-such-option")
     assert code == 2
     assert "usage: grace_uq info" in err
+
+
+def test_main_returns_the_exit_code_instead_of_raising_and_does_not_read_sys_argv(tmp_path, monkeypatch):
+    artifact = str(tmp_path / "art.npz")
+    _write_synthetic_info_artifact(artifact, n_elements=2, K=3, D=4)
+    cli_help.poison_sys_argv(monkeypatch)
+    assert grace_uq.main(["info", artifact]) == 0
+    assert grace_uq.main([]) == 0
+    assert grace_uq.main(["frobnicate"]) == 2
+
+
+def test_main_without_argv_reads_sys_argv(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["grace_uq", "frobnicate"])
+    assert grace_uq.main() == 2

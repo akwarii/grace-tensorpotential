@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
+import inspect
 import io
 import os
 import sys
@@ -173,3 +175,48 @@ def test_run_main_turns_a_system_exit_message_into_stderr_and_exit_code_1():
         raise SystemExit("something is wrong")
 
     assert cli_help.run_main(main, "cmd", []) == (1, "", "something is wrong\n")
+
+
+ENTRY_MODULES = sorted(
+    {(case.module, case.function) for case in CASES}
+    | {
+        ("tensorpotential.uq.cli.build", "build_main"),
+        ("tensorpotential.uq.cli.info", "info_main"),
+        ("tensorpotential.uq.cli.predict", "predict_main"),
+        ("tensorpotential.uq.cli.select", "select_main"),
+        ("tensorpotential.cli.gracemaker", "main"),
+    }
+)
+PARSER_MODULES = [
+    "tensorpotential.scripts.grace_utils",
+    "tensorpotential.scripts.grace_dashboard",
+    "tensorpotential.scripts.grace_predict",
+    "tensorpotential.scripts.extxyz2df",
+    "tensorpotential.scripts.df2extxyz",
+    "tensorpotential.scripts.grace_collect",
+    "tensorpotential.scripts.grace_models",
+    "tensorpotential.scripts.grace_preprocess",
+    "tensorpotential.uq.cli.build.master",
+    "tensorpotential.uq.cli.info",
+    "tensorpotential.cli.gracemaker",
+]
+
+
+@pytest.mark.parametrize(("module", "function"), ENTRY_MODULES)
+def test_every_entry_function_takes_argv_first_and_defaults_it_to_none(
+    module, function
+):
+    parameters = list(
+        inspect.signature(
+            getattr(importlib.import_module(module), function)
+        ).parameters.values()
+    )
+    assert parameters[0].name == "argv"
+    assert parameters[0].default is None
+
+
+@pytest.mark.parametrize("module", PARSER_MODULES)
+def test_every_command_module_builds_its_parser_without_running_anything(module):
+    parser = importlib.import_module(module).build_parser()
+    assert isinstance(parser, argparse.ArgumentParser)
+    assert parser.format_help().startswith("usage:")

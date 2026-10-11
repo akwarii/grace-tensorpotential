@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+from collections.abc import Sequence
 import glob
 import json
 import logging
@@ -720,7 +721,7 @@ def get_databuilders(
     return databuilders_list
 
 
-def main(args=None):
+def main(argv: Sequence[str] | None = None) -> int:
     # TODO: apply reference energy (esa_dict)
     # TODO: if  shift -> compute esa_dict from lstsq (optional), scale (necessary!)
     # TODO: Extract elements and element_map
@@ -728,7 +729,7 @@ def main(args=None):
     # TODO: user_cutoff_dict = args_yaml.get(tc.INPUT_CUTOFF_DICT)
 
     parser = build_parser()
-    args_parse = parser.parse_args(args)
+    args_parse = parser.parse_args(argv)
     input_fnames = args_parse.input
     sharded_input = args_parse.sharded_input
     elements = args_parse.elements
@@ -1035,6 +1036,8 @@ def main(args=None):
             with open(stats_fname, "w") as f:
                 json.dump(stats, f, cls=NumpyEncoder)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

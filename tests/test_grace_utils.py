@@ -170,3 +170,15 @@ def test_documented_aux_model_command_is_accepted_by_the_parser():
     args = called.call_args.args[0]
     assert args.output_path == "/path/to/upgraded_model"
     assert args.communicated_keys == ["I", "I_out_0_LN"]
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(model_1l, monkeypatch):
+    model, _ = model_1l
+    monkeypatch.setattr(sys, "argv", ["poisoned", "--no-such-option-in-any-command"])
+    assert grace_utils.main(["-p", str(model), "summary"]) == 0
+
+
+def test_main_without_argv_reads_sys_argv(model_1l, monkeypatch):
+    model, _ = model_1l
+    monkeypatch.setattr(sys, "argv", ["grace_utils", "-p", str(model), "summary"])
+    assert grace_utils.main() == 0

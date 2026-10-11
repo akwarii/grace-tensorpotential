@@ -24,6 +24,7 @@ import json
 import math
 import os
 import re
+from collections.abc import Sequence
 from datetime import datetime
 
 import numpy as np
@@ -1327,8 +1328,8 @@ def build_parser():
     return ap
 
 
-def main():
-    args = build_parser().parse_args()
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     base = os.path.abspath(args.base)
     if not os.path.isdir(base):
@@ -1340,7 +1341,8 @@ def main():
           f"{sum(len(f['seeds']) for f in fits)} seed(s) total")
     app = create_app(base, target_epochs=args.target_epochs)
     app.run(host=args.host, port=args.port, debug=args.debug)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

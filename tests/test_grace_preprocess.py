@@ -585,3 +585,20 @@ def test_an_unreadable_input_file_is_logged_and_skipped(input_file, dataframe, t
         run_main([broken, input_file], out, 1, "--sharded-input")
     assert "Error reading file" in caplog.text
     assert len(load_dataset(out / "stage1" / "shard_1-of-1")) == N_STRUCTURES
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(input_file, tmp_path, monkeypatch):
+    from tests import cli_help
+
+    cli_help.poison_sys_argv(monkeypatch)
+    out = tmp_path / "out"
+    argv = [str(input_file), "-o", str(out), "-e", "Cu", "-c", "4.0", "--stage-1"]
+    assert grace_preprocess.main(argv) == 0
+    assert (out / "stage1" / "shard_1-of-1").is_dir()
+
+
+def test_main_without_argv_reads_sys_argv(input_file, tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    monkeypatch.setattr("sys.argv", ["grace_preprocess", str(input_file), "-o", str(out), "-e", "Cu", "--stage-1"])
+    assert grace_preprocess.main() == 0
+    assert (out / "stage1" / "shard_1-of-1").is_dir()

@@ -28,7 +28,9 @@ from tensorpotential.scripts import grace_preprocess
 from tensorpotential.tpmodel import extract_cutoff_and_elements
 from tensorpotential.uq import constants as uqc
 from tensorpotential.uq.cli.build import build_main
+from tensorpotential.uq.cli.build.master import build_parser
 from tensorpotential.uq.cli.info import info_main
+from tests import cli_help
 
 DATA = Path(__file__).resolve().parent / "data" / "MoNbTaW_test50.pkl.gz"
 N_TRAIN = 12
@@ -82,8 +84,9 @@ def master_run(model_dir, training_frame, tmp_path_factory):
     out = io.StringIO()
     with pytest.MonkeyPatch.context() as patch, contextlib.redirect_stdout(out):
         patch.chdir(seed)
-        build_main(common_args(model_dir, "--n-clusters", "2", "--no-export"))
+        code = build_main(common_args(model_dir, "--n-clusters", "2", "--no-export"))
     return {
+        "code": code,
         "seed": seed,
         "fit": fit,
         "artifact": seed / "gmm_artifacts.npz",
@@ -112,6 +115,7 @@ def test_the_training_data_come_from_the_input_yaml_two_levels_up(master_run):
 def test_the_run_writes_the_artifact_next_to_the_working_directory_and_no_saved_model(
     master_run,
 ):
+    assert master_run["code"] == 0
     assert master_run["artifact"].is_file()
     assert not (master_run["seed"] / "saved_model").exists()
 
@@ -513,3 +517,35 @@ def test_a_sharded_dataset_without_statistics_is_read_all_the_same(model_dir, tm
         worker_args(model_dir, tmp_path, dataset / "stage3", 1, "--n-clusters", "2")
     )
     assert (tmp_path / ".step1_w0_k2.npz").is_file()
+
+
+def test_a_finished_worker_step_returns_zero_without_loading_the_model(
+    tmp_path, data_file, monkeypatch, capsys
+):
+    # the expected output of step 1 exists, so no model is needed: nothing but the argument parsing runs
+    for k in (2, 3):
+        (tmp_path / f".step1_w0_k{k}.npz").write_bytes(b"")
+    cli_help.poison_sys_argv(monkeypatch)
+    argv = [
+        "--worker-id",
+        "0",
+        "--step",
+        "1",
+        "--n-workers",
+        "1",
+        "--n-clusters",
+        "2",
+        "3",
+        "--train-data",
+        str(data_file),
+        "--artifact-path",
+        str(tmp_path / "gmm_artifacts.npz"),
+        "--model-yaml",
+        str(tmp_path / "absent.yaml"),
+    ]
+    assert build_main(argv) == 0
+    assert "already completed, skipping" in capsys.readouterr().out
+
+
+def test_the_parser_of_the_build_command_is_available_without_running_it():
+    assert build_parser().prog == "grace_uq build"

@@ -2,6 +2,7 @@
 
 import os
 import argparse
+from collections.abc import Sequence
 from tensorpotential.cli.data import load_extxyz
 from tensorpotential.formatting import sizeof_fmt
 
@@ -31,10 +32,10 @@ def build_parser():
     return parser
 
 
-def main(args=None):
+def main(argv: Sequence[str] | None = None) -> int:
     ##############################################################################################
     parser = build_parser()
-    args_parse = parser.parse_args(args)
+    args_parse = parser.parse_args(argv)
     extxyz_filename = os.path.abspath(args_parse.extxyz_filename)
     output_dataset_filename = args_parse.output_dataset_filename
     if output_dataset_filename is None:
@@ -51,6 +52,8 @@ def main(args=None):
         f"Saved dataframe to {output_dataset_filename} ({sizeof_fmt(output_dataset_filename)})"
     )
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

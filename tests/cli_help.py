@@ -145,6 +145,11 @@ def run_main(
     return (result if isinstance(result, int) else 0), out.getvalue(), err.getvalue()
 
 
+def poison_sys_argv(monkeypatch) -> None:
+    """Make ``sys.argv`` something no parser accepts: a ``main`` that still reads it fails with a usage error."""
+    monkeypatch.setattr(sys, "argv", ["poisoned", "--no-such-option-in-any-command"])
+
+
 def capture_help(case: HelpCase) -> str:
     """The text ``<command> <words> --help`` prints, with the exit code checked to be 0."""
     code, out, err = run_main(case.main(), case.command, [*case.words, "--help"])
