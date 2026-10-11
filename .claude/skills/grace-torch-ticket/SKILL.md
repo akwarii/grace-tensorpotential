@@ -128,6 +128,11 @@ Rules for the text:
 
 ## Before you call it done
 
+- **Tidy up your code first** (rule in `CLAUDE.md`): four reviews of the diff against `origin/torch-backend`, one per lens, run as parallel subagents or with the `simplify` skill. Give each the diff and the touched files, and tell it to report, not to edit.
+  Reuse: an existing helper, base class or tool that does the same, duplicates the diff adds (`python tools/check_clones.py check`). Simplification: nesting, dead branches, parameters nobody varies, functions above complexity 10 or 50 statements.
+  Efficiency: a cost that a measurement shows (rule R7), not a guess. Altitude: logic placed in the wrong layer or module, private names used across modules, an import against the direction of the layers.
+  Apply what is right in `refactor:` commits (each fix of a unit below 90% coverage first gets its characterization test), run the checks again, and put the outcome per lens in the PR's Review focus: what was found, what was fixed, what was left and why.
+  A finding outside the files of the PR is commented on the issue (`board.py finding`), not fixed in this PR.
 - Run the Verify commands of the issue and go through the Definition of Done checklist in its body (every box ticked or marked not applicable): exit criterion met, touched units at 90% coverage **before** the
   change, new code covered with both test layers, `ruff`/`ty` clean on new code, import contracts green, docstrings, no commented-out code, single concern.
 - Run the tests that can catch a behaviour change (from the repository root): the full suite with `-n 4 --dist load`, compared with `baselines/` through
