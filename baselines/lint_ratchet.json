@@ -5,12 +5,6 @@
    "F405": 3,
    "F821": 2
   },
-  "setup.py": {
-   "ERA001": 7
-  },
-  "tensorpotential/cli/gracemaker.py": {
-   "ERA001": 13
-  },
   "tensorpotential/cli/train.py": {
    "ERA001": 2
   },
@@ -69,9 +63,6 @@
   "tensorpotential/functions/nn.py": {
    "ERA001": 1
   },
-  "tensorpotential/functions/radial.py": {
-   "ERA001": 9
-  },
   "tensorpotential/instructions/compute.py": {
    "ERA001": 8
   },
@@ -83,12 +74,6 @@
   },
   "tensorpotential/scripts/_kokkos_export.py": {
    "ERA001": 1
-  },
-  "tensorpotential/scripts/grace_preprocess.py": {
-   "ERA001": 1
-  },
-  "tensorpotential/scripts/grace_utils.py": {
-   "ERA001": 7
   },
   "tensorpotential/tensorpot.py": {
    "ERA001": 1
@@ -140,7 +125,7 @@
    "not-iterable": 1
   },
   "tensorpotential/cli/train_callbacks.py": {
-   "invalid-assignment": 3
+   "invalid-assignment": 1
   },
   "tensorpotential/cli/wizard.py": {
    "invalid-assignment": 2
@@ -194,7 +179,7 @@
    "not-iterable": 3
   },
   "tensorpotential/instructions/compute.py": {
-   "call-non-callable": 3,
+   "call-non-callable": 1,
    "invalid-type-form": 2,
    "no-matching-overload": 4,
    "not-iterable": 2
@@ -240,17 +225,10 @@
    "no-matching-overload": 1
   },
   "tensorpotential/utils.py": {
-   "invalid-method-override": 1,
-   "not-subscriptable": 1
+   "invalid-method-override": 1
   },
   "tests/MoNbTaW-CUSTOM/model.py": {
    "invalid-method-override": 1
-  },
-  "tests/test_calculator.py": {
-   "missing-argument": 2
-  },
-  "tests/test_graph_split.py": {
-   "missing-argument": 1
   },
   "tests/test_instructions.py": {
    "not-iterable": 6,
