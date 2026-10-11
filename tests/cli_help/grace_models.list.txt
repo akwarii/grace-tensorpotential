@@ -1,0 +1,6 @@
+usage: grace_models list [-h] [-v] [--ascii]
+
+options:
+  -h, --help     show this help message and exit
+  -v, --verbose  full per-model block (description, paths, license) instead of the table
+  --ascii        use ASCII glyphs (Y/N/./-) instead of unicode in the table

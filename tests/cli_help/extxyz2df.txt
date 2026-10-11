@@ -1,0 +1,9 @@
+usage: extxyz2df [-h] [--output-dataset-filename OUTPUT_DATASET_FILENAME] extxyz_filename
+
+positional arguments:
+  extxyz_filename       Name of extxyz file
+
+options:
+  -h, --help            show this help message and exit
+  --output-dataset-filename OUTPUT_DATASET_FILENAME
+                        pickle filename, default is inferenced from extxyz_filename

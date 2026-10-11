@@ -1,0 +1,4 @@
+usage: grace_utils update_model [-h]
+
+options:
+  -h, --help  show this help message and exit

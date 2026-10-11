@@ -1,0 +1,13 @@
+usage: grace_utils export_kokkos [-h] -o OUTPUT [--arch {auto,1l,2l,3l}]
+                                 [--uq-artifacts UQ_ARTIFACTS_PATH]
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTPUT, --output OUTPUT
+                        Output .npz path (e.g. grace_2l_weights.npz)
+  --arch {auto,1l,2l,3l}
+                        Override architecture (default: auto-detect from instructions).
+  --uq-artifacts UQ_ARTIFACTS_PATH
+                        Path to gmm_artifacts.npz (UQ). If given, dense uq_* arrays (centroids,
+                        inverse covariances, gamma thresholds, error model) are baked into the
+                        exported kokkos .npz.

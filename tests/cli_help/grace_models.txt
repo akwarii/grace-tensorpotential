@@ -1,0 +1,15 @@
+usage: grace_models [-h] {list,info,download,checkpoint,update} ...
+
+Download foundation GRACE models
+
+positional arguments:
+  {list,info,download,checkpoint,update}
+                        Sub-command help
+    list                List available models
+    info                Show declared + downloaded-artifact capability flags for a model
+    download            Download a model
+    checkpoint          Download a checkpoint
+    update              Re-download cached models/checkpoints whose origin URL is out of date
+
+options:
+  -h, --help            show this help message and exit

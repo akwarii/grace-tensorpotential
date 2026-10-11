@@ -1,0 +1,7 @@
+usage: grace_models checkpoint [-h] model_name
+
+positional arguments:
+  model_name  Name of the model to download checkpoint for
+
+options:
+  -h, --help  show this help message and exit

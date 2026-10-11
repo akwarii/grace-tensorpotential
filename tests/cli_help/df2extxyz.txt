@@ -1,0 +1,17 @@
+usage: df2extxyz [-h] [-e ENERGY_COLUMN] [-f FORCE_COLUMN] [-s STRESS_COLUMN] [-o OUTPUT] input
+
+Conversion from df.pkl.gz to extxyz
+
+positional arguments:
+  input                 input pkl.gz file
+
+options:
+  -h, --help            show this help message and exit
+  -e ENERGY_COLUMN, --energy-column ENERGY_COLUMN
+                        name of energy column
+  -f FORCE_COLUMN, --force-column FORCE_COLUMN
+                        name of forces column
+  -s STRESS_COLUMN, --stress-column STRESS_COLUMN
+                        name of stress column
+  -o OUTPUT, --output OUTPUT
+                        output file name

@@ -1,0 +1,90 @@
+grace_uq <subcommand> [options]
+
+Subcommands:
+  build    Parallel GMM-UQ artifact generation (3 steps + optional SavedModel export).
+  info     Summarize a UQ .npz artifact (D, K, elements, thresholds, diagnostics).
+  predict  Run E/F/S + per-atom gamma over a dataset; multi-worker; pkl.gz/extxyz.
+  select   Pick N structures from a candidate pool (random/fps; gamma window;
+           per-element stratification).
+
+Run `grace_uq <subcommand> --help` for subcommand-specific options.
+
+
+Examples
+--------
+
+1. Building UQ artifacts:
+
+ * Build UQ artifacts (default):
+    grace_uq build
+
+ * Build UQ artifacts from a training set:
+    grace_uq build --model-yaml model.yaml \
+                   --checkpoint checkpoints/checkpoint.best_test_loss.index \
+                   --train-data training_set.pkl.gz  \
+                   --n-workers 4
+
+ * Re-export a SavedModel from existing artifacts (no training data needed):
+    grace_uq build --model-yaml model.yaml \
+                   --checkpoint checkpoint \
+                   --artifact-path UQ/gmm_artifacts.npz
+
+2. Inspecting UQ artifacts:
+
+ * Inspect an artifact:
+    grace_uq info
+
+3. Predicting with uncertainties
+
+  * Predict on a candidate pool using the exported SavedModel (multi-worker):
+    grace_uq predict --model saved_model/ \
+                     --dataset candidates.pkl.gz \
+
+  * Predict using model.yaml + checkpoint + artifact (no SavedModel):
+    grace_uq predict --model model.yaml \
+                     --checkpoint checkpoint \
+                     --artifact UQ/gmm_artifacts.npz \
+                     --dataset candidates.pkl.gz \
+                     --save-features
+
+  * Predict and save as extxyz, dropping the ase_atoms column from pkl:
+    grace_uq predict --model saved_model/ \
+                     --dataset candidates.pkl.gz \
+                     --output predicted.xyz
+
+4. Selecting structures
+
+  * Simplest case — point at a SavedModel + raw dataset; predict + select in one go:
+    grace_uq select --model saved_model/ \
+                    --dataset candidates.pkl.gz \
+                    -n 200
+
+  * Select 200 most-extrapolatory structures by Mini-batch FPS, gamma > 1.5:
+    grace_uq select --uq UQ/gmm_artifacts.npz \
+                    --predicted predicted.pkl.gz \
+                    -n 200 --strategy fps-extrap \
+                    --gamma-min 1.5 \
+                    --output selected.pkl.gz
+
+  * Random selection over the full pool, no stratification:
+    grace_uq select --uq UQ/gmm_artifacts.npz \
+                    --predicted predicted.pkl.gz \
+                    -n 100 --strategy random-all \
+                    --no-element-stratified \
+                    --output selected.pkl.gz
+
+  * Select from a raw (un-predicted) dataset — runs predict first, then selects:
+    grace_uq select --uq UQ/gmm_artifacts.npz \
+                    --dataset candidates.pkl.gz \
+                    --model saved_model/ \
+                    -n 200 --strategy fps-extrap \
+                    --n-workers 4 --gpus 0,1,2,3 \
+                    --output selected.pkl.gz
+
+  * Bound the gamma window (only mildly extrapolatory atoms):
+    grace_uq select --uq UQ/gmm_artifacts.npz \
+                    --predicted predicted.pkl.gz \
+                    -n 200 --strategy fps-extrap \
+                    --gamma-min 1.0 --gamma-max 3.0 \
+                    --output selected.pkl.gz
+

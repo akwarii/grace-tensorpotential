@@ -1,0 +1,73 @@
+usage: grace_uq predict [-h] --model MODEL [--checkpoint CHECKPOINT] [--artifact ARTIFACT]
+                        --dataset DATASET [--output OUTPUT] [--n-workers N_WORKERS] [--gpus GPUS]
+                        [--threads-per-worker THREADS_PER_WORKER] [--no-ase-atoms]
+                        [--save-features] [--sort-by-natoms] [--no-sort-by-natoms]
+                        [--pad-atoms-number PAD_ATOMS_NUMBER]
+                        [--pad-neighbors-fraction PAD_NEIGHBORS_FRACTION]
+                        [--max-number-reduction-recompilation MAX_NUMBER_REDUCTION_RECOMPILATION]
+                        [--raise-errors] [--verbose] [--worker-id WORKER_ID]
+
+Predict E/F/S and per-atom gamma using a UQ-enabled GRACE model.
+
+options:
+  -h, --help            show this help message and exit
+  --model MODEL         SavedModel directory (with compute_uq) OR model.yaml file.
+  --checkpoint CHECKPOINT
+                        Required iff --model is a model.yaml.
+  --artifact ARTIFACT   UQ .npz artifact. Required iff --model is a model.yaml.
+  --dataset DATASET     Input dataset (.pkl.gz default; .xyz/.extxyz).
+  --output OUTPUT       Output path (extension drives format).
+  --n-workers N_WORKERS
+  --gpus GPUS
+  --threads-per-worker THREADS_PER_WORKER
+  --no-ase-atoms        Drop ase_atoms column from the saved output.
+  --save-features       Add per-atom features [nat, D] column (model-native dtype).
+  --sort-by-natoms      Evaluate each worker's shard largest-structure-first so the widest XLA
+                        shape is compiled once (default ON). Performance only — output rows keep
+                        the input order either way.
+  --no-sort-by-natoms
+  --pad-atoms-number PAD_ATOMS_NUMBER
+  --pad-neighbors-fraction PAD_NEIGHBORS_FRACTION
+  --max-number-reduction-recompilation MAX_NUMBER_REDUCTION_RECOMPILATION
+  --raise-errors        Stop on the first prediction error.
+  --verbose
+  --worker-id WORKER_ID
+
+Examples
+--------
+  # 1. Predict using a UQ-enabled SavedModel (output of `grace_uq build`):
+  grace_uq predict --model saved_model/ \
+                   --dataset candidates.pkl.gz \
+                   --output predicted.pkl.gz
+
+  # 2. Predict using model.yaml + checkpoint + artifact (no SavedModel needed):
+  grace_uq predict --model model.yaml \
+                   --checkpoint checkpoint.best_test_loss \
+                   --artifact UQ/gmm_artifacts.npz \
+                   --dataset candidates.pkl.gz \
+                   --output predicted.pkl.gz
+
+  # 3. Multi-worker (4 GPUs), include per-atom features [nat, D]:
+  grace_uq predict --model saved_model/ \
+                   --dataset candidates.pkl.gz \
+                   --output predicted.pkl.gz \
+                   --n-workers 4 --gpus 0,1,2,3 \
+                   --save-features
+
+  # 4. Save as extxyz (per-atom features are dropped — extxyz cannot store them):
+  grace_uq predict --model saved_model/ \
+                   --dataset candidates.pkl.gz \
+                   --output predicted.xyz
+
+  # 5. Drop ase_atoms column from the pkl.gz output (smaller file):
+  grace_uq predict --model saved_model/ \
+                   --dataset candidates.pkl.gz \
+                   --output predicted.pkl.gz \
+                   --no-ase-atoms
+
+  # 6. Tune XLA padding for a heterogeneous dataset (fewer recompiles):
+  grace_uq predict --model saved_model/ \
+                   --dataset candidates.pkl.gz \
+                   --output predicted.pkl.gz \
+                   --pad-atoms-number 32 \
+                   --pad-neighbors-fraction 0.40
