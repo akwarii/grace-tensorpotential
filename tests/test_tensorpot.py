@@ -757,6 +757,40 @@ def test_a_model_without_optimizer_has_nothing_to_build():
     assert tp.optimizer is None
 
 
+def _seeded_step(tp: TensorPotential, seed: int) -> None:
+    variables = tp.model.variables_to_train
+    grads = [
+        tf.constant(np.random.default_rng([21, seed, i]).standard_normal(v.shape), dtype=v.dtype)
+        for i, v in enumerate(variables)
+    ]
+    tp.optimizer.apply_gradients(zip(grads, variables))
+
+
+def test_a_restart_from_a_checkpoint_saved_in_the_ema_scope_resumes_the_uninterrupted_run(tmp_path):
+    # train.py saves checkpoints inside ema_scope (the model holds the average, the slot holds the weights)
+    # and calls prepare_for_training after the load to swap them back. DEPS3 FIXES a bug of legacy Keras 2,
+    # where the optimizer was still unbuilt at that point, the swap was skipped, and training resumed from
+    # the averaged weights (the next step was off by 1.2 on this model; measured on the tree before DEPS3).
+    saved = _ema_tp()
+    for seed in range(3):
+        _seeded_step(saved, seed)
+    raw, average = _weights(saved), _averages(saved)
+    with saved.ema_scope():
+        saved.step, saved.epoch = 3, 3
+        saved.save_checkpoint(checkpoint_name=_checkpoint_path(tmp_path))
+    _seeded_step(saved, 3)  # the uninterrupted run goes on
+
+    restarted = _ema_tp()
+    restarted.load_checkpoint(checkpoint_name=_checkpoint_path(tmp_path), expect_partial=True)
+    np.testing.assert_array_equal(_weights(restarted), average)  # as saved: the model holds the average
+    restarted.prepare_for_training()
+
+    np.testing.assert_array_equal(_weights(restarted), raw)  # swapped back to the training weights
+    _seeded_step(restarted, 3)
+    np.testing.assert_array_equal(_weights(restarted), _weights(saved))
+    np.testing.assert_array_equal(_averages(restarted), _averages(saved))
+
+
 # ---- the optimizer state in a checkpoint
 
 

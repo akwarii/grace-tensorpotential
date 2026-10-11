@@ -21,3 +21,8 @@ The package now trains with Keras 3, the version that TensorFlow 2.20 installs, 
   small model).
 * **The `reduce_on_plateau` callback no longer fails** with `TypeError: 'NoneType' object is not callable` (the error
   that the legacy-Keras variable used to work around), and its default mode still minimises a loss.
+* **Restarting a run that uses `use_ema` resumes from the training weights.** A checkpoint stores the averaged
+  weights in the model and the training weights in the optimizer; on a restart they are swapped back before
+  training continues. With Keras 2 that swap was silently skipped (the optimizer was not built yet), so a
+  restarted run continued from the averaged weights and lost part of its progress. A restart now continues
+  exactly where the interrupted run stood (the next step is identical).
