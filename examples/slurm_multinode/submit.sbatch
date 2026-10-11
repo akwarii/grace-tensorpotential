@@ -31,7 +31,6 @@ set -euo pipefail
 mkdir -p "logs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 
 # --- TF / dataset env ---
-export TF_USE_LEGACY_KERAS=1
 export TF_CPP_MIN_LOG_LEVEL=1
 export TF_FORCE_GPU_ALLOW_GROWTH=true
 

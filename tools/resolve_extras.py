@@ -11,7 +11,7 @@ Nothing is installed or downloaded beyond the package metadata that resolution r
     python tools/resolve_extras.py [--python-version 3.11] [--python-platform linux] [EXTRA ...]
 
 The extras to check default to all of them. The names are the project names after normalisation
-(``tf_keras`` and ``tf-keras`` are one name); ``tensorpotential[tf]`` style references to the project itself are
+(``torch_sim`` and ``torch-sim`` are one name); ``tensorpotential[tf]`` style references to the project itself are
 expanded to the extras they name, so ``all`` is checked against the requirements of ``tf``, ``torch`` and
 ``torch-sim``.
 """

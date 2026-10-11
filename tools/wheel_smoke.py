@@ -33,13 +33,13 @@ import tensorpotential.core.backends
 import tensorpotential.core.cutoffs
 import tensorpotential.core.lazy
 import tensorpotential.functions.couplings
-loaded = sorted(m for m in ("tensorflow", "tf_keras") if m in sys.modules)
+loaded = sorted(m for m in ("tensorflow", "keras") if m in sys.modules)
 print("LOADED", ",".join(loaded))
 """
 
 PROBE = """
 import importlib.util
-print(",".join(m for m in ("tensorflow", "tf_keras", "torch", "flask") if importlib.util.find_spec(m)))
+print(",".join(m for m in ("tensorflow", "keras", "torch", "flask") if importlib.util.find_spec(m)))
 """
 
 #: Console scripts that cannot run without TensorFlow (no ``--help`` either): found by running them in an
@@ -80,7 +80,7 @@ def run(python: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def installed_packages(python: Path) -> set[str]:
-    """The names of tensorflow, tf_keras, torch and flask that this environment can import."""
+    """The names of tensorflow, keras, torch and flask that this environment can import."""
     result = run(python, "-c", PROBE)
     return set(filter(None, result.stdout.strip().split(",")))
 
@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     args.python = Path(os.path.abspath(args.python))
     have = installed_packages(args.python)
     print(
-        f"environment has: {sorted(have) or 'none of tensorflow, tf_keras, torch, flask'}"
+        f"environment has: {sorted(have) or 'none of tensorflow, keras, torch, flask'}"
     )
     problems: list[str] = []
     if args.expect and (("tensorflow" in have) != (args.expect == "tf")):

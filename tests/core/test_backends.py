@@ -77,7 +77,7 @@ def probe(
 
 
 def test_each_backend_names_the_packages_its_extra_installs() -> None:
-    assert BACKEND_PACKAGES["tf"] == ("tensorflow", "tf_keras")
+    assert BACKEND_PACKAGES["tf"] == ("tensorflow", "keras")
     assert BACKEND_PACKAGES["torch"] == ("torch",)
     assert BACKEND_PACKAGES["torch-sim"] == ("torch", "torch_sim", "vesin")
 
@@ -90,15 +90,15 @@ def test_an_unknown_backend_is_a_value_error_naming_the_known_ones() -> None:
 
 
 def test_installed_packages_are_found_without_being_imported(tmp_path: Path) -> None:
-    out = probe(tmp_path, "tf", ("tensorflow", "tf_keras"))
+    out = probe(tmp_path, "tf", ("tensorflow", "keras"))
     assert out == {"missing": []}
 
 
 def test_one_missing_package_is_enough_to_fail(tmp_path: Path) -> None:
     out = probe(tmp_path, "tf", ("tensorflow",))
-    assert out["missing"] == ["tf_keras"]
-    assert out["missing_attr"] == ["tf_keras"]
-    assert out["name"] == "tf_keras"
+    assert out["missing"] == ["keras"]
+    assert out["missing_attr"] == ["keras"]
+    assert out["name"] == "keras"
 
 
 def test_nothing_installed_lists_every_package_in_table_order(tmp_path: Path) -> None:
@@ -118,7 +118,7 @@ def test_the_message_names_the_missing_packages_the_extra_and_the_caller(
 ) -> None:
     message = probe(tmp_path, "tf", (), needed_by="grace_utils")["message"]
     assert message.startswith("grace_utils needs TensorFlow, which is not installed")
-    assert "missing: tensorflow, tf_keras" in message
+    assert "missing: tensorflow, keras" in message
     assert "pip install 'tensorpotential[tf]'" in message
     assert "'tensorpotential.core', still work" in message
 
