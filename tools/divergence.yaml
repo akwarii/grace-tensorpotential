@@ -20,12 +20,12 @@
 
 - path: docs/gracemaker/install.md
   reason: 'documents the extras (tf, torch, torch-sim, all): TensorFlow is no longer installed by pip install tensorpotential; states that Keras 3 is used and no setting for it is needed'
-  milestone: [CI1, DEPS3]
+  milestone: [CI1, DEPS3, CLI1]
   upstream: never
 
 - path: docs/gracemaker/utilities.md
   reason: 'documents the --stress-units option of grace_preprocess; the aux_model help and usage describe what the command does (no --aux argument)'
-  milestone: [DATA1, CLEAN5]
+  milestone: [DATA1, CLEAN5, CLI1]
   upstream: pending
 
 - path: docs/gracemaker/inputfile.md
@@ -50,7 +50,7 @@
 
 - path: pyproject.toml
   reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py; drops tf_keras from the tf extra and forbids keras in the TensorFlow-free modules'
-  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3]
+  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3, CLI1]
   upstream: never
 
 - path: pytest.ini
@@ -90,7 +90,7 @@
 
 - path: tensorpotential/cli/gracemaker.py
   reason: 'commented-out code removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation, reduction and restart wired in (helpers apply_lora_options, finalize_lora_if_enabled, lora_restart_model_file)'
-  milestone: [CLEAN2, CORE1, LORA2]
+  milestone: [CLEAN2, CORE1, LORA2, CLI1]
   upstream: pending
 
 - path: tensorpotential/cli/metrics.py
@@ -260,27 +260,27 @@
 
 - path: tensorpotential/scripts/df2extxyz.py
   reason: 'duplicated code folded into shared helpers'
-  milestone: [QUAL2]
+  milestone: [QUAL2, CLI1]
   upstream: pending
 
 - path: tensorpotential/scripts/extxyz2df.py
   reason: 'duplicated code folded into shared helpers'
-  milestone: [QUAL2]
+  milestone: [QUAL2, CLI1]
   upstream: pending
 
 - path: tensorpotential/scripts/grace_predict.py
   reason: 'commented-out code removed; pandas 3 readiness'
-  milestone: [CLEAN2, DEPS1]
+  milestone: [CLEAN2, DEPS1, CLI1]
   upstream: pending
 
 - path: tensorpotential/scripts/grace_preprocess.py
   reason: 'duplicated code folded into shared helpers; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); --stress-units option passed to the reference data builder'
-  milestone: [QUAL2, CORE1, DATA1]
+  milestone: [QUAL2, CORE1, DATA1, CLI1]
   upstream: pending
 
 - path: tensorpotential/scripts/grace_utils.py
   reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); dead --aux comments removed and the aux_model help corrected'
-  milestone: [CORE1, CLEAN5]
+  milestone: [CORE1, CLEAN5, CLI1]
   upstream: pending
 
 - path: tensorpotential/tensorpot.py
@@ -460,15 +460,70 @@
 
 - path: tests/test_uq_cli.py
   reason: 'no longer sets the legacy-Keras variable'
-  milestone: [DEPS3]
+  milestone: [DEPS3, CLI1]
   upstream: never
 
 - path: tests/test_wizard.py
   reason: 'duplicated code folded into shared helpers'
-  milestone: [QUAL2]
+  milestone: [QUAL2, CLI1]
   upstream: pending
 
 - path: tests/utils.py
   reason: 'paths resolved relative to the test file and outputs written to tmp_path'
   milestone: [TEST1]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_collect.py
+  reason: 'build_parser() and a prog name; main takes argv and returns an exit code'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_dashboard.py
+  reason: 'build_parser() and a prog name; main takes argv and returns an exit code'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_models.py
+  reason: 'main takes argv and a prog name and returns an exit code'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/scripts/grace_uq.py
+  reason: 'dispatches through the table of the grace command (scripts/grace.py); main takes argv and a prog name and returns the exit code'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/scripts/gracemaker.py
+  reason: 'main takes argv and a prog name and returns an exit code'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/build/__main__.py
+  reason: 'exits with the code of build_main'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/build/master.py
+  reason: 'build_parser() takes the program name; build_main takes argv and a prog name and returns an exit code'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/info.py
+  reason: 'build_parser() takes the program name; info_main takes a prog name'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/predict.py
+  reason: 'the parser takes the program name; predict_main takes a prog name'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/select.py
+  reason: 'the parser takes the program name; select_main takes a prog name'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tests/test_gen_tensor_wizard.py
+  reason: 'tests of the wizard sections, the review, the entry point and the tensor property converters added'
+  milestone: [CLI1]
   upstream: pending
