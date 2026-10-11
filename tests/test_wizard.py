@@ -583,6 +583,10 @@ def test_the_prompt_helpers_live_in_cli_prompts_and_are_still_importable_from_th
 
 
 def test_the_wizard_prints_through_the_shared_console():
-    from tensorpotential.cli.console import get_console
+    import tensorpotential.cli.prompts as prompts
+    from rich.console import Console
 
-    assert wizard._rich_console is get_console()
+    # prompts takes the shared console when it is imported; a test of the console module may have reset the cache since,
+    # so identity with get_console() depends on the test order, but the wizard and the prompts must share one object
+    assert wizard._rich_console is prompts._rich_console
+    assert isinstance(wizard._rich_console, Console)
