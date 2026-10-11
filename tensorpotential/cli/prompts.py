@@ -2,10 +2,10 @@
 
 ``gracemaker -t`` (``cli/wizard.py``) and the generic-tensor wizard (``extra/gen_tensor/wizard.py``) ask their questions
 and print their messages through these helpers, and neither imports the other: this module is what they share. A question
-is asked with ``questionary`` when it is installed (a terminal is needed), with ``input()`` otherwise; a message is printed
-through the shared rich console (:mod:`tensorpotential.cli.console`) when rich is installed, as plain text otherwise.
+is asked with ``questionary`` (a terminal is needed) and a message is printed through the shared rich console
+(:mod:`tensorpotential.cli.console`); both are dependencies of the package.
 
-``_HAS_QUESTIONARY`` and ``_HAS_RICH`` say which of the two worlds is active; tests switch them. The names and behaviour
+``_HAS_QUESTIONARY`` and ``_HAS_RICH`` select the ``input()`` and plain-text fallbacks instead; tests switch them. The names and behaviour
 are those of the helpers when they lived in ``cli/wizard.py``, which still re-exports them.
 """
 
@@ -125,39 +125,32 @@ def _print_header():
         _write("=" * 50)
 
 
-def _info(msg: str):
+def _emit(rich_markup: str, plain: str) -> None:
+    """Print ``rich_markup`` through the shared console, or ``plain`` when rich is switched off."""
     if _HAS_RICH:
-        _rich_console.print(f"  [dim]→[/dim] {msg}")
+        _rich_console.print(rich_markup)
     else:
-        _write(f"  -> {msg}")
+        _write(plain)
+
+
+def _info(msg: str):
+    _emit(f"  [dim]→[/dim] {msg}", f"  -> {msg}")
 
 
 def _success(msg: str):
-    if _HAS_RICH:
-        _rich_console.print(f"  [bold green]✓[/bold green] {msg}")
-    else:
-        _write(f"  OK: {msg}")
+    _emit(f"  [bold green]✓[/bold green] {msg}", f"  OK: {msg}")
 
 
 def _warning(msg: str):
-    if _HAS_RICH:
-        _rich_console.print(f"  [bold orange1]![/bold orange1] {msg}")
-    else:
-        _write(f"  WARNING: {msg}")
+    _emit(f"  [bold orange1]![/bold orange1] {msg}", f"  WARNING: {msg}")
 
 
 def _error(msg: str):
-    if _HAS_RICH:
-        _rich_console.print(f"  [bold red]✗[/bold red] {msg}")
-    else:
-        _write(f"  ERROR: {msg}")
+    _emit(f"  [bold red]✗[/bold red] {msg}", f"  ERROR: {msg}")
 
 
 def _section(title: str):
-    if _HAS_RICH:
-        _rich_console.print(f"\n[bold cyan]── {title}[/bold cyan]")
-    else:
-        _write(f"\n-- {title}")
+    _emit(f"\n[bold cyan]── {title}[/bold cyan]", f"\n-- {title}")
 
 
 def _tip_path_input():
@@ -168,10 +161,15 @@ def _tip_path_input():
         tip = "↑↓ for command history  ·  Tab may autocomplete (readline)"
     else:
         tip = "Type or paste the full file path"
-    if _HAS_RICH:
-        _rich_console.print(f"  [dim italic]{tip}[/dim italic]")
-    else:
-        _write(f"  ({tip})")
+    _emit(f"  [dim italic]{tip}[/dim italic]", f"  ({tip})")
+
+
+def _answered(question: Any) -> Any:
+    """Ask a questionary question; Ctrl-C (``None``) is a ``KeyboardInterrupt`` for the wizard to handle."""
+    result = question.ask()
+    if result is None:
+        raise KeyboardInterrupt
+    return result
 
 
 def _ask_select(message, choices, default=None):
@@ -185,12 +183,11 @@ def _ask_select(message, choices, default=None):
                 (c for c in choice_list if getattr(c, "value", c) == default),
                 choice_list[0],
             )
-        result = questionary.select(
-            message, choices=choice_list, default=def_val, style=_QUESTIONARY_STYLE
-        ).ask()
-        if result is None:
-            raise KeyboardInterrupt
-        return result
+        return _answered(
+            questionary.select(
+                message, choices=choice_list, default=def_val, style=_QUESTIONARY_STYLE
+            )
+        )
     # extract string values from Choice objects if needed
     str_choices = [getattr(c, "value", c) for c in choices]
     return input_choice(
@@ -200,34 +197,28 @@ def _ask_select(message, choices, default=None):
 
 def _ask_text(message, default=None):
     if _HAS_QUESTIONARY:
-        result = questionary.text(
-            message,
-            default=str(default) if default is not None else "",
-            style=_QUESTIONARY_STYLE,
-        ).ask()
-        if result is None:
-            raise KeyboardInterrupt
+        result = _answered(
+            questionary.text(
+                message,
+                default=str(default) if default is not None else "",
+                style=_QUESTIONARY_STYLE,
+            )
+        )
         return result if result else default
     return input_with_default(message, default)
 
 
 def _ask_path(message):
     if _HAS_QUESTIONARY:
-        result = questionary.path(message, style=_QUESTIONARY_STYLE).ask()
-        if result is None:
-            raise KeyboardInterrupt
-        return result
+        return _answered(questionary.path(message, style=_QUESTIONARY_STYLE))
     return input_no_default(message + " ")
 
 
 def _ask_confirm(message, default=True):
     if _HAS_QUESTIONARY:
-        result = questionary.confirm(
-            message, default=default, style=_QUESTIONARY_STYLE
-        ).ask()
-        if result is None:
-            raise KeyboardInterrupt
-        return result
+        return _answered(
+            questionary.confirm(message, default=default, style=_QUESTIONARY_STYLE)
+        )
     ans = input_choice(message, ["yes", "no"], "yes" if default else "no")
     return ans == "yes"
 
