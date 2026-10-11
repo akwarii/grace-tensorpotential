@@ -35,6 +35,8 @@ Procedure (board commands, PR text, findings, Definition of Done): `grace-torch-
 - **The fork is public: sanitise everything you post** (issues, comments, PR text, commit messages). `tools/board.py` sanitises what it posts; pass other text through `python tools/board.py sanitise FILE`. No personal data, institution names, e-mail addresses, absolute local paths or research-application details;
   no bare `#N` that is not an issue of this repository; no `@mentions` outside code spans; no links to other repositories' issues or pull requests (back-links). Sanitise the existing text of an issue you touch when it needs it.
 - `CLAUDE.md`, `.claude/`, `tools/` and `baselines/` are fork-only: committed on `torch-backend`, never on an upstream branch (`pr/U*`); check with `python tools/check_pr_branch.py` before any upstream PR text is drafted.
+- **A Bash hook enforces part of these rules** (`tools/guard_bash.py`, registered in `.claude/settings.json`; it takes effect in new sessions): it blocks `gh project item-list` / `field-list`, `uv sync` in a worktree, commits, merges and pushes on `torch-backend` or `master`, `gh pr merge` / `ready`,
+  writes on the upstream ICAMS repositories, `git worktree remove --force`, and a parallel, coverage or `gracemaker` run on a busy machine. When the user told you to run exactly such a command, prefix it with `GRACE_HOOK_OVERRIDE=<rule>` (the block message names it); nothing else bypasses the hook.
 - Ask for GPU access before any GPU benchmark; never report a GPU result from a CPU run. Use the scratch directory for temporary files, not the repository.
 - Verify compatibility claims with warnings unmuted (`-W always`) and across all entry points (scripts, CLI, data pipeline, tests); state what a check does not cover.
 
