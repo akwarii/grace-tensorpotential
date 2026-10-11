@@ -79,6 +79,9 @@ INPUT_FIT_LOSS_STRESS: Final[str] = "stress"
 INPUT_FIT_LOSS_VIRIAL: Final[str] = "virial"
 INPUT_POTENTIAL_REDUCE_ELEMENTS: Final[str] = "reduce_elements"
 INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL: Final[str] = "finetune_foundation_model"
+# LoRA adaptation (input.yaml::potential::lora, a per-instruction config) and its reduction
+INPUT_POTENTIAL_LORA: Final[str] = "lora"
+INPUT_POTENTIAL_REDUCE_LORA: Final[str] = "reduce_lora"
 # Enable the dense (reshape) equivariant neighbor aggregation
 # (input.yaml::potential::dense_nbr). Broadcast to the model's InstructionManager and
 # to the data builder so the model runs the dense compute and data prep supplies the
