@@ -120,7 +120,7 @@ def run_main(
     """Run ``main`` as the console script ``command`` would, in process.
 
     A ``main`` that reads ``sys.argv`` (the scripts before CLI1 task 2) and one that takes ``argv`` both see ``argv``.
-    Returns the exit code (``SystemExit`` included; ``None`` is 0), the standard output and the standard error.
+    Returns the exit code (``SystemExit`` included: ``None`` is 0, a message is written to the error output and is 1), the standard output and the standard error.
     """
     out, err = io.StringIO(), io.StringIO()
     takes_argv = bool(inspect.signature(main).parameters)
@@ -132,8 +132,12 @@ def run_main(
         try:
             result = main(list(argv)) if takes_argv else main()
         except SystemExit as stop:
-            code = stop.code
-            result = 0 if code is None else code
+            result = stop.code
+            if isinstance(result, str):  # SystemExit("message"): Python prints it to stderr and exits with 1
+                err.write(f"{result}\n")
+                result = 1
+            elif result is None:
+                result = 0
     return (result if isinstance(result, int) else 0), out.getvalue(), err.getvalue()
 
 

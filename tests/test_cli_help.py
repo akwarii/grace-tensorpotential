@@ -166,3 +166,10 @@ def test_capture_help_raises_when_help_does_not_exit_with_zero(monkeypatch):
     monkeypatch.setattr(HelpCase, "main", lambda self: broken)
     with pytest.raises(RuntimeError, match="exited with 2"):
         cli_help.capture_help(case)
+
+
+def test_run_main_turns_a_system_exit_message_into_stderr_and_exit_code_1():
+    def main(argv=None):
+        raise SystemExit("something is wrong")
+
+    assert cli_help.run_main(main, "cmd", []) == (1, "", "something is wrong\n")

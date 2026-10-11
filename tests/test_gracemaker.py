@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -953,3 +954,131 @@ class TestLoraDocumentedExample:
         assert tp.is_lora_enabled()
         ranks = {v.name: v.shape for v in tp.model.variables if "/LORA/" in v.name}
         assert 8 in ranks["Z/w/LORA/A:0"]  # Z overrides `all` (rank 16)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The console script: tensorpotential.scripts.gracemaker.main
+# (multi-GPU detection, TF_CONFIG, virtual devices; the run itself is the unit tested above)
+# ---------------------------------------------------------------------------------------------------------------------
+
+from tensorpotential.cli import distribute  # noqa: E402
+from tensorpotential.scripts import gracemaker as gracemaker_script  # noqa: E402
+from tests import cli_help  # noqa: E402
+
+STRATEGY = object()
+
+
+@pytest.fixture
+def script_env(monkeypatch, tmp_path):
+    """A clean environment for the script and recorders for what it hands over to the library.
+
+    Replaced, each at a boundary: ``cli.gracemaker.main`` (the training run, tested above, takes minutes),
+    ``make_mwms_strategy`` (builds a process-global distributed runtime that cannot be undone in a test process),
+    and the ``tf.config`` device calls (global hardware configuration of the TensorFlow context).
+    """
+    for name in ("TF_CONFIG", "NUM_VIRTUAL_DEVICES", "CUDA_VISIBLE_DEVICES"):
+        monkeypatch.setenv(name, "unset-by-test")  # records the original, so the script's own writes are undone
+        monkeypatch.delenv(name)
+    monkeypatch.chdir(tmp_path)  # a relative input.yaml that does not exist is not read from the repository
+    record: dict = {"runs": [], "mwms": 0, "devices": []}
+
+    def fake_main(argv=None, strategy=None, strategy_desc=""):
+        record["runs"].append({"argv": list(argv), "strategy": strategy, "desc": strategy_desc})
+
+    def fake_mwms():
+        record["mwms"] += 1
+        return STRATEGY
+
+    monkeypatch.setattr(gracemaker, "main", fake_main)
+    monkeypatch.setattr(distribute, "make_mwms_strategy", fake_mwms)
+    monkeypatch.setattr(tf.config, "list_physical_devices", lambda kind=None: ["cpu0"])
+    monkeypatch.setattr(
+        tf.config,
+        "set_logical_device_configuration",
+        lambda device, configs: record["devices"].append((device, len(configs))),
+    )
+    monkeypatch.setattr(tf.config, "list_logical_devices", lambda kind=None: ["logical"] * len(record["devices"]))
+    return record
+
+
+def run_script(*argv: str) -> tuple[int, str, str]:
+    return cli_help.run_main(gracemaker_script.main, "gracemaker", list(argv))
+
+
+def test_script_hands_the_arguments_to_the_library_without_a_strategy(script_env):
+    code, _, _ = run_script("input.yaml", "--seed", "3")
+    assert code == 0
+    assert script_env["runs"] == [{"argv": ["input.yaml", "--seed", "3"], "strategy": None, "desc": ""}]
+    assert script_env["mwms"] == 0
+    assert "TF_CONFIG" not in os.environ
+
+
+@pytest.mark.parametrize("flag", ["-m", "--multigpu"])
+def test_multigpu_flag_builds_a_single_worker_mwms_cluster(script_env, flag):
+    run_script(flag, "input.yaml")
+    assert script_env["mwms"] == 1
+    assert script_env["runs"][0]["strategy"] is STRATEGY
+    assert script_env["runs"][0]["desc"] == "Single host/multi GPU (MWMS auto-TF_CONFIG)"
+    assert json.loads(os.environ["TF_CONFIG"]) == {
+        "cluster": {"worker": [f"localhost:{distribute.DEFAULT_TF_PORT}"]},
+        "task": {"type": "worker", "index": 0},
+    }
+    assert script_env["runs"][0]["argv"] == [flag, "input.yaml"]
+
+
+def test_mirrored_strategy_in_the_input_yaml_is_detected_before_the_run(script_env, tmp_path):
+    (tmp_path / "input.yaml").write_text("fit:\n  strategy: mirrored\n")
+    run_script("input.yaml")
+    assert script_env["mwms"] == 1
+    assert script_env["runs"][0]["desc"] == "Single host/multi GPU (MWMS auto-TF_CONFIG)"
+
+
+def test_the_default_input_yaml_is_read_when_no_positional_argument_is_given(script_env, tmp_path):
+    (tmp_path / "input.yaml").write_text("fit:\n  strategy: mirrored\n")
+    run_script("--seed", "3")
+    assert script_env["mwms"] == 1
+
+
+def test_an_external_tf_config_is_kept_and_means_a_multi_host_run(script_env, monkeypatch):
+    external = json.dumps({"cluster": {"worker": ["n1:1", "n2:1"]}, "task": {"type": "worker", "index": 1}})
+    monkeypatch.setenv("TF_CONFIG", external)
+    run_script("input.yaml")
+    assert os.environ["TF_CONFIG"] == external
+    assert script_env["mwms"] == 1
+    assert script_env["runs"][0]["desc"] == "Multi Host / Multi GPU"
+
+
+def test_an_external_tf_config_with_the_multigpu_flag_is_still_not_overwritten(script_env, monkeypatch):
+    monkeypatch.setenv("TF_CONFIG", "external")
+    run_script("-m", "input.yaml")
+    assert os.environ["TF_CONFIG"] == "external"
+    assert script_env["runs"][0]["desc"] == "Single host/multi GPU (MWMS auto-TF_CONFIG)"
+
+
+def test_virtual_devices_split_the_cpu_and_fall_back_to_mirrored_strategy(script_env, monkeypatch, caplog):
+    monkeypatch.setenv("NUM_VIRTUAL_DEVICES", "3")
+    with caplog.at_level(logging.INFO):
+        run_script("-m", "input.yaml")
+    assert script_env["devices"] == [("cpu0", 3)]
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "-1"
+    assert script_env["mwms"] == 0
+    assert "TF_CONFIG" not in os.environ
+    assert script_env["runs"][0]["strategy"] is None
+    assert "auto-MWMS upgrade is incompatible with virtual device setup" in caplog.text
+    assert "Setting 3 virtual devices" in caplog.text
+
+
+def test_virtual_devices_win_over_an_external_tf_config(script_env, monkeypatch):
+    monkeypatch.setenv("NUM_VIRTUAL_DEVICES", "2")
+    monkeypatch.setenv("TF_CONFIG", "external")
+    run_script("input.yaml")
+    assert script_env["mwms"] == 0
+    assert script_env["runs"][0]["strategy"] is None
+    assert script_env["devices"] == [("cpu0", 2)]
+
+
+def test_virtual_devices_without_multigpu_do_not_warn(script_env, monkeypatch, caplog):
+    monkeypatch.setenv("NUM_VIRTUAL_DEVICES", "2")
+    with caplog.at_level(logging.WARNING):
+        run_script("input.yaml")
+    assert "auto-MWMS" not in caplog.text
