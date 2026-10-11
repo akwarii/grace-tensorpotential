@@ -12,114 +12,6 @@ states the agreed scope of one task: what may change, what must not, how it is v
 example restructuring legacy code in a clean-up milestone), do what the issue says within its scope, keep the safeguards it names (coverage,
 behaviour-preserving checks, baselines), and note the conflict in a comment on the issue. If the user and an issue disagree, ask.
 
-## Development commands
-
-```bash
-uv sync --group dev          # .venv from the committed uv.lock; the dev group has pytest, pytest-cov, pytest-xdist, ruff, ty and the tf extra (TF is not a base dependency)
-
-# Tests: from the repository root; they write nothing into the tree. Under -n N every worker gets cores/N TF and OpenMP threads (conftest.py).
-uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
-    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast loop: add -m "not slow"
-uv run --frozen --no-sync pytest tests/test_instructions.py -vv    # one file, serial
-uv run --frozen --no-sync pytest tests_torch -q                     # torch-backend tests, TF-free, seconds
-
-# CI runs the suite as 4 pytest-split shards balanced by tests/.test_durations (regenerating it, running a shard locally: .github/CI.md)
-
-# tests_torch/structures/structures.json/.xyz are written by python -m tests_torch.structures.build_structures (test_build_structures.py fails on a difference).
-# Golden fixtures: the generator is the only thing allowed to write them, from a committed tree (tiers, verify, compare, the generator's tests: tests_torch/golden/README.md)
-uv run --frozen --no-sync python tools/make_golden.py write --tier tiny   # tests_torch/golden/ (committed); --tier faithful: tests_torch/fixtures/ (npz git-ignored)
-
-# Lint, format, types (dev group pins ruff==0.16.7, ty==0.0.84; ty is pre-1.0)
-uv run --frozen --no-sync ruff check PATH                  # strict set in the new packages; elsewhere E, F, ERA001
-uv run --frozen --no-sync ruff format --preview NEW_FILE   # NEW files only, never reformat existing files
-uv run --frozen --no-sync ty check NEW_PACKAGE             # strict in the new packages; [[tool.ty.overrides]] relax legacy
-uv run --frozen --no-sync python tools/lint_ratchet.py check   # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
-uv run --frozen --no-sync lint-imports                     # import contract: TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow
-uv run --frozen --no-sync python tools/divergence.py check --pr-branches   # every upstream file the fork modifies has a row in tools/divergence.yaml (same PR); no fork-only path on a pr/U* branch
-uv run --frozen --no-sync python tools/instruction_ast.py check   # every TPInstruction subclass has a registry entry; pinned defaults equal the source
-uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py   # wheel contents and extras; also tools/wheel_smoke.py, tools/resolve_extras.py (CI runs them: .github/CI.md)
-prek install                                               # hooks on changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
-
-# Coverage and baselines (procedures: skills grace-torch-tests, grace-torch-goldens; baselines/README.md)
-uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json <same --ignore options>
-python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend] [--unit PATH::Class.method]   # touched units: 90%
-python tools/coverage_ratchet.py check cov.json            # a file fails when its share falls below baselines/coverage_baseline.json and its uncovered count rises
-python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json   # also tools/ast_manifest.py and tools/check_clones.py
-```
-
-**Runtime** (14 cores, 30 GB, about 2,640 tests, idle machine, 2026-10-09): the full suite takes about 15 minutes with `-n 4` (19 with `--cov`); the longest test, `test_distrib`, takes about 4 minutes;
-an older figure for `-m "not slow"` (4 to 5 minutes at 1,340 tests) was not re-measured; a second suite next to it about doubles the time. Compare timings only between back-to-back runs.
-Not in a normal run: `test_structured_grid.py` (skipped on public master: needs the non-existent `tensorpotential.experimental`; ignored above only so counts match `baselines/`) and
-`test_foundation_model_regression.py` (needs foundation-model weights, HPC only). A test writes only into `tmp_path` or a scratch directory; `git status` is clean after a run.
-
-## Code style
-
-- Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
-- **Legacy code stays as it is**: no repo-wide reformat, no file splitting (`instructions/compute.py` is about 4,900 lines and upstream merges depend on its shape), no renames; improve a unit only
-  while you are already changing it. An issue whose job is to change legacy code (clean-up, quality, deduplication, packaging, performance) says what may change; the coverage and comparison rules govern it and it is not widened.
-- New packages get the strict ruff set from the **single ruff configuration in `pyproject.toml`** (no `ruff.toml`; `per-file-ignores` switch the strict families off outside the new packages, listed there and in `tools/lint_ratchet.py`).
-- Numpy-convention docstrings on new public API. No commented-out code, no `print` in library code (`logging.getLogger(__name__)`), no bare `except`, no `TODO` without an issue link, no mutable or shared default arguments.
-- Small functions (complexity at most 10, at most 6 arguments); pure functions and frozen dataclasses for specifications. Errors are typed, actionable and raised early; nothing falls back silently.
-- Physics names (`N806`, `E741`) are allowed. Units: eV, eV/Angstrom, eV/Angstrom^3.
-
-## Testing conventions
-
-Procedures, the two layers, planted mutants, mock policy and speed tips: `grace-torch-tests` skill.
-
-- A function or class you **modify** must already be covered at 90% (line and branch). Below that, write characterization tests first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
-- Every unit gets a **logic** layer and, where physics applies, a **physical values** layer from an oracle that does not call the unit under test.
-- **A test goes in the file named after the source module** (`tests/test_<module>.py` for `tensorpotential/<...>/<module>.py`, e.g. `tests/test_tp_model.py`); `tests/` stays flat, except `tensorpotential/core/` (TF-free shared code) whose tests
-  live in `tests/core/test_<module>.py` (owner, 2026-10-04). Do not group tests by issue or kind of change; do not move existing test files unless an issue says so (owner, 2026-10-03).
-- Prefer real objects to mocks; a mock or `monkeypatch` only at an external boundary (network, clock, absent hardware), with a comment saying what it replaces, never for the unit under test or a numeric path.
-- Tolerances come from one named table (`tests/tolerances.py`, `numpy.isclose` semantics `atol + rtol*|reference|`); never inline a number, never widen a tolerance to make a test pass.
-- Tests depend neither on the working directory nor on each other's output: `tmp_path`, per-worker directories, fixed seeds, no network. Random-weight models only; real or foundation-model weights are HPC-only.
-- Markers: `slow` (30 s or more, registered in `pytest.ini`; the root `conftest.py` starts them first under `-n`), `gpu`, `hpc`, `tf` (these three not registered yet); unavailable capabilities skip locally but fail in CI jobs that require them. Nothing is skipped by default.
-- A model, calculator or result built once and shared by tests is read-only for them: fingerprint it when built and compare when its scope ends (`tests/shared_models.py`: `weights_fingerprint`, `CuTwoLayerModels`). A test that saves, trains or edits a model builds its own.
-
-## Architecture
-
-```
-ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instructions) -> energy, forces, virial -> TPCalculator
-```
-
-- `instructions/`: instruction classes (`compute.py` geometry, basis, products, reductions; `output.py` targets and shifts). Each has `build` (variables, index tables) and `frwrd`; its constructor arguments are captured into the saved `model.yaml`.
-- `tpmodel.py`: `TPModel` runs the instructions in file order and derives forces and virial from the pair energies. `tensorpot.py`: `TensorPotential` (training, checkpoints). Also `loss.py`, `metrics.py`, `utils.py`, `poly.py`, `export.py`.
-- `functions/`: Clebsch-Gordan and coupling tables (`couplings.py`), radial functions, activations. `data/`: dataframes and TF datasets (`databuilder.py`, `process_df.py`), neighbour lists (matscipy by default), streaming.
-- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `gracemaker`, `grace_preprocess`, `grace_predict`, ... `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty.
-- `compat/pace/`: legacy, untested, **out of scope: no change is allowed to it** (owner, 2026-10-01), whatever the issue; report findings, never fix or remove them.
-- The PyTorch backend lives in `torch_backend/` with TF-free shared code in `core/`; both must import without TensorFlow (import contract); the TF extractor lives outside them.
-- `tests/` (run from the repository root), `baselines/` and `tools/` (untouched-tree baselines and the tools that compare with them), `docs/`.
-
-Key dependencies: `tensorflow~=2.20` (Keras 3 comes with it; the package neither sets nor reads the legacy-Keras variable and warns when it is exported), `numpy`, `pandas<3` (see Gotchas), `ase`, `matscipy`, `sympy`/`scipy`, `pyyaml`; extras `torch`, `torch-sim`.
-
-## Gotchas
-
-Baseline pitfalls (probe checkpoint keys, junit and AST, snapshot reproducibility): `baselines/README.md` ("Pitfalls"); units, signs, force and virial formulas: `grace-torch-numerics` skill; golden fixtures: `tests_torch/golden/README.md`.
-
-- `capture_init_args` writes constructor defaults into the saved `model.yaml`: a default is part of every saved model, so changing a constructor signature or default changes existing models (persisted API). It is a **class** decorator.
-- **A new `TPInstruction` subclass needs a registry entry**, or `tests/test_registry.py` and `tools/instruction_ast.py check` fail (they also fail on a pinned default that differs from the source); how, and the scheduled upstream job: `docs/torch_backend/spec/README.md` (SPEC5).
-  A class that inherits its constructor reports the parent's parameters.
-- Output instructions overwrite `input_data[target.name]` **in place** (`instructions/output.py`); instruction order in the yaml matters and a dump must snapshot the key before and after.
-- `tpmodel.__getattr__` and `instructions.__getattr__` look unused but saved yamls import classes through them; dead-code tools flag them, keep them.
-- `pandas<3` stays pinned (decision D11) although the suite is green on 3.0.3 and 2.3.3; pickles written with pandas 3 cannot be read by pandas 2. A second pandas environment: `baselines/README.md`, with its `bin` on `PATH` (tests start `grace_preprocess` by name).
-- TF numerics are not bit-reproducible across processes (about one ulp on some float64 intermediates): compare through `tools/oracle_snapshot.py compare` (a named scaled tolerance per precision), never with exact float64 equality.
-- `GeometricalDataBuilder.extract_from_ase_atoms` edits its argument (`enforce_pbc` gives a non-periodic `Atoms` a cell, centres it, sets `pbc=True`, also overriding `pbc=(T,T,F)`): pass a copy when the structure is reused. An atom with no neighbour gets one dummy bond `(i, 0)` far outside the cutoff; a zero third cell vector with partial `pbc` raises `LinAlgError`.
-  Pinned by `tests/test_databuilder.py` and `tests/test_utils.py`; brute-force reference `tests/neighbour_oracle.py`.
-- Golden fixtures: the library imported is the one on `PYTHONPATH` (read the `library:` line the generator prints); commit the generator before writing fixtures (the tests fail on a modified tree); never write the manifest with sorted keys. Other pitfalls: `tests_torch/golden/README.md`.
-- `lm_first=True` fails on yamls whose output is `MLPOut2ScalarTarget` (`model_grace.yaml`). `CollectInvarBasis` cannot be instantiated as shipped (abstract `upd_init_args_new_elements` missing); tests subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
-- **Worktrees.** Link `.venv` from the main checkout (git-ignored; `uv.lock` is tracked). Never run `uv sync` there: it repoints the shared editable install to the worktree (repair: `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
-  Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, print `tensorpotential.__file__` once, give `ty` `--python <main>/.venv`, use `--cov=tensorpotential`, and in a scratch script import `tensorpotential` before `tensorflow` (or the numpy-style type promotion is enabled too late).
-- **TensorFlow is the `tf` extra, not a base dependency (D12).** `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first, so every TF-side module and console script stops with the `pip install 'tensorpotential[tf]'` hint without TF
-  (`grace_dashboard` also needs `flask`); the `dev` group includes the extra. **Import `torch` (and `torch_sim`) before `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20.
-- **CI limits (CI2).** The hosted runner has 16 GB and a TensorFlow xdist worker's memory only grows, so `test-tf` is four `pytest-split` shards with 2 workers each; every pytest in CI goes through `.github/actions/run-pytest`.
-  Workflows, measurements, package discovery, the regeneration commands: `.github/CI.md`.
-- **Keras 3 (DEPS3).** Under `dtype_conversion_mode="all"` (set by `_tf_options`) every Keras 3 optimizer operation fails unless `tensorpotential/keras_adapter.py` is imported (`tensorpot.py` does); never switch the promotion mode off around the optimizer step
-  (process-wide: `MirroredStrategy` replica threads race). Under a strategy build the optimizer with `TensorPotential.prepare_for_training()`; an EMA swap needs `iterations > 0`. Adam casts its betas through float32 (an oracle must too: `tests/test_tensorpot.py::_through_float32`);
-  a legacy Keras 2 checkpoint resets the optimizer with a `LegacyOptimizerStateWarning` (`optimizer_layout.py`). Reasons and measurements: docstring of `keras_adapter.py`.
-- **The package does not import TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve public names on first access (`core/lazy.py`); the TF options (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`.
-  **A new module with a module-level `import tensorflow` starts with `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt). A module that must stay TF-free goes in `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`.
-- `tests/test_import_gates.py` imports every module in its own interpreter and fails when a name that dead-code tools cannot see stops resolving (`from tensorpotential.X import name`, `__cls__` strings, the `__getattr__` shims); shrink its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`), never grow them silently.
-
 ## Working agreements
 
 Procedure (board commands, PR text, findings, Definition of Done): `grace-torch-ticket` skill; these rules hold even without it.
@@ -146,7 +38,91 @@ Procedure (board commands, PR text, findings, Definition of Done): `grace-torch-
 - Ask for GPU access before any GPU benchmark; never report a GPU result from a CPU run. Use the scratch directory for temporary files, not the repository.
 - Verify compatibility claims with warnings unmuted (`-W always`) and across all entry points (scripts, CLI, data pipeline, tests); state what a check does not cover.
 
+## Where to look
+
+| For | Look at |
+|---|---|
+| Board commands, findings, Definition of Done, PR text | skill `grace-torch-ticket` |
+| The rules of the torch backend (R1 to R9), the fork's issues | skill `grace-torch` |
+| Coverage rule, test layers, planted mutants, parallel runs | skill `grace-torch-tests`, rule `.claude/rules/testing.md` |
+| Baselines, golden fixtures, tolerances | skill `grace-torch-goldens`, `baselines/README.md`, `tests_torch/golden/README.md` |
+| Units, signs, dtypes, derivatives | skill `grace-torch-numerics` |
+| CI, packaging, runner memory, runtime of the suite | `.github/CI.md` |
+| Spec sheets and the instruction registry | `docs/torch_backend/spec/README.md` |
+| Area gotchas (instructions, data, Keras 3, TF-free packages, golden, CI) | `.claude/rules/*.md`: each loads when you read or edit a file its `paths` match |
+
+## Architecture
+
+```
+ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instructions) -> energy, forces, virial -> TPCalculator
+```
+
+- `instructions/`: instruction classes (`compute.py` geometry, basis, products, reductions; `output.py` targets and shifts). Each has `build` (variables, index tables) and `frwrd`; its constructor arguments are captured into the saved `model.yaml`.
+- `tpmodel.py`: `TPModel` runs the instructions in file order and derives forces and virial from the pair energies. `tensorpot.py`: `TensorPotential` (training, checkpoints). Also `loss.py`, `metrics.py`, `utils.py`, `poly.py`, `export.py`.
+- `functions/`: Clebsch-Gordan and coupling tables (`couplings.py`), radial functions, activations. `data/`: dataframes and TF datasets (`databuilder.py`, `process_df.py`), neighbour lists (matscipy by default), streaming.
+- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `gracemaker`, `grace_preprocess`, `grace_predict`, ... `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty.
+- `compat/pace/`: legacy, untested, **out of scope: no change is allowed to it** (owner, 2026-10-01), whatever the issue; report findings, never fix or remove them.
+- The PyTorch backend lives in `torch_backend/` with TF-free shared code in `core/`; both must import without TensorFlow (import contract); the TF extractor lives outside them.
+- `tests/` (run from the repository root), `baselines/` and `tools/` (untouched-tree baselines and the tools that compare with them), `docs/`.
+
+Key dependencies: `tensorflow~=2.20` (Keras 3 comes with it; the package neither sets nor reads the legacy-Keras variable and warns when it is exported), `numpy`, `pandas<3` (see Gotchas), `ase`, `matscipy`, `sympy`/`scipy`, `pyyaml`; extras `torch`, `torch-sim`.
+
+## Commands
+
+```bash
+uv sync --group dev          # .venv from the committed uv.lock; the dev group has pytest, pytest-cov, pytest-xdist, ruff, ty and the tf extra (TF is not a base dependency)
+
+# Tests: from the repository root; they write nothing into the tree. Under -n N every worker gets cores/N TF and OpenMP threads (conftest.py).
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
+    --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast loop: add -m "not slow"
+uv run --frozen --no-sync pytest tests/test_instructions.py -vv    # one file, serial
+uv run --frozen --no-sync pytest tests_torch -q                     # torch-backend tests, TF-free, seconds
+
+# Checks (dev group pins ruff==0.16.7, ty==0.0.84; ty is pre-1.0)
+uv run --frozen --no-sync ruff check PATH                  # strict set in the new packages; elsewhere E, F, ERA001
+uv run --frozen --no-sync ruff format --preview NEW_FILE   # NEW files only, never reformat existing files
+uv run --frozen --no-sync ty check NEW_PACKAGE             # strict in the new packages; [[tool.ty.overrides]] relax legacy
+uv run --frozen --no-sync python tools/lint_ratchet.py check   # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
+uv run --frozen --no-sync lint-imports                     # import contract: TF-free modules never reach tensorflow
+uv run --frozen --no-sync python tools/divergence.py check --pr-branches   # every upstream file the fork modifies has a row in tools/divergence.yaml (same PR); no fork-only path on a pr/U* branch
+prek install                                               # hooks on changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
+
+# Coverage and baselines (procedures: skills grace-torch-tests, grace-torch-goldens; baselines/README.md)
+uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json <same --ignore options>
+python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend] [--unit PATH::Class.method]   # touched units: 90%
+python tools/coverage_ratchet.py check cov.json            # a file fails when its share falls below baselines/coverage_baseline.json and its uncovered count rises
+python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json   # also tools/ast_manifest.py and tools/check_clones.py
+```
+
+Not in a normal run: `test_structured_grid.py` (skipped on public master: needs the non-existent `tensorpotential.experimental`; ignored above only so counts match `baselines/`) and `test_foundation_model_regression.py` (needs foundation-model weights, HPC only).
+A test writes only into `tmp_path` or a scratch directory; `git status` is clean after a run. The full suite takes about 15 minutes at `-n 4` on an idle machine: run it in the background (figures and CI shards: `.github/CI.md`).
+
+## Code style
+
+- Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
+- **Legacy code stays as it is**: no repo-wide reformat, no file splitting (`instructions/compute.py` is about 4,900 lines and upstream merges depend on its shape), no renames; improve a unit only
+  while you are already changing it. An issue whose job is to change legacy code (clean-up, quality, deduplication, packaging, performance) says what may change; the coverage and comparison rules govern it and it is not widened.
+- New packages get the strict ruff set from the **single ruff configuration in `pyproject.toml`** (no `ruff.toml`; `per-file-ignores` switch the strict families off outside the new packages, listed there and in `tools/lint_ratchet.py`).
+- Numpy-convention docstrings on new public API. No commented-out code, no `print` in library code (`logging.getLogger(__name__)`), no bare `except`, no `TODO` without an issue link, no mutable or shared default arguments.
+- Small functions (complexity at most 10, at most 6 arguments); pure functions and frozen dataclasses for specifications. Errors are typed, actionable and raised early; nothing falls back silently.
+- Physics names (`N806`, `E741`) are allowed. Units: eV, eV/Angstrom, eV/Angstrom^3.
+
+## Testing (the rules that always apply)
+
+- A function or class you **modify** must already be covered at 90% (line and branch). Below that, write characterization tests first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
+- Every unit gets a **logic** layer and, where physics applies, a **physical values** layer from an oracle that does not call the unit under test. Never widen a tolerance to make a test pass; real or foundation-model weights are HPC-only.
+- Conventions (file naming, tolerances, markers, shared models, no network) and procedures: `.claude/rules/testing.md` and the `grace-torch-tests` skill.
+
+## Gotchas that apply everywhere
+
+Area gotchas (instructions and `model.yaml`, data builder and pandas, training and Keras 3, TF-free packages and import gates, golden fixtures, CI and packaging) are in `.claude/rules/`; they load when you read or edit a matching file, and **a path-scoped rule is not re-injected after a compaction** until you touch a matching file again.
+
+- **The package does not import TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve public names on first access (`core/lazy.py`); the TF options (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`.
+  **A new module with a module-level `import tensorflow` starts with `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt). A module that must stay TF-free goes in `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`.
+- **Worktrees.** Link `.venv` from the main checkout (git-ignored; `uv.lock` is tracked). Never run `uv sync` there: it repoints the shared editable install to the worktree (repair: `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
+  Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, print `tensorpotential.__file__` once, give `ty` `--python <main>/.venv`, use `--cov=tensorpotential`, and in a scratch script import `tensorpotential` before `tensorflow` (or the numpy-style type promotion is enabled too late).
+
 **Adding to this file.** A lesson goes here only when an agent working on something else could trip on it and a rule or one command prevents it: at most three lines. Anything tied to one module, tool, test file or issue (measurements, the history of a fix,
-a pitfall of one procedure) goes in the document next to that code (module docstring, a README in its directory, `baselines/README.md`, `.github/CI.md`, the matching skill) and this file gets at most a one-line pointer; the evidence of a finding goes in the issue
-(`board.py finding`). Before adding, look for a bullet to extend or delete; delete a bullet when what it warns about is fixed. Never a measurement log or a dated progress note.
-**Creating a new skill (a directory under `.claude/skills/`) needs the user's validation first**: propose name, description and outline (in the conversation or as an issue comment), create it once the user agrees. The same holds for restructuring existing skills.
+a pitfall of one procedure) goes in the document next to that code (module docstring, a README in its directory, `baselines/README.md`, `.github/CI.md`, the `.claude/rules/` file whose `paths` match, the matching skill) and this file gets at most a one-line pointer; the evidence of a finding goes in the issue
+(`board.py finding`). Before adding, look for a bullet to extend or delete; delete a bullet when what it warns about is fixed. Never a measurement log or a dated progress note. A rule that must hold after a compaction stays in this file (or in an unscoped rule), never in a path-scoped one; a rule that must always hold is better enforced by a hook or a check than by prose.
+**Creating a new skill (a directory under `.claude/skills/`) needs the user's validation first**: propose name, description and outline (in the conversation or as an issue comment), create it once the user agrees. The same holds for restructuring existing skills and for adding a file to `.claude/rules/`.

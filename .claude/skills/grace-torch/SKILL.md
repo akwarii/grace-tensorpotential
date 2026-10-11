@@ -46,14 +46,7 @@ The decisions taken so far (D1-D19: packaging, fixtures, periodic-boundary polic
 - **R9 - The user and the issue take precedence** over the general rules here and in `CLAUDE.md`. An issue whose job is to change legacy code (clean-up, quality,
   deduplication, packaging) may do what the general text discourages, within its scope and with the safeguards it names.
 
-## Layout (destination)
+## Where the code is
 
-```
-tensorpotential/core/            TF-free shared code: neighbour-list contract, process_cutoff_dict, graph schema, conventions
-tensorpotential/torch_backend/   spec, registry, plans, ops, instructions/, model, weights, torchsim
-tensorpotential/scripts/         TF-side extractor (variables -> npz), converter entry points
-tests_torch/                     conftest without TF import; golden/ (tiny committed anchors), fixtures/ (local, git-ignored), oracle/
-tools/                           baselines tools, coverage and clone checks
-```
-
-Check the tree before relying on a path: pieces appear milestone by milestone, and the board is the record of what exists.
+`tensorpotential/core/` (TF-free shared code) and `tensorpotential/torch_backend/` (spec, registry; the plans, ops, instructions and model arrive milestone by milestone), the TF-side extractor in `tensorpotential/scripts/`,
+`tests_torch/` (`golden/` tiny committed anchors, `fixtures/` local and git-ignored, `structures/`), baselines and checks in `baselines/` and `tools/`. `CLAUDE.md` (Architecture) has the map of the whole package; the board is the record of what exists.

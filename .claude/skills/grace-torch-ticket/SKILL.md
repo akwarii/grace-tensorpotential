@@ -95,7 +95,7 @@ base:   torch-backend              (the integration branch on the fork; never ma
 
 New issues are created only when the user says so. Start from the fork's template, `.github/ISSUE_TEMPLATE/milestone.md` (fork only, never on a `pr/U*` branch): the same sections as the
 existing milestone issues plus **Out of scope** (binding) and **Decisions it depends on** (the decided outcomes inlined, so the issue needs no other reading), and the Definition of
-Done with the merged-PR box. The `Depends on` line names issue numbers (add the native "blocked by" relations), the Context lines carry the estimate and where it runs, and the text is
+Done with the merged-PR box. The `Depends on` line names issue numbers (add the native "blocked by" relations, and mirror the line in the `Blocks` of the open issues that now block this one), the Context lines carry the estimate and where it runs, and the text is
 sanitised. Add the issue to the board with its fields (Stage, Runs on, Priority, Days, Kind), and run `python tools/board.py refresh` and `python tools/board.py lint` afterwards.
 
 ## Writing the PR summary

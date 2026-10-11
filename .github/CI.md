@@ -32,3 +32,9 @@ uv run --frozen --no-sync pytest tests --splits 4 --group 1 --splitting-algorith
 - Package discovery is `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package.
 - TF and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue).
 - Checks: `pytest --noconftest tests/test_packaging.py` (builds the wheel in a scratch copy, or `TENSORPOTENTIAL_WHEEL=<wheel>`: file list against `baselines/wheel_files_upstream.txt`, metadata, extras; `--noconftest` because `tests/conftest.py` imports TensorFlow), `python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf` (clean venv with the wheel: core imports without TF, `--help` of the ten console scripts), `python tools/resolve_extras.py [EXTRA]` (resolves the extras with uv). CI runs the last two.
+
+## Runtime of the suite
+
+Measured on 14 cores and 30 GB, idle machine, about 2,640 tests, 2026-10-09: the full suite takes about 15 minutes with `-n 4` (19 with `--cov`); the longest test, `test_distrib`, takes about 4 minutes, and the total, not one test, bounds the run at `-n 4`.
+An older figure for `-m "not slow"` (4 to 5 minutes at 1,340 tests) was not re-measured. A second suite running next to it about doubles the time, so compare timings only between back-to-back runs. The histogram PNGs of `load_and_prepare_datasets` cost about 1 s of a 15 to 48 s training run, so they are not worth a switch.
+Re-measure before relying on these numbers.
