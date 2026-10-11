@@ -79,7 +79,7 @@ class Verdict:
 
 
 def _skip_heredoc_bodies(command: str) -> str:
-    """The command without the bodies of its here-documents (their text is data, not commands); `<<<` is a here-string."""
+    """Return the command without the bodies of its here-documents (their text is data, not commands); `<<<` is a here-string."""
     out: list[str] = []
     pending: list[tuple[str, bool]] = []
     lines = command.split("\n")
@@ -112,7 +112,8 @@ def _newlines_to_semicolons(command: str) -> str:
         elif ch in "'\"":
             quote = ch
         elif ch == "\n":
-            ch = ";"
+            out.append(";")
+            continue
         out.append(ch)
     return "".join(out)
 
@@ -129,7 +130,7 @@ def tokenize(command: str) -> list[str]:
 
 
 def split_commands(command: str) -> list[list[str]]:
-    """The simple commands of a command line, each a list of words."""
+    """Split a command line into its simple commands, each a list of words."""
     commands: list[list[str]] = []
     current: list[str] = []
     for token in [*tokenize(command), ";"]:
@@ -143,7 +144,7 @@ def split_commands(command: str) -> list[list[str]]:
 
 
 def _strip_assignments(words: list[str]) -> tuple[list[str], dict[str, str]]:
-    """The words after leading `VAR=value` assignments, and those assignments."""
+    """Split the leading `VAR=value` assignments from the words after them."""
     env: dict[str, str] = {}
     k = 0
     while k < len(words) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[k]):
@@ -154,7 +155,7 @@ def _strip_assignments(words: list[str]) -> tuple[list[str], dict[str, str]]:
 
 
 def _unwrap(words: list[str], env: dict[str, str]) -> tuple[list[str], dict[str, str]]:
-    """The command behind `env`, `timeout 5`, `sudo`, `nice -n 5`, ... (their own options and assignments dropped)."""
+    """Return the command behind `env`, `timeout 5`, `sudo`, `nice -n 5`, ... (their own options and assignments dropped)."""
     while words and Path(words[0]).name in WRAPPERS:
         wrapper, words = Path(words[0]).name, words[1:]
         while words and words[0].startswith("-"):
@@ -168,7 +169,7 @@ def _unwrap(words: list[str], env: dict[str, str]) -> tuple[list[str], dict[str,
 
 
 def _inner_script(words: list[str]) -> str | None:
-    """The script of `bash -c "<script>"` (also `-lc`, sh, zsh) or `eval ...`, else None."""
+    """Return the script of `bash -c "<script>"` (also `-lc`, sh, zsh) or `eval ...`, else None."""
     base = Path(words[0]).name
     if base == "eval":
         return " ".join(words[1:])
@@ -180,13 +181,13 @@ def _inner_script(words: list[str]) -> str | None:
 
 
 def overrides(env: dict[str, str]) -> set[str]:
-    """The rules a command (or the hook's own environment) overrides."""
+    """Return the rules a command (or the hook's own environment) overrides."""
     value = env.get(OVERRIDE_VAR, os.environ.get(OVERRIDE_VAR, ""))
     return {x.strip() for x in value.split(",") if x.strip()}
 
 
 def _chdir(cwd: Path, target: str) -> Path:
-    """The directory `target` names from `cwd` (`~` expanded)."""
+    """Resolve the directory `target` names from `cwd` (`~` expanded)."""
     return (cwd / Path(target).expanduser()).resolve()
 
 
@@ -195,14 +196,14 @@ def _chdir(cwd: Path, target: str) -> Path:
 
 def _git(cwd: Path, *args: str) -> str:
     try:
-        r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=5, check=False)
+        r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=5, check=False)  # noqa: S603, S607 - fixed argv
     except (OSError, subprocess.SubprocessError):
         return ""
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
 def current_branch(cwd: Path) -> str:
-    """The branch checked out in `cwd` ("" when detached or not a repository)."""
+    """Return the branch checked out in `cwd` ("" when detached or not a repository)."""
     return _git(cwd, "symbolic-ref", "--short", "-q", "HEAD")
 
 
@@ -241,7 +242,7 @@ def _push_destinations(args: list[str], branch: str) -> tuple[str, list[str]]:
 
 
 def check_git(words: list[str], cwd: Path) -> Verdict | None:
-    """The `integration-branch`, `upstream` and `worktree-force` rules for a `git` command."""
+    """Apply the `integration-branch`, `upstream` and `worktree-force` rules for a `git` command."""
     sub, args, where = _git_subcommand(words, cwd)
     if sub == "worktree" and args[:1] == ["remove"] and any(a in ("--force", "-f") for a in args):
         return Verdict("worktree-force", "`git worktree remove --force` discards another agent's uncommitted work. Remove it without --force; if git refuses, report the uncommitted work.")
@@ -297,10 +298,10 @@ def _api_writes(words: list[str]) -> bool:
 
 
 def check_gh(words: list[str], env: dict[str, str]) -> Verdict | None:
-    """The `graphql`, `merge`, `draft`, `repo` and `upstream` rules for a `gh` command."""
+    """Apply the `graphql`, `merge`, `draft`, `repo` and `upstream` rules for a `gh` command."""
     parts, repo = _gh_parts(words)
     repo = repo or env.get("GH_REPO", os.environ.get("GH_REPO", ""))
-    group, verb = (parts + ["", ""])[:2]
+    group, verb = [*parts, "", ""][:2]
     joined = " ".join(words)
     if group == "project" and verb in GRAPHQL_POINTS:
         return Verdict("graphql", f"`gh project {verb}` costs about {GRAPHQL_POINTS[verb]} GraphQL points of the 5,000 an hour that all agents share. Use `python tools/board.py` (it reads the table for about 3 points) and `board.py budget`.")
@@ -318,7 +319,7 @@ def check_gh(words: list[str], env: dict[str, str]) -> Verdict | None:
 
 
 def check_kill(words: list[str]) -> Verdict | None:
-    """The `kill` rule: no `kill`, `pkill` or `killall` naming a test or training process."""
+    """Apply the `kill` rule: no `kill`, `pkill` or `killall` naming a test or training process."""
     if Path(words[0]).name in KILLERS and re.search(r"pytest|gracemaker", " ".join(words[1:])):
         return Verdict("kill", "Never kill another agent's test or training process (it may be another agent's run). Wait for it, or ask the user.")
     return None
@@ -350,7 +351,7 @@ def is_suite_command(words: list[str]) -> bool:
 
 
 def _ps_args(line: str) -> str:
-    """The command-line part of a `ps -eo pid,etimes,args` line ("" for a malformed line)."""
+    """Return the command-line part of a `ps -eo pid,etimes,args` line ("" for a malformed line)."""
     parts = line.split(None, 2)
     return parts[2] if len(parts) == 3 else ""
 
@@ -387,7 +388,7 @@ def machine_state() -> tuple[float, list[str]]:
     except (OSError, ValueError, IndexError):
         load1 = 0.0
     try:
-        out = subprocess.run(["ps", "-eo", "pid,etimes,args"], capture_output=True, text=True, timeout=5, check=False).stdout
+        out = subprocess.run(["ps", "-eo", "pid,etimes,args"], capture_output=True, text=True, timeout=5, check=False).stdout  # noqa: S607 - fixed argv
     except (OSError, subprocess.SubprocessError):
         return load1, []
     mine = {str(os.getpid()), str(os.getppid())}
@@ -395,7 +396,7 @@ def machine_state() -> tuple[float, list[str]]:
 
 
 def check_busy(words: list[str]) -> Verdict | None:
-    """The `busy` rule: no suite or training run while another one runs or the load is high."""
+    """Apply the `busy` rule: no suite or training run while another one runs or the load is high."""
     if not is_suite_command(words):
         return None
     load1, procs = machine_state()
@@ -406,7 +407,7 @@ def check_busy(words: list[str]) -> Verdict | None:
 
 
 def _checks(base: str, words: list[str], env: dict[str, str], where: Path) -> list[Verdict | None]:
-    """The verdicts of every rule that applies to one simple command."""
+    """Return the verdicts of every rule that applies to one simple command."""
     by_tool: dict[str, Callable[[], Verdict | None]] = {
         "git": lambda: check_git(words, where),
         "gh": lambda: check_gh(words, env),
@@ -436,7 +437,7 @@ def evaluate(command: str, cwd: Path, inherited: frozenset[str] = frozenset()) -
 
 
 def message(verdicts: list[Verdict]) -> str:
-    """The text shown to the agent when a command is blocked."""
+    """Format the text shown to the agent when a command is blocked."""
     lines = [f"BLOCKED by tools/guard_bash.py ({v.rule}): {v.message}" for v in verdicts]
     rules = ",".join(sorted({v.rule for v in verdicts}))
     lines.append(f"These are rules of CLAUDE.md. Only if the user told you to run exactly this command, put {OVERRIDE_VAR}={rules} in front of it.")
@@ -450,13 +451,13 @@ def main() -> int:
         if data.get("tool_name") != "Bash":
             return 0
         command = str(data.get("tool_input", {}).get("command", ""))
-        cwd = Path(data.get("cwd") or os.getcwd())
+        cwd = Path(data.get("cwd") or Path.cwd())
         verdicts = evaluate(command, cwd)
     except Exception as exc:  # noqa: BLE001 - a broken guard must never block the agent: fail open and say so
-        print(f"guard_bash: ignored an internal error: {exc!r}", file=sys.stderr)
+        sys.stderr.write(f"guard_bash: ignored an internal error: {exc!r}\n")
         return 0
     if verdicts:
-        print(message(verdicts), file=sys.stderr)
+        sys.stderr.write(message(verdicts) + "\n")
         return 2
     return 0
 

@@ -201,6 +201,66 @@ class FakeGH:
         data = {"rateLimit": self.rate(cost=1), "node": {"items": page}}
         return json.dumps({"data": data})
 
+    def field_list(self):
+        """Answer `gh project field-list`."""
+        options = [{"name": n, "id": i} for i, n in self.options.items()]
+        fields = [
+            {"name": "Title", "id": "f0"},
+            {"name": "Status", "id": "fs", "options": options},
+        ]
+        if self.extra_fields:
+            select = lambda n, names: {"name": n, "id": f"f-{n}", "options": [{"name": x, "id": f"o-{n}-{x}"} for x in names]}  # noqa: E731
+            fields += [
+                select("Stage", [str(k) for k in range(9)]),
+                select("Runs on", ["local", "HPC", "GPU", "user"]),
+                select("Priority", ["P0", "P1", "P2", "P3", "gate"]),
+                select("Upstream", ["none", "candidate"]),
+                select("Kind", ["milestone", "gate"]),
+                {"name": "Days", "id": "f-Days"},
+            ]
+        if self.text_fields:
+            fields += [
+                {"name": "Blocked by", "id": "fb"},
+                {"name": "PR", "id": "fp"},
+            ]
+        return json.dumps({"fields": fields})
+
+    def graphql(self, args):
+        """Answer one `gh api graphql` call."""
+        query = args[3]
+        if "items(first" in query:
+            return self.items_page(args)
+        if "rateLimit" in query:
+            return json.dumps({"data": {"rateLimit": self.rate(cost=1)}})
+        if "$field" in query:  # a text cell: set, or cleared when there is no $text
+            kv = dict(a.split("=", 1) for a in args[3::2])
+            key = kv["item"].removeprefix("item-")
+            column = {"fb": "Blocked by", "fp": "PR"}[kv["field"]]
+            if "$text" in query:
+                self.text[key, column] = kv["text"]
+            else:
+                self.text.pop((key, column), None)
+            self.cell_writes += 1
+            return ""
+        if "addBlockedBy" in query:
+            issue, blocking = find(r'issueId: "node-(\d+)", blockingIssueId: "node-(\d+)"', query).groups()
+            self.blocked.append((int(issue), int(blocking)))
+            return ""
+        if "repository(owner" in query:
+            nodes = {f"n{n}": {"id": f"node-{n}"} for n in re.findall(r"n(\d+): issue", query)}
+            return json.dumps({"data": {"repository": nodes}})
+        field_match = re.search(r'fieldId:"([^"]+)"', query)
+        if field_match and field_match.group(1) != "fs":
+            key = find(r'itemId:"item-([^"]+)"', query).group(1)
+            number, option = find(r'value:\{(?:number:([\d.]+)|singleSelectOptionId:"o-[^-]+(?: on)?-([^"]+)")', query).groups()
+            self.item_fields[key, field_match.group(1).removeprefix("f-")] = number or option
+            return ""
+        item_match = re.search(r'itemId:"item-([^"]+)"', query)
+        option_match = re.search(r'singleSelectOptionId:"([^"]+)"', query)
+        assert item_match and option_match
+        self.status[item_match.group(1)] = self.options[option_match.group(1)]
+        return ""
+
     def __call__(self, *args):
         self.calls.append(args)
         head = args[:2]
@@ -240,61 +300,9 @@ class FakeGH:
                 ]
             })
         if head == ("project", "field-list"):
-            options = [{"name": n, "id": i} for i, n in self.options.items()]
-            fields = [
-                {"name": "Title", "id": "f0"},
-                {"name": "Status", "id": "fs", "options": options},
-            ]
-            if self.extra_fields:
-                select = lambda n, names: {"name": n, "id": f"f-{n}", "options": [{"name": x, "id": f"o-{n}-{x}"} for x in names]}  # noqa: E731
-                fields += [
-                    select("Stage", [str(k) for k in range(9)]),
-                    select("Runs on", ["local", "HPC", "GPU", "user"]),
-                    select("Priority", ["P0", "P1", "P2", "P3", "gate"]),
-                    select("Upstream", ["none", "candidate"]),
-                    select("Kind", ["milestone", "gate"]),
-                    {"name": "Days", "id": "f-Days"},
-                ]
-            if self.text_fields:
-                fields += [
-                    {"name": "Blocked by", "id": "fb"},
-                    {"name": "PR", "id": "fp"},
-                ]
-            return json.dumps({"fields": fields})
+            return self.field_list()
         if head == ("api", "graphql"):
-            query = args[3]
-            if "items(first" in query:
-                return self.items_page(args)
-            if "rateLimit" in query:
-                return json.dumps({"data": {"rateLimit": self.rate(cost=1)}})
-            if "$field" in query:  # a text cell: set, or cleared when there is no $text
-                kv = dict(a.split("=", 1) for a in args[3::2])
-                key = kv["item"].removeprefix("item-")
-                column = {"fb": "Blocked by", "fp": "PR"}[kv["field"]]
-                if "$text" in query:
-                    self.text[key, column] = kv["text"]
-                else:
-                    self.text.pop((key, column), None)
-                self.cell_writes += 1
-                return ""
-            if "addBlockedBy" in query:
-                issue, blocking = find(r'issueId: "node-(\d+)", blockingIssueId: "node-(\d+)"', query).groups()
-                self.blocked.append((int(issue), int(blocking)))
-                return ""
-            if "repository(owner" in query:
-                nodes = {f"n{n}": {"id": f"node-{n}"} for n in re.findall(r"n(\d+): issue", query)}
-                return json.dumps({"data": {"repository": nodes}})
-            field_match = re.search(r'fieldId:"([^"]+)"', query)
-            if field_match and field_match.group(1) != "fs":
-                key = find(r'itemId:"item-([^"]+)"', query).group(1)
-                number, option = find(r'value:\{(?:number:([\d.]+)|singleSelectOptionId:"o-[^-]+(?: on)?-([^"]+)")', query).groups()
-                self.item_fields[key, field_match.group(1).removeprefix("f-")] = number or option
-                return ""
-            item_match = re.search(r'itemId:"item-([^"]+)"', query)
-            option_match = re.search(r'singleSelectOptionId:"([^"]+)"', query)
-            assert item_match and option_match
-            self.status[item_match.group(1)] = self.options[option_match.group(1)]
-            return ""
+            return self.graphql(args)
         if head == ("pr", "list"):
             state = args[args.index("--state") + 1]
             if state == "merged":

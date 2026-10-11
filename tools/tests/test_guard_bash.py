@@ -25,7 +25,8 @@ GIT_ENV = {
 
 
 def git(cwd, *args):
-    return subprocess.run(["git", *args], cwd=cwd, env=GIT_ENV, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(["git", *args], cwd=cwd,  # noqa: S603, S607 - test repository, `git` from PATH
+         env=GIT_ENV, check=True, capture_output=True, text=True).stdout.strip()
 
 
 @pytest.fixture
@@ -292,8 +293,8 @@ def test_machine_state_reads_the_load_and_the_process_table():
 
 
 def test_machine_state_survives_a_missing_ps(monkeypatch):
-    def boom(*a, **k):
-        raise OSError("no ps")
+    def boom(*_a, **_k):
+        raise FileNotFoundError
 
     monkeypatch.setattr(gb.subprocess, "run", boom)
     assert REAL_MACHINE_STATE()[1] == []
@@ -339,7 +340,8 @@ def test_the_committed_settings_run_this_script_for_bash():
 
 def test_script_runs_as_a_program(tmp_path):
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "gh project item-list 2"}, "cwd": str(tmp_path)})
-    r = subprocess.run([sys.executable, str(Path(gb.__file__)), ], input=payload, capture_output=True, text=True, check=False)
+    r = subprocess.run([sys.executable, str(Path(gb.__file__))], input=payload,  # noqa: S603 - runs the hook as Claude Code does
+         capture_output=True, text=True, check=False)
     assert r.returncode == 2
     assert "graphql" in r.stderr
 
@@ -355,8 +357,8 @@ def test_repo_given_as_an_equals_option_counts_as_upstream(tmp_path):
 
 
 def test_git_failures_read_as_no_state(monkeypatch, tmp_path):
-    def boom(*a, **k):
-        raise OSError("no git")
+    def boom(*_a, **_k):
+        raise FileNotFoundError
 
     monkeypatch.setattr(gb.subprocess, "run", boom)
     assert gb.current_branch(tmp_path) == ""
