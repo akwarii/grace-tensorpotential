@@ -732,10 +732,18 @@ class _StagePaths:
     """The files and folders of one task, below the output folder."""
 
     stage1: str
-    stage1_temp: str
     batches_df: str
     stage3: str
-    stage3_temp: str
+
+    @property
+    def stage1_temp(self) -> str:
+        """The folder stage 1 writes to before it renames it to ``stage1``."""
+        return self.stage1 + ".tmp"
+
+    @property
+    def stage3_temp(self) -> str:
+        """The folder stage 3 writes to before it renames it to ``stage3``."""
+        return self.stage3 + ".tmp"
 
     @classmethod
     def of_task(cls, output_path: str, task_index: int, total_num_tasks: int) -> "_StagePaths":
@@ -743,7 +751,7 @@ class _StagePaths:
         stage1 = os.path.join(output_path, "stage1", f"shard_{shard}")
         stage3 = os.path.join(output_path, "stage3", f"shard_{shard}")
         batches_df = os.path.join(output_path, "stage2", f"batches_df-{shard}.pkl.gz")
-        return cls(stage1, stage1 + ".tmp", batches_df, stage3, stage3 + ".tmp")
+        return cls(stage1, batches_df, stage3)
 
 
 @dataclass
