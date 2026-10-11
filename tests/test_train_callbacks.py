@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-# tensorpotential first: it selects the Keras mode before TensorFlow is imported
+# tensorpotential first: it applies the TensorFlow options before TensorFlow is imported
 from tensorpotential.cli.train_callbacks import (
     CosineDecay,
     CustomReduceLROnPlateau,
@@ -511,3 +511,72 @@ def test_plateau_follows_the_factory_trace_of_the_integration_input():
     )
     seen = feed(cb, host, [5.0, 4.0, 4.5, 4.6, 4.7, 4.8])
     np.testing.assert_allclose(seen, [1.0, 1.0, 1.0, 0.1, 0.1, 0.01], rtol=F32.rtol)
+
+
+# ---- the plateau callback under Keras 3 (DEPS3): the direction of ``mode="auto"``, ``min_delta``, the first best value
+#
+# Keras 3 sets the monitor operation lazily inside its own ``on_epoch_end`` and resets ``best`` to ``None`` in
+# ``on_train_begin``; the callback keeps its own direction and initial best value. Rates are exactly representable
+# in float32 (the optimizer keeps its learning rate in a float32 variable).
+
+PLATEAU_START_LR = 0.5
+PLATEAU_FACTOR = 0.5
+
+
+def keras3_plateau(**kwargs) -> tuple[CustomReduceLROnPlateau, Host]:
+    host = Host(PLATEAU_START_LR)
+    options = {"factor": PLATEAU_FACTOR, "patience": 1, "mode": "min", **kwargs}
+    callback = CustomReduceLROnPlateau(host, **options)
+    callback.on_train_begin()  # the training loop calls it; Keras 3 resets its state there
+    return callback, host
+
+
+def monitored_rates(callback, host: Host, values: list[float], key: str) -> list[float]:
+    rates = []
+    for epoch, value in enumerate(values):
+        callback.on_epoch_end(epoch, {key: value})
+        rates.append(host.lr)
+    return rates
+
+
+def test_plateau_a_smaller_improvement_than_min_delta_does_not_count():
+    callback, host = keras3_plateau(min_delta=0.1)
+
+    assert monitored_rates(callback, host, [1.0, 0.95], "train_loss") == [0.5, 0.25]
+
+
+def test_plateau_auto_mode_minimises_a_loss_and_maximises_an_accuracy():
+    loss, loss_host = keras3_plateau(mode="auto", monitor="train_loss")
+    accuracy, accuracy_host = keras3_plateau(mode="auto", monitor="val_acc")
+
+    # a falling loss and a rising accuracy keep improving: no reduction
+    assert monitored_rates(loss, loss_host, [1.0, 0.5, 0.25], "train_loss") == [PLATEAU_START_LR] * 3
+    assert monitored_rates(accuracy, accuracy_host, [0.25, 0.5, 0.75], "val_acc") == [PLATEAU_START_LR] * 3
+
+
+def test_plateau_auto_mode_reduces_when_a_loss_rises_and_when_an_accuracy_falls():
+    loss, loss_host = keras3_plateau(mode="auto", monitor="train_loss")
+    accuracy, accuracy_host = keras3_plateau(mode="auto", monitor="val_acc")
+
+    assert monitored_rates(loss, loss_host, [1.0, 2.0], "train_loss")[-1] == 0.25
+    assert monitored_rates(accuracy, accuracy_host, [0.5, 0.25], "val_acc")[-1] == 0.25
+
+
+def test_plateau_a_new_callback_has_a_best_value_that_any_loss_improves_on():
+    callback, host = keras3_plateau()
+
+    assert callback.best >= 1e99
+    assert monitored_rates(callback, host, [1e6], "train_loss") == [PLATEAU_START_LR]
+
+
+def test_plateau_a_best_value_of_zero_after_construction_is_replaced_by_a_huge_one():
+    class StartsAtZero(CustomReduceLROnPlateau):
+        """The parent state at the end of its constructor, set to the one value the override rewrites."""
+
+        def _reset(self):
+            super()._reset()
+            self.best = 0.0
+
+    callback = StartsAtZero(Host(PLATEAU_START_LR), factor=PLATEAU_FACTOR, patience=2, mode="min")
+
+    assert callback.best == 1e99

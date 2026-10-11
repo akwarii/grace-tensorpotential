@@ -66,7 +66,7 @@ def configure_tensorflow(threads: int = 0):
     """Import TensorFlow on CPU; ``threads`` > 0 pins the intra- and inter-op thread pools."""
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-    import tensorpotential  # noqa: F401, I001 - selects the legacy Keras backend
+    import tensorpotential  # noqa: F401, I001 - applies the TensorFlow options before TensorFlow is imported
     import tensorflow as tf
 
     if threads > 0:

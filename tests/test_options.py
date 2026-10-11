@@ -142,7 +142,7 @@ def test_the_module_does_not_import_tensorflow_or_torch():
         "import sys\n"
         "class Block:\n"
         "    def find_spec(self, name, path=None, target=None):\n"
-        "        if name.split('.')[0] in ('tensorflow', 'tf_keras', 'torch'):\n"
+        "        if name.split('.')[0] in ('tensorflow', 'keras', 'torch'):\n"
         "            raise ImportError(name)\n"
         "sys.meta_path.insert(0, Block())\n"
         "import importlib.util\n"

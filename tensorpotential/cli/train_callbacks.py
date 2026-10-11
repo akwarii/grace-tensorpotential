@@ -104,6 +104,9 @@ class CustomReduceLROnPlateau(tf.keras.callbacks.ReduceLROnPlateau):
         stop_on_min_lr=False,
         **kwargs,
     ):
+        # Keras 3 sets its monitor operation lazily and in its own on_epoch_end, which is overridden here,
+        # and resets `best` to None in on_train_begin: the direction and the initial best value are our own
+        self._maximise = self._resolve_maximise(monitor, mode)
         super().__init__(
             monitor,
             factor,
@@ -117,8 +120,25 @@ class CustomReduceLROnPlateau(tf.keras.callbacks.ReduceLROnPlateau):
         )
         self.model = model
         self.stop_on_min_lr = stop_on_min_lr
+        self._reset()
         if self.best == 0.0:
             self.best = 1e99
+
+    @staticmethod
+    def _resolve_maximise(monitor: str, mode: str) -> bool:
+        """Whether a larger value of the monitored metric is better (``mode="auto"`` guesses from the name)."""
+        if mode in ("min", "max"):
+            return mode == "max"
+        return "acc" in monitor or monitor.startswith("fmeasure")
+
+    def _reset(self):
+        super()._reset()
+        self.best = -np.inf if self._maximise else np.inf
+
+    def _is_improvement(self, current, best) -> bool:
+        if self._maximise:
+            return bool(current > best + self.min_delta)
+        return bool(current < best - self.min_delta)
 
     def on_epoch_end(self, epoch: int, logs: Dict | None = None):
         logs = logs or {}
@@ -134,7 +154,7 @@ class CustomReduceLROnPlateau(tf.keras.callbacks.ReduceLROnPlateau):
             self.cooldown_counter -= 1
             self.wait = 0
 
-        if self.monitor_op(current, self.best):
+        if self._is_improvement(current, self.best):
             self.best = current
             self.wait = 0
         elif not self.in_cooldown():

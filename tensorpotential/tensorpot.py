@@ -5,12 +5,18 @@ import logging
 import os
 import shutil
 import tempfile
+import warnings
 
 from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
+from tensorpotential import keras_adapter  # noqa: F401  (installs the Keras 3 variable fix)
 from tensorpotential.loss import LossFunction
 from tensorpotential.metrics import ComputeMetrics
+from tensorpotential.optimizer_layout import (
+    LegacyOptimizerStateWarning,
+    optimizer_state_fits,
+)
 from tensorpotential.tpmodel import (
     ComputeBatchEnergyAndForces,
     ComputeFunction,
@@ -314,10 +320,19 @@ class TensorPotential:
                 if model_only
                 else self.checkpoint
             )
+            keep_optimizer_state = not model_only and self._optimizer_state_fits(
+                checkpoint_name
+            )
+            if not (model_only or keep_optimizer_state):
+                ckpt = self._discard_optimizer_state(checkpoint_name)
+                assert_consumed = False  # the optimizer entries stay unread by design
             with self.strategy.scope():
                 status = ckpt.read(checkpoint_name)
-                if expect_partial:
+                if expect_partial or not keep_optimizer_state:
                     status.expect_partial()
+            if not (model_only or keep_optimizer_state):
+                # a mid-epoch rewind completes gradient updates baked into optimizer moments, which are gone
+                self.checkpoint.intra_epoch_save.assign(False)
             if assert_consumed:
                 status.assert_consumed()
             elif assert_existing_objects_matched:
@@ -333,6 +348,51 @@ class TensorPotential:
                 raise ValueError(
                     f"No checkpoint index found at {checkpoint_name}.index"
                 )
+
+    def _optimizer_state_fits(self, checkpoint_name: str) -> bool:
+        """Whether the optimizer state of the checkpoint can be restored into this optimizer.
+
+        ``True`` without an optimizer, or when the checkpoint holds none.
+        """
+        if not self.optimizer:
+            return True
+        with self.strategy.scope():
+            return optimizer_state_fits(
+                checkpoint_name, self.optimizer, self.model.variables_to_train
+            )
+
+    def _discard_optimizer_state(self, checkpoint_name: str):
+        """Start the optimizer from scratch and return the checkpoint of everything else.
+
+        The model weights, step, epoch and mid-epoch flag are read from the checkpoint; the optimizer is
+        replaced by a fresh one of the same configuration, and the user is warned (never silent).
+        """
+        message = (
+            f"The optimizer state of checkpoint '{checkpoint_name}' is not restored: its layout is not the "
+            f"one of the {type(self.optimizer).__name__} of this Keras version (checkpoints written with "
+            "legacy Keras 2 store the optimizer variables in another order), or the optimizer "
+            "options differ. The model weights, step and epoch are restored; the optimizer moments and "
+            "averages start from scratch."
+        )
+        warnings.warn(message, LegacyOptimizerStateWarning, stacklevel=3)
+        logging.warning(message)
+        with self.strategy.scope():
+            self.optimizer = self.optimizer.__class__(**self.optimizer.get_config())
+        self._setup_weight_decay_exclusions()
+        old = self.checkpoint
+        self.checkpoint = tf.train.Checkpoint(
+            model=old.model,
+            step=old.step,
+            epoch=old.epoch,
+            intra_epoch_save=old.intra_epoch_save,
+            optimizer=self.optimizer,
+        )
+        return tf.train.Checkpoint(
+            model=old.model,
+            step=old.step,
+            epoch=old.epoch,
+            intra_epoch_save=old.intra_epoch_save,
+        )
 
     def save_checkpoint(
         self, suffix="", checkpoint_name=None, verbose=False, is_mid_epoch=False
@@ -696,6 +756,29 @@ class TensorPotential:
         self.reduce_dict(results)
         return results
 
+    def _build_optimizer(self):
+        """Create the optimizer variables now, under the strategy scope.
+
+        A Keras 3 optimizer creates its variables on the first update; inside a traced step under a
+        distribution strategy that fails (``You must feed a value for placeholder tensor``). Called once the
+        trainable variables, the checkpoint and the optimizer are final, before the first step.
+        """
+        if self.optimizer is not None and not self.optimizer.built:
+            with self.strategy.scope():
+                self.optimizer.build(self.model.variables_to_train)
+
+    @staticmethod
+    def _ema_ready(optimizer):
+        """Whether the optimizer holds an average that is worth swapping into the model.
+
+        A Keras 3 optimizer creates its averages filled with zeros and sets them at its first update: before
+        one update has happened (iterations is 0) the averages are not the weights.
+        """
+        return (
+            hasattr(optimizer, "_model_variables_moving_average")
+            and int(optimizer.iterations.numpy()) > 0
+        )
+
     def _get_ema_optimizer(self):
         """Return the optimizer that holds EMA state, unwrapping LossScaleOptimizer if needed."""
         if hasattr(self.optimizer, "inner_optimizer"):
@@ -739,9 +822,9 @@ class TensorPotential:
 
     def swap_variables(self):
         optimizer = self._get_ema_optimizer()
-        if not hasattr(optimizer, "_model_variables_moving_average"):
+        if not self._ema_ready(optimizer):
             raise ValueError(
-                "swap_variables requires use_ema=True on the optimizer. "
+                "swap_variables requires use_ema=True on the optimizer and at least one optimizer step. "
                 f"Received: use_ema={getattr(optimizer, 'use_ema', False)}"
             )
         self._swap_variables(optimizer)
@@ -756,7 +839,7 @@ class TensorPotential:
         optimizer = self._get_ema_optimizer()
         should_swap = (
             self.use_ema
-            and hasattr(optimizer, "_model_variables_moving_average")
+            and self._ema_ready(optimizer)
             and not self._ema_weights_in_model
         )
         if should_swap:
@@ -775,10 +858,11 @@ class TensorPotential:
         No-op when use_ema=False or optimizer not built.
         Safe for old checkpoints where model==shadow (swap is identity).
         """
+        self._build_optimizer()
         if not self.use_ema:
             return
         optimizer = self._get_ema_optimizer()
-        if not hasattr(optimizer, "_model_variables_moving_average"):
+        if not self._ema_ready(optimizer):
             return
         self._swap_variables(optimizer)
         self._ema_weights_in_model = False

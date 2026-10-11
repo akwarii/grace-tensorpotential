@@ -32,7 +32,7 @@ PyTorch come with extras, so install the one you need:
 
 | Command | Installs | Use it for |
 |---|---|---|
-| `pip install "tensorpotential[tf]"` | TensorFlow (with CUDA libraries on Linux) and `tf_keras` | fitting with `gracemaker`, `grace_predict`, `grace_utils`, `grace_preprocess`, the ASE calculator |
+| `pip install "tensorpotential[tf]"` | TensorFlow (with CUDA libraries on Linux) and Keras 3, which TensorFlow installs | fitting with `gracemaker`, `grace_predict`, `grace_utils`, `grace_preprocess`, the ASE calculator |
 | `pip install "tensorpotential[torch]"` | PyTorch | the PyTorch backend |
 | `pip install "tensorpotential[torch-sim]"` | PyTorch, `torch-sim-atomistic` and `vesin` | running models through torch-sim |
 | `pip install "tensorpotential[all]"` | all of the above | both stacks in one environment |
@@ -71,12 +71,9 @@ If the issue persists, you may need to downgrade your TensorFlow version:
 pip install "tensorflow[and-cuda]==2.16.2" 
 ```
 
-* **Keras Compatibility**: This project requires the legacy Keras API that is bundled with TensorFlow. 
-If you have a separate keras>=3.0.0 package installed, you must set the following environment variable to force TensorFlow 
-to use its built-in version: 
-```bash
-export TF_USE_LEGACY_KERAS=1
-```
+* **Keras 3**: This project uses Keras 3, the version that TensorFlow 2.20 installs, and needs no setting for it.
+A legacy-Keras setting left over from an earlier version of this package must be removed from the environment: 
+the package warns when it finds one (see the [release notes](release_notes.md)).
 
 * (Optional) Download foundation models (these will be stored in `$HOME/.cache/grace`):
 

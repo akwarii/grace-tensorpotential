@@ -13,9 +13,14 @@
   milestone: [FIX2]
   upstream: never
 
+- path: docs/gracemaker/faq.md
+  reason: 'removes the entries that told users to export the legacy-Keras variable (the callback TypeError and multi-GPU notes): the package uses Keras 3'
+  milestone: [DEPS3]
+  upstream: never
+
 - path: docs/gracemaker/install.md
-  reason: 'documents the extras (tf, torch, torch-sim, all): TensorFlow is no longer installed by pip install tensorpotential'
-  milestone: [CI1]
+  reason: 'documents the extras (tf, torch, torch-sim, all): TensorFlow is no longer installed by pip install tensorpotential; states that Keras 3 is used and no setting for it is needed'
+  milestone: [CI1, DEPS3]
   upstream: never
 
 - path: docs/gracemaker/utilities.md
@@ -23,14 +28,19 @@
   milestone: [DATA1, CLEAN5]
   upstream: pending
 
-- path: pyproject.toml
-  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py'
-  milestone: [TOOL1, QUAL1, CORE1, CI1]
+- path: examples/slurm_multinode/submit.sbatch
+  reason: 'no longer exports the legacy-Keras variable'
+  milestone: [DEPS3]
   upstream: never
 
-- path: setup.py
-  reason: 'removed: package discovery and package data moved to [tool.setuptools] in pyproject.toml (the wheel file list is unchanged, tests/test_packaging.py)'
-  milestone: [CI1]
+- path: mkdocs.yml
+  reason: 'adds the release-notes page to the navigation'
+  milestone: [DEPS3]
+  upstream: never
+
+- path: pyproject.toml
+  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py; drops tf_keras from the tf extra and forbids keras in the TensorFlow-free modules'
+  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3]
   upstream: never
 
 - path: pytest.ini
@@ -38,9 +48,14 @@
   milestone: [TEST4]
   upstream: never
 
+- path: setup.py
+  reason: 'removed: package discovery and package data moved to [tool.setuptools] in pyproject.toml (the wheel file list is unchanged, tests/test_packaging.py)'
+  milestone: [CI1]
+  upstream: never
+
 - path: tensorpotential/__init__.py
-  reason: 'resolves public names on first access so that importing the package does not import TensorFlow'
-  milestone: [CORE1]
+  reason: 'resolves public names on first access so that importing the package does not import TensorFlow; no longer sets TF_USE_LEGACY_KERAS; warns a user who still exports it'
+  milestone: [CORE1, DEPS3]
   upstream: never
 
 - path: tensorpotential/calculator/__init__.py
@@ -84,8 +99,8 @@
   upstream: pending
 
 - path: tensorpotential/cli/train_callbacks.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); CustomReduceLROnPlateau keeps its own direction and initial best value (Keras 3)'
+  milestone: [CLEAN2, QUAL1, CORE1, DEPS3]
   upstream: pending
 
 - path: tensorpotential/data/__init__.py
@@ -259,8 +274,8 @@
   upstream: pending
 
 - path: tensorpotential/tensorpot.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA entry points of TensorPotential work (no NotImplementedError)'
-  milestone: [CLEAN2, QUAL1, CORE1, LORA1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA entry points of TensorPotential work (no NotImplementedError); Keras 3: optimizer built before training, EMA swapped only after a first step, optimizer layout checked before a checkpoint restore'
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1, DEPS3]
   upstream: pending
 
 - path: tensorpotential/tpmodel.py
@@ -329,8 +344,8 @@
   upstream: pending
 
 - path: tests/conftest.py
-  reason: 'slow tier marked and read-only models shared between tests'
-  milestone: [TEST4]
+  reason: 'slow tier marked and read-only models shared between tests; no longer sets the legacy-Keras variable'
+  milestone: [TEST4, DEPS3]
   upstream: never
 
 - path: tests/data_distrib/check_stats.py
@@ -354,8 +369,8 @@
   upstream: pending
 
 - path: tests/test_distrib.py
-  reason: 'commented-out code removed; paths resolved relative to the test file and outputs written to tmp_path; thread budget per pytest-xdist worker; slow tier marked and read-only models shared between tests'
-  milestone: [CLEAN2, TEST1, TEST2, TEST4]
+  reason: 'commented-out code removed; paths resolved relative to the test file and outputs written to tmp_path; thread budget per pytest-xdist worker; slow tier marked and read-only models shared between tests; no longer sets the legacy-Keras variable'
+  milestone: [CLEAN2, TEST1, TEST2, TEST4, DEPS3]
   upstream: pending
 
 - path: tests/test_export.py
@@ -424,14 +439,19 @@
   upstream: pending
 
 - path: tests/test_structured_grid.py
-  reason: 'paths resolved relative to the test file and outputs written to tmp_path; unused imports, redefinitions and variables removed'
-  milestone: [TEST1, CLEAN3]
+  reason: 'paths resolved relative to the test file and outputs written to tmp_path; unused imports, redefinitions and variables removed; no longer sets the legacy-Keras variable'
+  milestone: [TEST1, CLEAN3, DEPS3]
   upstream: pending
 
 - path: tests/test_tp_model.py
   reason: 'commented-out code removed; paths resolved relative to the test file and outputs written to tmp_path; slow tier marked and read-only models shared between tests; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); characterization tests of the yaml round trip and constructor defaults'
   milestone: [CLEAN2, TEST1, TEST4, QUAL1, TEST8]
   upstream: pending
+
+- path: tests/test_uq_cli.py
+  reason: 'no longer sets the legacy-Keras variable'
+  milestone: [DEPS3]
+  upstream: never
 
 - path: tests/test_wizard.py
   reason: 'duplicated code folded into shared helpers'
