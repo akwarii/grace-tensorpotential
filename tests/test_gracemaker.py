@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -953,3 +954,263 @@ class TestLoraDocumentedExample:
         assert tp.is_lora_enabled()
         ranks = {v.name: v.shape for v in tp.model.variables if "/LORA/" in v.name}
         assert 8 in ranks["Z/w/LORA/A:0"]  # Z overrides `all` (rank 16)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The console script: tensorpotential.scripts.gracemaker.main
+# (multi-GPU detection, TF_CONFIG, virtual devices; the run itself is the unit tested above)
+# ---------------------------------------------------------------------------------------------------------------------
+
+from tensorpotential.cli import distribute  # noqa: E402
+from tensorpotential.scripts import gracemaker as gracemaker_script  # noqa: E402
+from tests import cli_help  # noqa: E402
+
+STRATEGY = object()
+
+
+@pytest.fixture
+def script_env(monkeypatch, tmp_path):
+    """A clean environment for the script and recorders for what it hands over to the library.
+
+    Replaced, each at a boundary: ``cli.gracemaker.main`` (the training run, tested above, takes minutes),
+    ``make_mwms_strategy`` (builds a process-global distributed runtime that cannot be undone in a test process),
+    and the ``tf.config`` device calls (global hardware configuration of the TensorFlow context).
+    """
+    for name in ("TF_CONFIG", "NUM_VIRTUAL_DEVICES", "CUDA_VISIBLE_DEVICES"):
+        monkeypatch.setenv(name, "unset-by-test")  # records the original, so the script's own writes are undone
+        monkeypatch.delenv(name)
+    monkeypatch.chdir(tmp_path)  # a relative input.yaml that does not exist is not read from the repository
+    record: dict = {"runs": [], "progs": [], "mwms": 0, "devices": []}
+
+    def fake_main(argv=None, strategy=None, strategy_desc="", prog=None):
+        record["runs"].append({"argv": list(argv), "strategy": strategy, "desc": strategy_desc})
+        record["progs"].append(prog)
+
+    def fake_mwms():
+        record["mwms"] += 1
+        return STRATEGY
+
+    monkeypatch.setattr(gracemaker, "main", fake_main)
+    monkeypatch.setattr(distribute, "make_mwms_strategy", fake_mwms)
+    monkeypatch.setattr(tf.config, "list_physical_devices", lambda kind=None: ["cpu0"])
+    monkeypatch.setattr(
+        tf.config,
+        "set_logical_device_configuration",
+        lambda device, configs: record["devices"].append((device, len(configs))),
+    )
+    monkeypatch.setattr(tf.config, "list_logical_devices", lambda kind=None: ["logical"] * len(record["devices"]))
+    return record
+
+
+def run_script(*argv: str) -> tuple[int, str, str]:
+    return cli_help.run_main(gracemaker_script.main, "gracemaker", list(argv))
+
+
+def test_script_hands_the_arguments_to_the_library_without_a_strategy(script_env):
+    code, _, _ = run_script("input.yaml", "--seed", "3")
+    assert code == 0
+    assert script_env["runs"] == [{"argv": ["input.yaml", "--seed", "3"], "strategy": None, "desc": ""}]
+    assert script_env["mwms"] == 0
+    assert "TF_CONFIG" not in os.environ
+
+
+@pytest.mark.parametrize("flag", ["-m", "--multigpu"])
+def test_multigpu_flag_builds_a_single_worker_mwms_cluster(script_env, flag):
+    run_script(flag, "input.yaml")
+    assert script_env["mwms"] == 1
+    assert script_env["runs"][0]["strategy"] is STRATEGY
+    assert script_env["runs"][0]["desc"] == "Single host/multi GPU (MWMS auto-TF_CONFIG)"
+    assert json.loads(os.environ["TF_CONFIG"]) == {
+        "cluster": {"worker": [f"localhost:{distribute.DEFAULT_TF_PORT}"]},
+        "task": {"type": "worker", "index": 0},
+    }
+    assert script_env["runs"][0]["argv"] == [flag, "input.yaml"]
+
+
+def test_mirrored_strategy_in_the_input_yaml_is_detected_before_the_run(script_env, tmp_path):
+    (tmp_path / "input.yaml").write_text("fit:\n  strategy: mirrored\n")
+    run_script("input.yaml")
+    assert script_env["mwms"] == 1
+    assert script_env["runs"][0]["desc"] == "Single host/multi GPU (MWMS auto-TF_CONFIG)"
+
+
+def test_the_default_input_yaml_is_read_when_no_positional_argument_is_given(script_env, tmp_path):
+    (tmp_path / "input.yaml").write_text("fit:\n  strategy: mirrored\n")
+    run_script("--seed", "3")
+    assert script_env["mwms"] == 1
+
+
+def test_an_external_tf_config_is_kept_and_means_a_multi_host_run(script_env, monkeypatch):
+    external = json.dumps({"cluster": {"worker": ["n1:1", "n2:1"]}, "task": {"type": "worker", "index": 1}})
+    monkeypatch.setenv("TF_CONFIG", external)
+    run_script("input.yaml")
+    assert os.environ["TF_CONFIG"] == external
+    assert script_env["mwms"] == 1
+    assert script_env["runs"][0]["desc"] == "Multi Host / Multi GPU"
+
+
+def test_an_external_tf_config_with_the_multigpu_flag_is_still_not_overwritten(script_env, monkeypatch):
+    monkeypatch.setenv("TF_CONFIG", "external")
+    run_script("-m", "input.yaml")
+    assert os.environ["TF_CONFIG"] == "external"
+    assert script_env["runs"][0]["desc"] == "Single host/multi GPU (MWMS auto-TF_CONFIG)"
+
+
+def test_virtual_devices_split_the_cpu_and_fall_back_to_mirrored_strategy(script_env, monkeypatch, caplog):
+    monkeypatch.setenv("NUM_VIRTUAL_DEVICES", "3")
+    with caplog.at_level(logging.INFO):
+        run_script("-m", "input.yaml")
+    assert script_env["devices"] == [("cpu0", 3)]
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "-1"
+    assert script_env["mwms"] == 0
+    assert "TF_CONFIG" not in os.environ
+    assert script_env["runs"][0]["strategy"] is None
+    assert "auto-MWMS upgrade is incompatible with virtual device setup" in caplog.text
+    assert "Setting 3 virtual devices" in caplog.text
+
+
+def test_virtual_devices_win_over_an_external_tf_config(script_env, monkeypatch):
+    monkeypatch.setenv("NUM_VIRTUAL_DEVICES", "2")
+    monkeypatch.setenv("TF_CONFIG", "external")
+    run_script("input.yaml")
+    assert script_env["mwms"] == 0
+    assert script_env["runs"][0]["strategy"] is None
+    assert script_env["devices"] == [("cpu0", 2)]
+
+
+def test_virtual_devices_without_multigpu_do_not_warn(script_env, monkeypatch, caplog):
+    monkeypatch.setenv("NUM_VIRTUAL_DEVICES", "2")
+    with caplog.at_level(logging.WARNING):
+        run_script("input.yaml")
+    assert "auto-MWMS" not in caplog.text
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# A fit without a test set
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def test_a_fit_without_a_test_set_trains_and_does_not_load_a_best_test_loss_checkpoint(ws, caplog):
+    cfg = _base_config()
+    cfg["data"] = {"filename": "../data/train.pkl.gz"}
+    (ws.run / "input.yaml").write_text(yaml.safe_dump(cfg))
+    with caplog.at_level(logging.INFO):
+        main(["input.yaml"])
+    assert ws.metrics("train")["epoch"].tolist() == [1, 2]
+    assert not (ws.seed_dir / "test_metrics.yaml").exists()
+    assert "Loading best test loss model" not in caplog.text
+
+
+def test_script_main_returns_zero_and_without_argv_reads_sys_argv(script_env, monkeypatch):
+    cli_help.poison_sys_argv(monkeypatch)
+    assert gracemaker_script.main(["input.yaml", "--seed", "3"]) == 0
+    assert script_env["runs"][-1]["argv"] == ["input.yaml", "--seed", "3"]
+    monkeypatch.setattr("sys.argv", ["gracemaker", "other.yaml"])
+    assert gracemaker_script.main() == 0
+    assert script_env["runs"][-1]["argv"] == ["other.yaml"]
+
+
+def test_script_main_hands_its_prog_name_to_the_library(script_env):
+    gracemaker_script.main(["input.yaml"])
+    gracemaker_script.main(["input.yaml"], prog="grace train")
+    assert script_env["progs"] == ["gracemaker", "grace train"]
+
+
+def test_importing_the_script_does_not_configure_logging():
+    from tests.fresh_python import run_fresh_python
+
+    code = (
+        "import logging\n"
+        "before = list(logging.getLogger().handlers)\n"
+        "import tensorpotential.scripts.gracemaker\n"
+        "print(before == list(logging.getLogger().handlers), logging.getLogger().level)\n"
+    )
+    result = run_fresh_python(code, Path("."))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines()[-1] == "True 30"
+
+
+def test_the_script_main_configures_logging_when_it_runs(script_env):
+    root = logging.getLogger()
+    saved_handlers, saved_level = list(root.handlers), root.level
+    for handler in saved_handlers:
+        root.removeHandler(handler)
+    try:
+        gracemaker_script.main(["input.yaml"])
+        assert root.handlers, "basicConfig was not called"
+        assert root.level == logging.INFO
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        for handler in saved_handlers:
+            root.addHandler(handler)
+        root.setLevel(saved_level)
+
+
+class TestBuildInstructions:
+    """``_build_instructions``: the model comes from a file (restarts) or is built from ``potential``; the communicated keys."""
+
+    @pytest.fixture
+    def custom_builder(self, tmp_path, monkeypatch):
+        """A ``potential::custom`` model builder that, like the presets of the 2-layer models, names its communicated keys."""
+        (tmp_path / "custom_builder_for_the_run.py").write_text(
+            "class Built:\n"
+            "    communicated_keys = ['from_the_builder']\n"
+            "    def get_instructions(self):\n"
+            "        return {'marker': 1}\n\n"
+            "def build(**kwargs):\n"
+            "    return Built()\n\n"
+            "def build_plain(**kwargs):\n"
+            "    return {'marker': 2}\n"
+        )
+        monkeypatch.chdir(tmp_path)  # construct_model adds the working directory to the import path
+        return "custom_builder_for_the_run"
+
+    @staticmethod
+    def make_run(potential_config: dict, **overrides) -> gracemaker._Run:
+        run = gracemaker._Run(
+            args=argparse.Namespace(save_model=False),
+            args_yaml={},
+            potential_config=potential_config,
+            fit_config={},
+            seed=1,
+            output_dir=".",
+            rcut=5.0,
+            element_map={"Mo": 0},
+            data_stats={},
+        )
+        for name, value in overrides.items():
+            setattr(run, name, value)
+        return run
+
+    def test_the_keys_of_the_builder_win_over_those_of_the_input(self, custom_builder):
+        run = self.make_run(
+            {"custom": f"{custom_builder}.build", "communicated_keys": ["from_the_input"]}
+        )
+        gracemaker._build_instructions(run)
+        assert run.instructions == {"marker": 1}
+        assert run.communicated_keys == ["from_the_builder"]
+
+    def test_the_keys_of_the_input_stay_when_the_builder_names_none(self, custom_builder):
+        run = self.make_run(
+            {"custom": f"{custom_builder}.build_plain", "communicated_keys": ["from_the_input"]}
+        )
+        gracemaker._build_instructions(run)
+        assert run.instructions == {"marker": 2}
+        assert run.communicated_keys == ["from_the_input"]
+
+    def test_a_model_file_is_loaded_and_nothing_is_built(self, trained):
+        run = self.make_run(
+            {"communicated_keys": ["from_the_input"]},
+            potential_file_name=str(trained.seed_dir / "model.yaml"),
+        )
+        gracemaker._build_instructions(run)
+        assert set(run.instructions) == set(load_instructions(str(trained.seed_dir / "model.yaml")))
+        assert run.communicated_keys == ["from_the_input"]
+
+    def test_a_model_built_from_scratch_cannot_be_exported_without_training(self, custom_builder):
+        run = self.make_run({"custom": f"{custom_builder}.build"})
+        run.args.save_model = True
+        with pytest.raises(ValueError, match="Cannot save just-initialized model"):
+            gracemaker._build_instructions(run)
+        assert run.instructions is None

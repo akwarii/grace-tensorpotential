@@ -1,0 +1,6 @@
+usage: grace_utils reduce_elements [-h] -e ELEMENTS [ELEMENTS ...]
+
+options:
+  -h, --help            show this help message and exit
+  -e ELEMENTS [ELEMENTS ...], --elements ELEMENTS [ELEMENTS ...]
+                        Elements to select

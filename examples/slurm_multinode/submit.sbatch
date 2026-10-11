@@ -4,9 +4,9 @@
 # One srun task per node. Each task sees all 4 local GPUs; TF's MWMS handles
 # NCCL within a node and across nodes over InfiniBand. The dataset must be
 # pre-sharded with at least num_nodes * gpus_per_node shards (see
-# grace_preprocess with --total-task-num).
+# grace preprocess with --total-task-num).
 #
-# Usage (all args after the script name are forwarded to gracemaker):
+# Usage (all args after the script name are forwarded to grace train):
 #   sbatch --nodes=4 submit.sbatch input.yaml
 #   sbatch --nodes=8 submit.sbatch input.yaml
 #
@@ -63,10 +63,10 @@ echo "=== SLURM job ${SLURM_JOB_ID} on ${SLURM_JOB_NUM_NODES} nodes ==="
 echo "Nodelist: ${SLURM_JOB_NODELIST}"
 echo "TF_PORT=${TF_PORT} NCCL_DEBUG=${NCCL_DEBUG}"
 
-# Each srun task injects its own SLURM_NODEID into TF_CONFIG and execs gracemaker.
+# Each srun task injects its own SLURM_NODEID into TF_CONFIG and execs grace train.
 srun --kill-on-bad-exit=1 bash -c '
   export TF_CONFIG="{\"cluster\":{\"worker\":[${TF_CLUSTER_WORKERS}]},\"task\":{\"type\":\"worker\",\"index\":${SLURM_NODEID}}}"
   echo "[node ${SLURM_NODEID}] host=$(hostname) CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
   echo "[node ${SLURM_NODEID}] TF_CONFIG=${TF_CONFIG}"
-  exec gracemaker "$@"
+  exec grace train "$@"
 ' _ "$@"

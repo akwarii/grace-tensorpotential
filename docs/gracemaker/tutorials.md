@@ -47,20 +47,20 @@ cd 1-AlLi-GRACE-2LAYER/0-data
 Now, let's collect DFT data recursively, by running
 
 ```bash
-grace_collect
+grace collect
 ```
 
-This will generate a `collected.pkl.gz` file that will be used by `gracemaker`
+This will generate a `collected.pkl.gz` file that will be used by `grace train`
 
 ### 1.2. Parameterization
 
 #### 1.2.1. Input file
 
-Now, switch to another folder and generate input file with `gracemaker -t`:
+Now, switch to another folder and generate input file with `grace train -t`:
 
 ```bash
 cd ../1-fit
-gracemaker -t
+grace train -t
 ```
 
 ```bash
@@ -123,7 +123,7 @@ sbatch submit.sh
 or run the model parameterization with:
 
 ```bash
-gracemaker
+grace train
 ```
 
 During this process:
@@ -141,8 +141,8 @@ sbatch submit-seed-3.sh
 ```
 Or for local runs:
 ```bash
-gracemaker --seed 2
-gracemaker --seed 3
+grace train --seed 2
+grace train --seed 3
 ```
 
 #### 1.2.3. Analyze learning curves
@@ -154,7 +154,7 @@ Check `1-AlLi-GRACE-2LAYER/1-fit/visualize_metrics.ipynb` Jupyter notebook to an
 In order to export the model into TensorFlow's SavedModel format, do
 
 ```bash
-gracemaker -r -s
+grace train -r -s
 ```
 
 Check [here](../quickstart/#tensorflows-savedmodel) for more details.
@@ -250,11 +250,11 @@ The same procedure can be repeated for other files.
 
 #### 2.1.1. Input file
 
-Go to `1-fit` folder and run `gracemaker -t` for interactive dialogue:
+Go to `1-fit` folder and run `grace train -t` for interactive dialogue:
 
 ```bash
 cd 1-fit
-gracemaker -t
+grace train -t
 ```
 
 You have to enter following information:
@@ -323,7 +323,7 @@ sbatch submit.sh
 Or run locally:
 
 ```bash
-gracemaker input.yaml
+grace train input.yaml
 ```
 
 During the run, you may notice multiple warning messages starting with `ptxas warning:` or similar. These messages indicate that JIT compilation is occurring for each training and testing bucket, and they are normal. They will disappear after the first iteration or epoch.
@@ -334,7 +334,7 @@ If you prefer, you can [reduce](../faq/#how-to-reduce-tensorflow-verbosity-level
 
 To continue the fit with **new** parameters, for example, to add more weight to energy in the loss function, take the following steps:
 
-* create new folder and run `gracemaker -t`:
+* create new folder and run `grace train -t`:
 
 ```bash
 ── Fit type
@@ -384,16 +384,16 @@ To continue the fit with **new** parameters, for example, to add more weight to 
   ✓ Total updates: 10000
 ```
 
-submit to the queue or run as usual with `gracemaker`.
+submit to the queue or run as usual with `grace train`.
 
-**Note**: You can switch energy/forces/stress weights in the loss function during a single `gracemaker` run. To do this, you need to manually provide the `input.yaml::fit::loss::switch` option (see [here](../inputfile/#input-file-inputyaml) for more details) or provide a non-empty answer to the `Switch loss function E:F:S...` question in the `gracemaker -t` dialog.
+**Note**: You can switch energy/forces/stress weights in the loss function during a single `grace train` run. To do this, you need to manually provide the `input.yaml::fit::loss::switch` option (see [here](../inputfile/#input-file-inputyaml) for more details) or provide a non-empty answer to the `Switch loss function E:F:S...` question in the `grace train -t` dialog.
 
 ### 2.2. Save/Export Model
 
 To export the model into both TensorFlow's SavedModel and GRACE/FS YAML formats, navigate to `2-HEA25S-GRACE-FS/1-fit` and run:
 
 ```bash
-gracemaker -r -s -sf
+grace train -r -s -sf
 ```
 
 For more details, check [here](../quickstart/#gracefs).
@@ -458,19 +458,19 @@ We have parameterized a series of single-layer (GRACE-1L), two-layer (GRACE-2L) 
 You can view the available GRACE foundation models using the command:
 
 ```bash
-grace_models list
+grace models list
 ```
 
 To download a specific model, use:
 
 ```bash
-grace_models download GRACE-1L-OMAT-medium-ft-E
+grace models download GRACE-1L-OMAT-medium-ft-E
 ```
 
 To download all models at once, use:
 
 ```bash
-grace_models download all
+grace models download all
 ```
 
 ### 3.2. Usage with ASE
@@ -510,7 +510,7 @@ You can submit simulation jobs to the queue with `sbatch submit.sh`
 ### Finetuning foundation models with a new dataset
 
 Navigate to `3-foundation-models/3a-finetuning` and
-run `gracemaker` with the `-t` flag to start an interactive dialogue and select the following options:
+run `grace train` with the `-t` flag to start an interactive dialogue and select the following options:
 
 ```bash
 
@@ -562,7 +562,7 @@ data/collected.pkl.gz
   ✓ Total updates: 10000
 ```
 
-After that, submit the job to the cluster with `sbatch submit.sh` or run `gracemaker` locally.
+After that, submit the job to the cluster with `sbatch submit.sh` or run `grace train` locally.
 
 After the training is finished, you can find the final model in the `seed/1/final_model` folder.
 If not, you can export the model using the `gracemaker -r -s` command to the `seed/1/saved_model` folder.
@@ -577,10 +577,10 @@ This will create a `distilled_AlLi_dataset.pkl.gz` file.
 
 ### Training a distilled model
 
-To train a model on the distilled dataset, start `gracemaker` in interactive mode:
+To train a model on the distilled dataset, start `grace train` in interactive mode:
 
 ```bash
-gracemaker -t
+grace train -t
 ```
 
 Answer the prompts as follows:
@@ -643,13 +643,13 @@ sbatch submit.sh
 or execute locally:
 
 ```bash
-gracemaker input.yaml
+grace train input.yaml
 ```
 
 Once training is complete the model will reside in `seed/1/final_model`.  You may also export a grace/fs YAML format with
 
 ```bash
-gracemaker -r -s -sf
+grace train -r -s -sf
 ```
 
 and then generate an active set:
@@ -758,7 +758,7 @@ fit:
 ```
 
 Submit the job with `sbatch submit.sh` (or run locally with
-`gracemaker input.yaml`).
+`grace train input.yaml`).
 
 When training completes, open the notebook
 `4-fit-tensors/1-vector/use_model.ipynb`.  It contains examples of

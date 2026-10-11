@@ -1,0 +1,29 @@
+usage: grace_utils [-h] -p POTENTIAL [--param_dtype PARAM_DTYPE] [-c CHECKPOINT_PATH]
+                   [-os OUTPUT_SUFFIX]
+                   {update_model,resave_checkpoint,reduce_elements,cast_model_param,export,export_kokkos,summary,aux_model}
+                   ...
+
+CLI tool for model conversions and summarization
+
+positional arguments:
+  {update_model,resave_checkpoint,reduce_elements,cast_model_param,export,export_kokkos,summary,aux_model}
+    update_model        Update model (model.yaml) and corresponding checkpoint.
+    resave_checkpoint   Resave model's (model.yaml) checkpoint (no optimizer)
+    reduce_elements     Reduce elements from the model.
+    cast_model_param    Change model's floating point precision.
+    export              Export model to saved_model or FS/C++ format.
+    export_kokkos       Export GRACE-1L/2L/3L weights to .npz for LAMMPS Kokkos pair style.
+    summary             Show info about the model
+    aux_model           Add compute_energy; split a 2L model (see -ck)
+
+options:
+  -h, --help            show this help message and exit
+  -p POTENTIAL, --potential POTENTIAL
+                        Path to model.yaml
+  --param_dtype PARAM_DTYPE
+                        Model parameters' dtype (float32 or float64). If not set, inferred from
+                        model.yaml metadata; falls back to float64 for old models.
+  -c CHECKPOINT_PATH, --checkpoint-path CHECKPOINT_PATH
+                        Path to checkpoint
+  -os OUTPUT_SUFFIX, --output-suffix OUTPUT_SUFFIX
+                        Output suffix for converted

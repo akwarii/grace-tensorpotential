@@ -9,9 +9,9 @@
 _____
 ### Data Collection
 
-You can either use [`grace_collect`](../utilities#grace_collect) 
+You can either use [`grace collect`](../utilities#grace_collect) 
 ```bash
-grace_collect
+grace collect
 ```
 
 or build a `pandas.DataFrame` on your own. It must contain the following columns:
@@ -33,7 +33,7 @@ _____
 
 ### Input File Setup
 
-You can use `gracemaker -t` for an interactive interface to configure simple input file
+You can use `grace train -t` for an interactive interface to configure simple input file
 and then adjust it manually, if needed. Check [model hyperparameters](../presets/#models-hyperparameters) for more details.
 For complete information about input file, see [Input file](../inputfile).
 
@@ -41,13 +41,13 @@ _____
 
 ### GRACE Model Parameterization
 
-To start `gracemaker`, simply run
+To start `grace train`, simply run
 ```bash
-gracemaker
+grace train
 ```
 
 The `seed` entry of the input file sets the random seed for initializing the model parameters.
-When `gracemaker` starts, it creates a working subfolder named after that seed (e.g. _seed/1/_ for
+When `grace train` starts, it creates a working subfolder named after that seed (e.g. _seed/1/_ for
 `seed: 1`) containing the following output files:
 
 * **log.txt** — Redirected log output.
@@ -71,7 +71,7 @@ _____
 
 To initialize fitting from a previously saved state, simply run
 ```bash
-gracemaker -r
+grace train -r
 ```
 This will try restarting fit from the `checkpoint.best_test_loss` and `model.yaml` from the default 
 locations at `./seed/*/checkpoints/checkpoint.best_test_loss` and `./seed/*/` respectively.
@@ -79,7 +79,7 @@ locations at `./seed/*/checkpoints/checkpoint.best_test_loss` and `./seed/*/` re
 You can also explicitly provide path to the checkpoint and model configuration file:
   
 ```bash
-gracemaker -r -p /path/to/model.yaml -cn /path/to/checkpoint.index
+grace train -r -p /path/to/model.yaml -cn /path/to/checkpoint.index
 ```
 
 or in `input.yaml`:
@@ -94,13 +94,13 @@ _____
 ### Export Model 
 
 #### TensorFlow's SavedModel
-After `gracemaker` completes successfully, the model is exported in TensorFlow [SavedModel](https://www.tensorflow.org/guide/saved_model) 
+After `grace train` completes successfully, the model is exported in TensorFlow [SavedModel](https://www.tensorflow.org/guide/saved_model) 
 format and is saved in the `seed/1/final_model` directory.
 
 To export GRACE model from a checkpoint at any time, use:
 
 ```bash
-gracemaker -r -s
+grace train -r -s
 ```
 to export the model with the _best test loss_. Replace `-r` with `-rl` flag to export the model from the _latest saved checkpoint_.
 
@@ -110,7 +110,7 @@ In all cases, the model will be saved in the `seed/1/saved_model` folder and can
 
 To export the GRACE/FS model in _YAML_ format (for using with a custom C++ implementation), add the `-sf` flag to the above commands:
 ```bash
-gracemaker -r -s -sf
+grace train -r -s -sf
 ```
 Here `-r` flag stands for reading checkpoint with best test loss (usually, it is `seed/1/checkpoints/checkpoint.best_test_loss.*` ),
 `-s` flag is for saving the model immediately (without running fit) into TensorFlow SavedModel format and `-sf` is for also saving into GRACE/FS YAML format.
@@ -121,10 +121,10 @@ This will generate the `seed/1/FS_model.yaml` file, which can be used in [ASE](#
 
 For TensorFlow-free GPU/OpenMP runs with `pair_style grace/1l/kk`, `grace/2l/kk`
 or `grace/3l/kk`, export the model weights to `.npz` using
-[`grace_utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style):
+[`grace utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style):
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export_kokkos -o grace_weights.npz
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export_kokkos -o grace_weights.npz
 ```
 
 The architecture (1L, 2L, or 3L) is auto-detected. The resulting `.npz` is loaded directly
@@ -138,10 +138,10 @@ by the matching Kokkos pair style — see [LAMMPS: GRACE-1L / GRACE-2L / GRACE-3
 
 To equip a fitted model with a per-atom extrapolation grade (`gamma`), build a
 NCM-UQ artifact (nearest-cluster Mahalanobis distance) from the training set with
-[`grace_uq build`](../uq/#grace_uq-build):
+[`grace uq build`](../uq/#grace_uq-build):
 
 ```bash
-grace_uq build --model-yaml /path/to/model.yaml \
+grace uq build --model-yaml /path/to/model.yaml \
                --checkpoint /path/to/checkpoint/checkpoint.best_test_loss.index \
                --train-data train.pkl.gz \
                --artifact-path gmm_artifacts.npz
@@ -332,7 +332,7 @@ pair_coeff * * /path/to/2layer_saved_model Al Li
 * For GRACE/FS models use `grace/fs` (or `grace/fs/kk` for GPU/OpenMP).
 * For TensorFlow-free GPU/OpenMP runs of GRACE-1L or GRACE-2L models use
   `grace/1l/kk` / `grace/2l/kk` after exporting weights to `.npz` with
-  [`grace_utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style).
+  [`grace utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style).
 
 If you don't have CUDA-aware MPI, use
 ```bash
@@ -361,7 +361,7 @@ pair_coeff * * FS_model.yaml Mo Nb Ta W
 `grace/1l/kk`, `grace/2l/kk` and `grace/3l/kk` run GRACE-1L / GRACE-2L /
 GRACE-3L models on GPU/OpenMP without TensorFlow at LAMMPS runtime. They read a
 `.npz` weights file produced from a fitted `model.yaml` + checkpoint by
-[`grace_utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style).
+[`grace utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style).
 
 !!! warning "Standard architectures only"
     The Kokkos pair styles support the **standard GRACE-1L / GRACE-2L / GRACE-3L
@@ -374,7 +374,7 @@ GRACE-3L models on GPU/OpenMP without TensorFlow at LAMMPS runtime. They read a
     (`grace`, `grace/2layer/parallel`, …) or GRACE-FS instead.
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export_kokkos -o grace_weights.npz
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export_kokkos -o grace_weights.npz
 ```
 
 Then in the LAMMPS input:

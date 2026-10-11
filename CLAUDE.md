@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI,
+GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI (also `grace train`: one `grace <subcommand>` command runs all the console tools),
 an ASE calculator, UQ tools and foundation-model loading. The library is TensorFlow 2 with Keras 3; a PyTorch backend that loads
 TF-trained models is being added next to it. Core abstractions: an *instruction graph* (`TPInstruction` subclasses described in a
 `model.yaml`) executed by `TPModel`, trained by `TensorPotential`, and served by `TPCalculator`.
@@ -47,7 +47,7 @@ uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also tests/test_import_gates.py
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # every upstream file the fork modifies has a row in tools/divergence.yaml (add it in the same PR as the change, drop it when the file equals upstream again); no fork-only path on a local pr/U* branch
 uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py    # builds the wheel in a scratch copy (or TENSORPOTENTIAL_WHEEL=<wheel>): file list against baselines/wheel_files_upstream.txt, metadata, extras; --noconftest because tests/conftest.py imports TensorFlow
-python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf    # clean venv with the wheel: core imports without TF, --help of the ten console scripts; python tools/resolve_extras.py [EXTRA] resolves the extras with uv (CI runs both)
+python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf    # clean venv with the wheel: core imports without TF, --help of the eleven console scripts; python tools/resolve_extras.py [EXTRA] resolves the extras with uv (CI runs both)
 uv run --frozen --no-sync python tools/instruction_ast.py check    # TF-free: every TPInstruction subclass has a registry entry (torch_backend/spec/registry.py) and the pinned defaults equal the source; `table` prints the constructor table
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
@@ -106,7 +106,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   `tensorpot.py`: `TensorPotential` (training, checkpoints). `loss.py`, `metrics.py`, `utils.py`, `poly.py`, `export.py`.
 - `functions/`: Clebsch-Gordan generation and coupling tables (`couplings.py`), radial functions, activations.
 - `data/`: dataframes and TF datasets (`databuilder.py`, `process_df.py`), neighbour lists (matscipy by default), streaming.
-- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `gracemaker`, `grace_preprocess`, `grace_predict`, ...
+- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `grace` (`scripts/grace.py`: the one table of sub-commands and the dispatch), `gracemaker`, `grace_preprocess`, `grace_predict`, ...; `cli/console.py` (shared rich console) and `cli/prompts.py` (prompt helpers of both input wizards)
 - `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty. `compat/pace/`: legacy, untested, **out of scope: no change is allowed to it** (owner, 2026-10-01), whatever the issue; report findings, never fix or remove them.
 - The PyTorch backend is being added in `tensorpotential/torch_backend/` with TF-free shared code in `tensorpotential/core/`; both must import without
   TensorFlow (enforced by an import contract), and the TF extractor lives outside them.
@@ -143,13 +143,14 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
   `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
   give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or the numpy-style type promotion is enabled too late.
-- **TensorFlow is the `tf` extra, not a base dependency (CI1, D12).** `pip install tensorpotential` has no TensorFlow; extras are `tf`, `torch`, `torch-sim`, `all`, and `[dependency-groups] dev` includes `tensorpotential[tf]`.
+- **TensorFlow is the `tf` extra, not a base dependency (CI1, D12).** `pip install tensorpotential` has no TensorFlow; extras are `tf`, `torch`, `torch-sim`, `dashboard` (Flask, for `grace_dashboard`), `all`, and `[dependency-groups] dev` includes `tensorpotential[tf,dashboard]`.
   `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils`
-  and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` still needs `flask`, which no extra installs). Package discovery is
+  and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` needs `flask`, which the `dashboard` extra installs). Package discovery is
   `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package. TensorFlow and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before
   `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue). The CI set is `.github/workflows/lint.yaml` (lint), `tests.yaml` (test-core without TF, test-torch, test-tf; also nightly), `wheel.yaml` (wheel, wheel-smoke, extras-resolve) and `nightly.yml` (both stacks, torch-sim main).
 - **The hosted runner has 16 GB and a TensorFlow xdist worker's resident memory only grows (CI2).** One unchanged `test-tf` job (4 workers, whole suite) climbed from 8 GB to 15 GB used and died with "The runner has received a shutdown signal"
   (no failing test, no kernel line when it survives) at 94 to 97% of the suite; a single runner with 2 workers on the whole suite still peaked at 14.9 GB, so the fix is **fewer tests per runner**: `test-tf` is four `pytest-split` groups with 2 workers each (peak memory used 6.7, 6.5, 6.0 and 5.9 GB, 5 to 7 minutes each; three groups peaked at 7.1, 11.5 and 9.4 GB, too close to 16 GB).
+  **Locally too (CLI1):** a whole-suite `-n 4` run needs more than 18 GB of a 30 GB machine (workers of 4 to 6 GB each, `tests/test_integration_test.py` the largest consumer), and with a browser open it took the desktop session down at 94% (no OOM line in the journal). For a full or coverage run use the CI shards one after another (`--splits 4 --group N --splitting-algorithm=least_duration --durations-path=tests/.test_durations`, `--cov-append` with one `COVERAGE_FILE`, junit files merged by hand) inside `systemd-run --user --scope -p MemoryMax=18G -p MemorySwapMax=2G`, so that an overrun kills the test run and not the session. Every run of `predict_main` / `TPCalculator` keeps about 350 MB of TensorFlow state that `clear_session`, `gc` and `malloc_trim` do not return; and under `--dist load` a module fixture is rebuilt on every worker that gets one of its tests, so a heavy run belongs inside one test. To find the culprit, log the resident memory after each test with a small plugin (`/proc/<pid>/status`, `VmRSS`) and run the files serially.
   Every pytest in CI goes through `.github/actions/run-pytest` (per-test `--timeout=900` from `pytest-timeout`, workers, markers, shard); every job has `timeout-minutes`; `cancel-in-progress` is for pull requests only. A new heavy test file needs no edit; a new CI job that runs pytest uses the action.
   Disk was never the problem (80 GB free after the suite), so there is no free-disk step.
 - **The package no longer imports TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve their public names on first access (`core/lazy.py`); the TF options
@@ -158,6 +159,17 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
   `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`.
 - `tests/test_import_gates.py` imports every module first in its own interpreter (the root no longer preloads the classes, so import cycles it hid now show) and fails when a name that dead-code tools cannot see stops resolving
   (`from tensorpotential.X import name` anywhere, `__cls__` strings, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
+- **The `grace` command and the console tools (CLI1).** `tensorpotential/scripts/grace.py` is the one table (`COMMANDS`, `UQ_COMMANDS`: name, module, function, one-line help, backend tag) and the dispatch; it is TF-free
+  (import contract, `TF_FREE_MODULES`) and checks the backend of a row (`require_backend`) before it imports the module. A new console command is a row there, a `[project.scripts]` entry, and a `main(argv=None, *, prog=...)` that
+  returns the exit code (every entry function takes `argv` first and a keyword `prog`: the usage line reads `grace uq build` through `grace`, `grace_uq build` through the old name; `tests/test_cli_help.py` checks the contract).
+  The `--help` text of every command and sub-command is committed in `tests/cli_help/` (compared after folding the Python 3.13 option format and the wrapping); regenerate only from an unmodified tree (`python -m tests.cli_help write`).
+  Output goes through `cli/console.py`: rich only styles (a message is a `Text`, never markup, never wrapped), so a pipe gets the same text as the `print` it replaced; a test that needs a terminal replaces `console.get_console`
+  with a `make_console(force_terminal=True)` on a `StringIO`. The prompt helpers are in `cli/prompts.py` (`cli.wizard` re-exports the old names), so a test that fakes `_ask_*` for the dataset question patches `cli.prompts`, and a test of
+  `extra/gen_tensor/wizard.py` patches both modules or types answers into `input()`. `tools/tests` (run with `pytest --noconftest tools/tests`), `tools/divergence.py check` (a row for every upstream file touched, docs and tests included) and
+  `tools/check_touched_coverage.py` **without `--unit`** (diff mode: every unit the branch changed, not a fixed list) must all be run before a PR; `lint-imports` of the shared venv may not start (stale shebang): `python -c "import sys; from importlinter.cli import lint_imports_command; sys.exit(lint_imports_command())"`.
+  A single new module cannot be opted into the strict ruff set (the glob, the ty overrides and `tools/tests/test_lint_ratchet.py` pin the three package names): check it with `ruff check --isolated --select <strict families> --config 'lint.pydocstyle.convention="numpy"' --config 'lint.pylint.max-args=6' FILE`.
+- **Shell.** The shell is zsh: an unquoted `$VAR` is not split into words (use an array), `==` starts a command substitution, and a heredoc together with `$(...)` in one call can hang the tool (write scripts with the Write tool). In a worktree sync the shared
+  venv without touching the editable install: `UV_PROJECT_ENVIRONMENT=<main>/.venv uv sync --frozen --group dev --no-install-project --inexact`.
 
 ## Working agreements
 

@@ -2,20 +2,19 @@
 
 import os
 import argparse
+from collections.abc import Sequence
 from tensorpotential.cli.data import load_extxyz
 from tensorpotential.formatting import sizeof_fmt
 
 import logging
+from tensorpotential.scripts._script_logging import configure_logging
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
-
+logger = configure_logging()
 
 
-def main(args=None):
-    ##############################################################################################
-    parser = argparse.ArgumentParser()
+
+def build_parser(prog: str | None = None):
+    parser = argparse.ArgumentParser(prog=prog)
 
     parser.add_argument(
         "extxyz_filename",
@@ -29,8 +28,13 @@ def main(args=None):
         type=str,
         default=None,
     )
+    return parser
 
-    args_parse = parser.parse_args(args)
+
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    ##############################################################################################
+    parser = build_parser(prog)
+    args_parse = parser.parse_args(argv)
     extxyz_filename = os.path.abspath(args_parse.extxyz_filename)
     output_dataset_filename = args_parse.output_dataset_filename
     if output_dataset_filename is None:
@@ -47,6 +51,8 @@ def main(args=None):
         f"Saved dataframe to {output_dataset_filename} ({sizeof_fmt(output_dataset_filename)})"
     )
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

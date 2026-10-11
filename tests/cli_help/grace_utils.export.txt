@@ -1,0 +1,10 @@
+usage: grace_utils export [-h] [-sf] [-n SAVED_MODEL_NAME]
+                          [-ck COMMUNICATED_KEYS [COMMUNICATED_KEYS ...]]
+
+options:
+  -h, --help            show this help message and exit
+  -sf                   Save to GRACE-FS/C++ YAML model format
+  -n SAVED_MODEL_NAME, --saved-model-name SAVED_MODEL_NAME
+                        Path where to save the SavedModel or YAML file
+  -ck COMMUNICATED_KEYS [COMMUNICATED_KEYS ...], --communicated-keys COMMUNICATED_KEYS [COMMUNICATED_KEYS ...]
+                        List of communicated keys for 2L model parallel split export

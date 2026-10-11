@@ -11,44 +11,25 @@ Subcommands:
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 
-_SUBCOMMANDS = {
-    "build": ("tensorpotential.uq.cli.build", "build_main"),
-    "info": ("tensorpotential.uq.cli.info", "info_main"),
-    "predict": ("tensorpotential.uq.cli.predict", "predict_main"),
-    "select": ("tensorpotential.uq.cli.select", "select_main"),
-}
+from tensorpotential.cli.console import print_ansi
+from tensorpotential.scripts.grace import UQ_COMMANDS, dispatch
 
 
-def _dispatch(argv: list[str]) -> int:
-    if not argv or argv[0] in {"-h", "--help"}:
-        _print_top_help()
-        return 0
-
-    sub = argv[0]
-    if sub not in _SUBCOMMANDS:
-        print(
-            f"grace_uq: unknown subcommand {sub!r}. Use one of: "
-            + ", ".join(sorted(_SUBCOMMANDS)),
-            file=sys.stderr,
-        )
-        return 2
-
-    module_name, fn_name = _SUBCOMMANDS[sub]
-    import importlib
-
-    fn = getattr(importlib.import_module(module_name), fn_name)
-    return fn(argv[1:]) or 0
+def _dispatch(argv: list[str], prog: str = "grace_uq") -> int:
+    return dispatch(
+        UQ_COMMANDS,
+        argv,
+        prog=prog,
+        print_help=lambda: _print_top_help(prog),
+    )
 
 
-def _print_top_help():
-    tty = sys.stdout.isatty()
-    b = "\033[1m" if tty else ""
-    c = "\033[36m" if tty else ""
-    g = "\033[32m" if tty else ""
-    r = "\033[0m" if tty else ""
+def _print_top_help(prog: str = "grace_uq"):
+    b, c, g, r = "\033[1m", "\033[36m", "\033[32m", "\033[0m"  # bold, cyan, green, reset
 
-    print(
+    text = (
         f"""{b}grace_uq{r} <subcommand> [options]
 
 {b}Subcommands:{r}
@@ -140,11 +121,12 @@ Run `grace_uq <subcommand> --help` for subcommand-specific options.
                     --output selected.pkl.gz{r}
 """
     )
+    print_ansi(text.replace("grace_uq", prog))
 
 
-def main():
-    raise SystemExit(_dispatch(sys.argv[1:]))
+def main(argv: Sequence[str] | None = None, *, prog: str = "grace_uq") -> int:
+    return _dispatch(list(sys.argv[1:] if argv is None else argv), prog)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

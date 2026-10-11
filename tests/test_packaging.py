@@ -7,7 +7,7 @@ Logic layer (``structure_problems`` on a real wheel): the top-level names are th
 ``dist-info``, no ``tests`` package, ``resources/input_template.yaml`` is present, every tracked module of
 the package is in the wheel, and the file list differs from the wheel built from upstream only by the
 files this work removed. Metadata layer (``METADATA`` of the wheel): the base requirements have no
-TensorFlow, the extras ``tf``, ``torch``, ``torch-sim`` and ``all`` exist, Python 3.11 or newer. A planted
+TensorFlow, the extras ``tf``, ``torch``, ``torch-sim``, ``dashboard`` and ``all`` exist, Python 3.11 or newer. A planted
 mutant (package discovery without the ``tensorpotential*`` scope, which also returns the tracked ``tests``
 package) must be reported by ``structure_problems``.
 """
@@ -207,6 +207,7 @@ def test_the_base_requirements_have_no_tensorflow_and_the_extras_are_declared(
         "tf",
         "torch",
         "torch-sim",
+        "dashboard",
         "all",
     }
     assert requirements_of(requires, "tf") == {"tensorflow"}
@@ -216,5 +217,6 @@ def test_the_base_requirements_have_no_tensorflow_and_the_extras_are_declared(
         "torch-sim-atomistic",
         "vesin",
     }
+    assert requirements_of(requires, "dashboard") == {"flask"}
     assert requirements_of(requires, "all") == {"tensorpotential"}
     assert metadata["Requires-Python"] == ">=3.11"

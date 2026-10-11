@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 import argparse
+from collections.abc import Sequence
 import logging
 
 import pandas as pd
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
 from tensorpotential.formatting import sizeof_fmt
+from tensorpotential.scripts._script_logging import configure_logging
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
-
+logger = configure_logging()
 
 
 
-def build_parser():
+
+def build_parser(prog: str = 'df2extxyz'):
     parser = argparse.ArgumentParser(
-        prog="df2extxyz", description="Conversion from df.pkl.gz to extxyz"
+        prog=prog, description="Conversion from df.pkl.gz to extxyz"
     )
 
     parser.add_argument("input", help="input pkl.gz file", type=str)
@@ -47,9 +47,9 @@ def build_parser():
     return parser
 
 
-def main(args=None):
-    parser = build_parser()
-    args_parse = parser.parse_args(args)
+def main(argv: Sequence[str] | None = None, *, prog: str = 'df2extxyz') -> int:
+    parser = build_parser(prog)
+    args_parse = parser.parse_args(argv)
     input_fname = args_parse.input
     energy_col = args_parse.energy_column
     force_col = args_parse.force_column
@@ -92,6 +92,8 @@ def main(args=None):
     write(output_fname, atoms_list, format="extxyz")
     logging.info(f"Saved to {output_fname} ({sizeof_fmt(output_fname)})")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

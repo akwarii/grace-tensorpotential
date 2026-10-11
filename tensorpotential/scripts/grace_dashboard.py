@@ -24,10 +24,13 @@ import json
 import math
 import os
 import re
+from collections.abc import Sequence
 from datetime import datetime
 
 import numpy as np
 from flask import Flask, jsonify, render_template_string, request
+
+from tensorpotential.cli.console import say
 
 
 TARGET_EPOCHS = 160
@@ -105,7 +108,7 @@ def extract_n_params(log_path):
                 m = _PARAMS_RE.search(line)
                 if m:
                     return int(m.group(1).replace(",", ""))
-    except Exception:
+    except (OSError, UnicodeDecodeError):  # unreadable or not text
         pass
     return None
 
@@ -124,7 +127,7 @@ def extract_times_mcs_atom(log_path):
                 t = _TIME_RE.search(line)
                 if t:
                     last = t
-    except Exception:
+    except (OSError, UnicodeDecodeError):  # unreadable or not text
         return (None, None)
     if last is None:
         return (None, None)
@@ -151,7 +154,7 @@ def extract_epoch_timing(log_path):
                 if first_ts is None:
                     first_ts, first_ep = ts, ep
                 last_ts, last_ep = ts, ep
-    except Exception:
+    except (OSError, UnicodeDecodeError):  # unreadable or not text
         return None
     if first_ts is None or last_ts is None or last_ep <= first_ep:
         return None
@@ -253,7 +256,7 @@ def extrapolate_series(rows, key, target_ep, min_eps=10):
             maxfev=5000,
         )
         a, b, m = popt
-    except Exception:
+    except Exception:  # noqa: BLE001  (curve_fit raises RuntimeError, ValueError or TypeError by input; any failure means no extrapolation)
         return None
     pred_eps  = np.arange(pts[-1][0] + 1, target_ep + 1, dtype=int)
     if len(pred_eps) == 0:
@@ -269,7 +272,7 @@ def extrapolate_series(rows, key, target_ep, min_eps=10):
             var = float(grad @ pcov @ grad)
             if var > 0 and math.isfinite(var):
                 std = min(math.sqrt(var), float(last_val))
-    except Exception:
+    except Exception:  # noqa: BLE001  (defensive: the error band is optional; the covariance may be singular)
         pass
     return (
         [int(last_ep)] + pred_eps.tolist(),
@@ -399,7 +402,7 @@ def build_payload(base, target_epochs=TARGET_EPOCHS):
         for s in seeds:
             try:
                 exp = collect_seed(fit["fit_folder"], s, fit_name, target_epochs)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  (any failure of one seed's files skips that seed only)
                 print(f"[warn] skipping {fit['fit_folder']} seed={s}: {e}")
                 continue
             if exp is None:
@@ -1315,8 +1318,8 @@ def create_app(base, target_epochs=TARGET_EPOCHS):
     return app
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__)
+def build_parser(prog: str | None = None):
+    ap = argparse.ArgumentParser(prog=prog, description=__doc__)
     ap.add_argument("--base", default=os.getcwd(),
                     help="directory to scan for fit folders (default: cwd)")
     ap.add_argument("--host", default="0.0.0.0", help="bind host")
@@ -1324,19 +1327,24 @@ def main():
     ap.add_argument("--target-epochs", default=TARGET_EPOCHS, type=int,
                     help="target epochs used for extrapolation of incomplete runs")
     ap.add_argument("--debug", action="store_true")
-    args = ap.parse_args()
+    return ap
+
+
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    args = build_parser(prog).parse_args(argv)
 
     base = os.path.abspath(args.base)
     if not os.path.isdir(base):
         raise SystemExit(f"base directory does not exist: {base}")
 
     fits = discover_fits(base)
-    print(f"[grace_dashboard] scanning {base}")
-    print(f"[grace_dashboard] discovered {len(fits)} fit folder(s), "
-          f"{sum(len(f['seeds']) for f in fits)} seed(s) total")
+    say(f"[grace_dashboard] scanning {base}")
+    say(f"[grace_dashboard] discovered {len(fits)} fit folder(s), "
+        f"{sum(len(f['seeds']) for f in fits)} seed(s) total")
     app = create_app(base, target_epochs=args.target_epochs)
     app.run(host=args.host, port=args.port, debug=args.debug)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

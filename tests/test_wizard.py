@@ -291,6 +291,14 @@ def test_section_weighting_adam_scratch_defaults(monkeypatch, silence_output):
 # ---------------------------------------------------------------------------
 
 
+def _mirror_prompts(monkeypatch):
+    """The dataset question lives in cli.prompts and calls the helpers of that module: give it the same fakes."""
+    import tensorpotential.cli.prompts as prompts
+
+    for name in ("_ask_text", "_ask_path", "_ask_confirm", "_info", "_success", "_section"):
+        monkeypatch.setattr(prompts, name, getattr(wizard, name))
+
+
 def test_e2e_fs_lbfgsb(monkeypatch, tmp_path):
     """FS from scratch with L-BFGS-B chosen → valid input.yaml without scheduler/LR."""
 
@@ -313,6 +321,7 @@ def test_e2e_fs_lbfgsb(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "_info", lambda msg: None)
     monkeypatch.setattr(wizard, "_success", lambda msg: None)
     monkeypatch.setattr(wizard, "_section", lambda title: None)
+    _mirror_prompts(monkeypatch)
 
     # Force non-questionary path for the review loop
     monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", False)
@@ -345,6 +354,7 @@ def test_e2e_adam_has_scheduler(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "_info", lambda msg: None)
     monkeypatch.setattr(wizard, "_success", lambda msg: None)
     monkeypatch.setattr(wizard, "_section", lambda title: None)
+    _mirror_prompts(monkeypatch)
 
     monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", False)
     monkeypatch.setattr("builtins.input", lambda prompt="": "")
@@ -559,3 +569,24 @@ def test_maybe_ask_fp64_variant_no_variant_does_not_ask(monkeypatch):
     monkeypatch.setattr(wizard, "_ask_select", _boom)
     out = wizard._maybe_ask_fp64_variant("GRACE-3L-OMAT-large")
     assert out == "GRACE-3L-OMAT-large"
+
+
+def test_the_prompt_helpers_live_in_cli_prompts_and_are_still_importable_from_the_wizard():
+    import tensorpotential.cli.prompts as prompts
+
+    for name in (
+        "_ask_select", "_ask_text", "_ask_path", "_ask_confirm", "_section", "_success", "_info", "_warning", "_error",
+        "_print_header", "_tip_path_input", "_section_dataset", "_HAS_QUESTIONARY", "_HAS_RICH", "_rich_console",
+        "_QUESTIONARY_STYLE", "input_choice", "input_with_default", "input_no_default", "no_readline",
+    ):  # fmt: skip
+        assert getattr(wizard, name) is getattr(prompts, name), name
+
+
+def test_the_wizard_prints_through_the_shared_console():
+    import tensorpotential.cli.prompts as prompts
+    from rich.console import Console
+
+    # prompts takes the shared console when it is imported; a test of the console module may have reset the cache since,
+    # so identity with get_console() depends on the test order, but the wizard and the prompts must share one object
+    assert wizard._rich_console is prompts._rich_console
+    assert isinstance(wizard._rich_console, Console)

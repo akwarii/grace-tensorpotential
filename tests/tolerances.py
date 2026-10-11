@@ -65,3 +65,12 @@ STORED_COORDINATE_DISTANCE = Tolerance(rtol=0.0, atol=2e-8)
 # unit length by 5e-11 / r**2, so a sum of squares of its components, or of harmonics built from it, deviates from
 # its exact value by at most 2e-11 relative for bonds of 2.5 A or more (observed 1.7e-11).
 SOFTENED_UNIT_VECTOR_F64 = Tolerance(rtol=1e-10, atol=0.0)
+
+# A number written to an extxyz file with 8 decimals (``ase.io.write``) and read back: the text is within 5e-9 of the
+# float64 value, so 1e-8 holds for positions, forces and stresses of order 1 to 10 and leaves no room for a dropped digit.
+EXTXYZ_TEXT_ROUNDTRIP = Tolerance(rtol=0.0, atol=1e-8)
+
+# A unit conversion written with 10 significant digits (1 GPa = 1 / 160.21766208 eV/A^3) against the constant of ASE:
+# both are the same CODATA value up to the digits typed, so 1e-6 relative flags a wrong factor of ten or a missing sign
+# and nothing smaller.
+HAND_UNIT_CONVERSION = Tolerance(rtol=1e-6, atol=0.0)

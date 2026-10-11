@@ -4,16 +4,15 @@ import os
 import numpy as np
 import pandas as pd
 import argparse
+from collections.abc import Sequence
 
 from ase import Atoms
 from ase.io import read
 
 from collections import defaultdict, Counter
-import logging
+from tensorpotential.scripts._script_logging import configure_logging
 
-LOG_FMT = '%(asctime)s %(levelname).1s - %(message)s'
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
+logger = configure_logging()
 
 
 class InvalidArgumentError(ValueError):
@@ -169,9 +168,8 @@ def get_free_atom_energy(df, el):
     return ref_epa
 
 
-def main(args=None):
-    ##############################################################################################
-    parser = argparse.ArgumentParser()
+def build_parser(prog: str | None = None):
+    parser = argparse.ArgumentParser(prog=prog)
 
     parser.add_argument("-wd", "--working-dir", help="top directory where keep calculations",
                         type=str, default='.', dest="working_dir")
@@ -188,8 +186,13 @@ def main(args=None):
     parser.add_argument('--selection', type=str, default='last', dest='selection',
                         help='Option to select from multiple configurations of single VASP calculation:'
                              ' first, last, all, first_and_last (default: last)')
+    return parser
 
-    args_parse = parser.parse_args(args)
+
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    ##############################################################################################
+    parser = build_parser(prog)
+    args_parse = parser.parse_args(argv)
     working_dir = os.path.abspath(args_parse.working_dir)
     free_atom_energy_dict = args_parse.free_atom_energy
     output_dataset_filename = args_parse.output_dataset_filename
@@ -230,7 +233,7 @@ def main(args=None):
         except InvalidArgumentError as e:
             logger.error('Invalid argument: {}'.format(str(e)))
             raise e
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  (the ASE readers raise a different exception type for each kind of malformed file)
             logger.error('Filename could not be read: {}'.format(str(e)))
 
     df = pd.DataFrame(data)
@@ -303,6 +306,8 @@ def main(args=None):
     logger.info('Minimum/maximum force magnitude: {:.3f}/{:.3f} eV/A'.format(df['magnitude_forces'].min(),
                                                                              df['magnitude_forces'].max()))
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

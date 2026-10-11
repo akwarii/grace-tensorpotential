@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from collections import defaultdict
+from collections.abc import Sequence
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -149,7 +150,7 @@ def run_master(args):
         for f in glob.glob(_wpath(".step*")):
             try:
                 os.remove(f)
-            except Exception:
+            except Exception:  # noqa: BLE001  (best-effort clean-up of old files)
                 pass
 
     def cleanup_worker_files(step_idx):
@@ -612,7 +613,7 @@ def run_master(args):
                 _first_e = int(_elems_in_artifact[0])
                 _D_from_artifact = _data[f"{uq_constants.CENTROIDS}_{_first_e}"].shape[1]
                 min_atoms_for_threshold = max(min_atoms_for_threshold, _D_from_artifact)
-        except Exception:
+        except Exception:  # noqa: BLE001  (the minimum atom count is a refinement: a missing or odd artifact keeps the default)
             pass
 
         # Compute both thresholds in parallel, by default with the robust
@@ -778,10 +779,9 @@ def run_master(args):
         print(f"  SavedModel: {args.export_path}")
 
 
-def build_main(argv=None):
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+def build_parser(prog: str = "grace_uq build"):
     parser = argparse.ArgumentParser(
-        prog="grace_uq build",
+        prog=prog,
         description="Parallel GRACE-UQ artifact generation",
         epilog=_BUILD_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -940,8 +940,14 @@ def build_main(argv=None):
     )
     parser.add_argument("--step1-artifacts", help="Internal")
     parser.add_argument("--step2-artifacts", help="Internal")
-    args = parser.parse_args(argv)
+    return parser
 
+
+class BuildInputError(Exception):
+    """A problem with the inputs of ``grace_uq build``; ``build_main`` turns it into ``SystemExit(message)``."""
+
+
+def _check_threshold_percentile(parser, args) -> None:
     # Q outside (0, 100] silently produces a degenerate threshold: Q<=0 gives
     # threshold 0 (gamma = sigma/0 = inf), Q>100 clamps to the histogram ceiling
     # (gamma ~ 0, UQ effectively off). NaN slips through both comparisons, so
@@ -953,6 +959,9 @@ def build_main(argv=None):
             "Typical values: 99 (~1% of training atoms above gamma=1) or 99.9."
         )
 
+
+def _flatten_weighted_train_data(parser, args) -> bool:
+    """Resolve --train-data-weighted into a flat path list and a weight map; return whether --train-data is the default."""
     # Snapshot whether the user is using the default --train-data BEFORE we
     # turn paths absolute (the abspath mangling makes a literal-equality
     # check unreliable later on).
@@ -975,14 +984,11 @@ def build_main(argv=None):
     if args.train_data_weighted:
         args.train_data = flat_paths
     args.file_weight_map = file_weight_map
+    return train_data_is_default
 
-    # Eagerly validate the filter spec so a bad import fails before workers
-    # are spawned. The callable itself isn't cached on args (it's re-imported
-    # per worker subprocess); we just verify it's resolvable here.
-    if args.filter_fn:
-        _load_filter_fn(args.filter_fn)  # raises if bad
 
-    # Resolve all file paths to absolute so workers are CWD-independent.
+def _make_paths_absolute(args) -> None:
+    """Resolve all file paths to absolute so workers are CWD-independent."""
     args.model_yaml = os.path.abspath(args.model_yaml)
     args.checkpoint = os.path.abspath(args.checkpoint)
     args.artifact_path = os.path.abspath(args.artifact_path)
@@ -999,10 +1005,13 @@ def build_main(argv=None):
     if args.step2_artifacts:
         args.step2_artifacts = os.path.abspath(args.step2_artifacts)
 
-    # If the user is relying on the default --train-data and it doesn't
-    # exist on disk, look one level up for a gracemaker input.yaml and
-    # resolve data.filename from it (refusing if any train/test split is
-    # configured there).
+
+def _fall_back_to_input_yaml(args, train_data_is_default: bool) -> None:
+    """Look for the training data of the fit one level up when the default --train-data is not on disk.
+
+    Reads ``data.filename`` of the gracemaker ``input.yaml`` two levels up (refusing if any train/test split is
+    configured there).
+    """
     if (
         args.worker_id is None
         and train_data_is_default
@@ -1017,28 +1026,25 @@ def build_main(argv=None):
             )
             args.train_data = [os.path.abspath(p) for p in resolved]
 
-    # Early validation of --train-data.
-    #
-    # Master mode auto-falls-through to export-only when none of the
-    # --train-data paths exist *and* an artifact is already on disk. This
-    # makes `grace_uq build` runnable inside seed/{N}/ folders that have
-    # already produced a gmm_artifacts.npz from a previous run, without
-    # requiring the user to know about the export-only flag pattern.
-    #
-    # Exception: --restart explicitly asks for a full rebuild, so silently
-    # falling through to export-only here would defeat the user's intent.
+
+def _check_train_data(parser, args) -> None:
+    """Early validation of --train-data.
+
+    Master mode auto-falls-through to export-only when none of the --train-data paths exist *and* an artifact is
+    already on disk. This makes `grace_uq build` runnable inside seed/{N}/ folders that have already produced a
+    gmm_artifacts.npz from a previous run, without requiring the user to know about the export-only flag pattern.
+
+    Exception: --restart explicitly asks for a full rebuild, so silently falling through to export-only here would
+    defeat the user's intent.
+    """
     train_data_exists = bool(args.train_data) and any(
         os.path.exists(p) for p in args.train_data
     )
     if args.worker_id is not None and not train_data_exists:
-        parser.error(
-            f"--train-data files do not exist: {args.train_data}"
-        )
-    if (
-        args.worker_id is None
-        and not train_data_exists
-        and (args.restart or not os.path.exists(args.artifact_path))
-    ):
+        parser.error(f"--train-data files do not exist: {args.train_data}")
+    if args.worker_id is not None or train_data_exists:
+        return
+    if args.restart or not os.path.exists(args.artifact_path):
         hint = (
             "--restart was given but no training data could be located. "
             if args.restart
@@ -1049,138 +1055,179 @@ def build_main(argv=None):
             f"--artifact-path is not usable for export-only mode "
             f"({args.artifact_path}). Provide a training set explicitly."
         )
-    if args.worker_id is None and not train_data_exists:
-        # Export-only fall-through: clear train_data so the master skips
-        # the 3-step pipeline and goes straight to SavedModel export.
-        args.train_data = None
+    # Export-only fall-through: clear train_data so the master skips
+    # the 3-step pipeline and goes straight to SavedModel export.
+    args.train_data = None
 
-    if args.worker_id is not None:
-        # Check if this worker's output already exists — skip entirely.
-        # This avoids loading the TF model when resuming a partial run.
-        wdir = _worker_dir(args)
-        if args.step in (1, 2, 3):
-            expected = _worker_output_paths(
-                wdir, args.step, args.worker_id, args.n_clusters
-            )
-            already_done = all(os.path.exists(p) for p in expected)
-        else:
-            expected, already_done = [], False
-        if already_done:
-            print(f"Worker {args.worker_id} Step {args.step} already completed, skipping.", flush=True)
-            return
-        else:
-            missing = [p for p in expected if not os.path.exists(p)]
-            print(f"Worker {args.worker_id} Step {args.step}: {len(missing)} file(s) missing, running."
-                  f" (e.g. {missing[0] if missing else '?'})", flush=True)
 
-        # Suppress noisy loggers in worker subprocesses
-        logging.getLogger("tensorpotential.data.streaming").setLevel(logging.WARNING)
-        logging.getLogger("tensorflow").setLevel(logging.ERROR)
+def _prepare_arguments(parser, args) -> None:
+    """Validate the options and resolve the training data and the paths, in place."""
+    _check_threshold_percentile(parser, args)
+    train_data_is_default = _flatten_weighted_train_data(parser, args)
+    # Eagerly validate the filter spec so a bad import fails before workers
+    # are spawned. The callable itself isn't cached on args (it's re-imported
+    # per worker subprocess); we just verify it's resolvable here.
+    if args.filter_fn:
+        _load_filter_fn(args.filter_fn)  # raises if bad
+    _make_paths_absolute(args)
+    _fall_back_to_input_yaml(args, train_data_is_default)
+    _check_train_data(parser, args)
 
-        if args.checkpoint.endswith(".index"):
-            args.checkpoint = args.checkpoint.replace(".index", "")
 
-        # Every step only needs the side-written FEATURES key (energy-only
-        # compute is sufficient — no forces are required now that the
-        # force-error model has been removed).
-        step1_compute_fn = ComputeEnergy(
-            extra_return_keys=[uq_constants.FEATURES]
-        )
-
-        tp, instructions = load_uq_model(
-            model_yaml=args.model_yaml,
-            checkpoint=args.checkpoint,
-            model_compute_function=step1_compute_fn,
-            # The production basis-RP transform; the shared constant keeps this in
-            # sync with what make_basis_rp_spec stamps into the artifact below.
-            feature_spec={
-                "out_dim": args.rp_dim,
-                "seed": args.rp_seed,
-                "transform": uq_constants.DEFAULT_FEATURE_TRANSFORM,
-                "normalize": uq_constants.UQ_DEFAULT_NORMALIZE,
-                "add_density_channel": uq_constants.UQ_DEFAULT_DENSITY,
-                "density_scale": uq_constants.UQ_DEFAULT_DENSITY_SCALE,
-            },
-        )
-        cutoff, symbols, indices = extract_cutoff_and_elements(instructions)
-        cutoff_dict = extract_cutoff_dict(instructions)
-        elem_map = {s: int(i) for s, i in zip(symbols, indices)}
-
-        use_tf_dataset = is_sharded_dataset(args.train_data)
-
-        if use_tf_dataset and (args.train_data_weighted or args.filter_fn):
-            raise SystemExit(
-                "--train-data-weighted and --filter-fn require pickle/df shards; "
-                "they are not supported with sharded TF datasets."
-            )
-
-        def make_feature_iter():
-            if use_tf_dataset:
-                dataset_path = args.train_data[0]
-                all_shards = discover_shards(dataset_path)
-                my_shards = all_shards[args.worker_id :: args.n_workers]
-                total_batches = None
-                try:
-                    stats = read_saved_dataset_stats(dataset_path)
-                    if all_shards:
-                        total_batches = (
-                            stats.get("total_num_of_batches", 0)
-                            * len(my_shards)
-                            // len(all_shards)
-                        )
-                except (FileNotFoundError, ValueError):
-                    pass
-                return _prefetch(tf_dataset_feature_iterator(
-                    my_shards,
-                    tp.model,
-                    frac=args.frac,
-                    seed=args.seed + args.worker_id,
-                    verbose=args.verbose,
-                    total_num_batches=total_batches,
-                ))
-            else:
-                n_my_files = sum(1 for _ in _iter_worker_files(
-                    args.train_data, args.worker_id, args.n_workers
-                ))
-                estimate = StreamingEstimate(n_my_files)
-                worker_filter_fn = _load_filter_fn(args.filter_fn)
-                atoms_gen = stream_atoms(
-                    args.train_data,
-                    args.worker_id,
-                    args.n_workers,
-                    frac=args.frac,
-                    seed=args.seed,
-                    estimate=estimate,
-                    file_weight_map=args.file_weight_map,
-                    filter_fn=worker_filter_fn,
-                )
-                return _prefetch(batched_feature_iterator(
-                    atoms_gen,
-                    tp.model,
-                    elem_map,
-                    cutoff,
-                    cutoff_dict=cutoff_dict,
-                    max_num_neighbours_per_batch=args.max_neighbours_per_batch,
-                    verbose=args.verbose,
-                    total_num_structures=estimate,
-                ))
-
-        if args.step == 1:
-            run_worker_step1(args, make_feature_iter())
-        elif args.step == 2:
-            run_worker_step2(args, make_feature_iter())
-        elif args.step == 3:
-            run_worker_step3(args, make_feature_iter(), tp)
+def _worker_has_finished(args) -> bool:
+    """Say what the worker is about to do; return True when its output already exists (skip entirely)."""
+    # This avoids loading the TF model when resuming a partial run.
+    wdir = _worker_dir(args)
+    if args.step in (1, 2, 3):
+        expected = _worker_output_paths(wdir, args.step, args.worker_id, args.n_clusters)
+        already_done = all(os.path.exists(p) for p in expected)
     else:
-        # Master mode
-        if args.train_data is None:
-            # Standalone export: artifact must already exist (validated above)
-            if args.no_export:
-                parser.error(
-                    "Nothing to do: --train-data not provided and --no-export set"
-                )
-            print(f"Standalone export: {args.artifact_path} -> {args.export_path}")
-            export_savedmodel(args)
-            print(f"\nSUCCESS: SavedModel exported to {args.export_path}")
+        expected, already_done = [], False
+    if already_done:
+        print(f"Worker {args.worker_id} Step {args.step} already completed, skipping.", flush=True)
+        return True
+    missing = [p for p in expected if not os.path.exists(p)]
+    print(f"Worker {args.worker_id} Step {args.step}: {len(missing)} file(s) missing, running."
+          f" (e.g. {missing[0] if missing else '?'})", flush=True)
+    return False
+
+
+def _load_worker_model(args):
+    """Load the model of a worker with the feature side-output of the UQ basis-RP transform; return (tp, instructions)."""
+    # Suppress noisy loggers in worker subprocesses
+    logging.getLogger("tensorpotential.data.streaming").setLevel(logging.WARNING)
+    logging.getLogger("tensorflow").setLevel(logging.ERROR)
+
+    if args.checkpoint.endswith(".index"):
+        args.checkpoint = args.checkpoint.replace(".index", "")
+
+    # Every step only needs the side-written FEATURES key (energy-only
+    # compute is sufficient — no forces are required now that the
+    # force-error model has been removed).
+    step1_compute_fn = ComputeEnergy(extra_return_keys=[uq_constants.FEATURES])
+    return load_uq_model(
+        model_yaml=args.model_yaml,
+        checkpoint=args.checkpoint,
+        model_compute_function=step1_compute_fn,
+        # The production basis-RP transform; the shared constant keeps this in
+        # sync with what make_basis_rp_spec stamps into the artifact below.
+        feature_spec={
+            "out_dim": args.rp_dim,
+            "seed": args.rp_seed,
+            "transform": uq_constants.DEFAULT_FEATURE_TRANSFORM,
+            "normalize": uq_constants.UQ_DEFAULT_NORMALIZE,
+            "add_density_channel": uq_constants.UQ_DEFAULT_DENSITY,
+            "density_scale": uq_constants.UQ_DEFAULT_DENSITY_SCALE,
+        },
+    )
+
+
+def _tf_dataset_feature_iterator(args, tp):
+    dataset_path = args.train_data[0]
+    all_shards = discover_shards(dataset_path)
+    my_shards = all_shards[args.worker_id :: args.n_workers]
+    total_batches = None
+    try:
+        stats = read_saved_dataset_stats(dataset_path)
+        if all_shards:
+            total_batches = (
+                stats.get("total_num_of_batches", 0) * len(my_shards) // len(all_shards)
+            )
+    except (FileNotFoundError, ValueError):
+        pass
+    return _prefetch(
+        tf_dataset_feature_iterator(
+            my_shards,
+            tp.model,
+            frac=args.frac,
+            seed=args.seed + args.worker_id,
+            verbose=args.verbose,
+            total_num_batches=total_batches,
+        )
+    )
+
+
+def _pickle_feature_iterator(args, tp, elem_map, cutoff, cutoff_dict):
+    n_my_files = sum(
+        1 for _ in _iter_worker_files(args.train_data, args.worker_id, args.n_workers)
+    )
+    estimate = StreamingEstimate(n_my_files)
+    atoms_gen = stream_atoms(
+        args.train_data,
+        args.worker_id,
+        args.n_workers,
+        frac=args.frac,
+        seed=args.seed,
+        estimate=estimate,
+        file_weight_map=args.file_weight_map,
+        filter_fn=_load_filter_fn(args.filter_fn),
+    )
+    return _prefetch(
+        batched_feature_iterator(
+            atoms_gen,
+            tp.model,
+            elem_map,
+            cutoff,
+            cutoff_dict=cutoff_dict,
+            max_num_neighbours_per_batch=args.max_neighbours_per_batch,
+            verbose=args.verbose,
+            total_num_structures=estimate,
+        )
+    )
+
+
+def _run_worker(args) -> None:
+    """One worker step: skip it when done, else load the model and run the step on the features of this worker's data."""
+    if _worker_has_finished(args):
+        return
+    tp, instructions = _load_worker_model(args)
+    cutoff, symbols, indices = extract_cutoff_and_elements(instructions)
+    cutoff_dict = extract_cutoff_dict(instructions)
+    elem_map = {s: int(i) for s, i in zip(symbols, indices)}
+
+    use_tf_dataset = is_sharded_dataset(args.train_data)
+    if use_tf_dataset and (args.train_data_weighted or args.filter_fn):
+        raise BuildInputError(
+            "--train-data-weighted and --filter-fn require pickle/df shards; "
+            "they are not supported with sharded TF datasets."
+        )
+
+    def make_feature_iter():
+        if use_tf_dataset:
+            return _tf_dataset_feature_iterator(args, tp)
+        return _pickle_feature_iterator(args, tp, elem_map, cutoff, cutoff_dict)
+
+    if args.step == 1:
+        run_worker_step1(args, make_feature_iter())
+    elif args.step == 2:
+        run_worker_step2(args, make_feature_iter())
+    elif args.step == 3:
+        run_worker_step3(args, make_feature_iter(), tp)
+
+
+def _run_master(parser, args) -> None:
+    """Master mode: run the three-step pipeline, or only export the SavedModel of an existing artifact."""
+    if args.train_data is not None:
+        run_master(args)
+        return
+    # Standalone export: artifact must already exist (validated above)
+    if args.no_export:
+        parser.error("Nothing to do: --train-data not provided and --no-export set")
+    print(f"Standalone export: {args.artifact_path} -> {args.export_path}")
+    export_savedmodel(args)
+    print(f"\nSUCCESS: SavedModel exported to {args.export_path}")
+
+
+def build_main(argv: Sequence[str] | None = None, *, prog: str = "grace_uq build") -> int:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    parser = build_parser(prog)
+    args = parser.parse_args(argv)
+    try:
+        _prepare_arguments(parser, args)
+        if args.worker_id is not None:
+            _run_worker(args)
         else:
-            run_master(args)
+            _run_master(parser, args)
+    except BuildInputError as error:
+        raise SystemExit(str(error)) from error
+    return 0

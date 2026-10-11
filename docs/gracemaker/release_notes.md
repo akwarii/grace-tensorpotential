@@ -1,5 +1,19 @@
 # Release notes
 
+## A single `grace` command
+
+`grace <subcommand>` runs the console commands of the package: `grace train` is `gracemaker`, `grace uq build` is
+`grace_uq build`, and likewise `grace utils`, `grace models`, `grace preprocess`, `grace predict`, `grace collect`,
+`grace dashboard`, `grace extxyz2df` and `grace df2extxyz`. See [the command line](cli.md).
+
+* **The old names keep working** and print the same output, with the same options, defaults and exit codes; only the
+  program name in usage lines differs (`grace uq build` through `grace`, `grace_uq build` through the old name).
+* **`grace`, `grace --help` and an unknown sub-command need no TensorFlow**; a sub-command that does says so with the
+  `pip install "tensorpotential[tf]"` command before it imports anything.
+* **Output on a terminal is styled** with [rich](https://rich.readthedocs.io/); in a pipe, a file or a SLURM log it is the
+  same plain text as before, and `NO_COLOR` turns the colour off.
+* **`grace_dashboard` has an extra:** `pip install "tensorpotential[dashboard]"` installs Flask.
+
 ## Keras 3 replaces legacy Keras 2
 
 The package now trains with Keras 3, the version that TensorFlow 2.20 installs, and no longer needs `tf_keras`.

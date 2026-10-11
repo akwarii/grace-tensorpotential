@@ -1,0 +1,7 @@
+usage: grace_models info [-h] model_name
+
+positional arguments:
+  model_name  Name (or alias) of the model to inspect
+
+options:
+  -h, --help  show this help message and exit

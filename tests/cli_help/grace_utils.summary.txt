@@ -1,0 +1,6 @@
+usage: grace_utils summary [-h] [-v {0,1,2}]
+
+options:
+  -h, --help            show this help message and exit
+  -v {0,1,2}, --verbose {0,1,2}
+                        Verbosity level: 0, 1 or 2

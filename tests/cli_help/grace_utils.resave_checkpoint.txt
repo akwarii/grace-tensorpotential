@@ -1,0 +1,4 @@
+usage: grace_utils resave_checkpoint [-h]
+
+options:
+  -h, --help  show this help message and exit

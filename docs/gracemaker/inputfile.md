@@ -224,7 +224,7 @@ fit:
 ```
 
 This is the complete list of parameters. For most practical purposes
-it is sufficient to generate the input file with the `gracemaker -t` utility.
+it is sufficient to generate the input file with the `grace train -t` utility.
 
 Detailed weighting option (`weighting` belongs to the `fit` section):
 

@@ -290,3 +290,329 @@ def test_stage_1_with_ev_per_a3_equals_stage_1_without_the_option(input_file, tm
         assert before.keys() == after.keys()
         for key in before:
             assert np.array_equal(before[key], after[key]), key
+
+
+# ---------------------------------------------------------------------------------------------------
+# main: the four stages, driven in process. Physical layer: the statistics of stages 2 and 4 against hand sums of the
+# input (atom counts, squared forces) and the brute-force neighbour oracle of ``tests/neighbour_oracle.py``.
+# ---------------------------------------------------------------------------------------------------
+
+import json  # noqa: E402
+import logging  # noqa: E402
+
+from tests.neighbour_oracle import brute_force_pairs  # noqa: E402
+
+CUTOFF = 4.0
+BATCH_SIZE = 2
+
+
+def run_main(input_files, output: Path, stage: int | None, *options: str) -> None:
+    """``grace_preprocess`` with ``-e Cu -c 4.0 --is-fit-stress`` and the given stage flag (none for ``None``)."""
+    files = input_files if isinstance(input_files, (list, tuple)) else [input_files]
+    argv = [*map(str, files), "-o", str(output), "-e", "Cu", "-c", str(CUTOFF), "--is-fit-stress"]
+    if stage is not None:
+        argv.append(f"--stage-{stage}")
+    grace_preprocess.main([*argv, *options])
+
+
+def load_dataset(path: Path) -> list[dict]:
+    dataset = tf.data.Dataset.load(str(path), compression="GZIP")
+    return [{k: v.numpy() for k, v in sample.items()} for sample in dataset]
+
+
+def oracle_neighbour_count(atoms) -> int:
+    return len(brute_force_pairs(atoms.positions, atoms.cell[:], atoms.get_chemical_symbols(), CUTOFF))
+
+
+@pytest.fixture(scope="module")
+def pipeline(input_file, tmp_path_factory) -> Path:
+    """All four stages on the three-structure frame: batches of two structures, two padding buckets."""
+    out = tmp_path_factory.mktemp("pipeline") / "out"
+    for stage in (1, 2, 3, 4):
+        run_main(input_file, out, stage, "-b", str(BATCH_SIZE), "-bu", "2")
+    return out
+
+
+def test_stage_1_stores_params_and_one_sample_per_structure(pipeline, dataframe):
+    params = json.loads((pipeline / "params.json").read_text())
+    assert params["elements_map"] == {"Cu": 0}
+    assert params["cutoff"] == CUTOFF
+    assert params["precision"] == "float64"
+    assert len(load_dataset(pipeline / "stage1" / "shard_1-of-1")) == N_STRUCTURES
+
+
+def test_stage_2_counts_atoms_neighbours_and_structures_of_every_batch(pipeline, dataframe):
+    batches = pd.read_pickle(pipeline / "stage2" / "batches_df-1-of-1.pkl.gz")
+    assert list(batches.columns) == ["n_atoms", "n_neighbours", "n_structures"]
+    assert sorted(batches["n_structures"]) == [1, 2]
+    assert batches["n_structures"].sum() == N_STRUCTURES
+    assert batches["n_atoms"].sum() == sum(len(a) for a in dataframe["ase_atoms"])
+    assert batches["n_neighbours"].sum() == sum(oracle_neighbour_count(a) for a in dataframe["ase_atoms"])
+    assert batches["n_neighbours"].is_monotonic_decreasing
+
+
+def test_stage_3_padding_bounds_cover_every_batch(pipeline):
+    bounds = json.loads((pipeline / "stage3" / "reduced_padding_bounds.json").read_text())
+    batches = pd.read_pickle(pipeline / "stage2" / "batches_df-1-of-1.pkl.gz")
+    assert len(bounds) == 2
+    assert bounds == sorted(bounds)
+    for n_neigh, n_atoms, n_struct in batches[["n_neighbours", "n_atoms", "n_structures"]].itertuples(index=False):
+        assert any(b[0] >= n_neigh and b[1] >= n_atoms and b[2] >= n_struct for b in bounds)
+
+
+def test_stage_3_batches_hold_the_real_atoms_structures_and_forces_of_the_input(pipeline, dataframe):
+    batches = load_dataset(pipeline / "stage3" / "shard_1-of-1")
+    assert len(batches) == 2
+    assert sum(int(b[constants.N_STRUCTURES_BATCH_REAL]) for b in batches) == N_STRUCTURES
+    assert sum(int(b[constants.N_ATOMS_BATCH_REAL]) for b in batches) == sum(len(a) for a in dataframe["ase_atoms"])
+    stored = sum(float(np.sum(b[constants.DATA_REFERENCE_FORCES][: int(b[constants.N_ATOMS_BATCH_REAL])] ** 2)) for b in batches)
+    given = float(sum(np.sum(f**2) for f in dataframe[FORCES_COL]))
+    np.testing.assert_allclose(stored, given, rtol=FLOAT64_ARITHMETIC.rtol, atol=FLOAT64_ARITHMETIC.atol)
+
+
+def test_stage_4_statistics_equal_the_hand_sums_of_the_input(pipeline, dataframe):
+    stats = json.loads((pipeline / "stage3" / "stats.json").read_text())
+    n_atoms = sum(len(a) for a in dataframe["ase_atoms"])
+    n_neigh = sum(oracle_neighbour_count(a) for a in dataframe["ase_atoms"])
+    sum_sqr = float(sum(np.sum(f**2) for f in dataframe[FORCES_COL]))
+    assert stats["total_num_structures"] == N_STRUCTURES
+    assert stats["total_num_of_atoms"] == n_atoms
+    assert stats["total_num_of_neighs"] == n_neigh
+    assert stats["total_num_of_batches"] == 2
+    np.testing.assert_allclose(stats["sum_sqr_forces"], sum_sqr, rtol=FLOAT64_ARITHMETIC.rtol)
+    np.testing.assert_allclose(stats["avg_n_neigh"], n_neigh / n_atoms, rtol=FLOAT64_ARITHMETIC.rtol)
+    np.testing.assert_allclose(stats["scale"], np.sqrt(sum_sqr / n_atoms / 3), rtol=FLOAT64_ARITHMETIC.rtol)
+    assert stats["element_map"] == {"Cu": 0}
+    assert (stats["cutoff"], stats["batch_size"], stats["precision"]) == (CUTOFF, BATCH_SIZE, "float64")
+    assert stats["cutoff_dict"] is None
+
+
+@pytest.mark.parametrize("stages", [[], [1, 2], [2, 3, 4]])
+def test_exactly_one_stage_flag_is_required(input_file, tmp_path, caplog, stages):
+    argv = [str(input_file), "-o", str(tmp_path / "out")] + [f"--stage-{s}" for s in stages]
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as stop:
+        grace_preprocess.main(argv)
+    assert stop.value.code == 1
+    assert "--stage-1 or --stage-2 or --stage-3 options must be provided" in caplog.text
+    assert not (tmp_path / "out").exists()
+
+
+def test_stage_1_is_skipped_when_its_folder_exists_and_redone_with_rerun(input_file, tmp_path, caplog):
+    out = tmp_path / "out"
+    run_main(input_file, out, 1)
+    marker = out / "stage1" / "shard_1-of-1" / "marker.txt"
+    marker.write_text("kept")
+    with caplog.at_level(logging.INFO):
+        run_main(input_file, out, 1)
+    assert marker.exists()
+    assert "Stage 1 is already finished" in caplog.text
+    run_main(input_file, out, 1, "--rerun")
+    assert not marker.exists()
+    assert len(load_dataset(out / "stage1" / "shard_1-of-1")) == N_STRUCTURES
+
+
+def test_stage_2_is_skipped_when_its_file_exists_and_redone_with_rerun(input_file, tmp_path, caplog):
+    out = tmp_path / "out"
+    run_main(input_file, out, 1)
+    run_main(input_file, out, 2)
+    target = out / "stage2" / "batches_df-1-of-1.pkl.gz"
+    target.write_text("not a pickle")
+    with caplog.at_level(logging.INFO):
+        run_main(input_file, out, 2)
+    assert "already exists, stopping" in caplog.text
+    assert target.read_text() == "not a pickle"
+    run_main(input_file, out, 2, "--rerun")
+    assert len(pd.read_pickle(target)) == 1
+
+
+def test_stage_3_is_skipped_when_its_folder_exists_and_removes_stage_1_on_request(input_file, tmp_path, caplog):
+    out = tmp_path / "out"
+    for stage in (1, 2):
+        run_main(input_file, out, stage)
+    run_main(input_file, out, 3, "--remove_stage1")
+    assert not (out / "stage1" / "shard_1-of-1").exists()
+    assert len(load_dataset(out / "stage3" / "shard_1-of-1")) == 1
+    with caplog.at_level(logging.INFO):
+        run_main(input_file, out, 3)
+    assert "already exists, skipping" in caplog.text
+
+
+def test_stage_3_keeps_stage_1_without_the_remove_option(pipeline):
+    assert (pipeline / "stage1" / "shard_1-of-1").is_dir()
+
+
+def test_stage_3_needs_the_batch_statistics_of_stage_2(input_file, tmp_path):
+    out = tmp_path / "out"
+    run_main(input_file, out, 1)
+    with pytest.raises(RuntimeError, match="Stage 2 is not completed"):
+        run_main(input_file, out, 3)
+
+
+@pytest.mark.parametrize("strategy", [grace_preprocess.EQUI_ATOMS_STRATEGY, grace_preprocess.EQUI_NEIGH_STRATEGY])
+def test_stage_2_strategies_split_by_atoms_or_neighbours(input_file, tmp_path, strategy):
+    out = tmp_path / "out"
+    run_main(input_file, out, 1)
+    run_main(input_file, out, 2, "-b", "10", "-s", strategy)
+    batches = pd.read_pickle(out / "stage2" / "batches_df-1-of-1.pkl.gz")
+    assert batches["n_structures"].sum() == N_STRUCTURES
+    assert batches["n_atoms"].sum() == 12
+
+
+def test_stage_2_rejects_an_unknown_strategy(input_file, tmp_path):
+    out = tmp_path / "out"
+    run_main(input_file, out, 1)
+    with pytest.raises(NotImplementedError, match="Strategy shuffled not implemented"):
+        run_main(input_file, out, 2, "-s", "shuffled")
+
+
+@pytest.mark.parametrize(
+    ("elements", "expected"),
+    [
+        ("ALL", grace_preprocess.FULL_ELEMENTS),
+        ("MP", grace_preprocess.ALEXANDRIA_ELEMENTS),
+        ("Alexandria", grace_preprocess.ALEXANDRIA_ELEMENTS),
+        ("OMOL_N", grace_preprocess.OMOL_N_ELEMENTS),
+        ("Zn Cu Al", ["Al", "Cu", "Zn"]),
+    ],
+)
+def test_stage_1_elements_presets_and_lists(input_file, tmp_path, elements, expected):
+    out = tmp_path / "out"
+    argv = [str(input_file), "-o", str(out), "-e", elements, "-c", str(CUTOFF), "--stage-1"]
+    if "Cu" in expected:
+        grace_preprocess.main(argv)
+    else:
+        # the parameters are stored first; the data has Cu, which the preset lacks, so the run then fails
+        with pytest.raises(KeyError, match="Cu"):
+            grace_preprocess.main(argv)
+    params = json.loads((out / "params.json").read_text())
+    assert list(params["elements_map"]) == list(expected)
+    assert list(params["elements_map"].values()) == list(range(len(expected)))
+
+
+def test_stage_1_without_elements_extracts_them_from_the_data_with_a_warning(input_file, tmp_path, caplog):
+    out = tmp_path / "out"
+    with caplog.at_level(logging.INFO):
+        grace_preprocess.main([str(input_file), "-o", str(out), "-c", str(CUTOFF), "--stage-1"])
+    assert "Elements are not provided" in caplog.text
+    assert json.loads((out / "params.json").read_text())["elements_map"] == {"Cu": 0}
+
+
+def test_stage_1_reuses_the_elements_of_a_previous_run_when_none_are_given(input_file, tmp_path, caplog):
+    out = tmp_path / "out"
+    grace_preprocess.main([str(input_file), "-o", str(out), "-e", "Al Cu", "-c", str(CUTOFF), "--stage-1"])
+    with caplog.at_level(logging.INFO):
+        grace_preprocess.main([str(input_file), "-o", str(out), "--stage-1", "--rerun"])
+    assert "Loaded elements: ['Al', 'Cu']" in caplog.text
+    assert json.loads((out / "params.json").read_text())["elements_map"] == {"Al": 0, "Cu": 1}
+
+
+def test_stage_2_and_3_use_the_parameters_stored_by_stage_1(input_file, tmp_path):
+    out = tmp_path / "out"
+    grace_preprocess.main([str(input_file), "-o", str(out), "-e", "Cu", "-c", "4.0", "--stage-1", "--precision", "float32"])
+    params = json.loads((out / "params.json").read_text())
+    assert params["precision"] == "float32"
+    # stages 2 and 3 are started without -c or --precision: the stored cutoff and precision are used
+    grace_preprocess.main([str(input_file), "-o", str(out), "--stage-2"])
+    grace_preprocess.main([str(input_file), "-o", str(out), "--stage-3"])
+    batch = load_dataset(out / "stage3" / "shard_1-of-1")[0]
+    assert batch[constants.DATA_REFERENCE_FORCES].dtype == np.float32
+
+
+def test_load_params_of_an_unparsable_file_logs_and_returns_nothing(tmp_path, caplog):
+    (tmp_path / "params.json").write_text("{not json")
+    with caplog.at_level(logging.ERROR):
+        assert grace_preprocess.load_params(str(tmp_path)) is None
+    assert "Can't parse" in caplog.text
+
+
+def test_load_params_without_a_file_returns_nothing(tmp_path):
+    assert grace_preprocess.load_params(str(tmp_path)) is None
+
+
+def test_load_params_round_trips_save_params(tmp_path):
+    grace_preprocess.save_params(str(tmp_path), {"Cu": 0, "Zn": 1}, 5.5, "float32", {"Cu": {"Zn": 4.0}})
+    assert grace_preprocess.load_params(str(tmp_path)) == ({"Cu": 0, "Zn": 1}, 5.5, {"Cu": {"Zn": 4.0}}, "float32")
+
+
+# --- several tasks -----------------------------------------------------------------------------------
+
+
+def structure_ids(path: Path) -> list[int]:
+    return sorted(int(s["structure_id"]) for s in load_dataset(path))
+
+
+def test_rows_are_split_between_tasks_when_the_input_is_not_sharded(input_file, tmp_path):
+    out = tmp_path / "out"
+    for task in (0, 1):
+        run_main(input_file, out, 1, "--task-id", str(task), "--total-task-num", "2")
+    assert structure_ids(out / "stage1" / "shard_1-of-2") == [0, 2]
+    assert structure_ids(out / "stage1" / "shard_2-of-2") == [1]
+
+
+def test_files_are_split_between_tasks_when_the_input_is_sharded(dataframe, tmp_path):
+    files = []
+    for k in range(2):
+        path = tmp_path / f"part{k}.pkl.gz"
+        dataframe.iloc[[k]].to_pickle(path)
+        files.append(path)
+    out = tmp_path / "out"
+    for task in (0, 1):
+        run_main(files, out, 1, "--sharded-input", "--task-id", str(task), "--total-task-num", "2")
+    assert structure_ids(out / "stage1" / "shard_1-of-2") == [0]
+    assert structure_ids(out / "stage1" / "shard_2-of-2") == [1]
+
+
+def test_stages_2_to_4_combine_the_shards_of_every_task(input_file, dataframe, tmp_path):
+    out = tmp_path / "out"
+    for stage in (1, 2):
+        for task in (0, 1):
+            run_main(input_file, out, stage, "--task-id", str(task), "--total-task-num", "2", "-b", "2", "-bu", "2")
+    for task in (0, 1):
+        run_main(input_file, out, 3, "--task-id", str(task), "--total-task-num", "2", "-b", "2", "-bu", "2")
+    run_main(input_file, out, 4, "--task-id", "1", "--total-task-num", "2")
+    assert not (out / "stage3" / "stats.json").exists()  # only task 0 aggregates
+    run_main(input_file, out, 4, "--task-id", "0", "--total-task-num", "2")
+    stats = json.loads((out / "stage3" / "stats.json").read_text())
+    assert stats["total_num_structures"] == N_STRUCTURES
+    assert stats["total_num_of_atoms"] == sum(len(a) for a in dataframe["ase_atoms"])
+
+
+def test_an_unreadable_input_file_is_logged_and_skipped(input_file, dataframe, tmp_path, caplog):
+    broken = tmp_path / "broken.pkl.gz"
+    broken.write_text("not a pickle")
+    out = tmp_path / "out"
+    with caplog.at_level(logging.ERROR):
+        run_main([broken, input_file], out, 1, "--sharded-input")
+    assert "Error reading file" in caplog.text
+    assert len(load_dataset(out / "stage1" / "shard_1-of-1")) == N_STRUCTURES
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(input_file, tmp_path, monkeypatch):
+    from tests import cli_help
+
+    cli_help.poison_sys_argv(monkeypatch)
+    out = tmp_path / "out"
+    argv = [str(input_file), "-o", str(out), "-e", "Cu", "-c", "4.0", "--stage-1"]
+    assert grace_preprocess.main(argv) == 0
+    assert (out / "stage1" / "shard_1-of-1").is_dir()
+
+
+def test_main_without_argv_reads_sys_argv(input_file, tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    monkeypatch.setattr("sys.argv", ["grace_preprocess", str(input_file), "-o", str(out), "-e", "Cu", "--stage-1"])
+    assert grace_preprocess.main() == 0
+    assert (out / "stage1" / "shard_1-of-1").is_dir()
+
+
+@pytest.mark.parametrize(
+    "content",
+    ['{"cutoff": 4.0, "precision": "float64"}', "[1, 2, 3]", '{"elements_map": {}, "cutoff": 4.0}'],
+    ids=["no-elements-map", "not-a-mapping", "no-precision"],
+)
+def test_load_params_of_a_file_that_is_not_a_complete_mapping_logs_and_returns_nothing(
+    tmp_path, caplog, content
+):
+    (tmp_path / "params.json").write_text(content)
+    with caplog.at_level(logging.ERROR):
+        assert grace_preprocess.load_params(str(tmp_path)) is None
+    assert "Can't parse" in caplog.text

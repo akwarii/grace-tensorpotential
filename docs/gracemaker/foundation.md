@@ -9,7 +9,7 @@ The **UQ** and **Kokkos** columns indicate, per model:
 - **UQ** — the distributed saved model ships with an uncertainty-quantification head (and the checkpoint includes `gmm_artifacts.npz`).
 - **Kokkos** — a `kokkos.npz` LAMMPS-Kokkos export is available. It is now distributed as a
   **separate file** (no longer bundled inside the model archive); fetch it with
-  `grace_models download <model_name> --kokkos`.
+  `grace models download <model_name> --kokkos`.
 
 **Precision (fp32 / fp64).** The current release defaults to **fp32**: the bare model name
 (e.g. `GRACE-2L-OMAT-large-ft-E`) resolves to the fp32 saved model and checkpoint — roughly
@@ -142,17 +142,17 @@ natively **fp32** (there is no `-fp64` variant). For LAMMPS-Kokkos use
 
 ## Downloading Foundation Models
 
-You can use the `grace_models` utility to download and inspect pre-trained GRACE models:
+You can use the `grace models` utility to download and inspect pre-trained GRACE models:
 
-- Run `grace_models list` to view the list of available models (a compact capability
+- Run `grace models list` to view the list of available models (a compact capability
   table). Add `-v`/`--verbose` for a full per-model block (description, paths, license).
-- Run `grace_models info <model_name>` to show a model's declared capability flags
+- Run `grace models info <model_name>` to show a model's declared capability flags
   (precision, UQ, parallel) and, if it is already downloaded, introspect the artifact.
-- Run `grace_models download <model_name>` to download a specific model. Add `--kokkos`
+- Run `grace models download <model_name>` to download a specific model. Add `--kokkos`
   to also fetch its LAMMPS-Kokkos export (`kokkos.npz`) into the model directory.
-- Run `grace_models checkpoint <model_name>` to download only the checkpoint (used for
+- Run `grace models checkpoint <model_name>` to download only the checkpoint (used for
   fine-tuning).
-- Run `grace_models update <model_name>` (or `--all`) to re-download cached copies whose
+- Run `grace models update <model_name>` (or `--all`) to re-download cached copies whose
   upstream artifact has changed — upgrading the `tensorpotential` package alone never
   refreshes a model that is already in the cache. See
   [Updating cached models](../utilities/#updating-cached-models).
@@ -168,13 +168,13 @@ but you can overwrite it with `GRACE_CACHE` environment variable.
 
 ### Automatic input file generation
 
-You can generate an `input.yaml` file for fine-tuning a foundation model by running `gracemaker -t`.
+You can generate an `input.yaml` file for fine-tuning a foundation model by running `grace train -t`.
 
 ### Manual setup
 
 Fine-tuning foundation GRACE models can only be performed using checkpoints, not saved models.
-Run `grace_models list -v` to view the available models that include a `CHECKPOINT:` field (or `grace_models info <MODEL-NAME>` for a single model).
-You can either download this checkpoint manually using `grace_models checkpoint <MODEL-NAME>`, or it will be downloaded automatically when needed.
+Run `grace models list -v` to view the available models that include a `CHECKPOINT:` field (or `grace models info <MODEL-NAME>` for a single model).
+You can either download this checkpoint manually using `grace models checkpoint <MODEL-NAME>`, or it will be downloaded automatically when needed.
 
 To fine-tune a foundation model, add the following to the `potential` section of your `input.yaml`:
 
@@ -254,7 +254,7 @@ fit:
 You can find more variable names by running a model summary:
 
 ```bash
-grace_utils -p ~/.cache/grace/checkpoints/SOME_FOUNDATIONAL_MODEL_NAME/model.yaml  summary -v 1
+grace utils -p ~/.cache/grace/checkpoints/SOME_FOUNDATIONAL_MODEL_NAME/model.yaml  summary -v 1
 
 ```
 

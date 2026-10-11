@@ -2,6 +2,9 @@
 import os
 import json
 import argparse
+from collections.abc import Sequence
+
+from tensorpotential.cli.console import say
 
 
 # ---------------------------------------------------------------------------
@@ -479,16 +482,16 @@ def download_model(args):
     want_kokkos = getattr(args, "kokkos", False)
     names = MODELS_NAME_LIST if args.model_name == "all" else [args.model_name]
     if args.model_name != "all" and args.model_name not in MODELS_METADATA:
-        print(f"Model {args.model_name} not found in available models.")
+        say(f"Model {args.model_name} not found in available models.")
         return
 
     for model_name in names:
-        print(f"Downloading model: {model_name}")
+        say(f"Downloading model: {model_name}")
         get_or_download_model(model_name)
         if want_kokkos:
-            print(f"Downloading kokkos.npz for {model_name}")
+            say(f"Downloading kokkos.npz for {model_name}")
             get_or_download_kokkos(model_name)
-        print(f"Model {model_name} downloaded successfully.")
+        say(f"Model {model_name} downloaded successfully.")
 
 
 def download_checkpoint(args):
@@ -503,22 +506,22 @@ def download_checkpoint(args):
     model_name = args.model_name
 
     if model_name in MODELS_METADATA:
-        print(f"Downloading checkpoint for {model_name}")
+        say(f"Downloading checkpoint for {model_name}")
         get_or_download_checkpoint(model_name)
-        print(f"Checkpoint for {model_name} downloaded successfully.")
+        say(f"Checkpoint for {model_name} downloaded successfully.")
     elif model_name in ["all"]:
-        print(f"Downloading ALL models: {MODELS_NAME_LIST}")
+        say(f"Downloading ALL models: {MODELS_NAME_LIST}")
         for model_name in MODELS_NAME_LIST:
-            print(f"Downloading model: {model_name}")
+            say(f"Downloading model: {model_name}")
             get_or_download_checkpoint(model_name)
-            print(f"Model {model_name} downloaded successfully.")
+            say(f"Model {model_name} downloaded successfully.")
     else:
-        print(f"Model {model_name} not found in available models.")
+        say(f"Model {model_name} not found in available models.")
 
 
-def build_parser():
+def build_parser(prog: str = 'grace_models'):
     parser = argparse.ArgumentParser(
-        prog="grace_models", description="Download foundation GRACE models"
+        prog=prog, description="Download foundation GRACE models"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Sub-command help")
@@ -592,15 +595,17 @@ def build_parser():
     return parser
 
 
-def main(args=None):
-    parser = build_parser()
-    args_parse = parser.parse_args(args)
+def main(argv: Sequence[str] | None = None, *, prog: str = 'grace_models') -> int:
+    parser = build_parser(prog)
+    args_parse = parser.parse_args(argv)
 
     if args_parse.command:
         args_parse.func(args_parse)
     else:
         parser.print_help()
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

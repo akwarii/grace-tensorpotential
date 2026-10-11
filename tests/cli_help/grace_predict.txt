@@ -1,0 +1,12 @@
+usage: grace_predict [-h] [-m MODEL_PATH] [-d DATASET_FILE] [-o OUTPUT] [-e]
+
+options:
+  -h, --help            show this help message and exit
+  -m MODEL_PATH, --model_path MODEL_PATH
+                        provide path to the saved_model directory
+  -d DATASET_FILE, --dataset DATASET_FILE
+                        path to the dataset.pkl.gzip containing ase_atoms structures
+  -o OUTPUT, --output OUTPUT
+                        path to the OUTPUT dataset (pkl.gzip) containing energy_predicted and
+                        forces_predicted
+  -e, --raise-errors    Whether to NOT ignore errors and stop the program.

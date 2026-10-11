@@ -14,8 +14,8 @@ The checks need nothing but the standard library, so the tool runs under any Pyt
      the others print their usage text.
 
 ``--expect`` fails the run when the environment is not the one the job meant to test (a torch-only job
-must not silently have TensorFlow). ``grace_dashboard`` needs ``flask``, which no extra installs (finding of
-CLEAN3); it is expected to name the missing module until flask is installed or becomes a dependency.
+must not silently have TensorFlow). ``grace_dashboard`` needs ``flask``, which the ``dashboard`` extra (and ``all``) installs; in an environment
+without it the script is expected to exit non-zero and name the missing module.
 """
 
 from __future__ import annotations
@@ -153,8 +153,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     problems += check_core(args.python)
     scripts = console_scripts(args.python)
-    if len(scripts) != 10:
-        problems.append(f"expected 10 console scripts, found {len(scripts)}: {scripts}")
+    if len(scripts) != 11:
+        problems.append(f"expected 11 console scripts, found {len(scripts)}: {scripts}")
     for name in scripts:
         problem = check_script(args.python, name, have)
         print(f"{'ok  ' if problem is None else 'FAIL'} {name} --help")
