@@ -1,5 +1,6 @@
 # TEMPORARY (CI3, task 1): wall time and peak memory of each test-tf shard with and without coverage.
 # Removed from the branch before the pull request is marked ready; the numbers go into the pull request.
+# Second measurement: after the regeneration of tests/.test_durations.
 
 name: Measure coverage cost
 
