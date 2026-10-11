@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI,
+GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI (also `grace train`: one `grace <subcommand>` command runs all the console tools),
 an ASE calculator, UQ tools and foundation-model loading. The library is TensorFlow 2 with Keras 3; a PyTorch backend that loads
 TF-trained models is being added next to it. Core abstractions: an *instruction graph* (`TPInstruction` subclasses described in a
 `model.yaml`) executed by `TPModel`, trained by `TensorPotential`, and served by `TPCalculator`.
@@ -106,7 +106,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
   `tensorpot.py`: `TensorPotential` (training, checkpoints). `loss.py`, `metrics.py`, `utils.py`, `poly.py`, `export.py`.
 - `functions/`: Clebsch-Gordan generation and coupling tables (`couplings.py`), radial functions, activations.
 - `data/`: dataframes and TF datasets (`databuilder.py`, `process_df.py`), neighbour lists (matscipy by default), streaming.
-- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `gracemaker`, `grace_preprocess`, `grace_predict`, ...
+- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `grace` (`scripts/grace.py`: the one table of sub-commands and the dispatch), `gracemaker`, `grace_preprocess`, `grace_predict`, ...; `cli/console.py` (shared rich console) and `cli/prompts.py` (prompt helpers of both input wizards)
 - `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty. `compat/pace/`: legacy, untested, **out of scope: no change is allowed to it** (owner, 2026-10-01), whatever the issue; report findings, never fix or remove them.
 - The PyTorch backend is being added in `tensorpotential/torch_backend/` with TF-free shared code in `tensorpotential/core/`; both must import without
   TensorFlow (enforced by an import contract), and the TF extractor lives outside them.
@@ -158,6 +158,17 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
   `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`.
 - `tests/test_import_gates.py` imports every module first in its own interpreter (the root no longer preloads the classes, so import cycles it hid now show) and fails when a name that dead-code tools cannot see stops resolving
   (`from tensorpotential.X import name` anywhere, `__cls__` strings, the two `__getattr__` shims). Its allow-lists (`KNOWN_ABSENT_PACKAGES`, `KNOWN_STALE_SOURCES`, `BASELINED_IMPORT_FAILURES`) name what is already broken; shrink them, never grow them silently.
+- **The `grace` command and the console tools (CLI1).** `tensorpotential/scripts/grace.py` is the one table (`COMMANDS`, `UQ_COMMANDS`: name, module, function, one-line help, backend tag) and the dispatch; it is TF-free
+  (import contract, `TF_FREE_MODULES`) and checks the backend of a row (`require_backend`) before it imports the module. A new console command is a row there, a `[project.scripts]` entry, and a `main(argv=None, *, prog=...)` that
+  returns the exit code (every entry function takes `argv` first and a keyword `prog`: the usage line reads `grace uq build` through `grace`, `grace_uq build` through the old name; `tests/test_cli_help.py` checks the contract).
+  The `--help` text of every command and sub-command is committed in `tests/cli_help/` (compared after folding the Python 3.13 option format and the wrapping); regenerate only from an unmodified tree (`python -m tests.cli_help write`).
+  Output goes through `cli/console.py`: rich only styles (a message is a `Text`, never markup, never wrapped), so a pipe gets the same text as the `print` it replaced; a test that needs a terminal replaces `console.get_console`
+  with a `make_console(force_terminal=True)` on a `StringIO`. The prompt helpers are in `cli/prompts.py` (`cli.wizard` re-exports the old names), so a test that fakes `_ask_*` for the dataset question patches `cli.prompts`, and a test of
+  `extra/gen_tensor/wizard.py` patches both modules or types answers into `input()`. `tools/tests` (run with `pytest --noconftest tools/tests`), `tools/divergence.py check` (a row for every upstream file touched, docs and tests included) and
+  `tools/check_touched_coverage.py` **without `--unit`** (diff mode: every unit the branch changed, not a fixed list) must all be run before a PR; `lint-imports` of the shared venv may not start (stale shebang): `python -c "import sys; from importlinter.cli import lint_imports_command; sys.exit(lint_imports_command())"`.
+  A single new module cannot be opted into the strict ruff set (the glob, the ty overrides and `tools/tests/test_lint_ratchet.py` pin the three package names): check it with `ruff check --isolated --select <strict families> --config 'lint.pydocstyle.convention="numpy"' --config 'lint.pylint.max-args=6' FILE`.
+- **Shell.** The shell is zsh: an unquoted `$VAR` is not split into words (use an array), `==` starts a command substitution, and a heredoc together with `$(...)` in one call can hang the tool (write scripts with the Write tool). In a worktree sync the shared
+  venv without touching the editable install: `UV_PROJECT_ENVIRONMENT=<main>/.venv uv sync --frozen --group dev --no-install-project --inexact`.
 
 ## Working agreements
 

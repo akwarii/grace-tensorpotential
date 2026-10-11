@@ -15,7 +15,7 @@
 
 - path: docs/gracemaker/faq.md
   reason: 'removes the entries that told users to export the legacy-Keras variable (the callback TypeError and multi-GPU notes): the package uses Keras 3'
-  milestone: [DEPS3]
+  milestone: [DEPS3, CLI1]
   upstream: never
 
 - path: docs/gracemaker/install.md
@@ -30,7 +30,7 @@
 
 - path: docs/gracemaker/inputfile.md
   reason: 'documents the lora and reduce_lora options as supported'
-  milestone: [LORA2]
+  milestone: [LORA2, CLI1]
   upstream: pending
 
 - path: tensorpotential/constants.py
@@ -40,7 +40,7 @@
 
 - path: examples/slurm_multinode/submit.sbatch
   reason: 'no longer exports the legacy-Keras variable'
-  milestone: [DEPS3]
+  milestone: [DEPS3, CLI1]
   upstream: never
 
 - path: mkdocs.yml
@@ -85,7 +85,7 @@
 
 - path: tensorpotential/cli/data.py
   reason: 'commented-out code removed; duplicated code folded into shared helpers; copy=False dropped from the joint train and test concat; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL2, DEPS2, CORE1]
+  milestone: [CLEAN2, QUAL2, DEPS2, CORE1, CLI1]
   upstream: pending
 
 - path: tensorpotential/cli/gracemaker.py
@@ -525,5 +525,65 @@
 
 - path: tests/test_gen_tensor_wizard.py
   reason: 'tests of the wizard sections, the review, the entry point and the tensor property converters added'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: README.md
+  reason: 'command lines use the grace command (grace uq build, grace train, ...)'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/cli.md
+  reason: 'describes the grace command, its sub-commands and the old names; quotes the help of grace train'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/foundation.md
+  reason: 'command lines use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/gen_tensor.md
+  reason: 'command lines use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/presets.md
+  reason: 'command lines use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/quickstart.md
+  reason: 'command lines use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/tutorials.md
+  reason: 'command lines use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/gracemaker/uq.md
+  reason: 'command lines use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: docs/index.md
+  reason: 'command names in the release highlights use the grace command'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/cli/wizard.py
+  reason: 'the prompt helpers and the dataset question live in cli/prompts.py (shared console); cli.wizard re-exports every old name'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/extra/gen_tensor/wizard.py
+  reason: 'imports the prompt helpers from cli/prompts.py, which ends the import cycle with cli/wizard.py'
+  milestone: [CLI1]
+  upstream: pending
+
+- path: tensorpotential/uq/cli/build/data_resolve.py
+  reason: 'the catch-all of the prefetch thread carries its reason (noqa)'
   milestone: [CLI1]
   upstream: pending
