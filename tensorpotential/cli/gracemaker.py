@@ -6,6 +6,8 @@ import logging
 import math
 import os
 import sys
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import yaml
@@ -33,6 +35,7 @@ from tensorpotential.tpmodel import TPModel
 from tensorpotential.tensorpot import TensorPotential, get_output_dir
 from tensorpotential.utils import (
     convert_model_reduce_elements,
+    get_dtype_by_name,
     get_param_dtype_from_config,
     is_chief,
 )
@@ -54,9 +57,9 @@ DEFAULT_TARGET_UPDATES = {
 }
 
 
-def build_parser():
+def build_parser(prog: str = "gracemaker"):
     parser = argparse.ArgumentParser(
-        prog="gracemaker",
+        prog=prog,
         description="Fitting utility for (graph) atomic cluster expansion "
         "potentials.\n",
     )
@@ -350,17 +353,55 @@ def lora_restart_model_file(args_parse, potential_config, output_dir):
     return None
 
 
-def main(argv=None, strategy=None, strategy_desc=""):
-    if argv is None:
-        argv = []
-    # Stages:
-    parser = build_parser()
-    args_parse = parser.parse_args(argv)
+class _RunFinished(Exception):
+    """The run is complete or was asked to stop early (check-model, save-model, Ctrl-C): ``main`` exits with 0."""
+
+
+@dataclass
+class _Run:
+    """The state of one gracemaker run, filled in step by step (see ``main`` for the order)."""
+
+    args: argparse.Namespace
+    args_yaml: dict
+    potential_config: dict
+    fit_config: dict
+    seed: int
+    output_dir: str
+    rcut: float
+    strategy: Any = None
+    batch_size: int = 8
+    test_batch_size: Any = 1
+    global_batch_size: int = 8
+    global_test_batch_size: Any = None
+    param_dtype: Any = None
+    param_dtype_flag: str = ""
+    user_set_param_dtype: bool = False
+    potential_file_name: str | None = None
+    checkpoint_name: str | None = None
+    element_map: dict | None = None
+    data_stats: dict | None = None
+    train_data: Any = None
+    test_data: Any = None
+    train_grouping_df: Any = None
+    test_grouping_df: Any = None
+    has_test_set: bool = False
+    communicated_keys: Any = None
+    instructions: Any = None
+    tp: Any = None
+
+    @property
+    def target_potential_file_name(self) -> str:
+        """Where the model config of this run is saved: ``model.yaml`` in the output directory."""
+        return os.path.join(self.output_dir, MODEL_CONFIG_YAML)
+
+
+def _restarting(args_parse) -> bool:
+    return bool(args_parse.restart_best_test or args_parse.restart_latest)
+
+
+def _start_run(args_parse, strategy) -> _Run:
+    """Read input.yaml, set the seed, open the log file and print the banner."""
     input_yaml_filename = args_parse.input
-
-    if args_parse.template:
-        generate_template_input()
-
     with open(input_yaml_filename) as f:
         args_yaml = yaml.safe_load(f)
     seed = args_parse.seed or args_yaml.get("seed", 1)
@@ -382,16 +423,24 @@ def main(argv=None, strategy=None, strategy_desc=""):
     log.info("Loaded {}... ".format(input_yaml_filename))
     assert isinstance(args_yaml, dict)
 
-    potential_config = args_yaml["potential"]
-    fit_config = args_yaml["fit"]
-
     log.info(f"Set seed to {seed}")
     np.random.seed(seed)
     tf.random.set_seed(seed)
+    return _Run(
+        args=args_parse,
+        args_yaml=args_yaml,
+        potential_config=args_yaml["potential"],
+        fit_config=args_yaml["fit"],
+        seed=seed,
+        output_dir=output_dir,
+        rcut=args_yaml["cutoff"],
+    )
 
-    # distributed strategy
+
+def _select_strategy(run: _Run, strategy, strategy_desc: str) -> None:
+    """Take the distribution strategy handed over, else MirroredStrategy on request, else the default one."""
     if strategy is None:
-        if fit_config.get("strategy") == "mirrored" or args_parse.multigpu:
+        if run.fit_config.get("strategy") == "mirrored" or run.args.multigpu:
             # The auto-MWMS upgrade for single-host multi-GPU is done by
             # scripts.gracemaker.main; it must run before any tf.config call
             # so MWMS can configure collective ops at program startup. We
@@ -410,392 +459,432 @@ def main(argv=None, strategy=None, strategy_desc=""):
     else:
         log.info("Multi host/multi GPU distributed strategy is already initialized")
 
-    num_replicas_in_sync = strategy.num_replicas_in_sync
     current_ctx = tf.distribute.get_replica_context()
     replica_id_in_sync_group = current_ctx.replica_id_in_sync_group
     log.info(f"Data distribution strategy: {strategy_desc}")
-    log.info(f"Number of replicas: {num_replicas_in_sync}")
+    log.info(f"Number of replicas: {strategy.num_replicas_in_sync}")
     log.info(f"Replica ID in sync group: {replica_id_in_sync_group}")
+    run.strategy = strategy
 
-    rcut = args_yaml["cutoff"]
-    batch_size = fit_config.get(
+
+def _set_batch_sizes(run: _Run) -> None:
+    """The per-replica and global batch sizes of the training and the test set."""
+    replicas = run.strategy.num_replicas_in_sync
+    run.batch_size = run.fit_config.get(
         "batch_size", 8
     )  # TODO: get batch_size from stats.json for distributed dataset
-    global_batch_size = batch_size * strategy.num_replicas_in_sync
-    if not args_parse.save_model:
+    run.global_batch_size = run.batch_size * replicas
+    if not run.args.save_model:
         log.info(
-            f"Global TRAIN batch size (= minibatch size * num GPUS): {global_batch_size}, "
-            f"num. GPUS: {strategy.num_replicas_in_sync}, minibatch size: {batch_size}"
+            f"Global TRAIN batch size (= minibatch size * num GPUS): {run.global_batch_size}, "
+            f"num. GPUS: {replicas}, minibatch size: {run.batch_size}"
         )
-
-    test_batch_size = fit_config.get("test_batch_size", 1)
-    if test_batch_size:
-        global_test_batch_size = test_batch_size * strategy.num_replicas_in_sync
-        if not args_parse.save_model:
+    run.test_batch_size = run.fit_config.get("test_batch_size", 1)
+    if run.test_batch_size:
+        run.global_test_batch_size = run.test_batch_size * replicas
+        if not run.args.save_model:
             log.info(
-                f"Global TEST batch size (= minibatch size * num GPUS): {global_test_batch_size}, "
-                f"num. GPUS: {strategy.num_replicas_in_sync}, minibatch size: {test_batch_size}"
+                f"Global TEST batch size (= minibatch size * num GPUS): {run.global_test_batch_size}, "
+                f"num. GPUS: {replicas}, minibatch size: {run.test_batch_size}"
             )
 
-    user_set_param_dtype = (
-        "param_dtype" in potential_config or "float_dtype" in potential_config
-    )
-    param_dtype, param_dtype_flag = get_param_dtype_from_config(
-        potential_config
-    )  # log deferred
 
-    train_data = None
-    test_data = None
-    element_map = None
-    data_stats = None
+def _check_model_and_stop(run: _Run) -> None:
+    check_model(run.args_yaml, run.param_dtype)
+    log.info("Exiting...")
+    raise _RunFinished
 
-    if args_parse.check_model:
-        check_model(args_yaml, param_dtype)
-        log.info("Exiting...")
-        sys.exit(0)
 
-    # finetuning of foundation models
-    finetune_model = potential_config.get(tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL)
-    if finetune_model and not (
-        args_parse.restart_best_test or args_parse.restart_latest
-    ):
+def _use_foundation_checkpoint(run: _Run) -> None:
+    """Fine-tuning of a foundation model: point the potential at its downloaded model.yaml and checkpoint."""
+    finetune_model = run.potential_config.get(tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL)
+    if finetune_model and not _restarting(run.args):
         log.info(f"FINETUNING {finetune_model} foundation model")
         checkpoint_path = get_or_download_checkpoint(finetune_model)
-        potential_config["filename"] = os.path.join(checkpoint_path, "model.yaml")
-        potential_config[tc.INPUT_POTENTIAL_CHECKPOINT_NAME] = os.path.join(
+        run.potential_config["filename"] = os.path.join(checkpoint_path, "model.yaml")
+        run.potential_config[tc.INPUT_POTENTIAL_CHECKPOINT_NAME] = os.path.join(
             checkpoint_path, "checkpoint"
         )
         log.info(
-            f'FINETUNING: set model path to {potential_config["filename"]} and '
-            + f"checkpoint to {potential_config[tc.INPUT_POTENTIAL_CHECKPOINT_NAME]}"
+            f'FINETUNING: set model path to {run.potential_config["filename"]} and '
+            + f"checkpoint to {run.potential_config[tc.INPUT_POTENTIAL_CHECKPOINT_NAME]}"
         )
 
-    potential_file_name = (
-        args_parse.potential
-        or potential_config.get("filename")
-        or lora_restart_model_file(args_parse, potential_config, output_dir)
+
+def _find_potential_file(run: _Run) -> None:
+    run.potential_file_name = (
+        run.args.potential
+        or run.potential_config.get("filename")
+        or lora_restart_model_file(run.args, run.potential_config, run.output_dir)
     )
-    if potential_file_name:
+    if run.potential_file_name:
         # model will be loaded from file,
         # need inject some parameters (cutoff, elements, scale, shift) into args_yaml
         log.info("Model YAML file is provided, try to adjust input")
-        args_yaml = add_loaded_model_parameter(potential_file_name, args_yaml)
+        run.args_yaml = add_loaded_model_parameter(run.potential_file_name, run.args_yaml)
 
-    # no need to perform expensive data processing if mode
-    if not args_parse.save_model:
-        (
-            train_data,
-            test_data,
-            element_map,
-            data_stats,
-            train_grouping_df,
-            test_grouping_df,
-        ) = load_and_prepare_datasets(
-            args_yaml,
-            batch_size,
-            test_batch_size=test_batch_size,
-            seed=seed,
-            strategy=strategy,
+
+def _resolve_maxiter(fit_config: dict, potential_config: dict, num_train_batches: int) -> None:
+    """Set fit_config['maxiter'] from target_total_updates or 'auto'; an integer stays as it is."""
+    target_total_updates = fit_config.get("target_total_updates")
+    maxiter_raw = fit_config.get("maxiter", "auto")
+    optimizer = fit_config.get("optimizer", "Adam")
+    if target_total_updates is not None:
+        resolved_maxiter = compute_maxiter(target_total_updates, num_train_batches, optimizer)
+        log.info(
+            f"maxiter resolved from target_total_updates={target_total_updates}: {resolved_maxiter} epochs"
         )
-        has_test_set = test_data is not None
-
-        # Resolve maxiter from target_total_updates or auto
-        num_train_batches = len(train_data)
-        target_total_updates = fit_config.get("target_total_updates")
-        maxiter_raw = fit_config.get("maxiter", "auto")
-        optimizer = fit_config.get("optimizer", "Adam")
-
-        if target_total_updates is not None:
-            resolved_maxiter = compute_maxiter(
-                target_total_updates, num_train_batches, optimizer
-            )
-            log.info(
-                f"maxiter resolved from target_total_updates={target_total_updates}: {resolved_maxiter} epochs"
-            )
-            fit_config["maxiter"] = resolved_maxiter
-        elif maxiter_raw == "auto":
-            is_finetune = bool(
-                potential_config.get(tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL)
-            )
-            mode = "finetune" if is_finetune else "scratch"
-            default_target = DEFAULT_TARGET_UPDATES.get(optimizer, {}).get(mode)
-
-            if default_target is None:
-                # fallback if optimizer not in dict
-                default_target = 100 if is_finetune else 500
-
-            resolved_maxiter = compute_maxiter(
-                default_target, num_train_batches, optimizer
-            )
-            log.info(
-                f"maxiter auto ({optimizer}, {mode}): target={default_target} → {resolved_maxiter} epochs"
-            )
-            fit_config["maxiter"] = resolved_maxiter
-        # else: maxiter is already an int, pass through unchanged
-
-        # Resolve switch.after_iter from fraction/auto to an integer epoch count
-        final_maxiter = fit_config.get("maxiter", 500)
-        switch_params = fit_config.get("loss", {}).get("switch", {})
-        if switch_params and "after_iter" in switch_params:
-            after_iter_raw = switch_params["after_iter"]
-            if after_iter_raw == "auto":
-                after_iter_raw = 0.75  # default: switch after 75% of training
-            if isinstance(after_iter_raw, float) and 0.0 < after_iter_raw < 1.0:
-                resolved_after_iter = max(1, round(after_iter_raw * final_maxiter))
-                log.info(
-                    f"switch.after_iter resolved from fraction {after_iter_raw}: "
-                    f"{resolved_after_iter} epochs (of {final_maxiter} total)"
-                )
-                switch_params["after_iter"] = resolved_after_iter
-        # else: after_iter is already an int, pass through unchanged
-
-    if args_parse.save_model:
-        potential_file_name = potential_file_name or os.path.join(
-            output_dir, MODEL_CONFIG_YAML
+        fit_config["maxiter"] = resolved_maxiter
+    elif maxiter_raw == "auto":
+        is_finetune = bool(potential_config.get(tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL))
+        mode = "finetune" if is_finetune else "scratch"
+        default_target = DEFAULT_TARGET_UPDATES.get(optimizer, {}).get(mode)
+        if default_target is None:
+            # fallback if optimizer not in dict
+            default_target = 100 if is_finetune else 500
+        resolved_maxiter = compute_maxiter(default_target, num_train_batches, optimizer)
+        log.info(
+            f"maxiter auto ({optimizer}, {mode}): target={default_target} → {resolved_maxiter} epochs"
         )
+        fit_config["maxiter"] = resolved_maxiter
 
-    # Infer param_dtype from model.yaml now that all potential_file_name sources are resolved.
-    # This must happen after the save_model fallback above, otherwise -r -s would miss the
-    # local model.yaml and default to float32, corrupting the saved model.yaml.
-    if potential_file_name and not user_set_param_dtype:
-        if os.path.exists(potential_file_name):
-            metadata = read_model_metadata(potential_file_name)
-            if "param_dtype" in metadata:
-                from tensorpotential.utils import get_dtype_by_name
 
-                param_dtype = get_dtype_by_name(metadata["param_dtype"])
-                param_dtype_flag = metadata["param_dtype"]
-                log.info(
-                    f"param_dtype={param_dtype_flag} inferred from model.yaml metadata"
-                )
-            else:
-                param_dtype = tf.float64
-                param_dtype_flag = "float64"
-                log.info(
-                    "No param_dtype in model.yaml (old model) — using float64 for backward compatibility"
-                )
+def _resolve_switch_after_iter(fit_config: dict) -> None:
+    """Turn loss.switch.after_iter from a fraction or 'auto' into an integer epoch count."""
+    final_maxiter = fit_config.get("maxiter", 500)
+    switch_params = fit_config.get("loss", {}).get("switch", {})
+    if switch_params and "after_iter" in switch_params:
+        after_iter_raw = switch_params["after_iter"]
+        if after_iter_raw == "auto":
+            after_iter_raw = 0.75  # default: switch after 75% of training
+        if isinstance(after_iter_raw, float) and 0.0 < after_iter_raw < 1.0:
+            resolved_after_iter = max(1, round(after_iter_raw * final_maxiter))
+            log.info(
+                f"switch.after_iter resolved from fraction {after_iter_raw}: "
+                f"{resolved_after_iter} epochs (of {final_maxiter} total)"
+            )
+            switch_params["after_iter"] = resolved_after_iter
+
+
+def _load_datasets(run: _Run) -> None:
+    """Load and batch the data (not needed to only save a model) and resolve the epochs that depend on its size."""
+    (
+        run.train_data,
+        run.test_data,
+        run.element_map,
+        run.data_stats,
+        run.train_grouping_df,
+        run.test_grouping_df,
+    ) = load_and_prepare_datasets(
+        run.args_yaml,
+        run.batch_size,
+        test_batch_size=run.test_batch_size,
+        seed=run.seed,
+        strategy=run.strategy,
+    )
+    run.has_test_set = run.test_data is not None
+    _resolve_maxiter(run.fit_config, run.potential_config, len(run.train_data))
+    _resolve_switch_after_iter(run.fit_config)
+
+
+def _infer_param_dtype(run: _Run) -> None:
+    """Infer param_dtype from model.yaml now that all potential_file_name sources are resolved.
+
+    This must happen after the save_model fallback, otherwise -r -s would miss the local model.yaml and default to
+    float32, corrupting the saved model.yaml.
+    """
+    name = run.potential_file_name
+    if name and not run.user_set_param_dtype and os.path.exists(name):
+        metadata = read_model_metadata(name)
+        if "param_dtype" in metadata:
+            run.param_dtype = get_dtype_by_name(metadata["param_dtype"])
+            run.param_dtype_flag = metadata["param_dtype"]
+            log.info(
+                f"param_dtype={run.param_dtype_flag} inferred from model.yaml metadata"
+            )
         else:
-            log.info(f"Using default model parameter dtype: {param_dtype_flag}")
-    elif user_set_param_dtype:
-        log.info(f"Model parameter dtype: {param_dtype_flag}")
+            run.param_dtype = tf.float64
+            run.param_dtype_flag = "float64"
+            log.info(
+                "No param_dtype in model.yaml (old model) — using float64 for backward compatibility"
+            )
+    elif run.user_set_param_dtype:
+        log.info(f"Model parameter dtype: {run.param_dtype_flag}")
     else:
-        # Fresh fit from scratch — no model.yaml exists yet
-        log.info(f"Using default model parameter dtype: {param_dtype_flag}")
+        # Fresh fit from scratch (no model.yaml yet), or a model file that does not exist
+        log.info(f"Using default model parameter dtype: {run.param_dtype_flag}")
 
-    checkpoint_name = args_parse.checkpoint_name or potential_config.get(
+
+def _resolve_checkpoint_name(run: _Run) -> None:
+    checkpoint_name = run.args.checkpoint_name or run.potential_config.get(
         tc.INPUT_POTENTIAL_CHECKPOINT_NAME
     )
     # clean checkpoint_name from .index suffix if needed
     if checkpoint_name and checkpoint_name.endswith(".index"):
         checkpoint_name = checkpoint_name.replace(".index", "")
+    run.checkpoint_name = checkpoint_name
 
-    # do model reduction / element selection
-    is_reduce_elements = args_yaml[tc.INPUT_POTENTIAL_SECTION].get(
+
+def _reduce_elements_if_requested(run: _Run) -> None:
+    """Model reduction / element selection: write the reduced model and checkpoint into the output folder."""
+    is_reduce_elements = run.args_yaml[tc.INPUT_POTENTIAL_SECTION].get(
         tc.INPUT_POTENTIAL_REDUCE_ELEMENTS, False
     )
-    if is_reduce_elements and not (
-        args_parse.restart_best_test or args_parse.restart_latest
-    ):
-        new_potential_file_name = os.path.join(output_dir, MODEL_CONFIG_YAML)
-        new_checkpoint_name = os.path.join(output_dir, "checkpoints", "checkpoint")
+    if not is_reduce_elements or _restarting(run.args):
+        return
+    new_potential_file_name = os.path.join(run.output_dir, MODEL_CONFIG_YAML)
+    new_checkpoint_name = os.path.join(run.output_dir, "checkpoints", "checkpoint")
+    log.info(
+        f"Selecting elements from model {run.potential_file_name} with checkpoint at {run.checkpoint_name}"
+        + f" and saving to {new_potential_file_name} with checkpoint at {new_checkpoint_name}"
+    )
+    convert_model_reduce_elements(
+        element_map=run.element_map,
+        potential_file_name=run.potential_file_name,
+        checkpoint_name=run.checkpoint_name,
+        new_potential_file_name=new_potential_file_name,
+        new_checkpoint_name=new_checkpoint_name,
+        param_dtype=run.param_dtype,
+    )
+    run.potential_file_name = new_potential_file_name
+    run.checkpoint_name = new_checkpoint_name
 
-        log.info(
-            f"Selecting elements from model {potential_file_name} with checkpoint at {checkpoint_name}"
-            + f" and saving to {new_potential_file_name} with checkpoint at {new_checkpoint_name}"
-        )
 
-        convert_model_reduce_elements(
-            element_map=element_map,
-            potential_file_name=potential_file_name,
-            checkpoint_name=checkpoint_name,
-            new_potential_file_name=new_potential_file_name,
-            new_checkpoint_name=new_checkpoint_name,
-            param_dtype=param_dtype,
-        )
-        potential_file_name = new_potential_file_name
-        checkpoint_name = new_checkpoint_name
-
+def _build_instructions(run: _Run) -> None:
+    """Load the model config from file (restarts) or construct it from the potential section of the input."""
     # Initialize communicated_keys; may be set by preset or overridden by input.yaml
-    _communicated_keys = potential_config.get("communicated_keys", None)
-
-    target_potential_file_name = os.path.join(output_dir, MODEL_CONFIG_YAML)
-    if potential_file_name:
+    run.communicated_keys = run.potential_config.get("communicated_keys", None)
+    if run.potential_file_name:
         # load from potential_file_name (restart path: -r / -rl)
-        log.info(f"Loading model config from `{potential_file_name}`")
-        pot = load_instructions(potential_file_name)
-        # enforce to save model.yaml into output_dir
-    elif not args_parse.save_model:
-        cut_dict = args_yaml.get(tc.INPUT_CUTOFF_DICT)
-        if cut_dict:
-            log.info(f"User-defined cutoff dict: {cut_dict}")
-        log.info("Constructing model from config")
-        pot, _preset_communicated_keys = construct_model(
-            potential_config,
-            element_map=element_map,
-            rcut=rcut,
-            cutoff_dict=cut_dict,
-            **data_stats,
-        )
-        # Preset keys take priority; fall back to input.yaml key if preset didn't set any
-        if _preset_communicated_keys is not None:
-            _communicated_keys = _preset_communicated_keys
-    else:  # save model, but initialized from scratch
+        log.info(f"Loading model config from `{run.potential_file_name}`")
+        run.instructions = load_instructions(run.potential_file_name)
+        return
+    if run.args.save_model:  # save model, but initialized from scratch
         # TODO: should be possible
         raise ValueError("Cannot save just-initialized model")
+    cut_dict = run.args_yaml.get(tc.INPUT_CUTOFF_DICT)
+    if cut_dict:
+        log.info(f"User-defined cutoff dict: {cut_dict}")
+    log.info("Constructing model from config")
+    run.instructions, preset_communicated_keys = construct_model(
+        run.potential_config,
+        element_map=run.element_map,
+        rcut=run.rcut,
+        cutoff_dict=cut_dict,
+        **run.data_stats,
+    )
+    # Preset keys take priority; fall back to input.yaml key if preset didn't set any
+    if preset_communicated_keys is not None:
+        run.communicated_keys = preset_communicated_keys
 
-    # Model surgery: inject FM-based atomic energy shifts before saving
-    fm_shift_dict = data_stats.get("fm_shift_dict") if data_stats else None
+
+def _inject_foundation_shift(run: _Run) -> None:
+    """Model surgery: inject FM-based atomic energy shifts before saving."""
+    fm_shift_dict = run.data_stats.get("fm_shift_dict") if run.data_stats else None
     if fm_shift_dict is not None:
         log.info("Injecting foundation model energy shifts into model")
         inject_or_update_atomic_shift_in_model(
-            instructions_dict=pot,
+            instructions_dict=run.instructions,
             fm_shift_dict=fm_shift_dict,
-            element_map=element_map,
+            element_map=run.element_map,
         )
 
+
+def _create_tensorpotential(run: _Run):
+    """Save the model config and build the TensorPotential with the loss and metric functions of the fit."""
+    fit_config = run.fit_config
     # loss function spec from fit_config
     model_fns = construct_model_functions(fit_config)
 
-    log.info(f"Saving model config to {target_potential_file_name}")
-    save_instructions_dict(target_potential_file_name, pot, param_dtype=param_dtype)
-
-    if args_parse.eager:
+    log.info(f"Saving model config to {run.target_potential_file_name}")
+    save_instructions_dict(
+        run.target_potential_file_name, run.instructions, param_dtype=run.param_dtype
+    )
+    if run.args.eager:
         log.warning("Eager execution")
-
     jit_compile = fit_config.get("jit_compile", True)
-    if args_parse.no_jit:
+    if run.args.no_jit:
         log.info("--no-jit option is provided")
         jit_compile = False
-    opt = fit_config.get("optimizer", "Adam")
-
-    if not args_parse.save_model:
+    if not run.args.save_model:
         log.info(f"Loss function: {model_fns.loss_fn}")
         log.info(f"JIT compilation: {jit_compile}")
         log.info(f"Optimization options: {fit_config.get('opt_params')}")
-
-    tp = TensorPotential(
-        potential=pot,
+    return TensorPotential(
+        potential=run.instructions,
         fit_config=fit_config,
-        global_batch_size=global_batch_size,
-        global_test_batch_size=global_test_batch_size,
+        global_batch_size=run.global_batch_size,
+        global_test_batch_size=run.global_test_batch_size,
         loss_function=model_fns.loss_fn,
         regularization_loss=model_fns.regularization_loss_fn,
         compute_metrics=model_fns.metrics_fn,
         model_train_function=model_fns.train_fn,
         model_compute_function=model_fns.compute_fn,
-        param_dtype=param_dtype,
-        eager_mode=args_parse.eager,
+        param_dtype=run.param_dtype,
+        eager_mode=run.args.eager,
         jit_compile=jit_compile,
-        seed=seed,
-        strategy=strategy,
+        seed=run.seed,
+        strategy=run.strategy,
         loss_norm_by_batch_size=fit_config.get("loss_norm_by_batch_size", False),
     )
 
-    try_load_checkpoint(
-        tp,
-        restart_best_test=args_parse.restart_best_test,
-        restart_latest=args_parse.restart_latest,
-        restart_suffix=args_parse.restart_suffix,
-        checkpoint_name=checkpoint_name,
-        expect_partial=args_parse.save_model,
-        verbose=True,
-        assert_consumed=False,
+
+def _export_and_stop(run: _Run) -> None:
+    """--save-model: export the saved model (and the FS model on request) and stop."""
+    tp = run.tp
+    finalize_lora_if_enabled(tp)
+    if run.args.save_fs:
+        log.info("Exporting FS-model to `saved_model.yaml`, please wait...")
+        tp.export_to_yaml("saved_model.yaml")
+        log.info("Exporting to `saved_model.yaml` done")
+    log.info("Saving model to `saved_model` and exit.")
+    # a save with jit_compile=True converts the compute function to JIT for the rest of the
+    # process, so this is the only export made here
+    tp.save_model_with_aux_computes(
+        "saved_model", jit_compile=True, communicated_keys=run.communicated_keys
+    )
+    raise _RunFinished
+
+
+def _load_best_test_checkpoint(run: _Run, expect_partial=False, verbose=True, assert_consumed=False):
+    if run.has_test_set:
+        log.info("Loading best test loss model")
+        run.tp.load_checkpoint(
+            suffix=".best_test_loss",
+            expect_partial=expect_partial,
+            verbose=verbose,
+            assert_consumed=assert_consumed,
+        )
+
+
+def _save_model(run: _Run, name: str) -> None:
+    log.info(f"Saving model to `{name}`")
+    run.tp.save_model_with_aux_computes(
+        name, jit_compile=True, communicated_keys=run.communicated_keys
     )
 
-    if args_parse.save_model:
-        finalize_lora_if_enabled(tp)
 
-        if args_parse.save_fs:
-            log.info("Exporting FS-model to `saved_model.yaml`, please wait...")
-            tp.export_to_yaml("saved_model.yaml")
-            log.info("Exporting to `saved_model.yaml` done")
-        log.info("Saving model to `saved_model` and exit.")
-        # a save with jit_compile=True converts the compute function to JIT for the rest of the
-        # process, so this is the only export made here
-        tp.save_model_with_aux_computes(
-            "saved_model", jit_compile=True, communicated_keys=_communicated_keys
-        )
-        sys.exit(0)
-
-    apply_lora_options(tp, potential_config, target_potential_file_name, param_dtype)
-
+def _prepare_training(run: _Run):
+    """LoRA options, trainable variables, the training tensors and the epoch counters; return the batches."""
+    tp, fit_config = run.tp, run.fit_config
+    apply_lora_options(tp, run.potential_config, run.target_potential_file_name, run.param_dtype)
     if fit_config.get("trainable_variable_names"):
         trainable_names = fit_config["trainable_variable_names"]
         assert isinstance(trainable_names, list), "trainable_names must be a list"
         log.info(f"Set trainable variable names: {trainable_names}")
         tp.set_trainable_variables(trainable_names, verbose=True)
 
-    def load_checkpoint_if_test_available(
-        expect_partial=False, verbose=True, assert_consumed=False
-    ):
-        if has_test_set:
-            log.info("Loading best test loss model")
-            tp.load_checkpoint(
-                suffix=".best_test_loss",
-                expect_partial=expect_partial,
-                verbose=verbose,
-                assert_consumed=assert_consumed,
-            )
-
-    def save_tp_model(name):
-        log.info(f"Saving model to `{name}`")
-        tp.save_model_with_aux_computes(
-            name, jit_compile=True, communicated_keys=_communicated_keys
-        )
-
     train_batches, test_batches = convert_to_tensors_for_model(
-        tp, train_data, test_data, strategy=strategy
+        tp, run.train_data, run.test_data, strategy=run.strategy
     )
-    del train_data
-    del test_data
+    run.train_data = None
+    run.test_data = None
     gc.collect()
 
-    if fit_config.get("reset_epoch_and_step") or args_parse.reset_epoch_and_step:
+    if fit_config.get("reset_epoch_and_step") or run.args.reset_epoch_and_step:
         log.info(f"Reset epochs ({tp.epoch} -> 0) and steps ({tp.step} -> 0) counters")
         tp.reset_epoch_and_step()
+    return train_batches, test_batches
 
-    #  Run training
+
+def _optimize(run: _Run, train_batches, test_batches) -> None:
+    opt = run.fit_config.get("optimizer", "Adam")
+    kwargs = dict(
+        fit_config=run.fit_config,
+        train_ds=train_batches,
+        test_ds=test_batches,
+        strategy=run.strategy,
+        seed=run.seed,
+        train_grouping_df=run.train_grouping_df,
+        test_grouping_df=run.test_grouping_df,
+    )
+    if opt in ["L-BFGS-B", "BFGS"]:
+        log.info(f"Start {opt} optimization")
+        train_bfgs(run.tp, **kwargs)
+    elif opt == "Adam":
+        log.info("Start Adam optimization")
+        train_adam(run.tp, intra_epoch_redo=run.args.intra_epoch_redo, **kwargs)
+    else:
+        raise ValueError(
+            f"Unknown optimizer: {opt}. Can be 'Adam' or 'L-BFGS-B', 'BFGS'"
+        )
+
+
+def _train_and_save(run: _Run, train_batches, test_batches) -> None:
+    """Run the optimisation, then load the best checkpoint and write the final model (and the FS model)."""
     try:
-        if opt in ["L-BFGS-B", "BFGS"]:
-            log.info(f"Start {opt} optimization")
-            train_bfgs(
-                tp,
-                fit_config=fit_config,
-                train_ds=train_batches,
-                test_ds=test_batches,
-                strategy=strategy,
-                seed=seed,
-                train_grouping_df=train_grouping_df,
-                test_grouping_df=test_grouping_df,
-            )
-        elif opt == "Adam":
-            log.info("Start Adam optimization")
-            train_adam(
-                tp,
-                fit_config=fit_config,
-                train_ds=train_batches,
-                test_ds=test_batches,
-                strategy=strategy,
-                seed=seed,
-                train_grouping_df=train_grouping_df,
-                test_grouping_df=test_grouping_df,
-                intra_epoch_redo=args_parse.intra_epoch_redo,
-            )
-        else:
-            raise ValueError(
-                f"Unknown optimizer: {opt}. Can be 'Adam' or 'L-BFGS-B', 'BFGS'"
-            )
-        load_checkpoint_if_test_available(assert_consumed=True, verbose=True)
-
-        finalize_lora_if_enabled(tp)
-
-        save_tp_model(name="final_model")
-        if args_parse.save_fs:
+        _optimize(run, train_batches, test_batches)
+        _load_best_test_checkpoint(run, assert_consumed=True, verbose=True)
+        finalize_lora_if_enabled(run.tp)
+        _save_model(run, name="final_model")
+        if run.args.save_fs:
             log.info("Exporting FS-model, please wait...")
-            tp.export_to_yaml("FS_model.yaml")
+            run.tp.export_to_yaml("FS_model.yaml")
             log.info("Exporting FS-model done")
     except KeyboardInterrupt:
         log.info("Keyboard interruption is captured")
+        raise _RunFinished from None
+
+
+def _setup_run(args_parse, strategy, strategy_desc) -> _Run:
+    """Everything before the model: input, strategy, batch sizes, dtype, foundation checkpoint, potential file, data."""
+    run = _start_run(args_parse, strategy)
+    _select_strategy(run, strategy, strategy_desc)
+    _set_batch_sizes(run)
+    run.user_set_param_dtype = (
+        "param_dtype" in run.potential_config or "float_dtype" in run.potential_config
+    )
+    run.param_dtype, run.param_dtype_flag = get_param_dtype_from_config(
+        run.potential_config
+    )  # log deferred
+    if args_parse.check_model:
+        _check_model_and_stop(run)
+    _use_foundation_checkpoint(run)
+    _find_potential_file(run)
+    # no need to perform expensive data processing if only saving a model
+    if not args_parse.save_model:
+        _load_datasets(run)
+    else:
+        run.potential_file_name = run.potential_file_name or os.path.join(
+            run.output_dir, MODEL_CONFIG_YAML
+        )
+    return run
+
+
+def _build_model(run: _Run) -> None:
+    """Everything between the data and the TensorPotential: dtype, checkpoint, element reduction, instructions."""
+    _infer_param_dtype(run)
+    _resolve_checkpoint_name(run)
+    _reduce_elements_if_requested(run)
+    _build_instructions(run)
+    _inject_foundation_shift(run)
+    run.tp = _create_tensorpotential(run)
+    try_load_checkpoint(
+        run.tp,
+        restart_best_test=run.args.restart_best_test,
+        restart_latest=run.args.restart_latest,
+        restart_suffix=run.args.restart_suffix,
+        checkpoint_name=run.checkpoint_name,
+        expect_partial=run.args.save_model,
+        verbose=True,
+        assert_consumed=False,
+    )
+
+
+def main(argv=None, strategy=None, strategy_desc="", prog="gracemaker"):
+    if argv is None:
+        argv = []
+    args_parse = build_parser(prog).parse_args(argv)
+    if args_parse.template:
+        generate_template_input()
+    try:
+        run = _setup_run(args_parse, strategy, strategy_desc)
+        _build_model(run)
+        if args_parse.save_model:
+            _export_and_stop(run)
+        train_batches, test_batches = _prepare_training(run)
+        _train_and_save(run, train_batches, test_batches)
+    except _RunFinished:
         sys.exit(0)
 
 

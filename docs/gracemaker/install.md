@@ -32,14 +32,15 @@ PyTorch come with extras, so install the one you need:
 
 | Command | Installs | Use it for |
 |---|---|---|
-| `pip install "tensorpotential[tf]"` | TensorFlow (with CUDA libraries on Linux) and Keras 3, which TensorFlow installs | fitting with `gracemaker`, `grace_predict`, `grace_utils`, `grace_preprocess`, the ASE calculator |
+| `pip install "tensorpotential[tf]"` | TensorFlow (with CUDA libraries on Linux) and Keras 3, which TensorFlow installs | fitting with `grace train`, `grace predict`, `grace utils`, `grace preprocess`, the ASE calculator |
 | `pip install "tensorpotential[torch]"` | PyTorch | the PyTorch backend |
 | `pip install "tensorpotential[torch-sim]"` | PyTorch, `torch-sim-atomistic` and `vesin` | running models through torch-sim |
-| `pip install "tensorpotential[all]"` | all of the above | both stacks in one environment |
+| `pip install "tensorpotential[dashboard]"` | Flask | `grace dashboard` |
+| `pip install "tensorpotential[all]"` | all of the above | both stacks and the dashboard in one environment |
 
 !!! warning "`pip install tensorpotential` no longer installs TensorFlow"
-    Earlier releases pulled TensorFlow in automatically. Now a command that needs it (`gracemaker`, `grace_predict`,
-    `grace_utils`, `grace_preprocess`, `extxyz2df`) stops with the message
+    Earlier releases pulled TensorFlow in automatically. Now a command that needs it (`grace train`, `grace predict`,
+    `grace utils`, `grace preprocess`, `extxyz2df`) stops with the message
     `... needs TensorFlow, which is not installed ... pip install 'tensorpotential[tf]'`. Add the `tf` extra to your
     existing install commands and requirement files.
 
@@ -78,7 +79,7 @@ the package warns when it finds one (see the [release notes](release_notes.md)).
 * (Optional) Download foundation models (these will be stored in `$HOME/.cache/grace`):
 
 ```bash
-grace_models download all
+grace models download all
 ```
 
 Learn more [here](../foundation/#pretrained-grace-foundation-models).
@@ -155,7 +156,7 @@ cmake -DCMAKE_BUILD_TYPE=Release -D BUILD_MPI=ON -DPKG_ML-PACE=ON -DNO_GRACE_TF=
 #### KOKKOS build
 KOKKOS support is available for `grace/fs`, `grace/1l/kk`, `grace/2l/kk` and `grace/3l/kk`.
 The `grace/{1l,2l,3l}/kk` pair styles read a `.npz` weights file
-produced by `grace_utils export_kokkos` (see
+produced by `grace utils export_kokkos` (see
 [utilities](../utilities/#export-to-npz-for-lammps-kokkos-pair-style))
 and do not require TensorFlow at runtime.
 

@@ -1,0 +1,6 @@
+usage: grace_utils cast_model_param [-h] -curr {fp32,fp64} -to {fp32,fp64}
+
+options:
+  -h, --help         show this help message and exit
+  -curr {fp32,fp64}  Current precision type to cast from
+  -to {fp32,fp64}    New precision type to cast into

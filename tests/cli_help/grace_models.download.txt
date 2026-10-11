@@ -1,0 +1,8 @@
+usage: grace_models download [-h] [--kokkos] model_name
+
+positional arguments:
+  model_name  Name of the model to download
+
+options:
+  -h, --help  show this help message and exit
+  --kokkos    also download the LAMMPS-Kokkos export (kokkos.npz) into the model dir

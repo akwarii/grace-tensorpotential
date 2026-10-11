@@ -28,8 +28,8 @@ export TF_CPP_MIN_LOG_LEVEL=3
 
 ## How to continue a current fit?
 
-- Run `gracemaker -r` in the folder of the original fit to restart from the previous best-test-loss checkpoint.
-- Run `gracemaker -rl` in the folder of the original fit to restart from the latest checkpoint.
+- Run `grace train -r` in the folder of the original fit to restart from the previous best-test-loss checkpoint.
+- Run `grace train -rl` in the folder of the original fit to restart from the latest checkpoint.
 - To continue in a new folder, copy `seed/{number}/checkpoints` and `seed/{number}/model.yaml` into the new folder.
 
 ---
@@ -43,7 +43,7 @@ To keep all regular checkpoints, add the flag `input.yaml::fit::save_all_regular
 
 ## How to perform multi-GPU fit?
 
-If you have a node with multiple GPUs, use the `gracemaker ... -m` option to enable data-parallel fitting. In this case, increase the batch size (global batch size).
+If you have a node with multiple GPUs, use the `grace train ... -m` option to enable data-parallel fitting. In this case, increase the batch size (global batch size).
 
 ---
 
@@ -163,7 +163,7 @@ the full bisection across toolchains.
 
 Pick the row that matches your build and parallelism needs. The Kokkos rows
 (`*/kk`) require a `.npz` produced by
-[`grace_utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style)
+[`grace utils export_kokkos`](../utilities/#export-to-npz-for-lammps-kokkos-pair-style)
 and run TensorFlow-free.
 
 ---
@@ -216,10 +216,10 @@ normalized by a calibrated per-cluster threshold, so it is dimensionless:
 * $\gamma \gg 1$ — extrapolation; treat the prediction as unreliable.
 
 **GRACE-1L/2L/3L models** need an NCM-UQ artifact, built once from the training
-set with [`grace_uq build`](../uq/#grace_uq-build):
+set with [`grace uq build`](../uq/#grace_uq-build):
 
 ```bash
-grace_uq build --model-yaml model.yaml \
+grace uq build --model-yaml model.yaml \
                --checkpoint checkpoints/checkpoint.best_test_loss.index \
                --train-data training_set.pkl.gz \
                --artifact-path UQ/gmm_artifacts.npz
@@ -251,9 +251,9 @@ then read `gamma` from
 [`PyGRACEFSCalculator`](../quickstart/#gracefs_1) in ASE or from
 [`pair_style grace/fs extrapolation`](../quickstart/#lammps-gracefs) in LAMMPS.
 
-**Screening datasets and active learning:** `grace_uq predict` evaluates
+**Screening datasets and active learning:** `grace uq predict` evaluates
 energies/forces/stresses plus per-atom γ over a whole dataset, and
-`grace_uq select` picks N structures from a candidate pool by
+`grace uq select` picks N structures from a candidate pool by
 extrapolation/diversity strategy.
 
 **In LAMMPS** with the Kokkos pair styles, bake the artifact into the weights

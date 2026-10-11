@@ -133,7 +133,7 @@ def test_a_project_without_extras_fails(
     assert "declares no extras" in capsys.readouterr().err
 
 
-def test_the_repository_declares_the_four_extras_with_their_packages() -> None:
+def test_the_repository_declares_the_five_extras_with_their_packages() -> None:
     pyproject = tomllib.loads((REPO / "pyproject.toml").read_text())
     assert re_.extra_requirements(pyproject, "tf") == {"tensorflow"}
     assert re_.extra_requirements(pyproject, "torch") == {"torch"}
@@ -142,6 +142,7 @@ def test_the_repository_declares_the_four_extras_with_their_packages() -> None:
         "torch-sim-atomistic",
         "vesin",
     }
+    assert re_.extra_requirements(pyproject, "dashboard") == {"flask"}
     assert re_.extra_requirements(pyproject, "all") == {
-        "tensorflow", "torch", "torch-sim-atomistic", "vesin"
+        "tensorflow", "torch", "torch-sim-atomistic", "vesin", "flask"
     }  # fmt: skip

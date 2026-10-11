@@ -37,8 +37,10 @@ base:   torch-backend              (the integration branch on the fork; never ma
   A finding outside the files of the PR is commented on the issue (`board.py finding`), not fixed in this PR.
 - Run the Verify commands of the issue and go through the Definition of Done checklist in its body (every box ticked or marked not applicable): exit criterion met, touched units at 90% coverage **before** the
   change, new code covered with both test layers, `ruff`/`ty` clean on new code, import contracts green, docstrings, no commented-out code, single concern.
-- Run the tests that can catch a behaviour change (from the repository root): the full suite with `-n 4 --dist load`, compared with `baselines/` through
-  `tools/junit_outcomes.py compare`. Skipped suites are named, not reported as clean.
+- Run the tests that can catch a behaviour change (from the repository root): the full suite, compared with `baselines/` through
+  `tools/junit_outcomes.py compare`. On this machine run it as the CI shards one after another under a memory cap (`CLAUDE.md`, Commands; `.github/CI.md`, "Locally"), not as one `-n 4` run. Skipped suites are named, not reported as clean.
+- The checks that are easy to forget: `tools/tests` (run with `pytest --noconftest tools/tests`), `tools/divergence.py check` (a row for every upstream file touched, docs and tests included) and
+  `tools/check_touched_coverage.py` **without `--unit`** (diff mode: every unit the branch changed, not a fixed list) must all be run before a PR; `lint-imports` of the shared venv may not start (stale shebang): `python -c "import sys; from importlinter.cli import lint_imports_command; sys.exit(lint_imports_command())"`. A single new module cannot be opted into the strict ruff set (the glob, the ty overrides and `tools/tests/test_lint_ratchet.py` pin the three package names): check it with `ruff check --isolated --select <strict families> --config 'lint.pydocstyle.convention="numpy"' --config 'lint.pylint.max-args=6' FILE`.
 - **A GPU- or HPC-marked issue needs that hardware.** State what ran where; never report GPU or real-weight results from a local CPU run.
 
 ## Writing the PR summary

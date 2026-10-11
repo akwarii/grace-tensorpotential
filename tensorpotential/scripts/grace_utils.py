@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
-import logging
 import sys
+from collections.abc import Sequence
 
 import numpy as np
 from ase import Atoms
@@ -15,10 +15,9 @@ from tensorpotential.instructions import (
 )
 from tensorpotential.utils import get_dtype_by_name
 from tensorpotential.metadata_utils import read_model_metadata
+from tensorpotential.scripts._script_logging import configure_logging
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
+logger = configure_logging()
 
 
 def load_checkpoint(tp, checkpoint_path):
@@ -554,9 +553,9 @@ def aux_model(args):
     logger.info("Finished")
 
 
-def main():
+def build_parser(prog: str = 'grace_utils'):
     parser = argparse.ArgumentParser(
-        prog="grace_utils",
+        prog=prog,
         description="CLI tool for model conversions and summarization",
     )
     parser.add_argument("-p", "--potential", required=True, help="Path to model.yaml")
@@ -709,10 +708,15 @@ def main():
     )
     parser_aux_model.set_defaults(func=lambda args: aux_model(args))
 
+    return parser
+
+
+def main(argv: Sequence[str] | None = None, *, prog: str = 'grace_utils') -> int:
     # Parse arguments and execute the corresponding function
-    args = parser.parse_args()
+    args = build_parser(prog).parse_args(argv)
     args.func(args)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

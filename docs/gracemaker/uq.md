@@ -56,14 +56,14 @@ The pipeline has two stages:
 
 -   **Build (post-training, required)** — fit the per-element clusters on features extracted from a
     trained model, accumulate covariances and calibrate the thresholds. This is the
-    [`grace_uq build`](#grace_uq-build) pipeline below.
+    [`grace uq build`](#grace_uq-build) pipeline below.
 -   **Inference** — attach the artifact (or load the exported SavedModel / Kokkos `.npz` that carries
-    it) and read `gamma` per atom in ASE, in `grace_uq predict`, or in LAMMPS.
+    it) and read `gamma` per atom in ASE, in `grace uq predict`, or in LAMMPS.
 
 
 ## CLI tool: `grace_uq`
 
-`grace_uq` is a multi-subcommand CLI built around the NCM-UQ pipeline:
+`grace uq` (the old name `grace_uq` still works) is a multi-subcommand CLI built around the NCM-UQ pipeline:
 
 | Subcommand | Purpose |
 | :--- | :--- |
@@ -72,10 +72,10 @@ The pipeline has two stages:
 | `predict` | Run E/F/S + per-atom γ on a dataset; multi-worker; pkl.gz/extxyz I/O. |
 | `select`  | Pick N structures from a candidate pool by extrapolation/diversity strategy. |
 
-A subcommand is always required — invoking `grace_uq` with no subcommand prints this overview.
+A subcommand is always required — invoking `grace uq` with no subcommand prints this overview.
 
 ```bash
-grace_uq <subcommand> --help    # see all options for a subcommand
+grace uq <subcommand> --help    # see all options for a subcommand
 ```
 
 ---
@@ -87,7 +87,7 @@ The `build` subcommand implements a high-performance, parallelized three-step pi
 ### Basic Usage
 
 ```bash
-grace_uq build --model-yaml model.yaml \
+grace uq build --model-yaml model.yaml \
                --checkpoint checkpoints/checkpoint.best_test_loss.index \
                --train-data training_set.pkl.gz \
                --n-workers 4 \
@@ -102,7 +102,7 @@ This runs the 3-step UQ pipeline using 4 parallel workers, scans candidate clust
 If UQ artifacts already exist, you can export a SavedModel without re-running the pipeline:
 
 ```bash
-grace_uq build --model-yaml model.yaml \
+grace uq build --model-yaml model.yaml \
                --checkpoint checkpoints/checkpoint.best_test_loss.index \
                --artifact-path gmm_artifacts.npz
 ```
@@ -142,7 +142,7 @@ When building a foundational UQ artifact for a model trained on multiple dataset
 Use `--train-data-weighted W FILE [FILE...]` (repeatable). Pick `W = original_shard_count / used_shard_count`:
 
 ```bash
-grace_uq build --model-yaml model.yaml --checkpoint checkpoint.index \
+grace uq build --model-yaml model.yaml --checkpoint checkpoint.index \
   --train-data-weighted 20.0 /OMAT/filtered_df_shard_*.pkl.gz \
   --train-data-weighted  1.0 /SMAX/TRAIN_shard_*.pkl.gz \
   --n-workers 32 --gpus 0,1,2,3 \
@@ -155,7 +155,7 @@ Effects on the pipeline:
 -   **Step 2** (covariance): per-cluster scatter accumulates `(w·δ)ᵀ δ` and the effective count accumulates `Σ w`; the covariance divisor is the effective count, not the raw atom count.
 -   **Step 3** (thresholds): the master computes both a raw robust-threshold matrix (`interp_thresholds`) and an effective (weighted) one (`eff_interp_thresholds`), each the per-cluster $\mathrm{median} + 3 \cdot (1.4826 \cdot \mathrm{MAD})$ fence on its histogram (or the Q-th percentile of it, with `--threshold-percentile Q`). The raw atom count still drives the `min_atoms_for_p99` reliability gate — statistical confidence depends on sample size, not weight. Both matrices are persisted; inference prefers the effective thresholds when present.
 -   **Bit-exact back-compat**: `--train-data-weighted 1.0 ...` produces an artifact identical (to floating-point round-off) to the equivalent `--train-data ...` build. The fast path in the hot loops skips the `sample_weight=` kwarg, the `w·δ` multiply, and the second weighted bincount whenever every atom in a batch carries weight 1.0.
--   **Diagnostics**: `grace_uq info` shows an extra `eff_count` column (and `eff_thr_med`) when they diverge from the raw values. Each artifact also stores both `counts_{e}` and `effective_count_{e}` per element, plus `hist_{e}` (raw int64) and `eff_hist_{e}` (weighted float64), so the artifact can be inspected from either side.
+-   **Diagnostics**: `grace uq info` shows an extra `eff_count` column (and `eff_thr_med`) when they diverge from the raw values. Each artifact also stores both `counts_{e}` and `effective_count_{e}` per element, plus `hist_{e}` (raw int64) and `eff_hist_{e}` (weighted float64), so the artifact can be inspected from either side.
 
 A path that appears in more than one weighted group with different weights is rejected at parse time.
 
@@ -181,7 +181,7 @@ def keep(atoms) -> bool:
 
 ```bash
 PYTHONPATH=~/.cache/grace/checkpoints/<MODEL>/UQ:$PYTHONPATH \
-  grace_uq build --model-yaml model.yaml --checkpoint checkpoint.index \
+  grace uq build --model-yaml model.yaml --checkpoint checkpoint.index \
                  --train-data /path/shards/*.pkl.gz \
                  --filter-fn uq_filter:keep \
                  --artifact-path UQ/gmm_artifacts.npz
@@ -189,7 +189,7 @@ PYTHONPATH=~/.cache/grace/checkpoints/<MODEL>/UQ:$PYTHONPATH \
 
 The filter module must be importable on the *worker's* `PYTHONPATH` — workers inherit the master's environment, so setting `PYTHONPATH` on the parent shell suffices. Each shard logs a one-line `filter <shard>: N_before → N_after structures` summary at `INFO` level so over-aggressive filters are easy to spot.
 
-Element coverage caveat: if a filter drops every structure containing some element of interest (or a shard set excludes it entirely), that element is silently absent from the artifact. At inference time `GMMUQModel.from_artifacts` back-fills missing elements with a large isotropic inverse covariance and emits a `UserWarning` naming them — but you should always check `grace_uq info` after a filtered build to confirm every expected element appears.
+Element coverage caveat: if a filter drops every structure containing some element of interest (or a shard set excludes it entirely), that element is silently absent from the artifact. At inference time `GMMUQModel.from_artifacts` back-fills missing elements with a large isotropic inverse covariance and emits a `UserWarning` naming them — but you should always check `grace uq info` after a filtered build to confirm every expected element appears.
 
 
 ### Pipeline Steps
@@ -224,7 +224,7 @@ Each of steps 1–3 splits the training data across `--n-workers` parallel proce
 > **Artifact format (schema v3).** The `.npz` stores the cluster statistics as **float32** (the model
 > runs float32, so this is lossless and halves the file; raw and effective counts stay float64 for
 > exact round-trip), plus the self-describing basis-RP spec: `uq_feature_mode`, `uq_rp_matrix` ($R$),
-> `uq_rp_dim`, `uq_rp_seed`. `grace_utils export_kokkos --uq-artifacts` likewise bakes $R$
+> `uq_rp_dim`, `uq_rp_seed`. `grace utils export_kokkos --uq-artifacts` likewise bakes $R$
 > (`uq_rp_matrix`/`uq_rp_dim`/`uq_rp_seed`) into the kokkos weights.
 
 
@@ -253,7 +253,7 @@ When that is not enough, `--threshold-percentile Q` pins the threshold to the Q-
 cluster's training sigma histogram instead:
 
 ```bash
-grace_uq build ... --threshold-percentile 99     # at most ~1% of training atoms above gamma = 1
+grace uq build ... --threshold-percentile 99     # at most ~1% of training atoms above gamma = 1
 ```
 
 The bound is one-sided ("at most"): backfilled clusters take the element-wide max threshold and
@@ -262,9 +262,9 @@ the quantile is over training *weight*, not atom count.
 
 **This changes what `gamma = 1` means** — a calibration statement about your training set, rather than
 an outlier fence — so gamma values are **not comparable** with artifacts built the default way. The
-artifact records which estimator ran; `grace_uq info` prints it as `threshold estimator`. Note the
+artifact records which estimator ran; `grace uq info` prints it as `threshold estimator`. Note the
 trade-off the default exists to avoid: on a heavy tail the quantile rides that tail, so the bulk can
-read `gamma ~ 0.01` and ordinary atoms never approach 1. `grace_uq info` warns when it detects this.
+read `gamma ~ 0.01` and ordinary atoms never approach 1. `grace uq info` warns when it detects this.
 
 
 
@@ -425,9 +425,9 @@ model, including ones with no UQ artifact.
 Parameterize the same input several times with different seeds:
 
 ```bash
-gracemaker ... --seed 1
-gracemaker ... --seed 2
-gracemaker ... --seed 3
+grace train ... --seed 1
+grace train ... --seed 2
+grace train ... --seed 3
 ```
 
 This produces one model per seed in `seed/{number}/`. Pass them together to a

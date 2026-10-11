@@ -1,0 +1,52 @@
+usage: grace_preprocess [-h] [-o OUTPUT] [--sharded-input] [-e ELEMENTS] [-b BATCH_SIZE]
+                        [-bu MAX_N_BUCKETS] [-c CUTOFF] [-cd CUTOFF_DICT]
+                        [--compression COMPRESSION] [--energy-col ENERGY_COL]
+                        [--forces-col FORCES_COL] [--stress-col STRESS_COL] [--is-fit-stress]
+                        [--stress-units {eV/A3,GPa,kbar,-kbar}] [--precision PRECISION]
+                        [-s STRATEGY] [--task-id TASK_ID] [--total-task-num TOTAL_TASK_NUM]
+                        [--rerun] [--stage-1] [--stage-2] [--stage-3] [--stage-4]
+                        [--remove_stage1] [--dense-nbr]
+                        input [input ...]
+
+Precompute dataset and save into TF.Dataset format
+
+positional arguments:
+  input                 input pkl.gz file
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTPUT, --output OUTPUT
+                        output file name
+  --sharded-input       Flag to show that input files are sharded
+  -e ELEMENTS, --elements ELEMENTS
+                        List of elements. Possible presets: `ALL` (except last 23 elements),
+                        `Alexandria` or `MP`
+  -b BATCH_SIZE, --batch_size BATCH_SIZE
+  -bu MAX_N_BUCKETS, --max-n-buckets MAX_N_BUCKETS
+  -c CUTOFF, --cutoff CUTOFF
+  -cd CUTOFF_DICT, --cutoff_dict CUTOFF_DICT
+  --compression COMPRESSION
+  --energy-col ENERGY_COL
+  --forces-col FORCES_COL
+  --stress-col STRESS_COL
+  --is-fit-stress
+  --stress-units {eV/A3,GPa,kbar,-kbar}
+                        Units of the stress column, converted to eV/A3. Write `--stress-
+                        units=-kbar` for the last value (a separate `-kbar` argument is read as an
+                        option).
+  --precision PRECISION
+  -s STRATEGY, --strategy STRATEGY
+                        Strategy to batch splitting. Possible values: structures (default), atoms,
+                        neighbours
+  --task-id TASK_ID     ZERO based ID of task
+  --total-task-num TOTAL_TASK_NUM
+                        Total number of tasks
+  --rerun               Enforce to rerun process
+  --stage-1             Run stage 1, precompute samples (non-batched)
+  --stage-2             Run stage 2, compute padding bounds
+  --stage-3             Run stage 3, padding batches
+  --stage-4             Run stage 4, compute statistics
+  --remove_stage1       If True - during stage 3, remove corresponding shard from stage1 folder
+  --dense-nbr           Mark the dataset for the dense (reshape) aggregation. Reserved for the
+                        batched dense data prep (per-atom-uniform layout bucketed by max_neigh,
+                        TODO); should match the model (input.yaml::potential::dense_nbr).

@@ -1,0 +1,144 @@
+usage: grace_uq build [-h] [--step {1,2,3}] [--worker-id WORKER_ID] [--n-workers N_WORKERS]
+                      [--model-yaml MODEL_YAML] [--checkpoint CHECKPOINT]
+                      [--train-data TRAIN_DATA [TRAIN_DATA ...]]
+                      [--n-clusters N_CLUSTERS [N_CLUSTERS ...]]
+                      [--min-atoms-per-cluster MIN_ATOMS_PER_CLUSTER]
+                      [--regularization REGULARIZATION] [--threshold-percentile Q]
+                      [--max-neighbours-per-batch MAX_NEIGHBOURS_PER_BATCH]
+                      [--train-data-weighted WEIGHT_OR_PATH [WEIGHT_OR_PATH ...]]
+                      [--filter-fn MODULE.PATH:FUNCTION_NAME] [--frac FRAC] [--seed SEED]
+                      [--artifact-path ARTIFACT_PATH] [--gpus GPUS]
+                      [--threads-per-worker THREADS_PER_WORKER] [--verbose] [--rp-dim RP_DIM]
+                      [--rp-seed RP_SEED] [--restart] [--export-path EXPORT_PATH] [--no-export]
+                      [--step1-artifacts STEP1_ARTIFACTS] [--step2-artifacts STEP2_ARTIFACTS]
+
+Parallel GRACE-UQ artifact generation
+
+options:
+  -h, --help            show this help message and exit
+  --step {1,2,3}
+  --worker-id WORKER_ID
+  --n-workers N_WORKERS
+                        Number of parallel workers (default: 4).
+  --model-yaml MODEL_YAML
+                        Path to the trained model YAML (default: model.yaml in cwd).
+  --checkpoint CHECKPOINT
+                        Path to the model checkpoint .index file (default:
+                        checkpoints/checkpoint.best_test_loss.index).
+  --train-data TRAIN_DATA [TRAIN_DATA ...]
+                        One or more paths to training data files (default: training_set.pkl.gz).
+                        If the default file is absent, the master falls back to
+                        ../../input.yaml::data.filename. Required for UQ-artifact generation; not
+                        needed for export-only mode.
+  --n-clusters N_CLUSTERS [N_CLUSTERS ...], --n_clusters N_CLUSTERS [N_CLUSTERS ...]
+                        Number(s) of GMM clusters. Pass a single value to use it directly, or
+                        multiple values (e.g. --n-clusters 1 2 4 8 16) to run the elbow method and
+                        automatically select the optimal k (default: 1 2 4 8 16).
+  --min-atoms-per-cluster MIN_ATOMS_PER_CLUSTER
+                        Minimum atoms per non-sentinel cluster. KMeans is shrunk to the largest K
+                        satisfying this. -1 (default) resolves to D+1, the strict floor for non-
+                        degenerate sample covariance in D-dim feature space.
+  --regularization REGULARIZATION
+                        Tikhonov epsilon (eps*I) added to each cluster covariance before
+                        inversion. Default: 1e-6. Bump to 1e-5 for noisy features, lower (e.g.
+                        1e-8) only if features are clean and you want minimal bias.
+  --threshold-percentile Q
+                        Calibrate gamma so that gamma = 1 sits at the Q-th percentile of each
+                        cluster's TRAINING sigma histogram (Q in (0, 100]; e.g. 99 puts at most
+                        ~1% of training atoms above gamma = 1). Default: unset, which uses the
+                        robust median + 3*1.4826*MAD outlier fence. Bound is 'at most': backfilled
+                        clusters take the element-wide max threshold and saturated ones clamp at
+                        the histogram ceiling, both of which are more lenient; under --train-data-
+                        weighted the quantile is over training WEIGHT, not atom count. A heavy
+                        sigma tail can drag the threshold up and leave the bulk over-lenient, so
+                        gamma values are NOT comparable with artifacts built using the default
+                        estimator.
+  --max-neighbours-per-batch MAX_NEIGHBOURS_PER_BATCH
+                        Target number of neighbour pairs per batch for streaming (pickle) input.
+                        Controls GPU memory usage. Ignored for sharded TF datasets.
+  --train-data-weighted WEIGHT_OR_PATH [WEIGHT_OR_PATH ...]
+                        Repeatable. First token is the per-source weight (float), remaining tokens
+                        are training shard paths. Atoms from those shards get that weight in the
+                        UQ artifact accumulation; centroid placement and per-cluster covariance
+                        are pulled toward heavy sources. Example: --train-data-weighted 20.0
+                        /OMAT/shard_*.pkl.gz --train-data-weighted 1.0 /SMAX/shard_*.pkl.gz.
+                        Mutually exclusive with explicit --train-data.
+  --filter-fn MODULE.PATH:FUNCTION_NAME
+                        Optional dotted import path to a callable ``filter_atoms(ase.Atoms) ->
+                        bool`` that drops structures during ingest (False = drop, True = keep).
+                        The module must be importable on the worker's PYTHONPATH. Applied per
+                        shard, before --frac.
+  --frac FRAC
+  --seed SEED
+  --artifact-path ARTIFACT_PATH, --output-path ARTIFACT_PATH
+                        Path for the .npz UQ artifact file (default: gmm_artifacts.npz). If a
+                        directory is given, gmm_artifacts.npz is appended.
+  --gpus GPUS           Comma-separated GPU indices
+  --threads-per-worker THREADS_PER_WORKER
+                        CPU threads per worker (OMP, MKL, TF). 'auto' (default) = physical_cores /
+                        n_workers. Set an integer to override, or 0 to disable limiting.
+  --verbose
+  --rp-dim RP_DIM, --rp_dim RP_DIM
+                        basis-RP UQ feature dimension: the random projection maps the concatenated
+                        invariant (l=0) energy-path basis to this many dims (default: 128).
+  --rp-seed RP_SEED, --rp_seed RP_SEED
+                        Seed for the basis-RP projection matrix R (default: 42). The same (rp-dim,
+                        rp-seed) regenerates a byte-identical R across all workers.
+  --restart             Delete all checkpoint npz files
+  --export-path EXPORT_PATH
+                        Path for the exported SavedModel directory. Default: saved_model/ next to
+                        the artifact file.
+  --no-export           Skip SavedModel export after artifact generation.
+  --step1-artifacts STEP1_ARTIFACTS
+                        Internal
+  --step2-artifacts STEP2_ARTIFACTS
+                        Internal
+
+Examples
+--------
+  # 1. Single GPU, single worker (default cluster scan):
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint.best_test_loss \
+                 --train-data training_set.pkl.gz \
+                 --artifact-path UQ/gmm_artifacts.npz
+
+  # 2. 4 workers across 4 GPUs, elbow scan over k = 1,2,4,8,16:
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint \
+                 --train-data training_set.pkl.gz \
+                 --n-workers 4 --gpus 0,1,2,3 \
+                 --n-clusters 1 2 4 8 16 \
+                 --artifact-path UQ/gmm_artifacts.npz
+
+  # 3. Sharded TF dataset (auto-detected by --train-data being a directory):
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint \
+                 --train-data dataset_shards/ \
+                 --n-workers 8 --gpus 0,1,2,3 \
+                 --artifact-path UQ/gmm_artifacts.npz
+
+  # 4. Re-export a SavedModel from existing artifacts (no training data):
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint \
+                 --artifact-path UQ/gmm_artifacts.npz
+
+  # 5. Skip SavedModel export (faster; useful when iterating on artifacts):
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint \
+                 --train-data training_set.pkl.gz \
+                 --artifact-path UQ/gmm_artifacts.npz \
+                 --no-export
+
+  # 6. Restart a partial run from scratch (deletes intermediate .step*.npz):
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint \
+                 --train-data training_set.pkl.gz \
+                 --artifact-path UQ/gmm_artifacts.npz \
+                 --restart
+
+  # 7. Subsample 20% of training data for a faster artifact build:
+  grace_uq build --model-yaml model.yaml \
+                 --checkpoint checkpoint \
+                 --train-data training_set.pkl.gz \
+                 --frac 0.2 \
+                 --artifact-path UQ/gmm_artifacts_quick.npz

@@ -25,13 +25,17 @@ uv run --frozen --no-sync pytest tests -n 2 --store-durations --durations-path=t
 uv run --frozen --no-sync pytest tests --splits 4 --group 1 --splitting-algorithm=least_duration --durations-path=tests/.test_durations -n 2 --timeout=900 <same --ignore options>
 ```
 
+## Locally
+
+**Locally too (CLI1):** a whole-suite `-n 4` run needs more than 18 GB of a 30 GB machine (workers of 4 to 6 GB each, `tests/test_integration_test.py` the largest consumer), and with a browser open it took the desktop session down at 94% (no OOM line in the journal). For a full or coverage run use the CI shards one after another (`--splits 4 --group N --splitting-algorithm=least_duration --durations-path=tests/.test_durations`, `--cov-append` with one `COVERAGE_FILE`, junit files merged by hand) inside `systemd-run --user --scope -p MemoryMax=18G -p MemorySwapMax=2G`, so that an overrun kills the test run and not the session. Every run of `predict_main` / `TPCalculator` keeps about 350 MB of TensorFlow state that `clear_session`, `gc` and `malloc_trim` do not return; and under `--dist load` a module fixture is rebuilt on every worker that gets one of its tests, so a heavy run belongs inside one test. To find the culprit, log the resident memory after each test with a small plugin (`/proc/<pid>/status`, `VmRSS`) and run the files serially.
+
 ## Packaging (CI1, D12)
 
-- TensorFlow is the `tf` extra, not a base dependency: `pip install tensorpotential` has none; extras are `tf`, `torch`, `torch-sim`, `all`; `[dependency-groups] dev` includes `tensorpotential[tf]`.
-- `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils` and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` also needs `flask`, which no extra installs).
+- TensorFlow is the `tf` extra, not a base dependency: `pip install tensorpotential` has none; extras are `tf`, `torch`, `torch-sim`, `dashboard` (Flask, for `grace_dashboard`), `all`; `[dependency-groups] dev` includes `tensorpotential[tf,dashboard]`.
+- `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils` and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` needs `flask`, which the `dashboard` extra installs).
 - Package discovery is `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package.
 - TF and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue).
-- Checks: `pytest --noconftest tests/test_packaging.py` (builds the wheel in a scratch copy, or `TENSORPOTENTIAL_WHEEL=<wheel>`: file list against `baselines/wheel_files_upstream.txt`, metadata, extras; `--noconftest` because `tests/conftest.py` imports TensorFlow), `python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf` (clean venv with the wheel: core imports without TF, `--help` of the ten console scripts), `python tools/resolve_extras.py [EXTRA]` (resolves the extras with uv). CI runs the last two.
+- Checks: `pytest --noconftest tests/test_packaging.py` (builds the wheel in a scratch copy, or `TENSORPOTENTIAL_WHEEL=<wheel>`: file list against `baselines/wheel_files_upstream.txt`, metadata, extras; `--noconftest` because `tests/conftest.py` imports TensorFlow), `python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf` (clean venv with the wheel: core imports without TF, `--help` of the eleven console scripts), `python tools/resolve_extras.py [EXTRA]` (resolves the extras with uv). CI runs the last two.
 
 ## Runtime of the suite
 

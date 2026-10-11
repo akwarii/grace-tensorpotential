@@ -177,7 +177,7 @@ def _prefetch(iterator, buffer_size=2):
                 if _stop.is_set():
                     break
                 q.put(item)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  (the producer thread hands any exception to the consumer, which re-raises it)
             q.put(exc)
         q.put(_sentinel)
 

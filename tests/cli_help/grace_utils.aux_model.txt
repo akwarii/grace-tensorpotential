@@ -1,0 +1,14 @@
+usage: grace_utils aux_model [-h] -o OUTPUT_PATH [-ck COMMUNICATED_KEYS [COMMUNICATED_KEYS ...]]
+
+Save the model as a SavedModel with the extra compute function compute_energy. A GRACE-2L model is
+also split at the communicated keys (-ck) into forward_layer_1, backward_layer_2 and
+backward_layer_1.
+
+options:
+  -h, --help            show this help message and exit
+  -o OUTPUT_PATH, --output-path OUTPUT_PATH
+                        Path to save the upgraded model
+  -ck COMMUNICATED_KEYS [COMMUNICATED_KEYS ...], --communicated-keys COMMUNICATED_KEYS [COMMUNICATED_KEYS ...]
+                        Keys communicated between the two layers of a GRACE-2L model, at which it
+                        is split (unused for other models); they must exist in the model (default:
+                        I_nl_LN I)

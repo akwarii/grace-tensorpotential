@@ -333,7 +333,7 @@ fit:
 Once `input.yaml` is configured, run the fit as usual:
 
 ```bash
-gracemaker input.yaml
+grace train input.yaml
 ```
 
 ---

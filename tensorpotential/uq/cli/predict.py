@@ -385,9 +385,9 @@ Examples
 """
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(prog: str = "grace_uq predict") -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="grace_uq predict",
+        prog=prog,
         description="Predict E/F/S and per-atom gamma using a UQ-enabled GRACE model.",
         epilog=_PREDICT_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -464,8 +464,8 @@ def _resolve_paths(args):
         args.artifact = os.path.abspath(args.artifact)
 
 
-def predict_main(argv=None) -> int:
-    parser = _build_parser()
+def predict_main(argv=None, *, prog: str = "grace_uq predict") -> int:
+    parser = _build_parser(prog)
     args = parser.parse_args(argv)
     _resolve_paths(args)
 

@@ -158,9 +158,10 @@ def test_documented_aux_model_command_is_accepted_by_the_parser():
     example = next(
         line
         for line in _docs_text().splitlines()
-        if line.startswith("grace_utils") and " aux_model " in line
+        if line.startswith("grace utils") and " aux_model " in line
     )
-    argv = example.split()
+    # the page writes ``grace utils ...``: the arguments after the sub-command word are those of grace_utils
+    argv = ["grace_utils", *example.split()[2:]]
     # aux_model itself is replaced: only the parsing of the documented command is under test.
     with (
         patch.object(sys, "argv", argv),
@@ -170,3 +171,15 @@ def test_documented_aux_model_command_is_accepted_by_the_parser():
     args = called.call_args.args[0]
     assert args.output_path == "/path/to/upgraded_model"
     assert args.communicated_keys == ["I", "I_out_0_LN"]
+
+
+def test_main_takes_argv_returns_zero_and_does_not_read_sys_argv(model_1l, monkeypatch):
+    model, _ = model_1l
+    monkeypatch.setattr(sys, "argv", ["poisoned", "--no-such-option-in-any-command"])
+    assert grace_utils.main(["-p", str(model), "summary"]) == 0
+
+
+def test_main_without_argv_reads_sys_argv(model_1l, monkeypatch):
+    model, _ = model_1l
+    monkeypatch.setattr(sys, "argv", ["grace_utils", "-p", str(model), "summary"])
+    assert grace_utils.main() == 0

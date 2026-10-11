@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI, an ASE calculator,
+GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI (also `grace train`: one `grace <subcommand>` command runs all the console tools), an ASE calculator,
 UQ tools and foundation-model loading. The library is TensorFlow 2 with Keras 3; a PyTorch backend that loads TF-trained models is being added next
 to it. Core abstractions: an *instruction graph* (`TPInstruction` subclasses described in a `model.yaml`) run by `TPModel`, trained by `TensorPotential`,
 served by `TPCalculator`.
@@ -63,7 +63,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 - `instructions/`: instruction classes (`compute.py` geometry, basis, products, reductions; `output.py` targets and shifts). Each has `build` (variables, index tables) and `frwrd`; its constructor arguments are captured into the saved `model.yaml`.
 - `tpmodel.py`: `TPModel` runs the instructions in file order and derives forces and virial from the pair energies. `tensorpot.py`: `TensorPotential` (training, checkpoints). Also `loss.py`, `metrics.py`, `utils.py`, `poly.py`, `export.py`.
 - `functions/`: Clebsch-Gordan and coupling tables (`couplings.py`), radial functions, activations. `data/`: dataframes and TF datasets (`databuilder.py`, `process_df.py`), neighbour lists (matscipy by default), streaming.
-- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `gracemaker`, `grace_preprocess`, `grace_predict`, ... `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty.
+- `calculator/`: `TPCalculator` (ASE), foundation-model loading. `cli/`, `scripts/`: `grace` (`scripts/grace.py`: the one table of sub-commands and the dispatch), `gracemaker`, `grace_preprocess`, `grace_predict`, ...; `cli/console.py` (shared rich console) and `cli/prompts.py` (prompt helpers of both input wizards). `potentials/`: presets. `extra/`: model generators. `uq/`: GMM-based uncertainty.
 - `compat/pace/`: legacy, untested, **out of scope: no change is allowed to it** (owner, 2026-10-01), whatever the issue; report findings, never fix or remove them.
 - The PyTorch backend lives in `torch_backend/` with TF-free shared code in `core/`; both must import without TensorFlow (import contract); the TF extractor lives outside them.
 - `tests/` (run from the repository root), `baselines/` and `tools/` (untouched-tree baselines and the tools that compare with them), `docs/`.
@@ -99,6 +99,7 @@ python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json   # 
 
 Not in a normal run: `test_structured_grid.py` (skipped on public master: needs the non-existent `tensorpotential.experimental`; ignored above only so counts match `baselines/`) and `test_foundation_model_regression.py` (needs foundation-model weights, HPC only).
 A test writes only into `tmp_path` or a scratch directory; `git status` is clean after a run. The full suite takes about 15 minutes at `-n 4` on an idle machine: run it in the background (figures and CI shards: `.github/CI.md`).
+**A whole-suite `-n 4` run needs more than 18 GB of the 30 GB** (workers of 4 to 6 GB) and has taken the desktop session down: run the CI shards one after another inside `systemd-run --user --scope -p MemoryMax=18G -p MemorySwapMax=2G` (recipe and findings: `.github/CI.md`, "Locally").
 
 ## Code style
 
@@ -124,6 +125,8 @@ Area gotchas (instructions and `model.yaml`, data builder and pandas, training a
   **A new module with a module-level `import tensorflow` starts with `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt). A module that must stay TF-free goes in `source_modules` of `[tool.importlinter]` and in `TF_FREE_MODULES` of `tests/test_import_gates.py`.
 - **Worktrees.** Link `.venv` from the main checkout (git-ignored; `uv.lock` is tracked). Never run `uv sync` there: it repoints the shared editable install to the worktree (repair: `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, print `tensorpotential.__file__` once, give `ty` `--python <main>/.venv`, use `--cov=tensorpotential`, and in a scratch script import `tensorpotential` before `tensorflow` (or the numpy-style type promotion is enabled too late).
+  To sync the shared venv from a worktree without touching the editable install: `UV_PROJECT_ENVIRONMENT=<main>/.venv uv sync --frozen --group dev --no-install-project --inexact`.
+- **Shell.** The shell is zsh: an unquoted `$VAR` is not split into words (use an array), `==` starts a command substitution, and a heredoc together with `$(...)` in one call can hang the tool (write scripts with the Write tool).
 
 **Adding to this file.** A lesson goes here only when an agent working on something else could trip on it and a rule or one command prevents it: at most three lines. Anything tied to one module, tool, test file or issue (measurements, the history of a fix,
 a pitfall of one procedure) goes in the document next to that code (module docstring, a README in its directory, `baselines/README.md`, `.github/CI.md`, the `.claude/rules/` file whose `paths` match, the matching skill) and this file gets at most a one-line pointer; the evidence of a finding goes in the issue

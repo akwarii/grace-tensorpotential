@@ -1,0 +1,20 @@
+usage: grace_uq info [-h] [-v] [artifact_path]
+
+Summarize a UQ .npz artifact
+
+positional arguments:
+  artifact_path  Path to gmm_artifacts.npz (default: gmm_artifacts.npz)
+
+options:
+  -h, --help     show this help message and exit
+  -v, --verbose  Print per-cluster breakdown for every element (counts, cond, rank, truncated,
+                 threshold, sentinel/real).
+
+Examples
+--------
+  # Inspect an artifact written by `grace_uq build`:
+  grace_uq info UQ/gmm_artifacts.npz
+
+  # The output shows: feature dim D, max clusters K, n_elements,
+  # per-element K_eff / atom counts / max condition number / threshold range,
+  # and flags any sentinel-padded clusters.

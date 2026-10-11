@@ -39,7 +39,7 @@ Latest and complete list of arguments can be found in definition of the models i
     The `_latest` presets always point to the current recommended architecture;
     to pin the 2024 architecture instead, use `GRACE_1LAYER_v1_24` or
     `GRACE_2LAYER_v1_24`. Each preset also provides `small`, `medium` and
-    `large` parameter sets, which `gracemaker -t` offers as "model complexity".
+    `large` parameter sets, which `grace train -t` offers as "model complexity".
 
 ### FS
 

@@ -1,0 +1,20 @@
+usage: grace_dashboard [-h] [--base BASE] [--host HOST] [--port PORT]
+                       [--target-epochs TARGET_EPOCHS] [--debug]
+
+Interactive Flask dashboard for GRACE-style fit output folders. Recursively scans a base directory
+for "fit folders" — any directory that contains ``seed/<N>/test_metrics.yaml`` for one or more
+integer seeds — and renders three panels: 1. Training curves (metric vs epoch, per-experiment) 2.
+Scatter / Pareto plot with selectable X/Y axes 3. Table overview with all metrics at the best-
+test-loss epoch Experiment display names are the deepest non-common path under the base folder,
+stripped of the ``/seed/<N>/...`` suffix. Multiple seeds of the same fit appear as separate rows
+by default; a checkbox averages them. Usage: grace_dashboard.py [--base DIR] [--host HOST] [--port
+N] grace_dashboard.py # scan the current directory Open ``http://<host>:<port>/`` in a browser.
+
+options:
+  -h, --help            show this help message and exit
+  --base BASE           directory to scan for fit folders (default: cwd)
+  --host HOST           bind host
+  --port PORT           bind port
+  --target-epochs TARGET_EPOCHS
+                        target epochs used for extrapolation of incomplete runs
+  --debug

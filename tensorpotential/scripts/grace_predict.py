@@ -1,5 +1,5 @@
 import argparse
-import logging
+from collections.abc import Sequence
 import os
 import warnings
 
@@ -8,15 +8,14 @@ import pandas as pd
 from tqdm import tqdm
 
 from tensorpotential.calculator import TPCalculator, predict_structures
+from tensorpotential.scripts._script_logging import configure_logging
 
 # only the NumPy deprecation that ASE triggers on every structure is hidden; pandas and
 # TensorFlow warnings stay visible
 warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"ase(\.|$)")
 
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
+logger = configure_logging()
 
 
 def set_magmom(at, magmoms):
@@ -50,8 +49,8 @@ def _atoms_with_magmoms(df):
     ]
 
 
-def main(args=None):
-    parser = argparse.ArgumentParser()
+def build_parser(prog: str | None = None):
+    parser = argparse.ArgumentParser(prog=prog)
 
     parser.add_argument(
         "-m",
@@ -89,7 +88,12 @@ def main(args=None):
         dest="raise_errors",
     )
 
-    args_parse = parser.parse_args(args)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    parser = build_parser(prog)
+    args_parse = parser.parse_args(argv)
 
     model_path = os.path.abspath(args_parse.model_path)
     dataset_file = args_parse.dataset_file
@@ -125,6 +129,8 @@ def main(args=None):
     logger.info(f"Saving dataset to {output_file}")
     df.drop(columns=["ase_atoms"]).to_pickle(output_file, compression="gzip")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

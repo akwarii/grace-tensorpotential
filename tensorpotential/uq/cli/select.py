@@ -43,6 +43,10 @@ from tensorpotential.uq.cli.strategies import get_strategy, list_strategies
 log = logging.getLogger("grace_uq.select")
 
 
+class SelectionError(Exception):
+    """A usage or data problem of ``grace_uq select``; ``select_main`` turns it into ``SystemExit(message)``."""
+
+
 # Per-atom prediction artifacts produced by `grace_uq predict` plus the
 # select-only `n_atoms_selected` book-keeping column. These are dropped from
 # the saved selection because the goal is a structure list for retraining,
@@ -114,11 +118,11 @@ def _build_atom_pool(
       - features                        (for fps-* strategies)
     """
     if "ase_atoms" not in df.columns:
-        raise SystemExit(
+        raise SelectionError(
             "select requires `ase_atoms` column on the predicted dataset."
         )
     if "gamma" not in df.columns:
-        raise SystemExit(
+        raise SelectionError(
             "select requires `gamma` column. Re-run `grace_uq predict` on this dataset."
         )
     struct_id_chunks, elem_chunks, gamma_chunks = [], [], []
@@ -129,7 +133,7 @@ def _build_atom_pool(
         gamma = np.asarray(getattr(row, "gamma"))
         nat = len(at)
         if len(gamma) != nat:
-            raise SystemExit(
+            raise SelectionError(
                 f"row {sid}: len(gamma)={len(gamma)} but n_atoms={nat}"
             )
         struct_id_chunks.append(np.full(nat, sid, dtype=np.int64))
@@ -140,13 +144,13 @@ def _build_atom_pool(
         if need_features:
             feats = getattr(row, uq_constants.FEATURES, None)
             if feats is None:
-                raise SystemExit(
+                raise SelectionError(
                     f"row {sid}: --strategy fps-* needs per-atom `features`. "
                     "Re-run `grace_uq predict --save-features`."
                 )
             feats = np.asarray(feats)
             if feats.shape[0] != nat:
-                raise SystemExit(
+                raise SelectionError(
                     f"row {sid}: features shape {feats.shape} but n_atoms={nat}"
                 )
             feat_chunks.append(feats.astype(np.float32, copy=False))
@@ -455,89 +459,77 @@ def _maybe_run_predict(args):
     return output
 
 
-def select_main(argv=None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    if args.uq:
-        args.uq = os.path.abspath(args.uq)
+def _absolute_paths(args) -> None:
+    """Make every path option absolute, so that workers started from another directory find the files."""
     args.output = os.path.abspath(args.output)
-    if args.predicted:
-        args.predicted = os.path.abspath(args.predicted)
-    if args.dataset:
-        args.dataset = os.path.abspath(args.dataset)
-    if args.model:
-        args.model = os.path.abspath(args.model)
-    if args.checkpoint:
-        args.checkpoint = os.path.abspath(args.checkpoint)
-    if args.artifact:
-        args.artifact = os.path.abspath(args.artifact)
+    for name in ("uq", "predicted", "dataset", "model", "checkpoint", "artifact"):
+        value = getattr(args, name)
+        if value:
+            setattr(args, name, os.path.abspath(value))
 
-    threads_int = resolve_threads_per_worker(args.threads_per_worker, args.n_workers)
-    apply_master_thread_caps(threads_int)
 
-    # Resolve predicted path
-    predicted_path = args.predicted
-    if predicted_path is None:
-        if not args.dataset:
-            raise SystemExit("either --predicted or --dataset must be given.")
-        predicted_path = _maybe_run_predict(args)
+def _predicted_dataset_path(args) -> str:
+    """The predicted dataset: the given one, or the output of a prediction run on ``--dataset``."""
+    if args.predicted is not None:
+        return args.predicted
+    if not args.dataset:
+        raise SelectionError("either --predicted or --dataset must be given.")
+    return _maybe_run_predict(args)
 
-    log.info("Loading predicted dataset: %s", predicted_path)
-    df = load_dataset_any(predicted_path)
 
-    # yaml-mode users pass --artifact for predict; it IS the UQ npz, so reuse it.
+def _element_map_and_dimension(args, df: pd.DataFrame):
+    """The element map, the feature dimension D (or None) and the number of elements of the model.
+
+    They come from the UQ artifact (``--uq``, or ``--artifact`` of the yaml mode), else from the SavedModel of ``--model``
+    with D inferred from the per-atom features of the predicted dataset.
+    """
     uq_path = args.uq or args.artifact
     if uq_path:
         if not args.uq:
             log.info("--uq not given; reusing --artifact (%s) as the UQ source.", uq_path)
         meta = read_artifact_metadata(uq_path)
-        D = meta["D"]
-        element_map = meta["element_map"]
-        n_elements = meta["n_elements"]
-    elif args.model:
-        element_map = load_element_map_from_savedmodel(args.model)
-        if element_map is None:
-            raise SystemExit(
-                f"--uq not given and could not derive element_map from --model "
-                f"({args.model}). Pass --uq <gmm_artifacts.npz> or use a "
-                "SavedModel directory containing metadata.yaml."
-            )
-        D = _infer_D_from_features(df)
-        n_elements = len(element_map)
-        d_msg = (
-            f"inferred D={D} from `features` in predicted dataset"
-            if D is not None
-            else "D unknown — pass --min-per-element or --no-element-stratified"
+        return meta["element_map"], meta["D"], meta["n_elements"]
+    if not args.model:
+        raise SelectionError("either --uq or --model must be given.")
+    element_map = load_element_map_from_savedmodel(args.model)
+    if element_map is None:
+        raise SelectionError(
+            f"--uq not given and could not derive element_map from --model "
+            f"({args.model}). Pass --uq <gmm_artifacts.npz> or use a "
+            "SavedModel directory containing metadata.yaml."
         )
-        log.info(
-            "Derived element_map from %s/metadata.yaml (%d elements); %s.",
-            args.model,
-            n_elements,
-            d_msg,
-        )
-    else:
-        raise SystemExit("either --uq or --model must be given.")
+    dimension = _infer_D_from_features(df)
+    d_msg = (
+        f"inferred D={dimension} from `features` in predicted dataset"
+        if dimension is not None
+        else "D unknown — pass --min-per-element or --no-element-stratified"
+    )
+    log.info(
+        "Derived element_map from %s/metadata.yaml (%d elements); %s.",
+        args.model,
+        len(element_map),
+        d_msg,
+    )
+    return element_map, dimension, len(element_map)
 
-    need_features = args.strategy.startswith("fps-")
-    pool = _build_atom_pool(df, element_map, need_features=need_features)
+
+def _candidate_pool(args, df: pd.DataFrame, element_map) -> dict:
+    """The per-atom pool of the candidates, with the warnings about unknown elements and a too large request."""
+    pool = _build_atom_pool(df, element_map, need_features=args.strategy.startswith("fps-"))
     log.info("Atom pool: %d atoms in %d structures", len(pool["struct_id"]), len(df))
-
     if len(pool["struct_id"]) == 0:
-        raise SystemExit(
+        raise SelectionError(
             "candidate atom pool is empty — nothing to select from. "
             "Check that --predicted/--dataset has structures with atoms and a `gamma` column."
         )
     elem = pool["element"]
-    valid_mask = elem >= 0
-    n_unknown = int(elem.size - valid_mask.sum())
+    n_unknown = int(elem.size - (elem >= 0).sum())
     if n_unknown > 0:
         log.warning(
             "%d candidate atoms have an element not in the model's element_map "
             "and will be ignored by the stratification floor.",
             n_unknown,
         )
-
     if args.n_structures > len(df):
         log.warning(
             "--n-structures=%d exceeds candidate pool size (%d); will return at most %d.",
@@ -545,59 +537,85 @@ def select_main(argv=None) -> int:
             len(df),
             len(df),
         )
+    return pool
 
-    floors = None
-    floor_target: int | None = None
-    if args.element_stratified:
-        if args.min_per_element is not None:
-            floor_val = args.min_per_element
-        elif D is not None:
-            floor_val = D + 1
-        else:
-            raise SystemExit(
-                "Stratification is ON but D is unknown (no --uq given). "
-                "Pass --min-per-element <int> or --no-element-stratified."
-            )
-        floor_target = floor_val
-        # Per-element clamp: an element's floor cannot exceed the atoms
-        # actually available in the candidate pool. Without this clamp an
-        # unreachable floor would force `_collect_top_n` to exhaust the entire
-        # iterator (then all strategies converge to the same answer).
-        atoms_per_e = np.bincount(elem[valid_mask], minlength=n_elements)
-        present = np.flatnonzero(atoms_per_e > 0)
-        eff = np.minimum(floor_val, atoms_per_e[present])
-        floors = {int(e): int(v) for e, v in zip(present, eff)}
-        clamped_idx = present[eff < floor_val]
-        log.info(
-            "Stratification ON: floor=%d atoms/element across %d present element(s) "
-            "(skipped %d absent element(s))",
+
+def _floor_per_element(args, dimension) -> int:
+    """The stratification floor: ``--min-per-element``, else D + 1 from the artifact."""
+    if args.min_per_element is not None:
+        return args.min_per_element
+    if dimension is not None:
+        return dimension + 1
+    raise SelectionError(
+        "Stratification is ON but D is unknown (no --uq given). "
+        "Pass --min-per-element <int> or --no-element-stratified."
+    )
+
+
+def _stratification_floors(args, pool: dict, dimension, element_map, n_elements: int):
+    """The per-element floors of atoms (clamped to the atoms the pool has) and the floor asked for, or (None, None)."""
+    if not args.element_stratified:
+        return None, None
+    floor_val = _floor_per_element(args, dimension)
+    elem = pool["element"]
+    # Per-element clamp: an element's floor cannot exceed the atoms actually available in the candidate pool. Without
+    # this clamp an unreachable floor would force `_collect_top_n` to exhaust the entire iterator (then all
+    # strategies converge to the same answer).
+    atoms_per_e = np.bincount(elem[elem >= 0], minlength=n_elements)
+    present = np.flatnonzero(atoms_per_e > 0)
+    eff = np.minimum(floor_val, atoms_per_e[present])
+    floors = {int(e): int(v) for e, v in zip(present, eff)}
+    log.info(
+        "Stratification ON: floor=%d atoms/element across %d present element(s) "
+        "(skipped %d absent element(s))",
+        floor_val,
+        len(floors),
+        n_elements - len(present),
+    )
+    clamped_idx = present[eff < floor_val]
+    if len(clamped_idx) > 0:
+        clamped = [
+            f"{format_elem_label(int(e), element_map)}:{int(atoms_per_e[e])}"
+            for e in clamped_idx
+        ]
+        log.warning(
+            "Clamped floor for %d element(s) below %d due to limited supply "
+            "in the candidate pool: %s",
+            len(clamped),
             floor_val,
-            len(floors),
-            n_elements - len(present),
+            ", ".join(clamped),
         )
-        if len(clamped_idx) > 0:
-            clamped = [
-                f"{format_elem_label(int(e), element_map)}:{int(atoms_per_e[e])}"
-                for e in clamped_idx
-            ]
-            log.warning(
-                "Clamped floor for %d element(s) below %d due to limited supply "
-                "in the candidate pool: %s",
-                len(clamped),
-                floor_val,
-                ", ".join(clamped),
-            )
+    return floors, floor_val
 
-    rng = np.random.default_rng(args.seed)
+
+def _top_up(top: list[int], n_structures: int, df: pd.DataFrame) -> list[int]:
+    """Add the unselected structures with the largest gamma until ``n_structures`` are chosen."""
+    if len(top) >= n_structures:
+        return top
+    log.warning(
+        "Only %d/%d structures available; topping up from unselected pool by gamma_max.",
+        len(top),
+        n_structures,
+    )
+    chosen = set(top)
+    outside = [s for s in range(len(df)) if s not in chosen]
+    gamma_per = df["gamma"].apply(lambda g: float(np.max(g)) if len(g) else 0.0).to_numpy()
+    for s in sorted(outside, key=lambda s: -gamma_per[s]):
+        if len(top) >= n_structures:
+            break
+        top.append(s)
+    return top
+
+
+def _choose_structures(args, df: pd.DataFrame, pool: dict, element_map, floors):
+    """Run the strategy and the stratification; return the chosen structures, their pick counts and the element counts."""
     strat_kwargs = dict(
         gamma_min=args.gamma_min,
         gamma_max=args.gamma_max,
         fps_max_pool=args.fps_max_pool,
-        rng=rng,
+        rng=np.random.default_rng(args.seed),
     )
-    strategy_fn = get_strategy(args.strategy)
-    atom_iter = strategy_fn(pool, **strat_kwargs)
-
+    atom_iter = get_strategy(args.strategy)(pool, **strat_kwargs)
     struct_elem_counts = _structure_element_counts(df, element_map)
     top, pick_counts, _ = _collect_top_n(
         atom_iter,
@@ -606,46 +624,47 @@ def select_main(argv=None) -> int:
         n_structures=args.n_structures,
         floors=floors,
     )
-
     if floors is not None:
         top = _repair_stratification(
             top, pick_counts, struct_elem_counts, floors, len(df)
         )
+    top = _top_up(top, args.n_structures, df)
+    return top[: args.n_structures], pick_counts, struct_elem_counts
 
-    # Top-up to N if we still don't have enough (e.g. pool too small).
-    if len(top) < args.n_structures:
-        log.warning(
-            "Only %d/%d structures available; topping up from unselected pool by gamma_max.",
-            len(top),
-            args.n_structures,
-        )
-        outside = [s for s in range(len(df)) if s not in top]
-        gamma_per = df["gamma"].apply(lambda g: float(np.max(g)) if len(g) else 0.0).to_numpy()
-        outside_sorted = sorted(outside, key=lambda s: -gamma_per[s])
-        for s in outside_sorted:
-            if len(top) >= args.n_structures:
-                break
-            top.append(s)
 
-    top = top[: args.n_structures]
+def _save_selection(args, df: pd.DataFrame, top: list[int], pick_counts) -> pd.DataFrame:
+    """Write the selected structures (without the prediction columns) and return them with ``n_atoms_selected``."""
     out_df = df.iloc[top].copy()
     out_df["n_atoms_selected"] = [int(pick_counts.get(s, 0)) for s in top]
-
     if is_extxyz_path(args.output) and "ase_atoms" not in out_df.columns:
-        raise SystemExit(
+        raise SelectionError(
             "extxyz output requires the ase_atoms column on the predicted dataset."
         )
     save_df = out_df.drop(
         columns=[c for c in _PREDICTION_COLUMNS if c in out_df.columns]
     )
     save_dataset_any(save_df, args.output, drop_ase_atoms=False)
-
     log.info(
         "Wrote %s (%d structures, total picked atoms=%d)",
         args.output,
         len(out_df),
         int(out_df["n_atoms_selected"].sum()),
     )
+    return out_df
+
+
+def _select(args) -> int:
+    """The work of ``select_main`` after the arguments are parsed."""
+    _absolute_paths(args)
+    apply_master_thread_caps(resolve_threads_per_worker(args.threads_per_worker, args.n_workers))
+    predicted_path = _predicted_dataset_path(args)
+    log.info("Loading predicted dataset: %s", predicted_path)
+    df = load_dataset_any(predicted_path)
+    element_map, dimension, n_elements = _element_map_and_dimension(args, df)
+    pool = _candidate_pool(args, df, element_map)
+    floors, floor_target = _stratification_floors(args, pool, dimension, element_map, n_elements)
+    top, pick_counts, struct_elem_counts = _choose_structures(args, df, pool, element_map, floors)
+    out_df = _save_selection(args, df, top, pick_counts)
     _print_selection_summary(
         out_df,
         top,
@@ -656,6 +675,14 @@ def select_main(argv=None) -> int:
         floor_target=floor_target,
     )
     return 0
+
+
+def select_main(argv=None, *, prog: str = "grace_uq select") -> int:
+    args = _build_parser(prog).parse_args(argv)
+    try:
+        return _select(args)
+    except SelectionError as error:
+        raise SystemExit(str(error)) from error
 
 
 def _print_selection_summary(
@@ -884,9 +911,9 @@ Examples
 """
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(prog: str = "grace_uq select") -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="grace_uq select",
+        prog=prog,
         description="Select N structures from a candidate pool by an extrapolation/diversity strategy.",
         epilog=_SELECT_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,

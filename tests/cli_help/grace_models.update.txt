@@ -1,0 +1,10 @@
+usage: grace_models update [-h] [--all] [--force] [--dry-run] [model_name ...]
+
+positional arguments:
+  model_name  Model name(s) to update
+
+options:
+  -h, --help  show this help message and exit
+  --all       check every built-in model
+  --force     re-download even when the origin URL already matches
+  --dry-run   report what would change, download nothing

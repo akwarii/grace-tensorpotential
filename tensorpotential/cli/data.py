@@ -113,7 +113,7 @@ def load_extxyz(filename: str) -> pd.DataFrame:
     try:
         logging.info("Trying to extract stresses")
         df["stress"] = df["ase_atoms"].map(lambda at: at.get_stress())
-    except Exception as e:
+    except (PropertyNotImplementedError, RuntimeError) as e:
         logging.error(f"Error while trying to extract stress: {e}, ignoring")
 
     logging.info("Extracting info")
@@ -1329,7 +1329,7 @@ def load_and_prepare_datasets(
         log.info(
             f"Train/test data distributions are plotted and saved to {plot_out_dir}"
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  (a plot is optional: whatever matplotlib or the data raise, the run goes on)
         log.warning(f"Failed to make histograms plot for datasets ({e}), skipping")
 
     return (
