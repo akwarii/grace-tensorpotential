@@ -13,8 +13,7 @@ logger = logging.getLogger()
 
 
 
-def main(args=None):
-    ##############################################################################################
+def build_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -29,7 +28,12 @@ def main(args=None):
         type=str,
         default=None,
     )
+    return parser
 
+
+def main(args=None):
+    ##############################################################################################
+    parser = build_parser()
     args_parse = parser.parse_args(args)
     extxyz_filename = os.path.abspath(args_parse.extxyz_filename)
     output_dataset_filename = args_parse.output_dataset_filename

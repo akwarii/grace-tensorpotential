@@ -778,8 +778,7 @@ def run_master(args):
         print(f"  SavedModel: {args.export_path}")
 
 
-def build_main(argv=None):
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+def build_parser():
     parser = argparse.ArgumentParser(
         prog="grace_uq build",
         description="Parallel GRACE-UQ artifact generation",
@@ -940,6 +939,12 @@ def build_main(argv=None):
     )
     parser.add_argument("--step1-artifacts", help="Internal")
     parser.add_argument("--step2-artifacts", help="Internal")
+    return parser
+
+
+def build_main(argv=None):
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     # Q outside (0, 100] silently produces a degenerate threshold: Q<=0 gives

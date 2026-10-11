@@ -494,7 +494,7 @@ Examples
 """
 
 
-def info_main(argv=None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="grace_uq info",
         description="Summarize a UQ .npz artifact",
@@ -514,6 +514,11 @@ def info_main(argv=None) -> int:
         help="Print per-cluster breakdown for every element (counts, cond, rank, "
         "truncated, threshold, sentinel/real).",
     )
+    return parser
+
+
+def info_main(argv=None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     if not os.path.exists(args.artifact_path):

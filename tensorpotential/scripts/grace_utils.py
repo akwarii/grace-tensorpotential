@@ -554,7 +554,7 @@ def aux_model(args):
     logger.info("Finished")
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(
         prog="grace_utils",
         description="CLI tool for model conversions and summarization",
@@ -709,8 +709,12 @@ def main():
     )
     parser_aux_model.set_defaults(func=lambda args: aux_model(args))
 
+    return parser
+
+
+def main():
     # Parse arguments and execute the corresponding function
-    args = parser.parse_args()
+    args = build_parser().parse_args()
     args.func(args)
 
 

@@ -50,7 +50,7 @@ def _atoms_with_magmoms(df):
     ]
 
 
-def main(args=None):
+def build_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -89,6 +89,11 @@ def main(args=None):
         dest="raise_errors",
     )
 
+    return parser
+
+
+def main(args=None):
+    parser = build_parser()
     args_parse = parser.parse_args(args)
 
     model_path = os.path.abspath(args_parse.model_path)

@@ -169,8 +169,7 @@ def get_free_atom_energy(df, el):
     return ref_epa
 
 
-def main(args=None):
-    ##############################################################################################
+def build_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-wd", "--working-dir", help="top directory where keep calculations",
@@ -188,7 +187,12 @@ def main(args=None):
     parser.add_argument('--selection', type=str, default='last', dest='selection',
                         help='Option to select from multiple configurations of single VASP calculation:'
                              ' first, last, all, first_and_last (default: last)')
+    return parser
 
+
+def main(args=None):
+    ##############################################################################################
+    parser = build_parser()
     args_parse = parser.parse_args(args)
     working_dir = os.path.abspath(args_parse.working_dir)
     free_atom_energy_dict = args_parse.free_atom_energy

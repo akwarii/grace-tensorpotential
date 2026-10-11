@@ -1315,7 +1315,7 @@ def create_app(base, target_epochs=TARGET_EPOCHS):
     return app
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--base", default=os.getcwd(),
                     help="directory to scan for fit folders (default: cwd)")
@@ -1324,7 +1324,11 @@ def main():
     ap.add_argument("--target-epochs", default=TARGET_EPOCHS, type=int,
                     help="target epochs used for extrapolation of incomplete runs")
     ap.add_argument("--debug", action="store_true")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
 
     base = os.path.abspath(args.base)
     if not os.path.isdir(base):
