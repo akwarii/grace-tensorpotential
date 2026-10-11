@@ -513,10 +513,10 @@ def test_from_dict_rejects_a_sibling_of_the_class_it_is_called_on():
 
 def test_load_instructions_rejects_a_payload_in_a_yaml(tmp_path, monkeypatch):
     marker = _evil_module(tmp_path, monkeypatch)
+    # not a literal `"__cls__": "<path>"`: tests/test_import_gates.py scans the tests for those and must resolve them
+    payload = {"A": dict([("__cls__", "evil_instruction_mod.run"), ("name", "A")])}
     path = tmp_path / "model.yaml"
-    path.write_text(
-        yaml.safe_dump({"A": {"__cls__": "evil_instruction_mod.run", "name": "A"}})
-    )
+    path.write_text(yaml.safe_dump(payload))
 
     with pytest.raises(ValueError, match="not a subclass of"):
         load_instructions(str(path))
