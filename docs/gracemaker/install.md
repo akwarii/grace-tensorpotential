@@ -35,7 +35,8 @@ PyTorch come with extras, so install the one you need:
 | `pip install "tensorpotential[tf]"` | TensorFlow (with CUDA libraries on Linux) and Keras 3, which TensorFlow installs | fitting with `gracemaker`, `grace_predict`, `grace_utils`, `grace_preprocess`, the ASE calculator |
 | `pip install "tensorpotential[torch]"` | PyTorch | the PyTorch backend |
 | `pip install "tensorpotential[torch-sim]"` | PyTorch, `torch-sim-atomistic` and `vesin` | running models through torch-sim |
-| `pip install "tensorpotential[all]"` | all of the above | both stacks in one environment |
+| `pip install "tensorpotential[dashboard]"` | Flask | `grace_dashboard` |
+| `pip install "tensorpotential[all]"` | all of the above | both stacks and the dashboard in one environment |
 
 !!! warning "`pip install tensorpotential` no longer installs TensorFlow"
     Earlier releases pulled TensorFlow in automatically. Now a command that needs it (`gracemaker`, `grace_predict`,

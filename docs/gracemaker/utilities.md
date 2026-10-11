@@ -463,7 +463,8 @@ saved-model exports.
 ## `grace_dashboard`
 
 Interactive [Flask](https://flask.palletsprojects.com/) dashboard for browsing
-and comparing GRACE fit results. It recursively scans a base directory for
+and comparing GRACE fit results. Install its dependency with
+`pip install "tensorpotential[dashboard]"`. It recursively scans a base directory for
 *fit folders* — any directory containing `seed/<N>/test_metrics.yaml` — and
 serves three panels in the browser:
 
