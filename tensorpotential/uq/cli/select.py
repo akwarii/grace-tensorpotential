@@ -597,7 +597,8 @@ def _top_up(top: list[int], n_structures: int, df: pd.DataFrame) -> list[int]:
         len(top),
         n_structures,
     )
-    outside = [s for s in range(len(df)) if s not in top]
+    chosen = set(top)
+    outside = [s for s in range(len(df)) if s not in chosen]
     gamma_per = df["gamma"].apply(lambda g: float(np.max(g)) if len(g) else 0.0).to_numpy()
     for s in sorted(outside, key=lambda s: -gamma_per[s]):
         if len(top) >= n_structures:
