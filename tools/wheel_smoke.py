@@ -153,8 +153,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     problems += check_core(args.python)
     scripts = console_scripts(args.python)
-    if len(scripts) != 10:
-        problems.append(f"expected 10 console scripts, found {len(scripts)}: {scripts}")
+    if len(scripts) != 11:
+        problems.append(f"expected 11 console scripts, found {len(scripts)}: {scripts}")
     for name in scripts:
         problem = check_script(args.python, name, have)
         print(f"{'ok  ' if problem is None else 'FAIL'} {name} --help")

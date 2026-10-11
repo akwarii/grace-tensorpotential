@@ -86,7 +86,7 @@ jobs:
           uv venv --python ${{ matrix.python }} ../clean-venv
           if [ "${{ matrix.extra }}" = none ]; then target="$(ls "$PWD"/dist/*.whl)"; else target="$(ls "$PWD"/dist/*.whl)[${{ matrix.extra }}]"; fi
           uv pip install --python ../clean-venv/bin/python "$target"
-      - name: Smoke test (core imports, --help of the ten console scripts)
+      - name: Smoke test (core imports, --help of the eleven console scripts)
         run: |
           expect=no-tf; if [ "${{ matrix.extra }}" = tf ]; then expect=tf; fi
           python3 tools/wheel_smoke.py ../clean-venv/bin/python --expect "$expect"

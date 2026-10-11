@@ -49,6 +49,7 @@ all = ["tensorpotential[tf,torch,torch-sim,dashboard]"]
 "Homepage" = "https://github.com/ICAMS/grace-tensorpotential"
 
 [project.scripts]
+grace = "tensorpotential.scripts.grace:main"
 gracemaker = "tensorpotential.scripts.gracemaker:main"
 grace_models = "tensorpotential.scripts.grace_models:main"
 grace_collect = "tensorpotential.scripts.grace_collect:main"
@@ -160,6 +161,8 @@ source_modules = [
     "tensorpotential.poly",
     "tensorpotential.functions.couplings",
     "tensorpotential.calculator.foundation_models",
+    "tensorpotential.scripts.grace",
+    "tensorpotential.scripts.grace_uq",
 ]
 forbidden_modules = ["tensorflow", "keras"]
 # The allowlist of modules that may cross is empty for core, and for torch_backend once it exists (the TF-side

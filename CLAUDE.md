@@ -47,7 +47,7 @@ uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also tests/test_import_gates.py
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # every upstream file the fork modifies has a row in tools/divergence.yaml (add it in the same PR as the change, drop it when the file equals upstream again); no fork-only path on a local pr/U* branch
 uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py    # builds the wheel in a scratch copy (or TENSORPOTENTIAL_WHEEL=<wheel>): file list against baselines/wheel_files_upstream.txt, metadata, extras; --noconftest because tests/conftest.py imports TensorFlow
-python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf    # clean venv with the wheel: core imports without TF, --help of the ten console scripts; python tools/resolve_extras.py [EXTRA] resolves the extras with uv (CI runs both)
+python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf    # clean venv with the wheel: core imports without TF, --help of the eleven console scripts; python tools/resolve_extras.py [EXTRA] resolves the extras with uv (CI runs both)
 uv run --frozen --no-sync python tools/instruction_ast.py check    # TF-free: every TPInstruction subclass has a registry entry (torch_backend/spec/registry.py) and the pinned defaults equal the source; `table` prints the constructor table
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
