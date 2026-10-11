@@ -334,10 +334,22 @@ def safe_extract(tar_filename, path=".", members=None):
                 f"Expected one top-level folder, found: {list(top_level_items.keys())}"
             )
 
+        has_data_filter = hasattr(tarfile, "data_filter")  # Python 3.11.4 and later
         for member in tar.getmembers():
             if member.name.startswith("/") or ".." in member.name:
                 raise ValueError(f"Unsafe path detected: {member.name}")
-        tar.extractall(path, members)
+            if not has_data_filter and not (member.isreg() or member.isdir()):
+                raise ValueError(
+                    f"Unsafe archive member (link or special file): {member.name}"
+                )
+        try:
+            if has_data_filter:
+                # the "data" filter rejects links and special files that point outside `path`
+                tar.extractall(path, members, filter="data")
+            else:
+                tar.extractall(path, members)  # noqa: S202  (members checked above)
+        except tarfile.FilterError as err:
+            raise ValueError(f"Unsafe archive member: {err}") from err
 
         return top_folder_name
 
