@@ -21,6 +21,8 @@ a def or method (a class body counts when a class attribute changes). Coverage =
 5. Not modified: units the suite cannot execute here (multi-GPU, distributed, HPC-only), and units whose tests would cost more than half a day for a
    cosmetic fix. Report them on the issue instead.
 
+A **new file** in any directory, a test file in `tests/` or `tools/tests/` included, is checked by `python tools/lint_ratchet.py check` with the whole strict set (docstrings and plain `assert` are allowed in test files) and with `ty` without the legacy relaxations, unless it is in `baselines/legacy_files.txt`, which never grows; write it clean, do not add it to the list.
+
 New code in `core/` and `torch_backend/` is held to 90% (branch) per package in CI. `# pragma: no cover` needs a reason in the comment. Raising coverage
 beyond the touched units is welcome; a file's coverage never falls.
 

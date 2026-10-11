@@ -43,7 +43,7 @@ uv run --frozen --no-sync pytest tests --splits 4 --group 1 --splitting-algorith
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
 uv run --frozen --no-sync ty check path/to/new_package     # strict in the new packages; [[tool.ty.overrides]] relax legacy
-uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
+uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise, a file outside baselines/legacy_files.txt and the new packages gets the whole strict set; `record` after a drop (a rise needs --allow-rise); `--moved OLD NEW` follows a moved file (also in tools/coverage_ratchet.py)
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also tests/test_import_gates.py
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # every upstream file the fork modifies has a row in tools/divergence.yaml (add it in the same PR as the change, drop it when the file equals upstream again); no fork-only path on a local pr/U* branch
 uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py    # builds the wheel in a scratch copy (or TENSORPOTENTIAL_WHEEL=<wheel>): file list against baselines/wheel_files_upstream.txt, metadata, extras; --noconftest because tests/conftest.py imports TensorFlow
@@ -73,7 +73,10 @@ A test writes only into `tmp_path` (or a scratch directory), never into the work
 - **By default legacy code stays as it is**: no repo-wide reformat, no file splitting (`instructions/compute.py` is about 4,900 lines and upstream merges depend on its shape), no renames, and improve a unit only while you are
   already changing it. An issue whose job is to change legacy code (clean-up, quality, deduplication, packaging, performance) says what may change; the coverage and comparison rules then govern the change, and it is not widened beyond what the issue names.
 - New packages get the strict ruff set (I, UP, B, SIM, C4, RUF, PD, NPY, PIE, PLE, PLW, PERF, RET, PTH, T20, ERA, W, complexity, docstring, exception and security families) from the **single ruff configuration in `pyproject.toml`**
-  (no `ruff.toml`; `per-file-ignores` switch the strict families off outside the new packages, which are listed there and in `tools/lint_ratchet.py`).
+  (no `ruff.toml`; `per-file-ignores` switch the strict families off outside the new packages, which are listed there and in `tools/lint_ratchet.py`, so a plain `ruff check` stays quiet on legacy code).
+  **Strict by default (TOOL3):** `tools/lint_ratchet.py` ignores that switch and decides by `baselines/legacy_files.txt` (every file that existed outside the new packages when it was written; it only shrinks, `record` removes deleted files and
+  follows `--moved`, a hand-added entry fails `check`): a file in neither that list nor a new package, so any **new file in `cli/`, `data/`, `tests/`, `tools/`, ...**, must have no ruff finding (docstrings and plain `assert` are allowed in test files) and no ty finding
+  without the `[[tool.ty.overrides]]`, and a legacy file may not raise its count of E, F, ERA001, C901, PLR0912/0913/0915, BLE001, B, RUF012, NPY002, SIM, RET, PLW, PTH and S (without S101); the families it leaves out are in the docstring of the tool.
 - Docstrings on new public API use the numpy convention. No commented-out code, no `print` in library code (use `logging.getLogger(__name__)`),
   no bare `except`, no `TODO` without an issue link, no mutable or shared default arguments.
 - Small functions (complexity at most 10, at most 6 arguments). Prefer pure functions and frozen dataclasses for specifications. Errors are
@@ -167,7 +170,7 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
   with a `make_console(force_terminal=True)` on a `StringIO`. The prompt helpers are in `cli/prompts.py` (`cli.wizard` re-exports the old names), so a test that fakes `_ask_*` for the dataset question patches `cli.prompts`, and a test of
   `extra/gen_tensor/wizard.py` patches both modules or types answers into `input()`. `tools/tests` (run with `pytest --noconftest tools/tests`), `tools/divergence.py check` (a row for every upstream file touched, docs and tests included) and
   `tools/check_touched_coverage.py` **without `--unit`** (diff mode: every unit the branch changed, not a fixed list) must all be run before a PR; `lint-imports` of the shared venv may not start (stale shebang): `python -c "import sys; from importlinter.cli import lint_imports_command; sys.exit(lint_imports_command())"`.
-  A single new module cannot be opted into the strict ruff set (the glob, the ty overrides and `tools/tests/test_lint_ratchet.py` pin the three package names): check it with `ruff check --isolated --select <strict families> --config 'lint.pydocstyle.convention="numpy"' --config 'lint.pylint.max-args=6' FILE`.
+  A new file needs no opt-in: `python tools/lint_ratchet.py check` holds it to the strict set (see Code style). To see the strict findings of one file before that, `ruff check --no-cache --config 'lint.per-file-ignores={}' FILE`; the pre-commit hook and the `Lint` workflow run the same `check`.
 - **Shell.** The shell is zsh: an unquoted `$VAR` is not split into words (use an array), `==` starts a command substitution, and a heredoc together with `$(...)` in one call can hang the tool (write scripts with the Write tool). In a worktree sync the shared
   venv without touching the editable install: `UV_PROJECT_ENVIRONMENT=<main>/.venv uv sync --frozen --group dev --no-install-project --inexact`.
 
