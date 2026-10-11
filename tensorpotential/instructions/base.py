@@ -122,8 +122,9 @@ def str_to_class(class_name, base=None):
     if not isinstance(class_name, str) or not _DOTTED_PATH.fullmatch(class_name):
         raise ValueError("Couldn't deserialize class `{}`".format(class_name))
     module, _, name = class_name.rpartition(".")
+    imported = importlib.import_module(module)
     try:
-        resolved = getattr(importlib.import_module(module), name)
+        resolved = getattr(imported, name)
     except AttributeError as err:
         raise ValueError(
             "Couldn't deserialize class `{}`: module `{}` has no attribute `{}`".format(

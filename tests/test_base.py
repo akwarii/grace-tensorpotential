@@ -461,6 +461,16 @@ def test_str_to_class_base_rejects_what_is_not_a_subclass(path):
         str_to_class(path, base=TPInstruction)
 
 
+def test_str_to_class_does_not_mistake_a_broken_module_for_a_missing_name(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "broken_instruction_mod.py").write_text("raise AttributeError('boom')\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(AttributeError, match="boom"):
+        str_to_class("broken_instruction_mod.Thing")
+
+
 def test_str_to_class_without_base_still_resolves_a_function():
     # `cli/prepare.py` resolves the model function named in the user's own input.yaml
     assert str_to_class("os.path.join") is os.path.join
