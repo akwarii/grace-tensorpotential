@@ -1,6 +1,5 @@
 import argparse
 from collections.abc import Sequence
-import logging
 import os
 import warnings
 

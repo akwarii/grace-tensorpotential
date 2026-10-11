@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import argparse
-import logging
 import sys
 from collections.abc import Sequence
 

@@ -10,7 +10,6 @@ from ase import Atoms
 from ase.io import read
 
 from collections import defaultdict, Counter
-import logging
 from tensorpotential.scripts._script_logging import configure_logging
 
 logger = configure_logging()
