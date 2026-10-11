@@ -20,12 +20,28 @@ import pytest
 
 from ase import Atoms
 from ase.build import bulk
+from ase.calculators.singlepoint import SinglePointCalculator
 
+from tensorpotential import constants
 from tensorpotential.calculator import TPCalculator
+from tensorpotential.data.databuilder import (
+    GeometricalDataBuilder,
+    ReferenceEnergyForcesStressesDataBuilder,
+    construct_batches,
+)
 from tensorpotential.instructions import load_instructions, save_instructions_dict
+from tensorpotential.loss import (
+    L2Loss,
+    LossFunction,
+    WeightedSSEEnergyLoss,
+    WeightedSSEForceLoss,
+    WeightedSSEVirialLoss,
+)
+from tensorpotential.metrics import ComputeMetrics, EnergyMetrics, ForceMetrics, VirialMetrics
 from tensorpotential.optimizer_layout import LegacyOptimizerStateWarning
 from tensorpotential.potentials import get_preset
-from tensorpotential.tensorpot import TensorPotential
+from tensorpotential.tensorpot import TensorPotential, _chief_or_discardable_path
+from tensorpotential.tpmodel import ComputeBatchEnergyForcesVirials, ComputeEnergy
 
 import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
 
@@ -993,3 +1009,449 @@ def test_a_checkpoint_with_other_optimizer_options_is_treated_the_same_way(tmp_p
     np.testing.assert_array_equal(_weights(restored), _weights(saved))
     assert restored.step == 2
     assert int(restored.optimizer.iterations.numpy()) == 0
+
+
+# ------------------------------------------------------ signatures, train and test steps, saving
+#
+# A tiny random-weight model (two structures of Be and Li, all numbers float64) is trained eagerly. The
+# loss of such a model is huge (its random weights give energies of order 1e5 eV), which does not matter
+# for comparisons that are relative. Oracles are numpy: the loss of the energy term from the predicted and
+# reference energies, the first Adam step from its closed form, and the gradient by a central difference.
+
+TRAIN_LR = 1e-9  # small enough that the first Adam step lowers a loss of this size to first order
+GLOBAL_BATCH_SIZE = 2  # structures of the batch
+FD_UNIT_STEP = 1e-6  # step along a unit direction of weight space; the loss is of order 1e12 and smooth
+
+
+def _training_batch() -> dict[str, tf.Tensor]:
+    """Two periodic structures (3 and 2 atoms), random reference energies, forces and virials."""
+    rng = np.random.default_rng(0)
+    structures = []
+    for symbols in (["Be", "Be", "Li"], ["Be", "Li"]):
+        atoms = Atoms(symbols, positions=rng.uniform(0, 4, (len(symbols), 3)), cell=[4.5] * 3, pbc=True)
+        atoms.calc = SinglePointCalculator(
+            atoms, energy=float(rng.normal()), forces=rng.normal(size=(len(symbols), 3))
+        )
+        structures.append(atoms)
+    builders = [
+        GeometricalDataBuilder({"Be": 0, "Li": 1}, cutoff=5.0),
+        ReferenceEnergyForcesStressesDataBuilder(),
+    ]
+    batch = construct_batches(structures, builders, batch_size=2, verbose=False)[0]
+    n_structures = batch[constants.DATA_REFERENCE_ENERGY].shape[0]
+    # the builder of ase objects knows no stress: the virial tensors are given by hand
+    batch[constants.DATA_REFERENCE_VIRIAL] = rng.normal(size=(n_structures, 6))
+    batch[constants.DATA_VIRIAL_WEIGHTS] = np.ones((n_structures, 1))
+    batch[constants.DATA_VOLUME] = np.full((n_structures, 1), 50.0)
+    return {key: tf.constant(value) for key, value in batch.items()}
+
+
+def _training_tp(**kwargs) -> TensorPotential:
+    options = {
+        "loss_function": LossFunction(
+            {
+                "energy": WeightedSSEEnergyLoss(1.0),
+                "forces": WeightedSSEForceLoss(1.0),
+                "virial": WeightedSSEVirialLoss(1.0),
+            }
+        ),
+        "compute_metrics": ComputeMetrics([EnergyMetrics(), ForceMetrics(), VirialMetrics()]),
+        "global_batch_size": GLOBAL_BATCH_SIZE,
+        "fit_config": {"optimizer": "Adam", "opt_params": {"learning_rate": TRAIN_LR}},
+        "model_train_function": ComputeBatchEnergyForcesVirials(),
+        "eager_mode": True,
+        **kwargs,
+    }
+    return _tp(**options)
+
+
+def _total_loss(tp: TensorPotential, batch) -> float:
+    return float(tp.model_grad(batch)[0])
+
+
+def _set_weights(tp: TensorPotential, values) -> None:
+    for variable, value in zip(tp.model.variables_to_train, values):
+        variable.assign(value)
+
+
+def _first_adam_step(w0, gradient, lr: float) -> np.ndarray:
+    """One bias-corrected Adam step from zero moments, with the beta powers rounded through float32."""
+    m = (1 - BETA_1) * gradient
+    v = (1 - BETA_2) * gradient**2
+    alpha = lr * np.sqrt(1 - _through_float32(BETA_2)) / (1 - _through_float32(BETA_1))
+    return w0 - alpha * m / (np.sqrt(v) + EPSILON)
+
+
+def test_the_predict_signatures_hold_the_model_and_metric_inputs_but_not_the_loss_inputs():
+    tp = _training_tp()
+    predict, grad = tp.get_model_predict_signatures(), tp.get_model_grad_signatures()
+
+    assert all(isinstance(spec, tf.TensorSpec) for spec in predict.values())
+    for key, spec in tp.model.train_specs.items():
+        assert predict[key].dtype == (tf.int32 if spec["dtype"] == "int" else tf.float64)
+        assert predict[key].shape.as_list() == spec["shape"]
+    for key in tp.compute_metrics.get_input_signatures():
+        assert key in predict
+    assert constants.DATA_ENERGY_WEIGHTS in grad
+    assert constants.DATA_ENERGY_WEIGHTS not in predict
+    assert set(predict) < set(grad)
+
+
+def test_the_predict_signatures_need_the_metrics_object():
+    tp = _tp()
+    with pytest.raises(AttributeError, match="get_input_signatures"):
+        tp.get_model_predict_signatures()
+
+
+def test_the_grad_signatures_of_a_model_without_loss_and_metrics_are_the_model_ones():
+    tp = _tp()
+    assert set(tp.get_model_grad_signatures()) == set(tp.model.train_specs)
+
+
+def test_model_grad_returns_loss_predictions_gradients_and_the_components_per_batch_size():
+    tp = _training_tp()
+    batch = _training_batch()
+    total, predictions, gradients, components = tp.model_grad(batch)
+
+    assert [g.shape for g in gradients] == [v.shape for v in tp.model.variables_to_train]
+    assert set(components) == {"energy", "forces", "virial"}
+    # the total is the sum of the components before the division by the batch size
+    assert float(total) == pytest.approx(GLOBAL_BATCH_SIZE * sum(float(v) for v in components.values()), rel=1e-12)
+    # the energy term from its formula, with the predictions of the same call
+    weight = batch[constants.DATA_ENERGY_WEIGHTS].numpy()
+    residual = predictions[constants.PREDICT_TOTAL_ENERGY].numpy() - batch[constants.DATA_REFERENCE_ENERGY].numpy()
+    expected = np.sum(weight * residual**2) / np.sum(weight) / GLOBAL_BATCH_SIZE
+    assert float(components["energy"]) == pytest.approx(expected, rel=1e-12)
+
+
+def _directional_derivative_check(tp: TensorPotential, batch) -> tuple[float, float]:
+    """The directional derivative of the total loss from the gradients, and by a central difference."""
+    variables = tp.model.variables_to_train
+    rng = np.random.default_rng(5)
+    directions = [rng.normal(size=v.shape) for v in variables]
+    norm = np.sqrt(sum(np.sum(d**2) for d in directions))
+    directions = [d / norm for d in directions]
+    start = [v.numpy().copy() for v in variables]
+    gradients = tp.model_grad(batch)[2]
+    analytic = sum(float(tf.reduce_sum(g * d)) for g, d in zip(gradients, directions))
+
+    def shifted(step: float) -> float:
+        _set_weights(tp, [w + step * d for w, d in zip(start, directions)])
+        return _total_loss(tp, batch)
+
+    numeric = (shifted(FD_UNIT_STEP) - shifted(-FD_UNIT_STEP)) / (2 * FD_UNIT_STEP)
+    _set_weights(tp, start)
+    return analytic, numeric
+
+
+@pytest.mark.parametrize("options", [{}, {"loss_norm_by_batch_size": True}], ids=["plain", "per_batch"])
+def test_the_gradient_of_model_grad_matches_a_central_difference_of_its_loss(options):
+    tp = _training_tp(**options)
+    analytic, numeric = _directional_derivative_check(tp, _training_batch())
+    np.testing.assert_allclose(numeric, analytic, rtol=FD.rtol, atol=FD.atol)
+
+
+def test_the_loss_can_be_divided_by_the_batch_size_once_more():
+    tp = _training_tp()
+    batch = _training_batch()
+    plain = float(tp.model_grad(batch)[0])
+    tp.loss_norm_by_batch_size = True
+    assert float(tp.model_grad(batch)[0]) == pytest.approx(plain / GLOBAL_BATCH_SIZE, rel=1e-12)
+
+
+def _l2_sum(tp: TensorPotential) -> float:
+    """Sum of squares of the variables that every L2-regularised instruction owns, by hand."""
+    from tensorpotential.tpmodel import to_instructions_list
+
+    return sum(
+        float(np.sum(v.numpy() ** 2))
+        for instruction in to_instructions_list(tp.model.instructions)
+        if hasattr(instruction, "compute_l2_regularization_loss")
+        for v in instruction.trainable_variables
+    )
+
+
+def test_a_regularisation_loss_adds_its_weighted_l2_sum_to_the_total_and_to_the_gradient():
+    tp = _training_tp(regularization_loss=LossFunction({"l2": L2Loss(1.0)}))
+    batch = _training_batch()
+    with_l2 = float(tp.model_grad(batch)[0])
+    analytic, numeric = _directional_derivative_check(tp, batch)
+    tp.regularization_loss = None
+    without = float(tp.model_grad(batch)[0])
+
+    assert with_l2 - without == pytest.approx(_l2_sum(tp), rel=1e-6)
+    np.testing.assert_allclose(numeric, analytic, rtol=FD.rtol, atol=FD.atol)
+
+
+def test_one_train_step_applies_the_first_adam_step_of_the_gradient_it_reports():
+    tp = _training_tp()
+    batch = _training_batch()
+    start = [v.numpy().copy() for v in tp.model.variables_to_train]
+    total, _, gradients, components = tp.model_grad(batch)
+
+    result = tp.train_step(batch)
+
+    for variable, w0, gradient in zip(tp.model.variables_to_train, start, gradients):
+        np.testing.assert_allclose(
+            variable.numpy(), _first_adam_step(w0, gradient.numpy(), TRAIN_LR), rtol=1e-9, atol=1e-12
+        )
+    assert float(result["total_loss/train"]) == pytest.approx(float(total), rel=1e-12)
+    for name, value in components.items():
+        assert float(result[f"loss_component/{name}/train"]) == pytest.approx(float(value), rel=1e-12)
+    assert {"abs/de/per_struct", "sqr/f_comp/per_struct", "abs/virial/per_struct"} <= set(result)
+
+
+def test_one_train_step_lowers_the_loss_by_the_first_order_amount():
+    tp = _training_tp()
+    batch = _training_batch()
+    before = _total_loss(tp, batch)
+    gradients = tp.model_grad(batch)[2]
+    tp.train_step(batch)
+    after = _total_loss(tp, batch)
+    # Adam's first step moves every weight by about the learning rate against the sign of its gradient
+    first_order = TRAIN_LR * sum(float(tf.reduce_sum(tf.abs(g))) for g in gradients)
+    assert after < before
+    assert before - after == pytest.approx(first_order, rel=1e-2)
+
+
+def test_a_test_step_reports_the_loss_at_the_test_batch_size_and_leaves_the_weights_alone():
+    tp = _training_tp(global_test_batch_size=4)
+    batch = _training_batch()
+    start = _weights(tp)
+    total, _, _, components = tp.model_grad(batch)
+
+    result = tp.test_step(batch)
+
+    np.testing.assert_array_equal(_weights(tp), start)
+    # model_grad divides by the batch size of 2, the test step by 4
+    assert float(result["total_loss/test"]) == pytest.approx(float(total), rel=1e-12)
+    for name, value in components.items():
+        assert float(result[f"loss_component/{name}/test"]) == pytest.approx(float(value) / 2, rel=1e-12)
+    assert "abs/depa/per_struct" in result
+    tp.loss_norm_by_batch_size = True
+    assert float(tp.test_step(batch)["total_loss/test"]) == pytest.approx(float(total) / 4, rel=1e-12)
+
+
+def test_a_bfgs_step_reports_the_flat_gradient_and_leaves_the_weights_alone():
+    tp = _training_tp()
+    batch = _training_batch()
+    start = _weights(tp)
+    total, _, gradients, components = tp.model_grad(batch)
+
+    result = tp.train_bfgs_step(batch)
+
+    np.testing.assert_array_equal(_weights(tp), start)
+    np.testing.assert_array_equal(result["total_jac"].numpy(), _flat(g.numpy() for g in gradients))
+    assert float(result["total_loss/train"]) == pytest.approx(float(total), rel=1e-12)
+    for name, value in components.items():
+        assert float(result[f"loss_component/{name}/train"]) == pytest.approx(float(value), rel=1e-12)
+    assert "abs/de/per_struct" in result
+
+
+def test_the_distributed_steps_of_the_default_strategy_take_one_batch_or_a_list_of_batches():
+    tp = _training_tp()
+    batch = _training_batch()
+    start = [v.numpy().copy() for v in tp.model.variables_to_train]
+    total = _total_loss(tp, batch)
+
+    tests = [tp.distributed_test_step(batch), tp.distributed_test_step([batch])]
+    trains = []
+    for argument in (batch, [batch]):
+        trains.append(tp.distributed_train_step(argument))
+        _set_weights(tp, start)  # the second call must see the weights of the first
+    bfgs = tp.distributed_bfgs_train_step([batch])
+
+    for result in tests:
+        assert float(result["total_loss/test"]) == pytest.approx(total, rel=1e-12)
+    for result in trains:
+        assert float(result["total_loss/train"]) == pytest.approx(total, rel=1e-12)
+    assert bfgs["total_jac"].shape[0] == sum(int(np.prod(v.shape)) for v in start)
+    assert float(bfgs["total_loss/train"]) == pytest.approx(total, rel=1e-12)
+
+
+def test_the_distributed_bfgs_step_needs_a_list_of_batches():
+    # pinned: unlike the other distributed steps it indexes its argument by the replica id unconditionally
+    tp = _training_tp()
+    with pytest.raises(KeyError):
+        tp.distributed_bfgs_train_step(_training_batch())
+
+
+class _TwoReplicas:
+    """Stands in for a strategy of two devices, which one CPU process cannot create after TensorFlow started."""
+
+    num_replicas_in_sync = 2
+
+    def reduce(self, op, value, axis):
+        assert op == tf.distribute.ReduceOp.SUM and axis is None
+        return value[0] + value[1]
+
+
+class _PerReplica:
+    def __init__(self, *values):
+        self.values = values
+
+
+def test_reduce_dict_leaves_a_single_replica_result_alone():
+    tp = _tp()
+    result = {"abs/de/per_struct": tf.constant([1.0]), "total_loss/train": tf.constant(2.0)}
+    expected = dict(result)
+    tp.reduce_dict(result)
+    assert result == expected
+
+
+def test_reduce_dict_joins_the_per_structure_values_and_sums_the_losses_over_two_replicas():
+    tp = _tp()
+    tp.strategy = _TwoReplicas()
+    a, b = tf.constant([[1.0], [2.0]]), tf.constant([[3.0]])
+    result = {
+        "abs/de/per_struct": _PerReplica(a, b),  # what a real strategy returns for a per-replica value
+        "sqr/de/per_struct": [a, b],  # plain tensors
+        "loss_component/energy/train": (tf.constant(1.5), tf.constant(2.5)),
+        "total_jac": (tf.constant([1.0, 2.0]), tf.constant([10.0, 20.0])),
+        "nat/other": "untouched",
+    }
+    tp.reduce_dict(result)
+
+    np.testing.assert_array_equal(result["abs/de/per_struct"].numpy(), [[1.0], [2.0], [3.0]])
+    np.testing.assert_array_equal(result["sqr/de/per_struct"].numpy(), [[1.0], [2.0], [3.0]])
+    assert float(result["loss_component/energy/train"]) == 4.0
+    np.testing.assert_array_equal(result["total_jac"].numpy(), [11.0, 22.0])
+    assert result["nat/other"] == "untouched"
+
+
+class _Resolver:
+    def __init__(self, task_type, task_id=0):
+        self.task_type, self.task_id = task_type, task_id
+
+
+class _Cluster:
+    """Stands in for a multi-worker strategy, which needs a running cluster."""
+
+    def __init__(self, task_type, task_id=0):
+        self.cluster_resolver = _Resolver(task_type, task_id)
+
+
+@pytest.mark.parametrize("strategy", [None, _Cluster("chief"), _Cluster("worker", 0)], ids=["none", "chief", "worker0"])
+def test_the_chief_writes_to_the_path_it_was_given(strategy, tmp_path):
+    target = str(tmp_path / "out" / "file")
+    with _chief_or_discardable_path(target, strategy) as path:
+        assert path == target
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_non_chief_worker_writes_to_a_temporary_path_that_is_removed_afterwards(tmp_path):
+    target = str(tmp_path / "out" / "file")
+    with _chief_or_discardable_path(target, _Cluster("worker", 1)) as path:
+        assert path != target
+        assert os.path.basename(path) == "file"
+        assert os.path.basename(os.path.dirname(path)).startswith("tp_nonchief_")
+        assert os.path.isdir(os.path.dirname(path))
+        written = os.path.dirname(path)
+    assert not os.path.exists(written)
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_non_chief_temporary_path_is_removed_when_the_body_raises(tmp_path):
+    with pytest.raises(RuntimeError, match="boom"):
+        with _chief_or_discardable_path(str(tmp_path / "x"), _Cluster("worker", 3)) as path:
+            written = os.path.dirname(path)
+            raise RuntimeError("boom")
+    assert not os.path.exists(written)
+
+
+def test_a_non_chief_path_that_ends_in_a_separator_gets_the_name_out(tmp_path):
+    with _chief_or_discardable_path(str(tmp_path / "dir") + os.sep, _Cluster("worker", 1)) as path:
+        assert os.path.basename(path) == "out"
+
+
+def test_saving_a_checkpoint_to_a_bare_file_name_writes_into_the_working_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tp = _tp()
+    tp.save_checkpoint(checkpoint_name="bare")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["bare.data-00000-of-00001", "bare.index"]
+
+
+def _signatures(path) -> set[str]:
+    return set(TensorPotential.load_model(str(path)).signatures)
+
+
+def test_save_model_writes_the_serving_model_to_a_bare_name_in_the_working_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _tp().save_model(exact_path="served")
+    saved = tmp_path / "served"
+    assert (saved / "saved_model.pb").is_file()
+    assert (saved / "metadata.yaml").is_file()
+    assert "compute" in _signatures(saved)
+
+
+def test_a_non_chief_worker_writes_its_checkpoint_nowhere(tmp_path):
+    tp = _tp()
+    tp.strategy = _Cluster("worker", 2)
+    tp.save_checkpoint(checkpoint_name=str(tmp_path / "ckpt" / "state"))
+    assert not (tmp_path / "ckpt").exists()
+
+
+def test_saving_with_aux_computes_to_a_bare_name_works_in_the_working_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tp = _tp()
+    tp.save_model_with_aux_computes(exact_path="aux")
+    assert {"compute", "compute_energy"} <= _signatures(tmp_path / "aux")
+
+
+def test_a_failure_while_saving_with_aux_computes_falls_back_to_the_standard_model(tmp_path, caplog):
+    tp = _tp()
+    path = tmp_path / "aux"
+    with caplog.at_level(logging.WARNING):
+        tp.save_model_with_aux_computes(
+            exact_path=str(path), communicated_keys=["no_such_key_1", "no_such_key_2"]
+        )
+    assert "Failed to save model with auxiliary compute functions" in caplog.text
+    assert "Falling back to standard save_model" in caplog.text
+    assert "compute" in _signatures(path)
+
+
+def test_a_failure_while_saving_with_a_uq_model_is_raised_instead_of_falling_back(tmp_path):
+    tp = _tp()
+    with pytest.raises(Exception):  # noqa: B017  (the type is the one the failing split raises)
+        tp.save_model_with_aux_computes(
+            exact_path=str(tmp_path / "aux"),
+            communicated_keys=["no_such_key_1", "no_such_key_2"],
+            gmm_uq_model=object(),
+        )
+    assert not (tmp_path / "aux").exists()
+
+
+def test_a_custom_compute_function_gets_no_extra_aux_functions(tmp_path):
+    tp = _tp(model_compute_function=ComputeEnergy())
+    tp.save_model_with_aux_computes(exact_path=str(tmp_path / "aux"))
+    signatures = _signatures(tmp_path / "aux")
+    assert "compute" in signatures
+    assert "compute_energy" not in signatures  # the one a standard compute function gets
+
+
+def test_export_to_yaml_creates_the_directory_and_writes_the_model(tmp_path):
+    from tensorpotential.potentials.presets import FS
+
+    instructions = FS(
+        element_map={"Al": 0, "Li": 1}, lmax=2, n_rad_base=4, n_rad_max=6, embedding_size=4, max_order=3
+    ).get_instructions()
+    tp = TensorPotential(instructions, param_dtype=tf.float64)
+    target = tmp_path / "nested" / "model.yaml"
+    tp.export_to_yaml(exact_filename=str(target))
+    import yaml
+
+    assert yaml.safe_load(target.read_text())["elements"] == ["Al", "Li"]
+
+
+def test_export_to_yaml_to_a_bare_file_name_and_the_default_directory(tmp_path, monkeypatch):
+    from tensorpotential.potentials.presets import FS
+
+    monkeypatch.chdir(tmp_path)
+    instructions = FS(
+        element_map={"Al": 0}, lmax=2, n_rad_base=4, n_rad_max=6, embedding_size=4, max_order=3
+    ).get_instructions()
+    tp = TensorPotential(instructions, param_dtype=tf.float64, seed=3)
+    tp.export_to_yaml(exact_filename="bare.yaml")
+    tp.export_to_yaml(model_name="named.yaml")
+    assert (tmp_path / "bare.yaml").is_file()
+    assert (tmp_path / "seed" / "3" / "named.yaml").is_file()
