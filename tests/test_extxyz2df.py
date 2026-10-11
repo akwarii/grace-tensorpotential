@@ -65,12 +65,27 @@ def test_the_dataframe_holds_energy_forces_stress_and_geometry(extxyz, tmp_path)
     assert len(df) == N_STRUCTURES
     for k, (_, row) in enumerate(df.iterrows()):
         reference = _structures()[k]
-        assert row["ase_atoms"].get_chemical_symbols() == reference.get_chemical_symbols()
-        np.testing.assert_allclose(row["ase_atoms"].positions, reference.positions, rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(row["ase_atoms"].cell[:], reference.cell[:], rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(row["energy"], reference.get_potential_energy(), rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(row["forces"], np.full((len(reference), 3), 0.1 * (k + 1)), rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(row["stress"], np.arange(6.0) * 0.01 * (k + 1), rtol=0.0, atol=TOL.atol)
+        assert (
+            row["ase_atoms"].get_chemical_symbols() == reference.get_chemical_symbols()
+        )
+        np.testing.assert_allclose(
+            row["ase_atoms"].positions, reference.positions, rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            row["ase_atoms"].cell[:], reference.cell[:], rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            row["energy"], reference.get_potential_energy(), rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            row["forces"],
+            np.full((len(reference), 3), 0.1 * (k + 1)),
+            rtol=0.0,
+            atol=TOL.atol,
+        )
+        np.testing.assert_allclose(
+            row["stress"], np.arange(6.0) * 0.01 * (k + 1), rtol=0.0, atol=TOL.atol
+        )
 
 
 def test_a_file_without_stress_gives_a_dataframe_without_the_stress_column(tmp_path):
@@ -91,4 +106,7 @@ def test_the_input_is_required(capsys):
     with pytest.raises(SystemExit) as stop:
         extxyz2df.main([])
     assert stop.value.code == 2
-    assert "the following arguments are required: extxyz_filename" in capsys.readouterr().err
+    assert (
+        "the following arguments are required: extxyz_filename"
+        in capsys.readouterr().err
+    )

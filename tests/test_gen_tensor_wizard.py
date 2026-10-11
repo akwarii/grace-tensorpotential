@@ -910,3 +910,382 @@ class TestApplyStateTensor:
             s = self._base_state(tensor_components=components)
             yaml = _apply_state_tensor(s)
             assert "WeightedTensorLoss" in yaml
+
+
+# ---------------------------------------------------------------------------
+# The sections, the review and the entry point, driven through the real prompt helpers.
+#
+# The prompts are answered at the outer boundary only: typed lines for ``input()`` (plain world: no questionary, no rich) or
+# a fake of the interactive ``questionary`` functions (they need a terminal), so the tests stay valid wherever the
+# prompt helpers live (``cli.wizard`` today, ``cli.prompts`` after CLI1 task 4: both modules are switched when both exist).
+# ---------------------------------------------------------------------------
+
+import builtins  # noqa: E402
+import importlib  # noqa: E402
+import sys  # noqa: E402
+import types  # noqa: E402
+
+import yaml  # noqa: E402
+
+from tensorpotential.extra.gen_tensor import wizard as gen_wizard  # noqa: E402
+
+
+def _prompt_modules():
+    modules = [_cli_wizard]
+    try:
+        modules.append(importlib.import_module("tensorpotential.cli.prompts"))
+    except ImportError:
+        pass
+    return modules
+
+
+def _set_world(monkeypatch, *, rich: bool, questionary: bool) -> None:
+    for module in _prompt_modules():
+        monkeypatch.setattr(module, "_HAS_RICH", rich)
+        monkeypatch.setattr(module, "_HAS_QUESTIONARY", questionary)
+
+
+@pytest.fixture
+def typed(monkeypatch):
+    """Plain world; ``typed("a", "", "b")`` makes ``input()`` return those lines in order and returns the prompts shown."""
+
+    def install(*lines, rich: bool = False):
+        _set_world(monkeypatch, rich=rich, questionary=False)
+        prompts = []
+        remaining = list(lines)
+
+        def fake_input(prompt=""):
+            prompts.append(prompt)
+            if not remaining:
+                raise AssertionError(f"unexpected prompt: {prompt!r}")
+            line = remaining.pop(0)
+            if isinstance(line, BaseException):
+                raise line
+            return line
+
+        monkeypatch.setattr(builtins, "input", fake_input)
+        return prompts
+
+    return install
+
+
+@pytest.fixture
+def accept_defaults(monkeypatch):
+    """Questionary world: every prompt returns its default (the first choice when it has none, ``train.pkl.gz`` for a path)."""
+    import questionary
+
+    _set_world(monkeypatch, rich=False, questionary=True)
+    asked = []
+
+    def value_of(choice):
+        return getattr(choice, "value", choice)
+
+    def select(message, choices, default=None, **kwargs):
+        asked.append(("select", message, list(choices)))
+        answer = value_of(default) if default is not None else value_of(choices[0])
+        return types.SimpleNamespace(ask=lambda: answer)
+
+    def text(message, default="", **kwargs):
+        asked.append(("text", message, default))
+        return types.SimpleNamespace(ask=lambda: default)
+
+    def confirm(message, default=True, **kwargs):
+        asked.append(("confirm", message, default))
+        return types.SimpleNamespace(ask=lambda: default)
+
+    def path(message, **kwargs):
+        asked.append(("path", message, None))
+        return types.SimpleNamespace(ask=lambda: "train.pkl.gz")
+
+    for name, fake in (("select", select), ("text", text), ("confirm", confirm), ("path", path)):
+        monkeypatch.setattr(questionary, name, fake)
+    return asked
+
+
+SECTION_DEFAULTS = [
+    (gen_wizard._section_tensor_components, {"tensor_components": [0, 1, 2], "tensor_rank": 2}),
+    (gen_wizard._section_tensor_per_structure, {"per_structure": False}),
+    (gen_wizard._section_tensor_model, {"preset": "TENSOR_1L", "cutoff": 6.0}),
+    (gen_wizard._section_tensor_energy, {"compute_energy": False, "compute_forces": False}),
+    (gen_wizard._section_tensor_loss, {"loss_type": "huber", "tensor_delta": 0.1, "tensor_weight": 10.0}),
+    (gen_wizard._section_tensor_batch, {"batch_size": 10, "target_total_updates": 10000}),
+    (gen_wizard._section_tensor_precision, {"param_dtype": "float32"}),
+]
+
+
+def _assert_attrs(state, expected: dict) -> None:
+    for name, value in expected.items():
+        assert getattr(state, name) == value, name
+
+
+@pytest.mark.parametrize(("section", "expected"), SECTION_DEFAULTS, ids=lambda v: getattr(v, "__name__", ""))
+def test_every_section_gives_the_documented_defaults_when_the_answers_are_empty(typed, section, expected):
+    typed(*([""] * 4))
+    _assert_attrs(section(_WizardStateTensor()), expected)
+
+
+@pytest.mark.parametrize(("section", "expected"), SECTION_DEFAULTS, ids=lambda v: getattr(v, "__name__", ""))
+def test_every_section_gives_the_same_defaults_with_questionary(accept_defaults, section, expected):
+    _assert_attrs(section(_WizardStateTensor()), expected)
+    assert accept_defaults, "no prompt was asked"
+
+
+@pytest.mark.parametrize(
+    ("answer", "components", "rank"),
+    [("[1]", [1], 1), ("[2]", [2], 2), ("[0, 2]", [0, 2], 2), ("[1, 2]", [1, 2], 2), ("[0, 1, 2]", [0, 1, 2], 2)],
+)
+def test_tensor_type_sets_the_components_and_the_rank(typed, answer, components, rank):
+    typed(answer)
+    state = gen_wizard._section_tensor_components(_WizardStateTensor())
+    assert (state.tensor_components, state.tensor_rank) == (components, rank)
+
+
+def test_the_tensor_type_choices_are_offered_with_their_descriptions_under_questionary(accept_defaults):
+    gen_wizard._section_tensor_components(_WizardStateTensor())
+    (_, message, choices), = accept_defaults
+    assert message == "Tensor type:"
+    assert [c.value for c in choices] == list(gen_wizard._TENSOR_CHOICES_MAP)
+    assert "Forces as tensor" in choices[0].title
+
+
+def test_per_structure_is_a_choice_between_two_granularities(typed):
+    typed("per-structure")
+    assert gen_wizard._section_tensor_per_structure(_WizardStateTensor()).per_structure is True
+    typed("per-atom")
+    assert gen_wizard._section_tensor_per_structure(_WizardStateTensor()).per_structure is False
+
+
+@pytest.mark.parametrize(
+    ("answers", "preset", "cutoff"),
+    [(["TENSOR_2L", ""], "TENSOR_2L", 5.0), (["TENSOR_1L", "7.5"], "TENSOR_1L", 7.5), (["TENSOR_2L", "4"], "TENSOR_2L", 4.0)],
+)
+def test_the_preset_decides_the_default_cutoff(typed, answers, preset, cutoff):
+    typed(*answers)
+    state = gen_wizard._section_tensor_model(_WizardStateTensor())
+    assert (state.preset, state.cutoff) == (preset, cutoff)
+
+
+@pytest.mark.parametrize(
+    ("answers", "energy", "forces"),
+    [(["no"], False, False), (["yes", ""], True, True), (["yes", "no"], True, False)],
+)
+def test_forces_are_only_asked_when_the_energy_is_fitted(typed, answers, energy, forces):
+    prompts = typed(*answers)
+    state = gen_wizard._section_tensor_energy(_WizardStateTensor(compute_forces=True))
+    assert (state.compute_energy, state.compute_forces) == (energy, forces)
+    assert len(prompts) == len(answers)
+
+
+def test_square_loss_has_no_huber_delta_and_asks_only_the_tensor_weight(typed):
+    prompts = typed("square", "5")
+    state = gen_wizard._section_tensor_loss(_WizardStateTensor())
+    assert (state.loss_type, state.tensor_weight, state.tensor_delta) == ("square", 5.0, 0.1)
+    assert len(prompts) == 2
+
+
+def test_huber_loss_with_energy_and_forces_asks_every_weight_and_both_deltas(typed):
+    prompts = typed("huber", "0.2", "20", "2", "0.05", "3")
+    state = gen_wizard._section_tensor_loss(_WizardStateTensor(compute_energy=True, compute_forces=True))
+    assert (state.tensor_delta, state.tensor_weight) == (0.2, 20.0)
+    assert (state.energy_weight, state.energy_delta, state.forces_weight) == (2.0, 0.05, 3.0)
+    assert len(prompts) == 6
+
+
+def test_energy_without_forces_does_not_ask_for_a_forces_weight(typed):
+    prompts = typed("square", "5", "2")
+    state = gen_wizard._section_tensor_loss(_WizardStateTensor(compute_energy=True, compute_forces=False))
+    assert (state.energy_weight, state.forces_weight) == (2.0, 5.0)
+    assert len(prompts) == 3
+
+
+def test_batch_size_and_updates_are_integers(typed):
+    typed("4", "250")
+    state = gen_wizard._section_tensor_batch(_WizardStateTensor())
+    assert (state.batch_size, state.target_total_updates) == (4, 250)
+
+
+@pytest.mark.parametrize(
+    ("answer", "dtype"),
+    [("FP64 (full double precision)", "float64"), ("mixed FP32/64 (parameters in FP32, geometry in FP64)", "float32")],
+)
+def test_parameter_precision_maps_the_choice_to_a_dtype(typed, answer, dtype):
+    typed(answer)
+    assert gen_wizard._section_tensor_precision(_WizardStateTensor()).param_dtype == dtype
+
+
+# --- review -------------------------------------------------------------------------------------------------------------
+
+
+def _full_state(**changes) -> _WizardStateTensor:
+    state = _make_state([0, 2], compute_energy=True, compute_forces=True)
+    state.train_filename = "train.pkl.gz"
+    state.preset, state.cutoff, state.batch_size = "TENSOR_2L", 5.0, 4
+    for name, value in changes.items():
+        setattr(state, name, value)
+    return state
+
+
+def test_plain_review_lists_every_choice(monkeypatch, capsys):
+    _set_world(monkeypatch, rich=False, questionary=False)
+    gen_wizard._show_review_tensor(_full_state(use_separate_test=True, test_filename="test.pkl.gz"))
+    out = capsys.readouterr().out
+    for fragment in ("--- Review ---", "[0, 2]", "TENSOR_2L  cutoff=5.0", "Compute forces:    True", "train.pkl.gz", "test.pkl.gz", "Batch size:        4"):
+        assert fragment in out
+
+
+def test_plain_review_shows_the_test_fraction_without_a_separate_file(monkeypatch, capsys):
+    _set_world(monkeypatch, rich=False, questionary=False)
+    gen_wizard._show_review_tensor(_full_state(test_size=0.1))
+    assert "split 0.1" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("changes", "present", "absent"),
+    [
+        ({}, ["weight=10.0, delta=0.1", "Energy loss", "Forces loss", "split 5%"], []),
+        ({"loss_type": "square"}, ["Tensor loss", "weight=10.0"], ["delta="]),
+        ({"compute_energy": False, "compute_forces": False}, ["Tensor loss"], ["Energy loss", "Forces loss"]),
+        ({"use_separate_test": True, "test_filename": "test.pkl.gz"}, ["test.pkl.gz"], ["split"]),
+    ],
+)
+def test_rich_review_is_a_panel_with_the_rows_that_apply(monkeypatch, capsys, changes, present, absent):
+    _set_world(monkeypatch, rich=True, questionary=False)
+    gen_wizard._show_review_tensor(_full_state(**changes))
+    out = capsys.readouterr().out
+    assert "Review" in out
+    for fragment in present:
+        assert fragment in out
+    for fragment in absent:
+        assert fragment not in out
+
+
+# --- the entry point ----------------------------------------------------------------------------------------------------
+
+
+DEFAULT_ANSWERS = (
+    ["train.pkl.gz", "", ""]  # dataset: file, separate test (default no), test fraction
+    + [""] * 4  # tensor type, per structure, model preset, cutoff
+    + [""]  # precision
+    + [""]  # fit energy (default no)
+    + ["", "", ""]  # loss: type, tensor delta, tensor weight
+    + ["", ""]  # batch size, updates
+)
+
+
+def run_wizard(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as stop:
+        gen_wizard.run_gen_tensor_wizard()
+    assert stop.value.code == 0
+
+
+def test_the_wizard_writes_input_yaml_from_the_answers_and_exits_0(typed, monkeypatch, tmp_path, capsys):
+    typed(*DEFAULT_ANSWERS, "", "no")  # confirm the review, skip the verification
+    run_wizard(monkeypatch, tmp_path)
+    config = yaml.safe_load((tmp_path / "input.yaml").read_text())
+    assert config["data"]["filename"] == "train.pkl.gz"
+    assert "Input file written to `input.yaml`" in capsys.readouterr().out
+
+
+def test_a_section_can_be_redone_after_the_review(typed, monkeypatch, tmp_path):
+    # the review asks for a section number: 4 is "Model"; then the second review is confirmed
+    prompts = typed(*DEFAULT_ANSWERS, "4", "TENSOR_2L", "4", "", "no")
+    run_wizard(monkeypatch, tmp_path)
+    assert prompts.count("Section number (Enter = confirm): ") == 2
+    assert prompts.count("Model preset:, available options: TENSOR_1L, TENSOR_2L (default = TENSOR_1L): ") == 2
+    text = (tmp_path / "input.yaml").read_text()
+    assert "TENSOR_2L" in text
+    assert yaml.safe_load(text)["data"]["filename"] == "train.pkl.gz"
+
+
+def test_the_wizard_with_rich_prints_panels(typed, monkeypatch, tmp_path, capsys):
+    typed(*DEFAULT_ANSWERS, "", "no", rich=True)
+    run_wizard(monkeypatch, tmp_path)
+    out = capsys.readouterr().out
+    assert "GRACEmaker input.yaml wizard" in out
+    assert "input.yaml written successfully!" in out
+
+
+def test_the_wizard_under_questionary_accepts_the_defaults_and_writes_the_file(accept_defaults, monkeypatch, tmp_path):
+    run_wizard(monkeypatch, tmp_path)
+    assert (tmp_path / "input.yaml").is_file()
+    assert [kind for kind, *_ in accept_defaults].count("select") == 6  # tensor type, granularity, preset, precision, loss, review
+    looks_good = [a for a in accept_defaults if a[1] == "Looks good?"]
+    assert len(looks_good) == 1
+    assert [c.value for c in looks_good[0][2]][0] == "ok"
+
+
+def test_an_interrupted_wizard_exits_0_without_writing_a_file(typed, monkeypatch, tmp_path, capsys):
+    typed("train.pkl.gz", KeyboardInterrupt())
+    run_wizard(monkeypatch, tmp_path)
+    assert "Interrupted. Exiting." in capsys.readouterr().out
+    assert not (tmp_path / "input.yaml").exists()
+
+
+def test_an_interrupted_wizard_with_rich_says_so_in_red(typed, monkeypatch, tmp_path, capsys):
+    typed(KeyboardInterrupt(), rich=True)
+    run_wizard(monkeypatch, tmp_path)
+    assert "Interrupted." in capsys.readouterr().out
+    assert not (tmp_path / "input.yaml").exists()
+
+
+# --- verification and conversion: the branches the sections above do not reach -----------------------------------------------
+
+
+def test_verification_is_skipped_when_pandas_cannot_be_imported(typed, monkeypatch):
+    typed("yes")
+    monkeypatch.setitem(sys.modules, "pandas", None)  # makes ``import pandas`` raise ImportError
+    state = _make_state([2])
+    assert gen_wizard._section_verify_dataset(state) is state
+
+
+def test_a_train_set_that_fails_its_checks_ends_with_the_warning(typed, tmp_path, capsys):
+    typed("yes")
+    frame = _df_with_tensor(_symmetric_traceless)
+    path = tmp_path / "train.pckl.gz"
+    frame.drop(columns="ase_atoms").to_pickle(path)
+    state = _make_state([2])
+    state.train_filename = str(path)
+    gen_wizard._section_verify_dataset(state)
+    out = capsys.readouterr().out
+    assert "'ase_atoms': MISSING" in out
+    assert "WARNING" in out
+
+
+def test_a_test_file_that_cannot_be_loaded_is_reported_and_ends_with_the_warning(typed, tmp_path, capsys):
+    typed("yes")
+    path = tmp_path / "train.pckl.gz"
+    _df_with_tensor(_symmetric_traceless).to_pickle(path)
+    state = _make_state([2])
+    state.train_filename = str(path)
+    state.use_separate_test = True
+    state.test_filename = str(tmp_path / "absent.pckl.gz")
+    gen_wizard._section_verify_dataset(state)
+    out = capsys.readouterr().out
+    assert "Could not load test dataset" in out
+    assert "WARNING" in out
+
+
+def test_a_valid_train_and_test_pair_ends_with_the_all_clear(typed, tmp_path, capsys):
+    typed("yes")
+    path = tmp_path / "data.pckl.gz"
+    _df_with_tensor(_symmetric_traceless).to_pickle(path)
+    state = _make_state([2])
+    state.train_filename = state.test_filename = str(path)
+    state.use_separate_test = True
+    gen_wizard._section_verify_dataset(state)
+    assert "All dataset checks passed!" in capsys.readouterr().out
+
+
+def test_an_unreadable_source_column_cannot_be_converted(typed):
+    typed("src", "yes")
+    frame = pd.DataFrame([{"ase_atoms": _atoms(4), "src": None}])
+    assert gen_wizard._generate_tensor_property_interactive(frame, _make_state([2])) is None
+
+
+def test_a_conversion_that_fails_is_reported_and_gives_nothing(typed, monkeypatch, capsys):
+    typed("src", "yes")
+    frame = pd.DataFrame([{"ase_atoms": _atoms(4), "src": np.random.randn(4, 9)}])
+    monkeypatch.setattr(pd.DataFrame, "apply", lambda self, *a, **k: (_ for _ in ()).throw(ValueError("boom")))
+    assert gen_wizard._generate_tensor_property_interactive(frame, _make_state([2])) is None
+    assert "Conversion error: boom" in capsys.readouterr().out

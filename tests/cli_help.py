@@ -88,7 +88,9 @@ CASES: tuple[HelpCase, ...] = (
         "checkpoint",
         "update",
     ),
-    *_cases("grace_uq", f"{_SCRIPTS}.grace_uq", "main", "build", "info", "predict", "select"),
+    *_cases(
+        "grace_uq", f"{_SCRIPTS}.grace_uq", "main", "build", "info", "predict", "select"
+    ),
     *_cases("gracemaker", f"{_SCRIPTS}.gracemaker", "main"),
     *_cases("grace_preprocess", f"{_SCRIPTS}.grace_preprocess", "main"),
     *_cases("grace_predict", f"{_SCRIPTS}.grace_predict", "main"),
@@ -133,7 +135,9 @@ def run_main(
             result = main(list(argv)) if takes_argv else main()
         except SystemExit as stop:
             result = stop.code
-            if isinstance(result, str):  # SystemExit("message"): Python prints it to stderr and exits with 1
+            if isinstance(
+                result, str
+            ):  # SystemExit("message"): Python prints it to stderr and exits with 1
                 err.write(f"{result}\n")
                 result = 1
             elif result is None:

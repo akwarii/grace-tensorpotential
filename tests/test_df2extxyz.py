@@ -25,7 +25,11 @@ N_ROWS = 3
 def frame() -> pd.DataFrame:
     """The first rows of the MoNbTaW training set: energy_corrected, forces and stress columns."""
     df = pd.read_pickle(DATA)
-    return df[["ase_atoms", "energy_corrected", "forces", "stress"]].head(N_ROWS).reset_index(drop=True)
+    return (
+        df[["ase_atoms", "energy_corrected", "forces", "stress"]]
+        .head(N_ROWS)
+        .reset_index(drop=True)
+    )
 
 
 def _write(frame: pd.DataFrame, path: Path) -> Path:
@@ -33,19 +37,31 @@ def _write(frame: pd.DataFrame, path: Path) -> Path:
     return path
 
 
-def _assert_matches(path: Path, frame: pd.DataFrame, energy: str, forces: str, stress: str | None) -> None:
+def _assert_matches(
+    path: Path, frame: pd.DataFrame, energy: str, forces: str, stress: str | None
+) -> None:
     written = read(path, format="extxyz", index=":")
     assert len(written) == len(frame)
     for atoms, (_, row) in zip(written, frame.iterrows(), strict=True):
         reference = row["ase_atoms"]
         assert atoms.get_chemical_symbols() == reference.get_chemical_symbols()
         assert tuple(atoms.pbc) == tuple(reference.pbc)
-        np.testing.assert_allclose(atoms.cell[:], reference.cell[:], rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(atoms.positions, reference.positions, rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(atoms.get_potential_energy(), row[energy], rtol=TOL.rtol, atol=TOL.atol)
-        np.testing.assert_allclose(atoms.get_forces(), row[forces], rtol=TOL.rtol, atol=TOL.atol)
+        np.testing.assert_allclose(
+            atoms.cell[:], reference.cell[:], rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            atoms.positions, reference.positions, rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            atoms.get_potential_energy(), row[energy], rtol=TOL.rtol, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            atoms.get_forces(), row[forces], rtol=TOL.rtol, atol=TOL.atol
+        )
         if stress is not None:
-            np.testing.assert_allclose(atoms.get_stress(), row[stress], rtol=TOL.rtol, atol=TOL.atol)
+            np.testing.assert_allclose(
+                atoms.get_stress(), row[stress], rtol=TOL.rtol, atol=TOL.atol
+            )
 
 
 def test_default_output_name_replaces_the_pickle_extension(frame, tmp_path):
@@ -73,24 +89,46 @@ def test_explicit_output_name(frame, tmp_path):
 def test_default_columns_are_energy_corrected_forces_and_stress(frame, tmp_path):
     source = _write(frame, tmp_path / "train.pkl.gz")
     df2extxyz.main([str(source)])
-    _assert_matches(tmp_path / "train.xyz", frame, "energy_corrected", "forces", "stress")
+    _assert_matches(
+        tmp_path / "train.xyz", frame, "energy_corrected", "forces", "stress"
+    )
 
 
 def test_the_reference_values_are_also_stored_in_info_and_arrays(frame, tmp_path):
     source = _write(frame, tmp_path / "train.pkl.gz")
     df2extxyz.main([str(source)])
-    for atoms, (_, row) in zip(read(tmp_path / "train.xyz", index=":"), frame.iterrows(), strict=True):
-        np.testing.assert_allclose(atoms.info["REF_energy"], row["energy_corrected"], rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(atoms.arrays["REF_forces"], row["forces"], rtol=0.0, atol=TOL.atol)
-        np.testing.assert_allclose(atoms.info["REF_stress"], row["stress"], rtol=0.0, atol=TOL.atol)
+    for atoms, (_, row) in zip(
+        read(tmp_path / "train.xyz", index=":"), frame.iterrows(), strict=True
+    ):
+        np.testing.assert_allclose(
+            atoms.info["REF_energy"], row["energy_corrected"], rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            atoms.arrays["REF_forces"], row["forces"], rtol=0.0, atol=TOL.atol
+        )
+        np.testing.assert_allclose(
+            atoms.info["REF_stress"], row["stress"], rtol=0.0, atol=TOL.atol
+        )
 
 
 def test_column_options_select_other_columns(frame, tmp_path):
-    frame = frame.rename(columns={"energy_corrected": "e_ref", "forces": "f_ref", "stress": "s_ref"})
+    frame = frame.rename(
+        columns={"energy_corrected": "e_ref", "forces": "f_ref", "stress": "s_ref"}
+    )
     source = _write(frame, tmp_path / "train.pkl.gz")
     df2extxyz.main([str(source), "-e", "e_ref", "-f", "f_ref", "-s", "s_ref"])
     _assert_matches(tmp_path / "train.xyz", frame, "e_ref", "f_ref", "s_ref")
-    df2extxyz.main([str(source), "--energy-column", "e_ref", "--force-column", "f_ref", "--stress-column", "s_ref", "-o", str(tmp_path / "long.xyz")])
+    df2extxyz.main([
+        str(source),
+        "--energy-column",
+        "e_ref",
+        "--force-column",
+        "f_ref",
+        "--stress-column",
+        "s_ref",
+        "-o",
+        str(tmp_path / "long.xyz"),
+    ])
     _assert_matches(tmp_path / "long.xyz", frame, "e_ref", "f_ref", "s_ref")
 
 
@@ -108,7 +146,9 @@ def test_the_stress_is_passed_through_without_a_unit_conversion(frame, tmp_path)
     source = _write(scaled, tmp_path / "train.pkl.gz")
     df2extxyz.main([str(source)])
     for i, atoms in enumerate(read(tmp_path / "train.xyz", index=":")):
-        np.testing.assert_allclose(atoms.get_stress(), np.arange(6.0) * 0.5 + i, rtol=0.0, atol=TOL.atol)
+        np.testing.assert_allclose(
+            atoms.get_stress(), np.arange(6.0) * 0.5 + i, rtol=0.0, atol=TOL.atol
+        )
 
 
 def test_a_missing_energy_column_is_an_error(frame, tmp_path):

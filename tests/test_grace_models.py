@@ -29,14 +29,16 @@ def downloads(monkeypatch) -> list[tuple[str, str]]:
         ("kokkos", "get_or_download_kokkos"),
         ("checkpoint", "get_or_download_checkpoint"),
     ):
-        monkeypatch.setattr(foundation_models, attr, lambda name, kind=kind: calls.append((kind, name)))
+        monkeypatch.setattr(
+            foundation_models, attr, lambda name, kind=kind: calls.append((kind, name))
+        )
     return calls
 
 
 KNOWN = foundation_models.MODELS_NAME_LIST[0]
 
 
-def test_without_a_command_the_help_is_printed(capsys):
+def test_without_a_command_the_help_is_printed():
     code, out, _ = run_models()
     assert code == 0
     reference = next(case for case in CASES if case.case_id == "grace_models").reference
@@ -89,7 +91,9 @@ def test_checkpoint_of_a_known_model(downloads):
 
 def test_checkpoint_all_fetches_every_registered_checkpoint(downloads):
     run_models("checkpoint", "all")
-    assert downloads == [("checkpoint", name) for name in foundation_models.MODELS_NAME_LIST]
+    assert downloads == [
+        ("checkpoint", name) for name in foundation_models.MODELS_NAME_LIST
+    ]
 
 
 def test_checkpoint_of_an_unknown_model_is_reported(downloads):
@@ -121,7 +125,7 @@ def test_list_verbose_prints_one_block_per_model():
         assert name in out
 
 
-def test_list_is_the_default_for_nothing_else():
+def test_the_verbose_list_differs_from_the_table():
     code, out, _ = run_models("list")
     code_v, out_v, _ = run_models("list", "--verbose")
     assert code == code_v == 0

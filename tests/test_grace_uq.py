@@ -37,7 +37,10 @@ def test_unknown_subcommand_exits_2_and_names_the_choices():
     code, out, err = run_grace_uq("frobnicate")
     assert code == 2
     assert out == ""
-    assert err == "grace_uq: unknown subcommand 'frobnicate'. Use one of: build, info, predict, select\n"
+    assert (
+        err
+        == "grace_uq: unknown subcommand 'frobnicate'. Use one of: build, info, predict, select\n"
+    )
 
 
 def test_options_before_a_subcommand_are_an_unknown_subcommand():

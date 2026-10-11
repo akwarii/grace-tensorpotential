@@ -1082,3 +1082,19 @@ def test_virtual_devices_without_multigpu_do_not_warn(script_env, monkeypatch, c
     with caplog.at_level(logging.WARNING):
         run_script("input.yaml")
     assert "auto-MWMS" not in caplog.text
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# A fit without a test set
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def test_a_fit_without_a_test_set_trains_and_does_not_load_a_best_test_loss_checkpoint(ws, caplog):
+    cfg = _base_config()
+    cfg["data"] = {"filename": "../data/train.pkl.gz"}
+    (ws.run / "input.yaml").write_text(yaml.safe_dump(cfg))
+    with caplog.at_level(logging.INFO):
+        main(["input.yaml"])
+    assert ws.metrics("train")["epoch"].tolist() == [1, 2]
+    assert not (ws.seed_dir / "test_metrics.yaml").exists()
+    assert "Loading best test loss model" not in caplog.text
