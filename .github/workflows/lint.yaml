@@ -1,6 +1,6 @@
 # Static checks on every pull request and on every push to the integration branch (CI1, D17a):
 # ruff (strict set of the new packages), ty, the lint ratchet, the import contract (TensorFlow-free modules),
-# registry completeness and the tests of the packaging tools.
+# registry completeness, the tests of the packaging tools, the clone ratchet and the divergence ledger (CI3).
 # Every action is pinned to a commit; the token has read access only.
 
 name: Lint
@@ -29,6 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          # the divergence check diffs against upstream master, so it needs the history of this branch
+          fetch-depth: 0
           persist-credentials: false
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
@@ -56,3 +58,9 @@ jobs:
         with:
           python: .venv/bin/python
           tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py
+      - name: Clone ratchet (duplicated functions may not rise)
+        run: uv run --frozen --no-sync python tools/check_clones.py check
+      - name: Fetch upstream master (read-only, public, no credential)
+        run: git fetch --no-tags https://github.com/ICAMS/grace-tensorpotential.git master:refs/remotes/upstream/master
+      - name: Divergence ledger (every modified upstream file has a row in tools/divergence.yaml)
+        run: uv run --frozen --no-sync python tools/divergence.py check
