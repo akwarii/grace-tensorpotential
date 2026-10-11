@@ -1145,3 +1145,72 @@ def test_the_script_main_configures_logging_when_it_runs(script_env):
         for handler in saved_handlers:
             root.addHandler(handler)
         root.setLevel(saved_level)
+
+
+class TestBuildInstructions:
+    """``_build_instructions``: the model comes from a file (restarts) or is built from ``potential``; the communicated keys."""
+
+    @pytest.fixture
+    def custom_builder(self, tmp_path, monkeypatch):
+        """A ``potential::custom`` model builder that, like the presets of the 2-layer models, names its communicated keys."""
+        (tmp_path / "custom_builder_for_the_run.py").write_text(
+            "class Built:\n"
+            "    communicated_keys = ['from_the_builder']\n"
+            "    def get_instructions(self):\n"
+            "        return {'marker': 1}\n\n"
+            "def build(**kwargs):\n"
+            "    return Built()\n\n"
+            "def build_plain(**kwargs):\n"
+            "    return {'marker': 2}\n"
+        )
+        monkeypatch.chdir(tmp_path)  # construct_model adds the working directory to the import path
+        return "custom_builder_for_the_run"
+
+    @staticmethod
+    def make_run(potential_config: dict, **overrides) -> gracemaker._Run:
+        run = gracemaker._Run(
+            args=argparse.Namespace(save_model=False),
+            args_yaml={},
+            potential_config=potential_config,
+            fit_config={},
+            seed=1,
+            output_dir=".",
+            rcut=5.0,
+            element_map={"Mo": 0},
+            data_stats={},
+        )
+        for name, value in overrides.items():
+            setattr(run, name, value)
+        return run
+
+    def test_the_keys_of_the_builder_win_over_those_of_the_input(self, custom_builder):
+        run = self.make_run(
+            {"custom": f"{custom_builder}.build", "communicated_keys": ["from_the_input"]}
+        )
+        gracemaker._build_instructions(run)
+        assert run.instructions == {"marker": 1}
+        assert run.communicated_keys == ["from_the_builder"]
+
+    def test_the_keys_of_the_input_stay_when_the_builder_names_none(self, custom_builder):
+        run = self.make_run(
+            {"custom": f"{custom_builder}.build_plain", "communicated_keys": ["from_the_input"]}
+        )
+        gracemaker._build_instructions(run)
+        assert run.instructions == {"marker": 2}
+        assert run.communicated_keys == ["from_the_input"]
+
+    def test_a_model_file_is_loaded_and_nothing_is_built(self, trained):
+        run = self.make_run(
+            {"communicated_keys": ["from_the_input"]},
+            potential_file_name=str(trained.seed_dir / "model.yaml"),
+        )
+        gracemaker._build_instructions(run)
+        assert set(run.instructions) == set(load_instructions(str(trained.seed_dir / "model.yaml")))
+        assert run.communicated_keys == ["from_the_input"]
+
+    def test_a_model_built_from_scratch_cannot_be_exported_without_training(self, custom_builder):
+        run = self.make_run({"custom": f"{custom_builder}.build"})
+        run.args.save_model = True
+        with pytest.raises(ValueError, match="Cannot save just-initialized model"):
+            gracemaker._build_instructions(run)
+        assert run.instructions is None

@@ -749,3 +749,12 @@ def test_the_default_strategy_is_random_extrap_with_stratification_on():
         args.gamma_max,
         args.seed,
     ) == ("random-extrap", True, 1.0, None, 42)
+
+
+def test_the_extxyz_output_of_a_selection_without_structures_is_refused(tmp_path):
+    # _build_atom_pool already rejects a pool without ase_atoms, so only a direct call reaches this guard of the saving step
+    frame = pool_frame().drop(columns="ase_atoms")
+    args = type("Args", (), {"output": str(tmp_path / "out.xyz")})
+    with pytest.raises(select_mod.SelectionError, match="extxyz output requires the ase_atoms column"):
+        select_mod._save_selection(args, frame, [0, 1], {0: 3})
+    assert not (tmp_path / "out.xyz").exists()

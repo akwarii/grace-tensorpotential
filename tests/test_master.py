@@ -28,7 +28,11 @@ from tensorpotential.scripts import grace_preprocess
 from tensorpotential.tpmodel import extract_cutoff_and_elements
 from tensorpotential.uq import constants as uqc
 from tensorpotential.uq.cli.build import build_main
-from tensorpotential.uq.cli.build.master import build_parser
+from tensorpotential.uq.cli.build.master import (
+    _flatten_weighted_train_data,
+    _worker_has_finished,
+    build_parser,
+)
 from tensorpotential.uq.cli.info import info_main
 from tests import cli_help
 
@@ -271,6 +275,8 @@ def test_a_worker_applies_the_filter_function_and_the_fraction(
             "keep_big_filter:keep_big",
             "--frac",
             "0.5",
+            "--checkpoint",
+            str(model_dir / "checkpoint"),  # named without the .index suffix the other tests give it
         )
     )
     assert (tmp_path / ".step1_w0_k2.npz").is_file()
@@ -544,3 +550,34 @@ def test_a_finished_worker_step_returns_zero_without_loading_the_model(
 
 def test_the_parser_of_the_build_command_is_available_without_running_it():
     assert build_parser().prog == "grace_uq build"
+
+
+def test_weighted_groups_become_the_flat_path_list_and_the_weight_map(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    parser = build_parser()
+    args = parser.parse_args(
+        ["--train-data-weighted", "2.0", "a.pkl.gz", "b.pkl.gz", "--train-data-weighted", "0.5", "c.pkl.gz"]
+    )
+    assert _flatten_weighted_train_data(parser, args) is True  # --train-data was left at its default
+    paths = [str(tmp_path / name) for name in ("a.pkl.gz", "b.pkl.gz", "c.pkl.gz")]
+    assert args.train_data == paths
+    assert args.file_weight_map == dict(zip(paths, (2.0, 2.0, 0.5), strict=True))
+
+
+def test_plain_train_data_gives_an_empty_weight_map_and_is_left_alone():
+    parser = build_parser()
+    args = parser.parse_args(["--train-data", "a.pkl.gz"])
+    assert _flatten_weighted_train_data(parser, args) is False
+    assert args.train_data == ["a.pkl.gz"]
+    assert args.file_weight_map == {}
+
+
+def test_a_worker_without_a_step_expects_no_file_and_is_never_finished(tmp_path, capsys):
+    class Args:
+        artifact_path = str(tmp_path / "gmm_artifacts.npz")
+        step = None
+        worker_id = 3
+        n_clusters = [2]
+
+    assert _worker_has_finished(Args) is False
+    assert "Worker 3 Step None: 0 file(s) missing, running. (e.g. ?)" in capsys.readouterr().out
