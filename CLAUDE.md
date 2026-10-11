@@ -67,6 +67,17 @@ Two test files are not part of a normal run: `test_structured_grid.py` is skippe
 counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
 A test writes only into `tmp_path` (or a scratch directory), never into the working directory or the source tree; `git status` is clean after a run.
 
+**Checks a pull request must pass (CI3).** The job names below are what the owner sets as required checks in the repository settings (an agent never changes them):
+
+| Workflow | Jobs | Covers |
+|---|---|---|
+| Lint | `lint` | strict ruff and ty on the new packages, lint ratchet, import contract, registry completeness, packaging-tool tests, **clone ratchet** (`tools/check_clones.py`), **divergence ledger** (`tools/divergence.py`, against a read-only fetch of the public upstream master) |
+| Tests | `test-core`, `test-torch (2.3.3)`, `test-torch (3.0.3)`, `test-tf (group 1 of 4)` to `test-tf (group 4 of 4)` | the suites; each TF shard uploads its coverage data |
+| Tests | `quality-gates` | combines the shard coverage, runs `tools/coverage_ratchet.py check` and, on a pull request, `tools/check_touched_coverage.py --base origin/<base branch>` (touched units at 90%) |
+| Wheel | `wheel`, `wheel-smoke`, `extras-resolve` | packaging |
+
+CI does **not** run `python tools/board.py lint` (it needs a token with project scope, so it stays in the agent procedure), the real-weight and foundation-model tests (HPC only), any GPU test, the comparisons with `baselines/` (`tools/junit_outcomes.py`, `tools/ast_manifest.py`; run them locally for a gate), or the `Nightly` and `Upstream completeness` jobs (scheduled, not per pull request). `quality-gates` runs only after all four shards pass; a failing shard hides its verdict.
+
 ## Code style
 
 - Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
@@ -147,7 +158,7 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
   `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils`
   and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` needs `flask`, which the `dashboard` extra installs). Package discovery is
   `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package. TensorFlow and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before
-  `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue). The CI set is `.github/workflows/lint.yaml` (lint), `tests.yaml` (test-core without TF, test-torch, test-tf; also nightly), `wheel.yaml` (wheel, wheel-smoke, extras-resolve) and `nightly.yml` (both stacks, torch-sim main).
+  `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue). The CI set is `.github/workflows/lint.yaml` (lint), `tests.yaml` (test-core without TF, test-torch, test-tf, quality-gates; also nightly), `wheel.yaml` (wheel, wheel-smoke, extras-resolve) and `nightly.yml` (both stacks, torch-sim main).
 - **The hosted runner has 16 GB and a TensorFlow xdist worker's resident memory only grows (CI2).** One unchanged `test-tf` job (4 workers, whole suite) climbed from 8 GB to 15 GB used and died with "The runner has received a shutdown signal"
   (no failing test, no kernel line when it survives) at 94 to 97% of the suite; a single runner with 2 workers on the whole suite still peaked at 14.9 GB, so the fix is **fewer tests per runner**: `test-tf` is four `pytest-split` groups with 2 workers each (peak memory used 6.7, 6.5, 6.0 and 5.9 GB, 5 to 7 minutes each; three groups peaked at 7.1, 11.5 and 9.4 GB, too close to 16 GB).
   **Locally too (CLI1):** a whole-suite `-n 4` run needs more than 18 GB of a 30 GB machine (workers of 4 to 6 GB each, `tests/test_integration_test.py` the largest consumer), and with a browser open it took the desktop session down at 94% (no OOM line in the journal). For a full or coverage run use the CI shards one after another (`--splits 4 --group N --splitting-algorithm=least_duration --durations-path=tests/.test_durations`, `--cov-append` with one `COVERAGE_FILE`, junit files merged by hand) inside `systemd-run --user --scope -p MemoryMax=18G -p MemorySwapMax=2G`, so that an overrun kills the test run and not the session. Every run of `predict_main` / `TPCalculator` keeps about 350 MB of TensorFlow state that `clear_session`, `gc` and `malloc_trim` do not return; and under `--dist load` a module fixture is rebuilt on every worker that gets one of its tests, so a heavy run belongs inside one test. To find the culprit, log the resident memory after each test with a small plugin (`/proc/<pid>/status`, `VmRSS`) and run the files serially.
