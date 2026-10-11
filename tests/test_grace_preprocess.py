@@ -602,3 +602,17 @@ def test_main_without_argv_reads_sys_argv(input_file, tmp_path, monkeypatch):
     monkeypatch.setattr("sys.argv", ["grace_preprocess", str(input_file), "-o", str(out), "-e", "Cu", "--stage-1"])
     assert grace_preprocess.main() == 0
     assert (out / "stage1" / "shard_1-of-1").is_dir()
+
+
+@pytest.mark.parametrize(
+    "content",
+    ['{"cutoff": 4.0, "precision": "float64"}', "[1, 2, 3]", '{"elements_map": {}, "cutoff": 4.0}'],
+    ids=["no-elements-map", "not-a-mapping", "no-precision"],
+)
+def test_load_params_of_a_file_that_is_not_a_complete_mapping_logs_and_returns_nothing(
+    tmp_path, caplog, content
+):
+    (tmp_path / "params.json").write_text(content)
+    with caplog.at_level(logging.ERROR):
+        assert grace_preprocess.load_params(str(tmp_path)) is None
+    assert "Can't parse" in caplog.text
