@@ -81,3 +81,22 @@ def test_main_returns_the_exit_code_instead_of_raising_and_does_not_read_sys_arg
 def test_main_without_argv_reads_sys_argv(monkeypatch):
     monkeypatch.setattr("sys.argv", ["grace_uq", "frobnicate"])
     assert grace_uq.main() == 2
+
+
+def test_the_help_is_styled_on_a_terminal_and_reads_the_same_without_styles(monkeypatch):
+    import io
+    import re
+
+    from tensorpotential.cli import console
+
+    buffer = io.StringIO()
+    terminal = console.make_console(file=buffer, force_terminal=True, width=200)
+    monkeypatch.setattr(console, "get_console", lambda *, stderr=False: terminal)
+    assert grace_uq.main(["--help"]) == 0
+    styled = buffer.getvalue()
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", styled)
+    assert styled != plain
+    assert "\x1b[1mgrace_uq\x1b[0m" in styled  # the program name in bold
+    monkeypatch.undo()
+    _, out, _ = run_grace_uq("--help")
+    assert plain == out

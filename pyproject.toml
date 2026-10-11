@@ -163,6 +163,8 @@ source_modules = [
     "tensorpotential.calculator.foundation_models",
     "tensorpotential.scripts.grace",
     "tensorpotential.scripts.grace_uq",
+    "tensorpotential.cli.console",
+    "tensorpotential.cli.prompts",
 ]
 forbidden_modules = ["tensorflow", "keras"]
 # The allowlist of modules that may cross is empty for core, and for torch_backend once it exists (the TF-side

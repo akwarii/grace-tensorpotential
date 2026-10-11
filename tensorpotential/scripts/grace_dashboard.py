@@ -30,6 +30,8 @@ from datetime import datetime
 import numpy as np
 from flask import Flask, jsonify, render_template_string, request
 
+from tensorpotential.cli.console import say
+
 
 TARGET_EPOCHS = 160
 
@@ -1336,9 +1338,9 @@ def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
         raise SystemExit(f"base directory does not exist: {base}")
 
     fits = discover_fits(base)
-    print(f"[grace_dashboard] scanning {base}")
-    print(f"[grace_dashboard] discovered {len(fits)} fit folder(s), "
-          f"{sum(len(f['seeds']) for f in fits)} seed(s) total")
+    say(f"[grace_dashboard] scanning {base}")
+    say(f"[grace_dashboard] discovered {len(fits)} fit folder(s), "
+        f"{sum(len(f['seeds']) for f in fits)} seed(s) total")
     app = create_app(base, target_epochs=args.target_epochs)
     app.run(host=args.host, port=args.port, debug=args.debug)
     return 0

@@ -550,3 +550,38 @@ def test_a_mirrored_strategy_in_the_input_yaml_is_seen_through_grace_train(
     run_grace("train", "--seed", "1", "input.yaml")
     assert train_env["mwms"] == 1
     assert train_env["runs"][0]["argv"] == ["--seed", "1", "input.yaml"]
+
+
+def test_the_top_level_help_is_a_styled_table_on_a_terminal(monkeypatch):
+    import io
+    import re
+
+    from tensorpotential.cli import console
+
+    buffer = io.StringIO()
+    terminal = console.make_console(file=buffer, force_terminal=True, width=120)
+    monkeypatch.setattr(console, "get_console", lambda *, stderr=False: terminal)
+    assert grace.main(["--help"]) == 0
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", buffer.getvalue())
+    assert plain.startswith("usage: grace <subcommand> [options]\n")
+    for command in grace.COMMANDS:
+        assert re.search(
+            rf"^{command.name}\s+{re.escape(command.help)}\s*$", plain, re.MULTILINE
+        )
+    assert buffer.getvalue() != plain
+
+
+def test_an_error_of_grace_is_red_on_a_terminal(monkeypatch):
+    import io
+    import re
+
+    from tensorpotential.cli import console
+
+    buffer = io.StringIO()
+    terminal = console.make_console(file=buffer, force_terminal=True, width=120)
+    monkeypatch.setattr(console, "get_console", lambda *, stderr=False: terminal)
+    assert grace.main(["nonsense"]) == 2
+    assert re.sub(r"\x1b\[[0-9;]*m", "", buffer.getvalue()).startswith(
+        "grace: unknown subcommand 'nonsense'"
+    )
+    assert "\x1b[1;31m" in buffer.getvalue()

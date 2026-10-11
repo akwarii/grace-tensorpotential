@@ -13,6 +13,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 
+from tensorpotential.cli.console import print_segments
 from tensorpotential.scripts.grace import UQ_COMMANDS, dispatch
 
 
@@ -25,12 +26,31 @@ def _dispatch(argv: list[str], prog: str = "grace_uq") -> int:
     )
 
 
+# The help text below marks its styled parts with these private-use characters (bold, cyan, green, reset);
+# _segments_of turns the text into (text, style) segments for the shared console, which styles them on a terminal only.
+_STYLE_MARKS = {"\ue000": "bold", "\ue001": "cyan", "\ue002": "green"}
+_RESET_MARK = "\ue003"
+
+
+def _segments_of(text: str) -> list[tuple[str, str | None]]:
+    segments: list[tuple[str, str | None]] = []
+    style: str | None = None
+    buffer: list[str] = []
+    for char in text:
+        if char in _STYLE_MARKS or char == _RESET_MARK:
+            if buffer:
+                segments.append(("".join(buffer), style))
+                buffer = []
+            style = _STYLE_MARKS.get(char)
+        else:
+            buffer.append(char)
+    if buffer:
+        segments.append(("".join(buffer), style))
+    return segments
+
+
 def _print_top_help(prog: str = "grace_uq"):
-    tty = sys.stdout.isatty()
-    b = "\033[1m" if tty else ""
-    c = "\033[36m" if tty else ""
-    g = "\033[32m" if tty else ""
-    r = "\033[0m" if tty else ""
+    b, c, g, r = "\ue000", "\ue001", "\ue002", _RESET_MARK
 
     text = (
         f"""{b}grace_uq{r} <subcommand> [options]
@@ -124,7 +144,7 @@ Run `grace_uq <subcommand> --help` for subcommand-specific options.
                     --output selected.pkl.gz{r}
 """
     )
-    print(text.replace("grace_uq", prog))
+    print_segments(_segments_of(text.replace("grace_uq", prog)))
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = "grace_uq") -> int:

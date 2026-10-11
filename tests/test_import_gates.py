@@ -497,6 +497,8 @@ TF_FREE_MODULES = (
     "tensorpotential.calculator.foundation_models",
     "tensorpotential.scripts.grace",
     "tensorpotential.scripts.grace_uq",
+    "tensorpotential.cli.console",
+    "tensorpotential.cli.prompts",
 )
 
 _TF_BLOCKED_CODE = """

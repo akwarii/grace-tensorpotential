@@ -18,6 +18,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from tensorpotential.cli.console import print_command_table, print_error
 from tensorpotential.core.backends import BackendNotInstalledError, require_backend
 
 _SCRIPTS = "tensorpotential.scripts"
@@ -172,7 +173,7 @@ def run_command(command: Command, argv: Sequence[str], *, prog: str) -> int:
         try:
             require_backend(command.backend, needed_by=prog)
         except BackendNotInstalledError as error:
-            sys.stderr.write(f"{error}\n")
+            print_error(str(error))
             return 1
     result = resolve(command)(list(argv), prog=prog)
     return result if isinstance(result, int) else 0
@@ -196,23 +197,18 @@ def dispatch(
     command = find_command(commands, argv[0])
     if command is None:
         known = ", ".join(sorted(c.name for c in commands))
-        sys.stderr.write(
-            f"{prog}: unknown subcommand {argv[0]!r}. Use one of: {known}\n"
-        )
+        print_error(f"{prog}: unknown subcommand {argv[0]!r}. Use one of: {known}")
         return 2
     return run_command(command, argv[1:], prog=f"{prog} {command.name}")
 
 
-def render_help(commands: Sequence[Command], prog: str = "grace") -> str:
-    """Return the top-level help text: usage, one line per sub-command, and how to get theirs."""
-    width = max(len(command.name) for command in commands)
-    rows = "\n".join(
-        f"  {command.name.ljust(width)}  {command.help}" for command in commands
-    )
-    return (
-        f"usage: {prog} <subcommand> [options]\n\n"
-        f"Subcommands:\n{rows}\n\n"
-        f"Run `{prog} <subcommand> --help` for the options of a subcommand.\n"
+def show_help(commands: Sequence[Command], prog: str = "grace") -> None:
+    """Write the top-level help: usage, one line per sub-command, and how to get theirs."""
+    print_command_table(
+        f"usage: {prog} <subcommand> [options]",
+        [(command.name, command.help) for command in commands],
+        "Subcommands",
+        f"Run `{prog} <subcommand> --help` for the options of a subcommand.",
     )
 
 
@@ -223,7 +219,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = "grace") -> int:
         COMMANDS,
         args,
         prog=prog,
-        print_help=lambda: sys.stdout.write(render_help(COMMANDS, prog)),
+        print_help=lambda: show_help(COMMANDS, prog),
     )
 
 
