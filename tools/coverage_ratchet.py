@@ -100,11 +100,8 @@ def _load(path: Path) -> dict:
 
 
 def _baseline_files(baseline: Path, moves: dict[str, str] | None) -> Counts:
-    """Per-file counts of the baseline, with the moved files under their new paths."""
-    try:
-        return rekey(_load(baseline)["files"], moves or {})
-    except ValueError as err:
-        raise RatchetError(str(err)) from err
+    """Per-file counts of the baseline, with the moved files under their new paths (ValueError on a clash)."""
+    return rekey(_load(baseline)["files"], moves or {})
 
 
 def check(
