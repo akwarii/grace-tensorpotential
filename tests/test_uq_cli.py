@@ -298,6 +298,51 @@ def test_info_main_prints_summary(tmp_path, capsys):
     assert "thr_min" in out
 
 
+def _artifact_with_histograms(path, hists):
+    """The synthetic artifact (K=3, D=4, counts 100) with counts 10/20/30 and the given ``hist_<e>`` arrays added."""
+    _write_synthetic_info_artifact(path, n_elements=2, K=3, D=4)
+    data = dict(np.load(path))
+    for e in (0, 1):
+        data[f"counts_{e}"] = np.array([10.0, 20.0, 30.0])
+    data["hist_bins"] = np.linspace(0, 4, 9).astype(np.float32)
+    for e, rows in hists.items():
+        hist = np.zeros((len(rows), 8), dtype=np.int64)
+        hist[:, 0] = rows
+        data[f"hist_{e}"] = hist
+    np.savez(path, **data)
+
+
+def test_info_verbose_prints_the_per_cluster_breakdown(tmp_path, capsys):
+    path = str(tmp_path / "art.npz")
+    _write_synthetic_info_artifact(path)
+    assert info_main([path, "-v"]) == 0
+    out = capsys.readouterr().out
+    assert "Per-cluster breakdown (--verbose):" in out
+    assert out.count("real") >= 6  # three real clusters for each of the two elements
+    assert info_main([path]) == 0
+    assert "Per-cluster breakdown (--verbose):" not in capsys.readouterr().out
+
+
+def test_info_warns_when_histograms_were_stored_in_another_cluster_order(tmp_path, capsys):
+    path = str(tmp_path / "art.npz")
+    # element 0: histogram row sums 30/10/20 against counts 10/20/30 (a genuine permutation); element 1 is aligned
+    _artifact_with_histograms(path, {0: [30, 10, 20], 1: [10, 20, 30]})
+    assert info_main([path]) == 0
+    out = capsys.readouterr().out
+    assert "WARNING: histograms AND thresholds for 1 element(s) were stored in a different cluster order" in out
+    assert "could not be aligned" not in out
+
+
+def test_info_warns_when_histograms_cannot_be_aligned_to_the_centroids(tmp_path, capsys):
+    path = str(tmp_path / "art.npz")
+    # element 1 has two histogram rows for three clusters: no alignment can be recovered
+    _artifact_with_histograms(path, {0: [10, 20, 30], 1: [10, 20]})
+    assert info_main([path]) == 0
+    out = capsys.readouterr().out
+    assert "WARNING: histograms for 1 element(s) could not be aligned to the centroid order" in out
+    assert "were stored in a different cluster order" not in out
+
+
 # ===========================================================================
 # grace_uq build — _worker_output_paths
 # ===========================================================================
