@@ -1,7 +1,7 @@
 <!--
 Fork-only template for pull requests into `torch-backend` on this fork. Generate a filled copy with `python tools/board.py pr-body <ID>`.
 Do not use it for upstream (ICAMS) pull requests: those use the upstream template and are sent only with an explicit go for that unit.
-Delete every comment before submitting. Rules for the text: see the "Writing the PR summary" section of the grace-torch-ticket skill.
+Delete every comment before submitting. Rules for the text: see the "Writing the PR summary" section of the grace-torch-pr skill.
 -->
 
 ## Summary

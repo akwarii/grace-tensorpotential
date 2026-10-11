@@ -23,7 +23,7 @@ a def or method (a class body counts when a class attribute changes). Coverage =
 
 A **new file** in any directory, a test file in `tests/` or `tools/tests/` included, is checked by `python tools/lint_ratchet.py check` with the whole strict set (docstrings and plain `assert` are allowed in test files) and with `ty` without the legacy relaxations, unless it is in `baselines/legacy_files.txt`, which never grows; write it clean, do not add it to the list.
 
-New code in `core/` and `torch_backend/` is held to 90% (branch) per package in CI. `# pragma: no cover` needs a reason in the comment. Raising coverage
+New code in `core/` and `torch_backend/` is held to 90% (branch) per package; no CI job checks it yet (issue CI3 adds the gates), so measure it with the commands above. `# pragma: no cover` needs a reason in the comment. Raising coverage
 beyond the touched units is welcome; a file's coverage never falls.
 
 ## Two layers: logic and physics
@@ -61,7 +61,7 @@ count of mock uses before and after when you change a test file.
 
 ## Speed
 
-- Run the suite from the repository root (`pytest tests`; it also passes from inside `tests/`). Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group): 10 to 12 min instead of 32 min on 14 cores with the identical outcome (`--dist worksteal` was not faster).
+- Run the suite from the repository root (`pytest tests`; it also passes from inside `tests/`). Parallel: `pytest -n 4 --dist load` (pytest-xdist, `dev` group), about a third of the serial time with the identical outcome (`--dist worksteal` was not faster); measured times and memory: `.github/CI.md`. A whole-suite `-n 4` run needs more than 18 GB of the 30 GB here: run the CI shards one after another under `systemd-run` with `MemoryMax=18G` (recipe: `.github/CI.md`, "Locally").
   Choose the worker count from memory (TF processes are large); the root `conftest.py` gives each worker `cores / N` threads before TensorFlow is first imported (`tests/thread_budget.py`; it must stay out of `tests/conftest.py`, where it would add E402 findings; overridable by setting `TF_NUM_INTRAOP_THREADS`, `TF_NUM_INTEROP_THREADS` or `OMP_NUM_THREADS`).
 - **Check that the machine is idle first** (the rule and the definition of busy are in `CLAUDE.md`; the load limit of 4 comes from a suite at `-n 4` taking about twice as long next to another one, so adjust it if the machine changes). The bracket in `grep '[p]ytest'` keeps the grep itself out of the list.
   A shell whose own command line merely contains the word "pytest" is not a test run, so look at the executable (`python ... -m pytest`, or the xdist workers). `pgrep -f` matches the shell that runs it, so a wait loop on it never ends, and `pkill -f <script name>` kills your own shell: do not use either.
@@ -76,7 +76,7 @@ count of mock uses before and after when you change a test file.
   ```
 
   `/tmp` stays writable, so `tmp_path` works; `PATH` must hold the venv's `bin` (the tests call `gracemaker` and `grace_preprocess`); the copy is imported, not the editable install. Do not run `uv sync` for this (see the worktree rule in `CLAUDE.md`).
-- Wall times on this machine vary by up to 30% between identical runs (summed test time of the same tests: 1,392 s to 1,826 s), so compare timings only between runs made back to back with nothing else running, and say how many runs a number comes from. A test that only makes sense under xdist (it checks the worker environment) skips serially by design; mention that when comparing counts with a serial run.
+- Wall times on this machine vary by up to 30% between identical runs, so compare timings only between runs made back to back with nothing else running, and say how many runs a number comes from. A test that only makes sense under xdist (it checks the worker environment) skips serially by design; mention that when comparing counts with a serial run.
 - Share real expensive objects (built models, prepared data, trained tiny models) through module- or session-scoped fixtures when tests only read them,
   with a check that they are not mutated. Merge training runs that differ only in what is asserted afterwards, keeping every assertion. Reduce work
   only where the assertion does not depend on it, and list each cut; never relax a tolerance for speed.
