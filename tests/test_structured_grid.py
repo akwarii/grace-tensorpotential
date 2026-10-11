@@ -25,7 +25,6 @@ from __future__ import annotations
 import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import numpy as np

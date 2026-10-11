@@ -55,6 +55,7 @@ nav:
   - Uncertainty Quantification: gracemaker/uq.md
   - Fitting Generic Tensors: gracemaker/gen_tensor.md
   - FAQs: gracemaker/faq.md
+  - Release notes: gracemaker/release_notes.md
 
 
 markdown_extensions:

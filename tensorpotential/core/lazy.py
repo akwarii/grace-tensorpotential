@@ -13,11 +13,16 @@ import sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
-TF_PACKAGES = frozenset({"tensorflow", "tf_keras"})
+from tensorpotential.core.backends import (
+    BackendNotInstalledError,
+    backend_not_installed,
+)
+
+TF_PACKAGES = frozenset({"tensorflow", "keras"})
 
 
 def is_tf_import_error(exc: ImportError) -> bool:
-    """Whether ``exc`` was raised because ``tensorflow`` or ``tf_keras`` could not be imported."""
+    """Whether ``exc`` was raised because ``tensorflow`` or ``keras`` could not be imported."""
     return (exc.name or "").split(".")[0] in TF_PACKAGES
 
 
@@ -29,8 +34,13 @@ def missing_tf_error(name: str, exc: ImportError) -> ImportError:
     name
         The public name that was requested, e.g. ``"TPModel"``.
     exc
-        The original ``ImportError``; its text is kept in the message.
+        The original ``ImportError``; its text is kept in the message, except that a
+        :class:`~tensorpotential.core.backends.BackendNotInstalledError` already carries the
+        install hint and is only renamed after ``name``.
     """
+    if isinstance(exc, BackendNotInstalledError):
+        # already says what is missing and how to install it: only the requested name is added
+        return backend_not_installed(exc.backend, exc.missing, needed_by=f"'{name}'")
     return ImportError(
         f"'{name}' needs TensorFlow, which could not be imported ({exc}). Install it with the "
         "'tf' extra: pip install 'tensorpotential[tf]'. The TensorFlow-free parts of the package, "

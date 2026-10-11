@@ -1,10 +1,11 @@
 """Characterization tests for ``tensorpotential/__init__.py``.
 
-Importing the package sets the legacy-Keras flag before TensorFlow is imported, switches
-TensorFlow to numpy-style type promotion and turns TensorFloat-32 off, and offers
+Importing the package neither sets nor reads the legacy-Keras variable (it warns a user who still exports
+it), a TensorFlow-side import switches TensorFlow to numpy-style type promotion and turns TensorFloat-32
+off, and the package offers
 ``TensorPotential``, ``TPModel``, ``LossFunction`` and ``L2Loss``.
 
-Logic layer: the flag in every state of the environment, the public names. Physical-value
+Logic layer: the variable in every state of the environment, the public names. Physical-value
 layer: TensorFloat-32 off means a float32 matrix product is evaluated to full float32
 precision, checked against the same product evaluated in float64 (an oracle that does not use
 the package); numpy-style promotion is what the model code relies on (``Tensor.ndim`` exists).
@@ -25,76 +26,85 @@ from tests.fresh_python import last_stdout_line, run_fresh_python
 FLAG = "TF_USE_LEGACY_KERAS"
 
 
-# ---- the legacy-Keras flag ----
+# ---- the legacy-Keras variable: neither set nor read, a warning when the user still exports it ----
 
 
-FLAG_PROBE = (
-    "import tensorpotential, os; print(repr(os.environ.get('TF_USE_LEGACY_KERAS')))"
-)
+FLAG_PROBE = """
+import warnings
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    import tensorpotential
+import os
+print(repr(os.environ.get("TF_USE_LEGACY_KERAS")), [str(w.message) for w in caught])
+"""
 
 
-@pytest.mark.parametrize("before", [None, ""])
-def test_flag_is_set_when_missing_or_empty_and_the_user_is_told(
+@pytest.mark.parametrize("before", [None, "", "0", "false"])
+def test_the_package_leaves_the_variable_alone_and_is_silent_when_it_does_not_ask_for_legacy_keras(
     before: str | None, tmp_path: Path
 ) -> None:
-    result = run_fresh_python(FLAG_PROBE, tmp_path, env={FLAG: before})
-    assert result.returncode == 0, result.stderr
-    assert "automatically set" in result.stdout
-    assert result.stdout.strip().endswith("'1'")
+    assert last_stdout_line(FLAG_PROBE, tmp_path, {FLAG: before}) == f"{before!r} []"
 
 
-@pytest.mark.parametrize("value", ["1", "true"])
-def test_flag_already_right_is_left_alone_and_silent(
+@pytest.mark.parametrize("value", ["1", "true", "True"])
+def test_a_user_who_still_exports_the_variable_gets_a_warning_and_keeps_the_value(
     value: str, tmp_path: Path
 ) -> None:
-    result = run_fresh_python(FLAG_PROBE, tmp_path, env={FLAG: value})
-    assert result.returncode == 0, result.stderr
-    assert f"'{value}'" in result.stdout
-    assert "automatically set" not in result.stdout
-    assert "requires" not in result.stdout
+    line = last_stdout_line(FLAG_PROBE, tmp_path, {FLAG: value})
+    assert line.startswith(f"{value!r} [")
+    assert f"{FLAG}='{value}' is set" in line
+    assert f"unset {FLAG}" in line
 
 
-def test_not_verbose_prints_nothing(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("value", ["1", "true", "True"])
+def test_the_warning_is_a_runtime_warning(
+    value: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(FLAG, "1")
-    tensorpotential._configure_keras_backend(verbose=False)
-    assert capsys.readouterr().out == ""
+    monkeypatch.setenv(FLAG, value)
+    with pytest.warns(RuntimeWarning, match="Keras 3"):
+        tensorpotential._warn_if_legacy_keras_is_requested()
+    assert os.environ[FLAG] == value
 
 
-def test_flag_set_to_something_else_in_a_fresh_interpreter_is_kept_with_a_warning(
-    tmp_path: Path,
+@pytest.mark.parametrize("value", [None, "", "0", "false", "False"])
+def test_no_warning_when_the_variable_does_not_ask_for_legacy_keras(
+    value: str | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    result = run_fresh_python(
-        "import tensorpotential, os; print(os.environ['TF_USE_LEGACY_KERAS'])",
-        tmp_path,
-        env={FLAG: "0"},
-    )
-    assert result.returncode == 0, result.stderr
-    assert "requires '1'" in result.stdout
-    assert result.stdout.strip().endswith("0")
-
-
-def test_flag_set_to_something_else_after_tensorflow_is_loaded_warns(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import tensorflow  # noqa: F401
-
-    monkeypatch.setenv(FLAG, "0")
-    with pytest.warns(RuntimeWarning, match="imported before"):
-        tensorpotential._configure_keras_backend(verbose=False)
-    assert os.environ[FLAG] == "0"
-
-
-def test_flag_right_after_tensorflow_is_loaded_does_not_warn(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import tensorflow  # noqa: F401
-
-    monkeypatch.setenv(FLAG, "1")
+    if value is None:
+        monkeypatch.delenv(FLAG, raising=False)
+    else:
+        monkeypatch.setenv(FLAG, value)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        tensorpotential._configure_keras_backend(verbose=False)
+        tensorpotential._warn_if_legacy_keras_is_requested()
+
+
+ENVIRONMENT_PROBE = """
+import os
+before = dict(os.environ)
+import tensorpotential
+import tensorpotential.tpmodel  # a TensorFlow-side import too: it configures TensorFlow without touching os.environ
+print(before == dict(os.environ))
+"""
+
+
+def test_importing_the_package_leaves_the_environment_untouched(tmp_path: Path) -> None:
+    assert last_stdout_line(ENVIRONMENT_PROBE, tmp_path, {FLAG: None}) == "True"
+    assert last_stdout_line(ENVIRONMENT_PROBE, tmp_path, {FLAG: "0"}) == "True"
+
+
+KERAS_SIDE_CHECK = """
+import sys
+import tensorpotential.tpmodel
+import tensorflow as tf
+print(tf.keras.optimizers.Adam.__module__.split(".")[0], sys.modules["keras"].__version__.split(".")[0])
+"""
+
+
+def test_with_the_variable_unset_tensorflow_uses_keras_3(
+    tmp_path: Path,
+) -> None:
+    assert last_stdout_line(KERAS_SIDE_CHECK, tmp_path, {FLAG: None}) == "keras 3"
 
 
 # ---- the TensorFlow options and the public names ----
@@ -175,7 +185,7 @@ def test_star_import_offers_the_public_names(tmp_path: Path) -> None:
 # ---- the package no longer imports TensorFlow ----
 
 LOADED = (
-    "sorted(m for m in sys.modules if m.split('.')[0] in ('tensorflow', 'tf_keras'))"
+    "sorted(m for m in sys.modules if m.split('.')[0] in ('tensorflow', 'keras'))"
 )
 
 
@@ -224,7 +234,7 @@ def test_a_missing_tensorflow_is_explained_when_a_public_name_is_used(
         "import sys\n"
         "class Refuse:\n"
         "    def find_spec(self, name, path=None, target=None):\n"
-        "        if name.split('.')[0] in ('tensorflow', 'tf_keras'):\n"
+        "        if name.split('.')[0] in ('tensorflow', 'keras'):\n"
         "            raise ImportError(f'No module named {name!r}', name=name)\n"
         "sys.meta_path.insert(0, Refuse())\n"
         "import tensorpotential\n"

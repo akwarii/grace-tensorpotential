@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 GRACE / `tensorpotential`: machine-learning interatomic potentials (Graph Atomic Cluster Expansion) with the `gracemaker` training CLI,
-an ASE calculator, UQ tools and foundation-model loading. The library is TensorFlow 2 (Keras legacy mode); a PyTorch backend that loads
+an ASE calculator, UQ tools and foundation-model loading. The library is TensorFlow 2 with Keras 3; a PyTorch backend that loads
 TF-trained models is being added next to it. Core abstractions: an *instruction graph* (`TPInstruction` subclasses described in a
 `model.yaml`) executed by `TPModel`, trained by `TensorPotential`, and served by `TPCalculator`.
 
@@ -16,8 +16,8 @@ user and an issue disagree, ask.
 ## Development commands
 
 ```bash
-# Environment (creates .venv from uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
-uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty
+# Environment (creates .venv from the committed uv.lock; TensorFlow 2.20 on CPU works locally, no GPU on most dev machines)
+uv sync --group dev          # the dev group holds pytest, pytest-cov, pytest-xdist, ruff and ty, and depends on the tf extra (TensorFlow is not a base dependency since CI1)
 
 # Tests: run from the repository root; they write nothing into the tree. Under -n N every worker gets cores/N TF and OpenMP threads (conftest.py).
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
@@ -34,6 +34,11 @@ uv run --frozen --no-sync python tools/make_golden.py write --tier tiny         
 uv run --frozen --no-sync python tools/make_golden.py verify tests_torch/golden  # reload every fixture in TF; also: compare DIR_A DIR_B, cells
 uv run --frozen --no-sync pytest tools/tests/test_make_golden.py -q              # the generator (TF, single thread, about 2 minutes); tests_torch/test_golden_fixtures.py checks the committed files without TF
 
+# CI shards the suite into 4 groups with pytest-split, balanced by tests/.test_durations (CI2). Regenerate that file after a large change
+# (an idle machine; times under -n are inflated but proportional, which is all the split needs), commit it, and run a group like CI does:
+uv run --frozen --no-sync pytest tests -n 2 --store-durations --durations-path=tests/.test_durations <same --ignore options>
+uv run --frozen --no-sync pytest tests --splits 4 --group 1 --splitting-algorithm=least_duration --durations-path=tests/.test_durations -n 2 --timeout=900 <same --ignore options>
+
 # Lint / format / types (dev group pins ruff==0.16.7 and ty==0.0.84; ty is pre-1.0, expect rule changes when bumping)
 uv run --frozen --no-sync ruff check path/to/file.py       # strict set in the new packages; elsewhere E, F, ERA001
 uv run --frozen --no-sync ruff format --preview path/to/new_file.py      # NEW files only, never reformat existing files
@@ -41,6 +46,8 @@ uv run --frozen --no-sync ty check path/to/new_package     # strict in the new p
 uv run --frozen --no-sync python tools/lint_ratchet.py check    # legacy ruff/ty counts per (file, rule) may not rise; `record` after a drop (a rise needs --allow-rise)
 uv run --frozen --no-sync lint-imports    # import contract: the TF-free modules (core/, constants, poly, couplings, foundation_models) never reach tensorflow; also tests/test_import_gates.py
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches    # every upstream file the fork modifies has a row in tools/divergence.yaml (add it in the same PR as the change, drop it when the file equals upstream again); no fork-only path on a local pr/U* branch
+uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py    # builds the wheel in a scratch copy (or TENSORPOTENTIAL_WHEEL=<wheel>): file list against baselines/wheel_files_upstream.txt, metadata, extras; --noconftest because tests/conftest.py imports TensorFlow
+python tools/wheel_smoke.py <venv>/bin/python --expect tf|no-tf    # clean venv with the wheel: core imports without TF, --help of the ten console scripts; python tools/resolve_extras.py [EXTRA] resolves the extras with uv (CI runs both)
 uv run --frozen --no-sync python tools/instruction_ast.py check    # TF-free: every TPInstruction subclass has a registry entry (torch_backend/spec/registry.py) and the pinned defaults equal the source; `table` prints the constructor table
 prek install                  # hooks on the changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 
@@ -51,8 +58,10 @@ python tools/coverage_ratchet.py check cov.json       # a file fails when its sh
 python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json     # also tools/ast_manifest.py and tools/check_clones.py
 ```
 
-**Rough runtime** (14 cores, 30 GB, about 1,340 tests; measured 2026-10-03): the full suite takes about 10 minutes with `-n 4` on an idle machine (12 with `--cov`), about 20 serially;
-`-m "not slow"` about 4 to 5 minutes; a second suite next to it about doubles that. Compare timings only between back-to-back runs.
+**Rough runtime** (14 cores, 30 GB, about 2,640 tests; measured 2026-10-09 on an idle machine): the full suite takes about 15 minutes with `-n 4` (19 with `--cov`); the
+longest single test is `test_distrib` (about 4 minutes), and the total, not one test, bounds the run at `-n 4`. The earlier figures (10 minutes, about 20 serially, `-m "not slow"` 4 to 5 minutes, for about 1,340 tests)
+were not re-measured and are lower bounds; a second suite next to it about doubles the time. The histogram PNGs of `load_and_prepare_datasets` cost about 1 s of a 15 to 48 s training run, so they are not worth a switch.
+Compare timings only between back-to-back runs.
 
 Two test files are not part of a normal run: `test_structured_grid.py` is skipped on public master (it needs the non-existent `tensorpotential.experimental`; ignored above only so that
 counts match `baselines/`), and `test_foundation_model_regression.py` needs foundation-model weights, which are only available on the HPC.
@@ -105,7 +114,7 @@ ASE Atoms -> TPAtoms / GeometricalDataBuilder (neighbour list) -> TPModel(instru
 
 ## Key dependencies
 
-`tensorflow~=2.20` with `tf_keras` (the package sets `TF_USE_LEGACY_KERAS=1` on import), `numpy`, `pandas<3` (see Gotchas), `ase`, `matscipy`,
+`tensorflow~=2.20` (Keras 3 comes with it; the package neither sets nor reads the legacy-Keras variable, and warns when it is exported), `numpy`, `pandas<3` (see Gotchas), `ase`, `matscipy`,
 `sympy`/`scipy` (coupling tables), `pyyaml`. Optional extras (packaging in progress): `torch`, `torch-sim`, `vesin`.
 
 ## Gotchas
@@ -126,12 +135,23 @@ Gotchas about the baselines (probe checkpoint keys, junit and AST pitfalls, snap
 - `GeometricalDataBuilder.extract_from_ase_atoms` edits its argument: `enforce_pbc` gives a non-periodic `Atoms` a cell, centres it and sets `pbc=True` (also overriding `pbc=(T,T,F)`), so pass a copy when the structure is reused (stress would otherwise be divided by an invented volume).
   An atom with no neighbour gets one dummy bond `(i, 0)` far outside the cutoff, so it never has zero bonds; a zero third cell vector with partial `pbc` raises `LinAlgError`. Pinned by `tests/test_databuilder.py` and `tests/test_utils.py`; the brute-force reference is `tests/neighbour_oracle.py`.
 - **Golden fixtures** (`tools/make_golden.py`, `tests_torch/golden/README.md`): the library imported is the one on `PYTHONPATH` (the generator appends its own root to `sys.path`, so a worktree of an older tag works: `PYTHONPATH=<tag worktree>`, and read the `library:` line it prints); the manifest records `library_dirty` and `generator_dirty` and `tests_torch/test_golden_fixtures.py` fails on a modified tree, so commit the generator before you write fixtures. The instruction order of the manifest is the execution order: never write it with sorted keys. The probe's `attribute_objects` walks into the instructions that an instruction refers to (`left`, `radial`, `indicator`), which repeats every table dozens of times (2.3 MB instead of 0.1 MB for one tiny fixture): the fixture tables use their own walk (`_own_tables`). A reload test must start from a seed other than the fixture's, or it reproduces the weights without reading them. Measured: `lm_first` moves the last axis of every angular tensor and Clebsch-Gordan table to the front and changes nothing else; `dense_nbr` pads the per-bond tensors of a structure with unequal neighbour counts with dummy bonds (`ind_i = ind_j = 0`, zero pair force), nodes and results are unchanged; neither option changes a weight shape.
+- **Keras 3 and the type promotion (DEPS3).** `_configure_tf_options` enables `dtype_conversion_mode="all"`; under it every Keras 3 optimizer operation (and any TF op on a Keras variable, such as the EMA averages) raises `ValueError: Attempt to convert a value (<class 'bool'>) ...`, because the promotion rules evaluate `variable == bool` and `keras.Variable.__eq__` builds a tensor. `tensorpotential/keras_adapter.py` (imported by `tensorpot.py`) makes `keras.Variable == <a Python type>` answer `False` and fails loudly when Keras loses the method. **Do not switch the promotion mode off around the optimizer step instead**: the mode is process-wide and the replica threads of a `MirroredStrategy` trace the model concurrently, so one replica inside the scope breaks another (measured: `gracemaker -m`, `tests/test_distrib.py`, fails with `x and y must have the same dtype`). Under a strategy Keras 3 also cannot create the optimizer variables inside the traced step: `TensorPotential.prepare_for_training()` builds the optimizer once the trainable set, the checkpoint and `reset_optimizer` are final. A Keras 3 EMA average is zero until the first update, so a swap needs `iterations > 0` (`_ema_ready`), not merely the existence of the slots.
+- **Adam in both Keras lines casts its betas through float32** (`cast(python float, float64)` goes through a float32 tensor), so the bias correction uses `float32(0.9)` and `float32(0.999)`: an oracle for it must do the same (`tests/test_tensorpot.py::_through_float32`) to reach 1e-12. Keras 3 starts the EMA at the weights after the first step (legacy Keras 2 started from the initial weights): the two averages differ by `momentum**n (w_0 - w_1)`, a documented change. A Keras 3 optimizer saves `_iterations` and `_learning_rate` under their own keys and the other slots at `_variables/<n>` from n = 2 (legacy: from 1), so a legacy checkpoint's slots restore at shifted positions without an error when shapes agree: `load_checkpoint` compares the layout first (`optimizer_layout.py`) and resets the optimizer with a `LegacyOptimizerStateWarning`. The fixture is `tests/legacy_keras_checkpoint/` (written by `make_fixture.py` on the tree before DEPS3, not regenerated).
 - `lm_first=True` fails on yamls whose output is `MLPOut2ScalarTarget` (it has no transpose for it, unlike `LinMLPOut2ScalarTarget`); `model_grace.yaml` is such a model.
 - `CollectInvarBasis` cannot be instantiated as shipped (it lacks the abstract `upd_init_args_new_elements`); tests subclass it with a stub. `ConstantScaleShiftTarget` sorts `atomic_shift_map` by key, so keys must be element indices.
-- **Worktrees.** A worktree has no `.venv` or `uv.lock` (both git-ignored): link `.venv` and copy `uv.lock` from the main checkout. Never run `uv sync` there: it repoints the editable
+- **Worktrees.** A worktree has no `.venv` (git-ignored): link it from the main checkout (`uv.lock` is tracked since CI1, so a worktree has it). Never run `uv sync` there: it repoints the editable
   `tensorpotential` install of the shared `.venv` to the worktree (repair with `uv sync --frozen --group dev` in the main checkout); `uv run --frozen --no-sync` and `.venv/bin/<tool>` are safe.
   Run with `PATH=<worktree>/.venv/bin:$PATH` (subprocess tests call `grace_preprocess`) and `PYTHONPATH=$PWD`, and print `tensorpotential.__file__` once (the editable install otherwise resolves to the main tree);
-  give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or Keras 3 is used.
+  give `ty` the environment with `--python <main>/.venv`; use `--cov=tensorpotential`; in a scratch script import `tensorpotential` before `tensorflow`, or the numpy-style type promotion is enabled too late.
+- **TensorFlow is the `tf` extra, not a base dependency (CI1, D12).** `pip install tensorpotential` has no TensorFlow; extras are `tf`, `torch`, `torch-sim`, `all`, and `[dependency-groups] dev` includes `tensorpotential[tf]`.
+  `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils`
+  and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` still needs `flask`, which no extra installs). Package discovery is
+  `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package. TensorFlow and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before
+  `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue). The CI set is `.github/workflows/lint.yaml` (lint), `tests.yaml` (test-core without TF, test-torch, test-tf; also nightly), `wheel.yaml` (wheel, wheel-smoke, extras-resolve) and `nightly.yml` (both stacks, torch-sim main).
+- **The hosted runner has 16 GB and a TensorFlow xdist worker's resident memory only grows (CI2).** One unchanged `test-tf` job (4 workers, whole suite) climbed from 8 GB to 15 GB used and died with "The runner has received a shutdown signal"
+  (no failing test, no kernel line when it survives) at 94 to 97% of the suite; a single runner with 2 workers on the whole suite still peaked at 14.9 GB, so the fix is **fewer tests per runner**: `test-tf` is four `pytest-split` groups with 2 workers each (peak memory used 6.7, 6.5, 6.0 and 5.9 GB, 5 to 7 minutes each; three groups peaked at 7.1, 11.5 and 9.4 GB, too close to 16 GB).
+  Every pytest in CI goes through `.github/actions/run-pytest` (per-test `--timeout=900` from `pytest-timeout`, workers, markers, shard); every job has `timeout-minutes`; `cancel-in-progress` is for pull requests only. A new heavy test file needs no edit; a new CI job that runs pytest uses the action.
+  Disk was never the problem (80 GB free after the suite), so there is no free-disk step.
 - **The package no longer imports TensorFlow.** `tensorpotential/__init__.py` and `calculator/__init__.py` resolve their public names on first access (`core/lazy.py`); the TF options
   (`_configure_tf_options`) run when a TF-side module imports `tensorpotential._tf_options`. **A new module with a module-level `import tensorflow` starts with
   `from tensorpotential import _tf_options  # noqa: F401`** (`tests/test_tf_options.py` scans for it; `compat/pace` is exempt, out of scope). A module that must stay TF-free goes in the

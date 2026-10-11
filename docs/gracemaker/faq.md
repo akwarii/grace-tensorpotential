@@ -11,28 +11,6 @@ export TF_FORCE_GPU_ALLOW_GROWTH=true
 
 ---
 
-## Resolving the `TypeError: 'NoneType' object is not callable` in TensorFlow callbacks
-
-If you encounter a `TypeError: 'NoneType' object is not callable` error, typically after the first epoch, the traceback will look similar to this:
-
-```python
-...
-    if self.monitor_op(current, self.best):
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: 'NoneType' object is not callable
-```
-
-This issue is caused by a change in how TensorFlow/Keras handles callbacks in newer versions. To resolve it, force the legacy Keras backend before running `gracemaker`:
-
-```bash
-export TF_USE_LEGACY_KERAS=1
-```
-
-!!! tip "Recurring need for `TF_USE_LEGACY_KERAS=1`"
-    The same flag is also needed for [multi-GPU fits](#how-to-perform-multi-gpu-fit) and whenever a separate `keras>=3.0.0` package is installed alongside TensorFlow. If in doubt, export it once in your shell rc.
-
----
-
 ## How to reduce TensorFlow verbosity level?
 
 ```python
@@ -66,9 +44,6 @@ To keep all regular checkpoints, add the flag `input.yaml::fit::save_all_regular
 ## How to perform multi-GPU fit?
 
 If you have a node with multiple GPUs, use the `gracemaker ... -m` option to enable data-parallel fitting. In this case, increase the batch size (global batch size).
-
-!!! note "Legacy Keras flag may be required"
-    Multi-GPU runs sometimes need `export TF_USE_LEGACY_KERAS=1` — see the [callback `TypeError` workaround](#resolving-the-typeerror-nonetype-object-is-not-callable-in-tensorflow-callbacks) above.
 
 ---
 

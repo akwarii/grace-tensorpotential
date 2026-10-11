@@ -80,7 +80,6 @@ def _compute_distributed_data_and_distrib_fit(work):
     current_env = os.environ.copy()
     current_env["NUM_VIRTUAL_DEVICES"] = "2"
     current_env["CUDA_VISIBLE_DEVICES"] = "-1"
-    current_env["TF_USE_LEGACY_KERAS"] = "1"
 
     subprocess.run(
         "gracemaker -m",

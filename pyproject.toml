@@ -18,11 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    # for windows and macos
-    "tensorflow<=2.20; sys_platform == 'win32' or sys_platform == 'darwin'",
-    # for linux
-    "tensorflow[and-cuda]<=2.20; sys_platform == 'linux'",
-    "tf_keras",  # Required for legacy Keras API. Users may need to set TF_USE_LEGACY_KERAS=1
+    # TensorFlow-free base (D12): every dependency except TensorFlow, which comes with the 'tf' extra
     "scipy",
     "matscipy",
     "numpy<3.0.0",
@@ -36,6 +32,18 @@ dependencies = [
     "rich>=13.0",
     "scikit-learn>=1.1",
 ]
+
+[project.optional-dependencies]
+tf = [
+    # for windows and macos
+    "tensorflow<=2.20; sys_platform == 'win32' or sys_platform == 'darwin'",
+    # for linux
+    "tensorflow[and-cuda]<=2.20; sys_platform == 'linux'",
+]
+torch = ["torch"]
+torch-sim = ["tensorpotential[torch]", "torch-sim-atomistic", "vesin"]
+all = ["tensorpotential[tf,torch,torch-sim]"]
+
 [project.urls]
 "Homepage" = "https://github.com/ICAMS/grace-tensorpotential"
 
@@ -50,6 +58,12 @@ grace_predict = "tensorpotential.scripts.grace_predict:main"
 grace_utils = "tensorpotential.scripts.grace_utils:main"
 grace_uq = "tensorpotential.scripts.grace_uq:main"
 grace_dashboard = "tensorpotential.scripts.grace_dashboard:main"
+
+[tool.setuptools.packages.find]
+include = ["tensorpotential*"]
+
+[tool.setuptools.package-data]
+tensorpotential = ["resources/input_template.yaml"]
 
 [tool.ruff]
 # One ruff configuration for the whole repository (D13). The strict set of the new packages is selected
@@ -97,9 +111,12 @@ convention = "numpy"
 
 [dependency-groups]
 dev = [
+    "tensorpotential[tf]",  # the test suite runs on the TensorFlow stack
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "pytest-timeout",  # per-test limit in CI: a hang becomes a failing test, not a dead runner (CI2)
+    "pytest-split",    # shards the TensorFlow suite by measured duration (CI2)
     "import-linter",
     "ruff==0.16.7",
     "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
@@ -125,7 +142,7 @@ branch = true
 source = ["tensorpotential"]
 # fail_under is set per package in CI (M2.1)
 
-# Import contract (D1, D16, R2): the TensorFlow-free modules never reach tensorflow or tf_keras, directly or through
+# Import contract (D1, D16, R2): the TensorFlow-free modules never reach tensorflow or keras, directly or through
 # another module of the package. tests/test_import_gates.py runs `lint-imports` and fails when tensorpotential.torch_backend
 # exists but is not in source_modules. To change the allowlist (ignore_imports), say why.
 [tool.importlinter]
@@ -143,7 +160,7 @@ source_modules = [
     "tensorpotential.functions.couplings",
     "tensorpotential.calculator.foundation_models",
 ]
-forbidden_modules = ["tensorflow", "tf_keras"]
+forbidden_modules = ["tensorflow", "keras"]
 # The allowlist of modules that may cross is empty for core, and for torch_backend once it exists (the TF-side
 # extractor lives in tensorpotential/scripts). One import is allowed: grace_fm imports the TF calculator inside
 # the function, when a model is loaded, never at import time; and the package __init__ imports tensorflow only inside

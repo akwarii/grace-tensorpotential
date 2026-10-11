@@ -1,0 +1,83 @@
+name: Run pytest
+description: >
+  The one place that assembles the pytest command of every CI job (CI2): a per-test timeout, the xdist workers,
+  the marker selection, the duration-balanced shard and the extra arguments. A job that runs pytest uses this
+  action, so a limit changes here and nowhere else. To reproduce a job locally, run the command it prints.
+
+inputs:
+  python:
+    description: Interpreter of the environment that holds pytest and pytest-timeout
+    required: false
+    default: python
+  path-prepend:
+    description: Directory put first on PATH (the tests start gracemaker and grace_preprocess by name)
+    required: false
+    default: ""
+  tests:
+    description: Space-separated test paths
+    required: false
+    default: tests
+  markers:
+    description: pytest -m expression (empty = no filter)
+    required: false
+    default: ""
+  numprocs:
+    description: xdist workers ("0" = no xdist)
+    required: false
+    default: "0"
+  timeout:
+    description: Per-test timeout in seconds (pytest-timeout); a hang fails that test instead of killing the runner
+    required: false
+    default: "900"
+  splits:
+    description: Number of shards (pytest-split); empty = no sharding
+    required: false
+    default: ""
+  group:
+    description: Shard index, 1-based (needs splits)
+    required: false
+    default: ""
+  durations-path:
+    description: Committed durations file for the shards
+    required: false
+    default: tests/.test_durations
+  extra-args:
+    description: Extra pytest arguments appended verbatim
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run pytest
+      shell: bash
+      env:
+        IN_PYTHON: ${{ inputs.python }}
+        IN_PATH: ${{ inputs.path-prepend }}
+        IN_TESTS: ${{ inputs.tests }}
+        IN_MARKERS: ${{ inputs.markers }}
+        IN_NUMPROCS: ${{ inputs.numprocs }}
+        IN_TIMEOUT: ${{ inputs.timeout }}
+        IN_SPLITS: ${{ inputs.splits }}
+        IN_GROUP: ${{ inputs.group }}
+        IN_DURATIONS: ${{ inputs.durations-path }}
+        IN_EXTRA: ${{ inputs.extra-args }}
+      run: |
+        if [ -n "$IN_PATH" ]; then
+          export PATH="$IN_PATH:$PATH"
+        fi
+        # shellcheck disable=SC2206 # the paths and the extra arguments are split on purpose
+        args=( $IN_TESTS -v -p no:cacheprovider --timeout="$IN_TIMEOUT" --durations=25 )
+        if [ "$IN_NUMPROCS" != "0" ]; then
+          args+=( -n "$IN_NUMPROCS" --dist load )
+        fi
+        if [ -n "$IN_MARKERS" ]; then
+          args+=( -m "$IN_MARKERS" )
+        fi
+        if [ -n "$IN_SPLITS" ]; then
+          args+=( --splits "$IN_SPLITS" --group "$IN_GROUP" --splitting-algorithm=least_duration --durations-path="$IN_DURATIONS" )
+        fi
+        # shellcheck disable=SC2206
+        args+=( $IN_EXTRA )
+        echo "+ $IN_PYTHON -m pytest ${args[*]}"
+        "$IN_PYTHON" -m pytest "${args[@]}"

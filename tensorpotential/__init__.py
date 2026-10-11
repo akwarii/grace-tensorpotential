@@ -1,5 +1,4 @@
 import os
-import sys
 import warnings
 
 try:
@@ -11,36 +10,25 @@ except (ImportError, PackageNotFoundError):
     __version__ = "unknown"
 
 
-def _configure_keras_backend(verbose=True):
-    """
-    Sets TF_USE_LEGACY_KERAS=1 and informs the user.
-    Must be run before 'import tensorflow'.
-    """
-    target_val = "1"
-    env_key = "TF_USE_LEGACY_KERAS"
+LEGACY_KERAS_VARIABLE = "TF_USE_LEGACY_KERAS"
+LEGACY_KERAS_TRUE_VALUES = ("1", "true", "True")  # the values for which TensorFlow loads legacy Keras
 
-    existing_val = os.environ.get(env_key)
 
-    # CRITICAL CHECK: Is TensorFlow already loaded?
-    if "tensorflow" in sys.modules and existing_val != target_val:
+def _warn_if_legacy_keras_is_requested():
+    """Warn when the environment still asks TensorFlow for legacy Keras.
+
+    The package uses Keras 3 and neither sets nor reads ``TF_USE_LEGACY_KERAS``; ``os.environ`` is left alone.
+    With the variable set, TensorFlow loads legacy Keras, which is no longer a dependency.
+    """
+    value = os.environ.get(LEGACY_KERAS_VARIABLE)
+    if value in LEGACY_KERAS_TRUE_VALUES:
         warnings.warn(
-            f"TensorFlow was imported before {__name__} could set {env_key}={target_val}. "
-            "The flag may be ignored. Please import this package first or continue at your own risk.",
+            f"{LEGACY_KERAS_VARIABLE}={value!r} is set. {__name__} uses Keras 3 and no longer needs it; "
+            "with it TensorFlow loads legacy Keras (tf_keras), which is not installed with this package "
+            f"(the import fails without it). Remove it from the environment: unset {LEGACY_KERAS_VARIABLE}",
             RuntimeWarning,
             stacklevel=2,
         )
-        return
-
-    if existing_val is None or existing_val == "":
-        # It is missing, set it and inform.
-        os.environ[env_key] = target_val
-        if verbose:
-            msg = f"[{__name__}] Info: Environment variable {env_key} is automatically set to '{target_val}'."
-            print(msg)
-    elif existing_val not in [target_val, "true"]:
-        if verbose:
-            msg = f"[{__name__}] Warning: Environment variable {env_key} is already set to '{existing_val}', but tensorpotential requires '{target_val}'. Do it at your own risk"
-            print(msg)
 
 
 def _configure_tf_options(verbose=True):
@@ -69,7 +57,7 @@ def _configure_tf_options(verbose=True):
 
 # Run immediately on import. This does not import TensorFlow: the TensorFlow options are applied by
 # ``tensorpotential._tf_options``, which every TensorFlow-side module imports before TensorFlow.
-_configure_keras_backend(verbose=True)
+_warn_if_legacy_keras_is_requested()
 
 from tensorpotential.core.lazy import lazy_exports  # noqa: E402
 
