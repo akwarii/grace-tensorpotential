@@ -65,7 +65,7 @@ def _detect_multigpu_intent(argv):
     return cfg.get("fit", {}).get("strategy") == "mirrored"
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, prog: str = 'gracemaker') -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
 
     strategy = None
@@ -139,7 +139,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from tensorpotential.cli.gracemaker import main as gracemaker_main
 
-    gracemaker_main(argv, strategy=strategy, strategy_desc=strategy_desc)
+    gracemaker_main(argv, strategy=strategy, strategy_desc=strategy_desc, prog=prog)
     return 0
 
 

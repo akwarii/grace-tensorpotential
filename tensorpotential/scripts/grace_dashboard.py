@@ -1316,8 +1316,8 @@ def create_app(base, target_epochs=TARGET_EPOCHS):
     return app
 
 
-def build_parser():
-    ap = argparse.ArgumentParser(description=__doc__)
+def build_parser(prog: str | None = None):
+    ap = argparse.ArgumentParser(prog=prog, description=__doc__)
     ap.add_argument("--base", default=os.getcwd(),
                     help="directory to scan for fit folders (default: cwd)")
     ap.add_argument("--host", default="0.0.0.0", help="bind host")
@@ -1328,8 +1328,8 @@ def build_parser():
     return ap
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    args = build_parser(prog).parse_args(argv)
 
     base = os.path.abspath(args.base)
     if not os.path.isdir(base):

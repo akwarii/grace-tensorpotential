@@ -14,8 +14,8 @@ logger = logging.getLogger()
 
 
 
-def build_parser():
-    parser = argparse.ArgumentParser()
+def build_parser(prog: str | None = None):
+    parser = argparse.ArgumentParser(prog=prog)
 
     parser.add_argument(
         "extxyz_filename",
@@ -32,9 +32,9 @@ def build_parser():
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
     ##############################################################################################
-    parser = build_parser()
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
     extxyz_filename = os.path.abspath(args_parse.extxyz_filename)
     output_dataset_filename = args_parse.output_dataset_filename

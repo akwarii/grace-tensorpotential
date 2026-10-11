@@ -980,10 +980,11 @@ def script_env(monkeypatch, tmp_path):
         monkeypatch.setenv(name, "unset-by-test")  # records the original, so the script's own writes are undone
         monkeypatch.delenv(name)
     monkeypatch.chdir(tmp_path)  # a relative input.yaml that does not exist is not read from the repository
-    record: dict = {"runs": [], "mwms": 0, "devices": []}
+    record: dict = {"runs": [], "progs": [], "mwms": 0, "devices": []}
 
-    def fake_main(argv=None, strategy=None, strategy_desc=""):
+    def fake_main(argv=None, strategy=None, strategy_desc="", prog=None):
         record["runs"].append({"argv": list(argv), "strategy": strategy, "desc": strategy_desc})
+        record["progs"].append(prog)
 
     def fake_mwms():
         record["mwms"] += 1
@@ -1107,3 +1108,9 @@ def test_script_main_returns_zero_and_without_argv_reads_sys_argv(script_env, mo
     monkeypatch.setattr("sys.argv", ["gracemaker", "other.yaml"])
     assert gracemaker_script.main() == 0
     assert script_env["runs"][-1]["argv"] == ["other.yaml"]
+
+
+def test_script_main_hands_its_prog_name_to_the_library(script_env):
+    gracemaker_script.main(["input.yaml"])
+    gracemaker_script.main(["input.yaml"], prog="grace train")
+    assert script_env["progs"] == ["gracemaker", "grace train"]

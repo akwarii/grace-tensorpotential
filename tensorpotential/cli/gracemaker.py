@@ -54,9 +54,9 @@ DEFAULT_TARGET_UPDATES = {
 }
 
 
-def build_parser():
+def build_parser(prog: str = "gracemaker"):
     parser = argparse.ArgumentParser(
-        prog="gracemaker",
+        prog=prog,
         description="Fitting utility for (graph) atomic cluster expansion "
         "potentials.\n",
     )
@@ -350,11 +350,11 @@ def lora_restart_model_file(args_parse, potential_config, output_dir):
     return None
 
 
-def main(argv=None, strategy=None, strategy_desc=""):
+def main(argv=None, strategy=None, strategy_desc="", prog="gracemaker"):
     if argv is None:
         argv = []
     # Stages:
-    parser = build_parser()
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
     input_yaml_filename = args_parse.input
 

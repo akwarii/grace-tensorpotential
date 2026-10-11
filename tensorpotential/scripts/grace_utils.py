@@ -555,9 +555,9 @@ def aux_model(args):
     logger.info("Finished")
 
 
-def build_parser():
+def build_parser(prog: str = 'grace_utils'):
     parser = argparse.ArgumentParser(
-        prog="grace_utils",
+        prog=prog,
         description="CLI tool for model conversions and summarization",
     )
     parser.add_argument("-p", "--potential", required=True, help="Path to model.yaml")
@@ -713,9 +713,9 @@ def build_parser():
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, prog: str = 'grace_utils') -> int:
     # Parse arguments and execute the corresponding function
-    args = build_parser().parse_args(argv)
+    args = build_parser(prog).parse_args(argv)
     args.func(args)
     return 0
 

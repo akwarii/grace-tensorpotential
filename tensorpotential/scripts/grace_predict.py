@@ -51,8 +51,8 @@ def _atoms_with_magmoms(df):
     ]
 
 
-def build_parser():
-    parser = argparse.ArgumentParser()
+def build_parser(prog: str | None = None):
+    parser = argparse.ArgumentParser(prog=prog)
 
     parser.add_argument(
         "-m",
@@ -93,8 +93,8 @@ def build_parser():
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
 
     model_path = os.path.abspath(args_parse.model_path)

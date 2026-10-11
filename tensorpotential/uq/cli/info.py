@@ -494,9 +494,9 @@ Examples
 """
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(prog: str = "grace_uq info") -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="grace_uq info",
+        prog=prog,
         description="Summarize a UQ .npz artifact",
         epilog=_INFO_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -517,8 +517,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def info_main(argv=None) -> int:
-    parser = build_parser()
+def info_main(argv=None, *, prog: str = "grace_uq info") -> int:
+    parser = build_parser(prog)
     args = parser.parse_args(argv)
 
     if not os.path.exists(args.artifact_path):

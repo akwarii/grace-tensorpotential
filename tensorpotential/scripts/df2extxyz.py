@@ -15,9 +15,9 @@ logger = logging.getLogger()
 
 
 
-def build_parser():
+def build_parser(prog: str = 'df2extxyz'):
     parser = argparse.ArgumentParser(
-        prog="df2extxyz", description="Conversion from df.pkl.gz to extxyz"
+        prog=prog, description="Conversion from df.pkl.gz to extxyz"
     )
 
     parser.add_argument("input", help="input pkl.gz file", type=str)
@@ -48,8 +48,8 @@ def build_parser():
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
+def main(argv: Sequence[str] | None = None, *, prog: str = 'df2extxyz') -> int:
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
     input_fname = args_parse.input
     energy_col = args_parse.energy_column

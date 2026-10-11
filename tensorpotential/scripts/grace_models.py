@@ -517,9 +517,9 @@ def download_checkpoint(args):
         print(f"Model {model_name} not found in available models.")
 
 
-def build_parser():
+def build_parser(prog: str = 'grace_models'):
     parser = argparse.ArgumentParser(
-        prog="grace_models", description="Download foundation GRACE models"
+        prog=prog, description="Download foundation GRACE models"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Sub-command help")
@@ -593,8 +593,8 @@ def build_parser():
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
+def main(argv: Sequence[str] | None = None, *, prog: str = 'grace_models') -> int:
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
 
     if args_parse.command:

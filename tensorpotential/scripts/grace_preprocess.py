@@ -410,9 +410,9 @@ def get_bound_for_batch(batch, padding_bounds):
     return bound
 
 
-def build_parser():
+def build_parser(prog: str = 'grace_preprocess'):
     parser = argparse.ArgumentParser(
-        prog="grace_preprocess",
+        prog=prog,
         description="Precompute dataset and save into TF.Dataset format",
     )
 
@@ -721,14 +721,14 @@ def get_databuilders(
     return databuilders_list
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, prog: str = 'grace_preprocess') -> int:
     # TODO: apply reference energy (esa_dict)
     # TODO: if  shift -> compute esa_dict from lstsq (optional), scale (necessary!)
     # TODO: Extract elements and element_map
     # TODO: apply weighting
     # TODO: user_cutoff_dict = args_yaml.get(tc.INPUT_CUTOFF_DICT)
 
-    parser = build_parser()
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
     input_fnames = args_parse.input
     sharded_input = args_parse.sharded_input

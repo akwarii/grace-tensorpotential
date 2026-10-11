@@ -220,3 +220,17 @@ def test_every_command_module_builds_its_parser_without_running_anything(module)
     parser = importlib.import_module(module).build_parser()
     assert isinstance(parser, argparse.ArgumentParser)
     assert parser.format_help().startswith("usage:")
+
+
+PROG_CASES = [case for case in CASES if case.command != "grace_uq"]
+
+
+@pytest.mark.parametrize("case", PROG_CASES, ids=lambda case: case.case_id)
+def test_the_usage_line_uses_the_prog_name_the_caller_gives(case: HelpCase) -> None:
+    prog = "grace thing"
+    main = case.main()
+    code, out, _ = cli_help.run_main(
+        lambda argv: main(argv, prog=prog), "ignored", [*case.words, "--help"]
+    )
+    assert code == 0
+    assert normalise(out).startswith("usage: " + " ".join([prog, *case.words]) + " ")

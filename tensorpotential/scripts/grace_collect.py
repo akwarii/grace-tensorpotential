@@ -170,8 +170,8 @@ def get_free_atom_energy(df, el):
     return ref_epa
 
 
-def build_parser():
-    parser = argparse.ArgumentParser()
+def build_parser(prog: str | None = None):
+    parser = argparse.ArgumentParser(prog=prog)
 
     parser.add_argument("-wd", "--working-dir", help="top directory where keep calculations",
                         type=str, default='.', dest="working_dir")
@@ -191,9 +191,9 @@ def build_parser():
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
     ##############################################################################################
-    parser = build_parser()
+    parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
     working_dir = os.path.abspath(args_parse.working_dir)
     free_atom_energy_dict = args_parse.free_atom_energy

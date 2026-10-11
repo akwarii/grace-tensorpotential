@@ -455,8 +455,8 @@ def _maybe_run_predict(args):
     return output
 
 
-def select_main(argv=None) -> int:
-    parser = _build_parser()
+def select_main(argv=None, *, prog: str = "grace_uq select") -> int:
+    parser = _build_parser(prog)
     args = parser.parse_args(argv)
 
     if args.uq:
@@ -884,9 +884,9 @@ Examples
 """
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser(prog: str = "grace_uq select") -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="grace_uq select",
+        prog=prog,
         description="Select N structures from a candidate pool by an extrapolation/diversity strategy.",
         epilog=_SELECT_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
