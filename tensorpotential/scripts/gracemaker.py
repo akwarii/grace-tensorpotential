@@ -5,7 +5,8 @@ import os
 import sys
 from collections.abc import Sequence
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
+from tensorpotential.scripts._script_logging import configure_logging
+
 log = logging.getLogger()
 
 
@@ -65,7 +66,7 @@ def _detect_multigpu_intent(argv):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = 'gracemaker') -> int:
-    logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
+    configure_logging()
     argv = sys.argv[1:] if argv is None else list(argv)
 
     strategy = None
