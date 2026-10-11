@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from ase import Atoms
 
-import tensorpotential.cli.wizard as _cli_wizard
+import tensorpotential.cli.prompts as _cli_wizard
 from tensorpotential.extra.gen_tensor.wizard import (
     _SYMMETRY_CHECKS,
     _VOIGT6_TO_FULL9_IDX,

@@ -53,7 +53,7 @@ _TENSOR_CHOICES_MAP = {
 
 
 def _section_tensor_components(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_select, _section, _success, _HAS_QUESTIONARY
+    from tensorpotential.cli.prompts import _ask_select, _section, _success, _HAS_QUESTIONARY
 
     _section("Tensor type")
 
@@ -74,7 +74,7 @@ def _section_tensor_components(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_per_structure(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_select, _section, _success, _HAS_QUESTIONARY
+    from tensorpotential.cli.prompts import _ask_select, _section, _success, _HAS_QUESTIONARY
 
     _section("Per-structure")
 
@@ -99,7 +99,7 @@ def _section_tensor_per_structure(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_model(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_select, _ask_text, _section, _success, _HAS_QUESTIONARY
+    from tensorpotential.cli.prompts import _ask_select, _ask_text, _section, _success, _HAS_QUESTIONARY
 
     _section("Model")
 
@@ -124,7 +124,7 @@ def _section_tensor_model(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_energy(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_confirm, _section, _success
+    from tensorpotential.cli.prompts import _ask_confirm, _section, _success
 
     _section("Energy & forces")
     s.compute_energy = _ask_confirm("Fit energy alongside tensor?", default=False)
@@ -138,7 +138,7 @@ def _section_tensor_energy(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_loss(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_select, _ask_text, _section, _success
+    from tensorpotential.cli.prompts import _ask_select, _ask_text, _section, _success
 
     _section("Loss")
     s.loss_type = _ask_select("Loss type:", choices=["huber", "square"], default="huber")
@@ -162,7 +162,7 @@ def _section_tensor_loss(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_batch(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_text, _section, _success
+    from tensorpotential.cli.prompts import _ask_text, _section, _success
 
     _section("Batch & training")
     s.batch_size = int(_ask_text("Batch size", default=10))
@@ -173,7 +173,7 @@ def _section_tensor_batch(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_precision(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.wizard import _ask_select, _section, _success
+    from tensorpotential.cli.prompts import _ask_select, _section, _success
 
     _section("Parameter precision")
     precision = _ask_select(
@@ -195,10 +195,10 @@ def _section_tensor_precision(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _show_review_tensor(s: _WizardStateTensor):
-    from tensorpotential.cli.wizard import _HAS_RICH
+    from tensorpotential.cli.prompts import _HAS_RICH
 
     if _HAS_RICH:
-        from tensorpotential.cli.wizard import _rich_console
+        from tensorpotential.cli.prompts import _rich_console
         from rich.table import Table
         from rich.panel import Panel
         from rich import box as rich_box
@@ -396,7 +396,7 @@ def _generate_tensor_property_interactive(df, s):
     Returns None if user cancels or conversion fails.
     """
     import numpy as np
-    from tensorpotential.cli.wizard import (
+    from tensorpotential.cli.prompts import (
         _ask_select,
         _ask_confirm,
         _info,
@@ -533,7 +533,7 @@ def _verify_one_df(df, filename, s, *, label="dataset"):
     Returns (updated_filename, all_ok).
     updated_filename differs from filename only when a new file is saved.
     """
-    from tensorpotential.cli.wizard import _ask_confirm, _ask_text, _info, _success, _error
+    from tensorpotential.cli.prompts import _ask_confirm, _ask_text, _info, _success, _error
 
     all_ok = True
 
@@ -618,7 +618,7 @@ def _section_verify_dataset(s: _WizardStateTensor) -> _WizardStateTensor:
     checks columns, tensor shape and symmetry; offers to generate
     tensor_property if it is missing.
     """
-    from tensorpotential.cli.wizard import (
+    from tensorpotential.cli.prompts import (
         _ask_confirm,
         _section,
         _info,
@@ -779,7 +779,7 @@ fit:
 
 def run_gen_tensor_wizard():
     """Entry point called from the main wizard when user picks 'Generic Tensors (L<=2)'."""
-    from tensorpotential.cli.wizard import (
+    from tensorpotential.cli.prompts import (
         _section_dataset,
         _HAS_QUESTIONARY,
         _HAS_RICH,
@@ -812,7 +812,7 @@ def run_gen_tensor_wizard():
 
             if _HAS_QUESTIONARY:
                 import questionary
-                from tensorpotential.cli.wizard import _QUESTIONARY_STYLE
+                from tensorpotential.cli.prompts import _QUESTIONARY_STYLE
 
                 redo_choices = [
                     questionary.Choice("Yes, write input.yaml", value="ok")
@@ -847,14 +847,14 @@ def run_gen_tensor_wizard():
 
     except KeyboardInterrupt:
         if _HAS_RICH:
-            from tensorpotential.cli.wizard import _rich_console
+            from tensorpotential.cli.prompts import _rich_console
             _rich_console.print("\n[bold red]Interrupted.[/bold red] Exiting.")
         else:
             print("\nInterrupted. Exiting.")
         sys.exit(0)
 
     if _HAS_RICH:
-        from tensorpotential.cli.wizard import _rich_console
+        from tensorpotential.cli.prompts import _rich_console
         from rich.panel import Panel
         from rich import box as rich_box
 
