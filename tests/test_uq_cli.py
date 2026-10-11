@@ -1064,7 +1064,12 @@ def test_fps_iter_all_unique_under_minibatch():
     assert len(picks) == len(set(picks)) == 300
 
 
-def test_register_strategy_decorator():
+def test_register_strategy_decorator(monkeypatch):
+    # work on a copy of the registry: a leftover "test-noop" would become a choice of `select --strategy` and change its --help
+    from tensorpotential.uq.cli import strategies
+
+    monkeypatch.setattr(strategies, "_STRATEGIES", dict(strategies._STRATEGIES))
+
     @register_strategy("test-noop")
     def _noop(pool, **kwargs):
         return iter([])
