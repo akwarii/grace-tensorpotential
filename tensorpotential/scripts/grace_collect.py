@@ -235,7 +235,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
         except InvalidArgumentError as e:
             logger.error('Invalid argument: {}'.format(str(e)))
             raise e
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  (the ASE readers raise a different exception type for each kind of malformed file)
             logger.error('Filename could not be read: {}'.format(str(e)))
 
     df = pd.DataFrame(data)
