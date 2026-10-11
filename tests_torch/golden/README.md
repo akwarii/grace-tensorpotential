@@ -143,3 +143,5 @@ for each file; the sum for `large_faithful_f64` is 41.7 MB because its float64 w
 * The probe's `attribute_objects` walks into the instructions that an instruction refers to (`left`, `radial`, `indicator`), which repeats every table dozens of
   times (2.3 MB instead of 0.1 MB for one tiny fixture); the fixture tables use their own walk (`_own_tables`).
 * A reload test must start from a seed other than the fixture's, or it reproduces the weights without reading them.
+* The library imported is the one on `PYTHONPATH` (the generator appends its own root to `sys.path`, so a worktree of an older tag works: `PYTHONPATH=<tag worktree>`); read the `library:` line it prints. The manifest records `library_dirty` and `generator_dirty`, and
+  `tests_torch/test_golden_fixtures.py` fails on a modified tree, so commit the generator before you write fixtures.
