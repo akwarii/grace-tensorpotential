@@ -63,6 +63,24 @@ STATUSES = ["Todo", "In Progress", "PR Open", "Done"]
 DOD_HEADING = "## Definition of Done"
 BLOCKED_FIELD = "Blocked by"  # text columns of the project table, written by `refresh`
 PR_FIELD = "PR"
+NEW_ID = re.compile(r"^(?:[A-Z]+[0-9]+|GATE-[A-Z]+)$")
+CREATE_SECTIONS = [
+    "Context",
+    "Work",
+    "Exit criterion",
+    "Out of scope",
+    "Decisions it depends on",
+    "Definition of Done",
+]
+DEPENDENCY_LINE = re.compile(
+    r"^\*\*Depends on:\*\*\s*(?P<depends>[^·]*)·\s*\*\*Blocks:\*\*\s*(?P<blocks>[^·]*)·\s*\*\*Related:\*\*\s*(?P<related>.*)$"
+)
+REFS_PLACEHOLDER = re.compile(r"Refs #<[^>\n]*>")
+STAGES = [str(n) for n in range(9)]
+PRIORITIES = ["P0", "P1", "P2", "P3", "gate"]
+RUNS_ON = ["local", "HPC", "GPU", "user"]
+UPSTREAM = ["none", "candidate", "opened", "merged"]
+KINDS = ["milestone", "gate", "decisions"]
 CACHE_TTL = 24 * 3600  # seconds the project's id, columns and Status options are kept in the git directory
 LOW_BUDGET = 200  # GraphQL points left below which every query that reports them prints a warning
 MIN_BUDGET = 10  # ... and below which a command stops instead of failing half-way
@@ -393,18 +411,8 @@ def statuses() -> dict[str, str]:
 def set_status(item_id: str, status: str) -> None:
     if status not in STATUSES:
         sys.exit(f"status must be one of {STATUSES}")
-    _, proj, field = project()
-    if not any(o["name"] == status for o in field["options"]):
-        project_meta(refresh=True)  # an option may have been added since the file was written
-        _, proj, field = project()
     row = board_items()[item_id]
-    item = row["id"]
-    option = next(o["id"] for o in field["options"] if o["name"] == status)
-    q = (
-        f'mutation {{ updateProjectV2ItemFieldValue(input:{{projectId:"{proj}", itemId:"{item}", fieldId:"{field["id"]}", '
-        f'value:{{singleSelectOptionId:"{option}"}}}}) {{ clientMutationId }} }}'
-    )
-    gh("api", "graphql", "-f", f"query={q}")
+    set_field(row["id"], "Status", status)
     row["status"] = status
     print(f"{item_id}: Status -> {status}")
 
@@ -782,29 +790,14 @@ def cmd_done(a) -> None:
     refresh_links(strict=False)
 
 
-NEW_ID = re.compile(r"^(?:[A-Z]+[0-9]+|GATE-[A-Z]+)$")
-CREATE_SECTIONS = [
-    "Context",
-    "Work",
-    "Exit criterion",
-    "Out of scope",
-    "Decisions it depends on",
-    "Definition of Done",
-]
-DEPENDENCY_LINE = re.compile(
-    r"^\*\*Depends on:\*\*\s*(?P<depends>[^·]*)·\s*\*\*Blocks:\*\*\s*(?P<blocks>[^·]*)·\s*\*\*Related:\*\*\s*(?P<related>.*)$"
-)
-REFS_PLACEHOLDER = re.compile(r"Refs #<[^>\n]*>")
-STAGES = [str(n) for n in range(9)]
-PRIORITIES = ["P0", "P1", "P2", "P3", "gate"]
-RUNS_ON = ["local", "HPC", "GPU", "user"]
-UPSTREAM = ["none", "candidate", "opened", "merged"]
-KINDS = ["milestone", "gate", "decisions"]
+def dependency_match(text: str) -> re.Match[str] | None:
+    """The `Depends on / Blocks / Related` line at the top of an issue body (or of a first line given alone)."""
+    return DEPENDENCY_LINE.match(text.split("\n", 1)[0])
 
 
 def depends_numbers(body: str) -> list[int]:
     """Issue numbers on the `Depends on` line of a body (the hard dependencies)."""
-    m = DEPENDENCY_LINE.match(body.split("\n", 1)[0])
+    m = dependency_match(body)
     return [int(n) for n in re.findall(r"#(\d+)", m.group("depends"))] if m else []
 
 
@@ -815,14 +808,17 @@ def check_new_issue(item_id: str, body: str, info: dict) -> list[str]:
         problems.append(f"`{item_id}` is not an id (a theme in capitals and a number, such as QUAL4, or GATE-<NAME>)")
     elif item_id in info:
         problems.append(f"the id {item_id} is already used")
-    m = DEPENDENCY_LINE.match(body.split("\n", 1)[0])
+    m = dependency_match(body)
     if m is None:
         problems.append("the first line must be `**Depends on:** #n · **Blocks:** none · **Related:** none`")
     else:
         known = {v["number"] for v in info.values()}
         for field in ("depends", "related"):
             problems += [f"#{n} on the {field} line is not an issue of this repository" for n in map(int, re.findall(r"#(\d+)", m.group(field))) if n not in known]
-    problems += [f"section '{h}' is missing or empty" for h in CREATE_SECTIONS if not section(body, h)]
+    if "<!--" in body:
+        problems.append("template comments are still present (delete every comment)")
+    uncommented = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+    problems += [f"section '{h}' is missing or empty" for h in CREATE_SECTIONS if not section(uncommented, h)]
     if len(dod_lines(body)) < 2 or not REFS_PLACEHOLDER.search(body):
         problems.append("the Definition of Done needs its checkboxes, the last one with `Refs #<this issue>`")
     leftovers = re.findall(r"<[A-Za-z][^>\n]{0,40}>", REFS_PLACEHOLDER.sub("", re.sub(r"`[^`\n]*`", "", body)))
@@ -830,21 +826,28 @@ def check_new_issue(item_id: str, body: str, info: dict) -> list[str]:
     return problems
 
 
+def check_context(body: str, expected: dict[str, str]) -> list[str]:
+    """Context lines of the body (`- Stage 0:`, `- Estimate: n focused days`, `- Priority: Pn`, `- Runs on: x`) that disagree with the options."""
+    patterns = {
+        "stage": r"^- Stage (\d)\b",
+        "days": r"^- Estimate: ([\d.]+)",
+        "priority": r"^- Priority: (P\d|gate)\b",
+        "runs on": r"^- Runs on: (\w+)",
+    }
+    out = []
+    for name, pattern in patterns.items():
+        m = re.search(pattern, body, re.M)
+        if m and (float(m.group(1)) != float(expected[name]) if name == "days" else m.group(1) != expected[name]):
+            out.append(f"the Context says {name} {m.group(1)} but the option says {expected[name]}")
+    return out
+
+
 def create_issue(title: str, body: str, labels: list[str]) -> int:
-    """Create the issue (with the `Refs` placeholder replaced by its own number) and return the number."""
-    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
-        f.write(body)
-        path = f.name
-    try:
-        args = ["issue", "create", "--repo", REPO, "--title", title, "--body-file", path]
-        for label in labels:
-            args += ["--label", label]
-        number = int(gh(*args).rstrip("/").rsplit("/", 1)[1])
-        Path(path).write_text(REFS_PLACEHOLDER.sub(f"Refs #{number}", body))
-        gh("issue", "edit", str(number), "--repo", REPO, "--body-file", path)
-    finally:
-        Path(path).unlink(missing_ok=True)
-    return number
+    """Create the issue (the `Refs` placeholder still in the body) and return its number."""
+    args = ["issue", "create", "--repo", REPO, "--title", title, "--body", body]
+    for label in labels:
+        args += ["--label", label]
+    return int(gh(*args).rstrip("/").rsplit("/", 1)[1])
 
 
 def set_field(item: str, name: str, value: str) -> None:
@@ -852,13 +855,17 @@ def set_field(item: str, name: str, value: str) -> None:
     meta = project_meta()
     if name not in meta["fields"]:
         sys.exit(f"the project has no '{name}' column")
+    options = meta["fields"][name].get("options", [])
+    if name != "Days" and not any(o["name"] == value for o in options):
+        meta = project_meta(refresh=True)  # an option may have been added since the file was written
+        options = meta["fields"][name].get("options", [])
     field = meta["fields"][name]
     if name == "Days":
         literal = f"{{number:{float(value):g}}}"
     else:
-        option = next((o["id"] for o in field.get("options", []) if o["name"] == value), None)
+        option = next((o["id"] for o in options if o["name"] == value), None)
         if option is None:
-            sys.exit(f"the {name} field has no option '{value}' (options: {', '.join(o['name'] for o in field.get('options', []))})")
+            sys.exit(f"the {name} field has no option '{value}' (options: {', '.join(o['name'] for o in options)})")
         literal = f'{{singleSelectOptionId:"{option}"}}'
     q = (
         f'mutation {{ updateProjectV2ItemFieldValue(input:{{projectId:"{meta["id"]}", itemId:"{item}", '
@@ -889,7 +896,7 @@ def add_blocked_by(number: int, blockers: list[int]) -> None:
 
 def with_block(first_line: str, number: int) -> str:
     """The dependency line with `#number` added to its Blocks list (unchanged when it is there already)."""
-    m = DEPENDENCY_LINE.match(first_line)
+    m = dependency_match(first_line)
     if m is None or f"#{number}" in re.findall(r"#\d+", m.group("blocks")):
         return first_line
     blocks = m.group("blocks").strip()
@@ -912,6 +919,7 @@ def cmd_create(a) -> None:
     info = issues()
     raw = Path(a.body).read_text()
     problems = check_new_issue(a.id, raw, info)  # on the text as written: the sanitiser would hide a bad reference
+    problems += check_context(raw, {"stage": a.stage, "days": str(a.days), "priority": a.priority, "runs on": a.runs_on})
     for p_ in problems:
         print("CREATE ", p_)
     if problems:
@@ -931,11 +939,16 @@ def cmd_create(a) -> None:
     number = create_issue(title, body, labels)
     print(f"created #{number}")
     _CACHE.pop("issues", None)
-    add_to_project(number, fields)
-    add_blocked_by(number, deps)
+    info = issues()
+    put_body(info, a.id, REFS_PLACEHOLDER.sub(f"Refs #{number}", body))
+    try:
+        add_to_project(number, fields)
+        add_blocked_by(number, deps)
+    except SystemExit:
+        print(f"#{number} exists but its board setup failed: finish with `gh project item-add`, `board.py status`, `board.py refresh` (a retry of create is refused: the id is taken)", file=sys.stderr)
+        raise
     if not a.no_mirror:
-        info = issues()
-        mirror_blocks(info, number, blocker_ids)
+        mirror_blocks(issues(), number, blocker_ids)
     refresh_links()
     print(f"{a.id}: #{number} is on the board; run `python tools/board.py lint` next")
 

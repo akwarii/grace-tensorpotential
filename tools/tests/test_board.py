@@ -220,7 +220,7 @@ class FakeGH:
         if head == ("issue", "create"):
             number = max(int(i["number"]) for i in self.issues) + 1
             title = args[args.index("--title") + 1]
-            self.issues.append({"number": number, "title": title, "state": "OPEN", "body": Path(args[args.index("--body-file") + 1]).read_text()})
+            self.issues.append({"number": number, "title": title, "state": "OPEN", "body": args[args.index("--body") + 1]})
             self.labels[number] = [args[k + 1] for k, a in enumerate(args) if a == "--label"]
             return f"https://github.com/akwarii/grace-tensorpotential/issues/{number}"
         if head == ("issue", "view") and "--json" in args:
@@ -1273,7 +1273,9 @@ def new_body(deps="#3, #2", blocks="none", extra="", refs="Refs #<this issue>"):
 ## Context
 
 - Stage 0: Cleanup
-- Estimate: 2 focused days
+- Estimate: 2.5 focused days
+- Priority: P3 (no score)
+- Runs on: local
 
 ## Work
 
@@ -1424,7 +1426,7 @@ def test_set_field_refuses_an_option_the_project_does_not_have(full):
 def test_create_is_reachable_from_the_command_line(fake, tmp_path, monkeypatch, capsys):
     path = tmp_path / "b.md"
     path.write_text(new_body())
-    monkeypatch.setattr(sys, "argv", ["board.py", "create", "QUAL4", "Tidy", "--body", str(path), "--stage", "0", "--days", "1"])
+    monkeypatch.setattr(sys, "argv", ["board.py", "create", "QUAL4", "Tidy", "--body", str(path), "--stage", "0", "--days", "2.5"])
     board.main()
     assert "dry run" in capsys.readouterr().out
 
@@ -1432,3 +1434,55 @@ def test_create_is_reachable_from_the_command_line(fake, tmp_path, monkeypatch, 
 def test_set_field_refuses_a_column_the_project_does_not_have(fake):
     with pytest.raises(SystemExit, match="no 'Stage' column"):
         board.set_field("item-X", "Stage", "0")
+
+
+def test_check_new_issue_rejects_left_over_template_comments_and_comment_only_sections(fake):
+    body = new_body().replace("It works.", "<!-- say how it is finished -->")
+    problems = board.check_new_issue("NEW1", body, board.issues())
+    assert any("template comments are still present" in p for p in problems)
+    assert any("section 'Exit criterion' is missing or empty" in p for p in problems)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        ("- Estimate: 2.5 focused days", "- Estimate: 4 focused days", "days 4 but the option says 2.5"),
+        ("- Stage 0: Cleanup", "- Stage 1: Ground truth", "stage 1 but the option says 0"),
+        ("- Priority: P3 (no score)", "- Priority: P1 (no score)", "priority P1 but the option says P3"),
+        ("- Runs on: local", "- Runs on: HPC", "runs on HPC but the option says local"),
+    ],
+)
+def test_the_context_lines_must_agree_with_the_options(old, new, expected, fake, tmp_path, capsys):
+    with pytest.raises(SystemExit, match="nothing was created"):
+        board.cmd_create(create_args(tmp_path, new_body().replace(old, new), yes=True))
+    assert expected in capsys.readouterr().out
+
+
+def test_a_context_without_those_lines_is_not_compared():
+    assert board.check_context("## Context\n\n- nothing here\n", {"stage": "0", "days": "1", "priority": "P3", "runs on": "local"}) == []
+
+
+def test_a_failed_board_setup_names_the_recovery_and_leaves_the_issue(fake, tmp_path, capsys):
+    # the fake project lacks the Stage column: set_field stops after the issue exists
+    with pytest.raises(SystemExit, match="no 'Stage' column"):
+        board.cmd_create(create_args(tmp_path, new_body(), yes=True))
+    assert fake.issue(7)["title"] == "QUAL4 — Tidy things"
+    assert "exists but its board setup failed" in capsys.readouterr().err
+
+
+def test_set_status_still_refreshes_the_options_when_one_was_added(fake):
+    board.reset_cache()
+    board.project_meta()
+    fake.options["opt-new"] = "In Review"
+    board.STATUSES.append("In Review")
+    try:
+        board.set_status("CLEAN1", "In Review")
+    finally:
+        board.STATUSES.remove("In Review")
+    assert fake.status["CLEAN1"] == "In Review"
+
+
+def test_an_estimate_is_compared_as_a_number_not_as_text(fake, tmp_path, capsys):
+    body = new_body().replace("- Estimate: 2.5 focused days", "- Estimate: 2 focused days")
+    board.cmd_create(create_args(tmp_path, body, days=2.0))
+    assert "dry run" in capsys.readouterr().out

@@ -4,27 +4,37 @@
 Claude Code starts it before every Bash command (`.claude/settings.json`) and passes a JSON object on stdin
 (`tool_input.command`, `cwd`). Exit status 2 blocks the command and shows the message on stderr to the agent; any
 other exit status lets it run. It is a guard rail against forgetting a rule, not a sandbox: it reads the command
-text (including `cd`, `git -C`, `bash -c` and heredocs) and cannot see what a script does.
+text (following `cd`, `git -C`, `bash -c`, `eval`, `env`/`timeout`/`sudo`-style wrappers, line continuations and
+here-documents) and cannot see variables, scripts or what a program does. An internal error lets the command run.
 
-Rules (the identifier is what an explicit override names):
+Rules (the identifier is what an override names):
 
 ``graphql``
     ``gh project item-list`` and ``gh project field-list`` cost 100 and 150 GraphQL points of the shared budget.
 ``worktree-sync``
     ``uv sync`` inside a linked worktree repoints the shared editable install to the worktree.
 ``integration-branch``
-    No commit, merge, rebase, reset or push on ``torch-backend`` or ``master``, and no push to them from any branch.
+    No commit, merge, rebase, reset or pull without ``--ff-only`` on ``torch-backend`` or ``master``, and no push to them
+    (also ``--all`` and ``--mirror``) from any branch.
 ``merge``
     An agent never merges a pull request, marks it ready or turns on auto-merge: the user does.
+``draft``
+    A pull request is opened as a draft (``gh pr create --draft``).
+``repo``
+    ``gh pr`` and ``gh issue`` writes name their repository (``--repo akwarii/grace-tensorpotential``): the default
+    repository of ``gh`` here is the upstream one.
 ``upstream``
     Nothing is pushed to, or written on, the upstream ``ICAMS`` repositories without an explicit go.
 ``worktree-force``
     ``git worktree remove --force`` would throw away uncommitted work of another agent.
+``kill``
+    Never kill another agent's test or training process.
 ``busy``
-    A parallel or coverage test run, a ``gracemaker`` training or another TensorFlow job while the machine is busy.
+    A parallel, coverage or whole-suite test run, a ``gracemaker`` training or another TensorFlow job while the machine
+    is busy (another such process runs or the 1-minute load is above 4).
 
-Override: when the user has told you to run exactly that command, put ``GRACE_HOOK_OVERRIDE=<rule>`` (or ``all``)
-in front of it; the hook then lets it through. Nothing else bypasses it.
+Override: when the user has told you to run exactly that command, put ``GRACE_HOOK_OVERRIDE=<rule>`` (or ``all``) in
+front of it. The hook cannot tell whether the user said so: the override is a deliberate, visible step, not a lock.
 """
 
 from __future__ import annotations
@@ -35,20 +45,26 @@ import re
 import shlex
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 INTEGRATION_BRANCHES = ("torch-backend", "master")
 OVERRIDE_VAR = "GRACE_HOOK_OVERRIDE"
 DEFAULT_BUSY_LOAD = 4.0  # the 1-minute load average above which the machine is busy (14 cores, CLAUDE.md)
-OPERATORS = {"&&", "||", ";", "|", "&", "|&", "(", ")"}
 SHELLS = {"bash", "sh", "zsh", "dash"}
+WRAPPERS = {"env", "command", "builtin", "time", "nice", "nohup", "exec", "sudo", "timeout"}
+LAUNCHERS = {"uv", "uvx", "env", "time", "nice", "nohup", "timeout"}
 HISTORY_REWRITES = {"commit", "rebase", "cherry-pick", "revert", "am", "reset"}
-GH_WRITE_VERBS = {
-    "create", "edit", "comment", "close", "reopen", "merge", "review", "ready", "delete", "lock", "unlock", "transfer", "develop",
-}
+GUARDED_GIT = HISTORY_REWRITES | {"merge", "pull", "push"}
+HARMLESS_FLAGS = {"--abort", "--dry-run", "--quit"}
+GH_WRITE_VERBS = {"create", "edit", "comment", "close", "reopen", "review", "delete", "lock", "unlock", "transfer", "develop"}
 GH_API_MERGE = re.compile(r"/pulls/\d+/merge|enablePullRequestAutoMerge|markPullRequestReadyForReview|mergePullRequest")
+GRAPHQL_POINTS = {"item-list": 100, "field-list": 150}
 SUITE_SCRIPTS = ("oracle_snapshot.py", "make_golden.py", "grace_probe.py")
+PARALLEL_FLAG = re.compile(r"-n\d*|--numprocesses(=.*)?|--cov(=.*|-.*)?|--splits(=.*)?")
+KILLERS = {"kill", "pkill", "killall"}
+FAST_TARGETS = ("tests_torch", "tools/")  # TF-free test directories that run in seconds
 
 
 @dataclass(frozen=True)
@@ -63,15 +79,14 @@ class Verdict:
 
 
 def _skip_heredoc_bodies(command: str) -> str:
-    """The command without the bodies of its here-documents (their text is data, not commands)."""
+    """The command without the bodies of its here-documents (their text is data, not commands); `<<<` is a here-string."""
     out: list[str] = []
     pending: list[tuple[str, bool]] = []
     lines = command.split("\n")
     i = 0
     while i < len(lines):
-        line = lines[i]
-        out.append(line)
-        pending += [(m.group(2), m.group(1) == "-") for m in re.finditer(r"<<(-?)\s*['\"]?([A-Za-z_][\w]*)['\"]?", line)]
+        out.append(lines[i])
+        pending += [(m.group(2), m.group(1) == "-") for m in re.finditer(r"(?<!<)<<(?!<)(-?)\s*['\"]?([A-Za-z_]\w*)['\"]?", lines[i])]
         i += 1
         while pending and i < len(lines):
             delim, strip = pending[0]
@@ -104,7 +119,7 @@ def _newlines_to_semicolons(command: str) -> str:
 
 def tokenize(command: str) -> list[str]:
     """Shell words and operators of a command line; an unbalanced quote falls back to a plain split."""
-    text = _newlines_to_semicolons(_skip_heredoc_bodies(command))
+    text = _newlines_to_semicolons(_skip_heredoc_bodies(command.replace("\\\n", "")))
     try:
         lex = shlex.shlex(text, posix=True, punctuation_chars=True)
         lex.whitespace_split = True
@@ -114,32 +129,17 @@ def tokenize(command: str) -> list[str]:
 
 
 def split_commands(command: str) -> list[list[str]]:
-    """The simple commands of a command line, each a list of words; `bash -c "..."` is expanded in place."""
+    """The simple commands of a command line, each a list of words."""
     commands: list[list[str]] = []
     current: list[str] = []
     for token in [*tokenize(command), ";"]:
-        if token in OPERATORS or (token and set(token) <= set("();&|")):
+        if re.fullmatch(r"[();&|]+", token):
             if current:
                 commands.append(current)
             current = []
         else:
             current.append(token)
-    expanded: list[list[str]] = []
-    for words in commands:
-        inner = _inner_script(words)
-        expanded.append(words)
-        if inner is not None:
-            expanded += split_commands(inner)
-    return expanded
-
-
-def _inner_script(words: list[str]) -> str | None:
-    """The script of `bash -c "<script>"` (also sh, zsh), else None."""
-    head = _strip_assignments(words)[0]
-    if head and Path(head[0]).name in SHELLS and "-c" in head[1:]:
-        k = head.index("-c")
-        return head[k + 1] if k + 1 < len(head) else None
-    return None
+    return commands
 
 
 def _strip_assignments(words: list[str]) -> tuple[list[str], dict[str, str]]:
@@ -153,10 +153,41 @@ def _strip_assignments(words: list[str]) -> tuple[list[str], dict[str, str]]:
     return words[k:], env
 
 
+def _unwrap(words: list[str], env: dict[str, str]) -> tuple[list[str], dict[str, str]]:
+    """The command behind `env`, `timeout 5`, `sudo`, `nice -n 5`, ... (their own options and assignments dropped)."""
+    while words and Path(words[0]).name in WRAPPERS:
+        wrapper, words = Path(words[0]).name, words[1:]
+        while words and words[0].startswith("-"):
+            takes_value = wrapper in ("nice", "sudo", "timeout") and words[0] in ("-n", "-u", "-k", "-s")
+            words = words[2:] if takes_value else words[1:]
+        if wrapper == "timeout" and words:
+            words = words[1:]  # the duration
+        words, more = _strip_assignments(words)
+        env = {**env, **more}
+    return words, env
+
+
+def _inner_script(words: list[str]) -> str | None:
+    """The script of `bash -c "<script>"` (also `-lc`, sh, zsh) or `eval ...`, else None."""
+    base = Path(words[0]).name
+    if base == "eval":
+        return " ".join(words[1:])
+    if base in SHELLS:
+        for k, w in enumerate(words[1:], 1):
+            if re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", w):
+                return words[k + 1] if k + 1 < len(words) else None
+    return None
+
+
 def overrides(env: dict[str, str]) -> set[str]:
     """The rules a command (or the hook's own environment) overrides."""
     value = env.get(OVERRIDE_VAR, os.environ.get(OVERRIDE_VAR, ""))
     return {x.strip() for x in value.split(",") if x.strip()}
+
+
+def _chdir(cwd: Path, target: str) -> Path:
+    """The directory `target` names from `cwd` (`~` expanded)."""
+    return (cwd / Path(target).expanduser()).resolve()
 
 
 # ---------------------------------------------------------------------------------------------------------------- git state
@@ -186,9 +217,10 @@ def _git_subcommand(words: list[str], cwd: Path) -> tuple[str, list[str], Path]:
     """(subcommand, its arguments, directory) of a `git ...` command, honouring `-C dir` and the other global options."""
     k = 1
     while k < len(words) and words[k].startswith("-"):
-        if words[k] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path") and k + 1 < len(words):
-            if words[k] == "-C":
-                cwd = (cwd / Path(words[k + 1]).expanduser()).resolve()
+        if words[k] == "-C" and k + 1 < len(words):
+            cwd = _chdir(cwd, words[k + 1])
+            k += 1
+        elif words[k] in ("-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"):
             k += 1
         k += 1
     return (words[k], words[k + 1 :], cwd) if k < len(words) else ("", [], cwd)
@@ -201,8 +233,7 @@ def _push_destinations(args: list[str], branch: str) -> tuple[str, list[str]]:
     dests = []
     for spec in positional[1:]:
         dest = spec.lstrip("+").split(":")[-1]
-        dest = branch if dest == "HEAD" else dest.removeprefix("refs/heads/")
-        dests.append(dest)
+        dests.append(branch if dest == "HEAD" else dest.removeprefix("refs/heads/"))
     return remote, dests or [branch]
 
 
@@ -210,31 +241,35 @@ def _push_destinations(args: list[str], branch: str) -> tuple[str, list[str]]:
 
 
 def check_git(words: list[str], cwd: Path) -> Verdict | None:
-    """The `integration-branch`, `upstream`, `worktree-sync`-independent git rules."""
+    """The `integration-branch`, `upstream` and `worktree-force` rules for a `git` command."""
     sub, args, where = _git_subcommand(words, cwd)
     if sub == "worktree" and args[:1] == ["remove"] and any(a in ("--force", "-f") for a in args):
         return Verdict("worktree-force", "`git worktree remove --force` discards another agent's uncommitted work. Remove it without --force; if git refuses, report the uncommitted work.")
+    if sub not in GUARDED_GIT:
+        return None
     branch = current_branch(where)
     if sub == "push":
         remote, dests = _push_destinations(args, branch)
         if remote.lower() == "upstream" or "icams" in remote.lower():
             return Verdict("upstream", "Nothing is pushed to the upstream ICAMS repositories without an explicit go for that unit.")
-        if any(d in INTEGRATION_BRANCHES for d in dests):
-            return Verdict("integration-branch", "Never push to torch-backend or master: push your work branch and open a draft PR; the user merges.")
-    if branch in INTEGRATION_BRANCHES and _rewrites_integration(sub, args):
+        if any(a in ("--all", "--mirror") for a in args) or any(d in INTEGRATION_BRANCHES for d in dests):
+            return Verdict("integration-branch", "Never push to torch-backend or master (also with --all or --mirror): push your work branch and open a draft PR; the user merges.")
+    elif branch in INTEGRATION_BRANCHES and _rewrites_integration(sub, args):
         return Verdict("integration-branch", f"You are on {branch}: never commit, merge, rebase or reset there. Work in your own worktree on the branch of your issue; update with `git pull --ff-only`.")
     return None
 
 
 def _rewrites_integration(sub: str, args: list[str]) -> bool:
+    if HARMLESS_FLAGS & set(args):
+        return False
     if sub in HISTORY_REWRITES:
         return sub != "reset" or "--hard" in args
-    return sub in ("merge", "pull") and "--ff-only" not in args
+    return "--ff-only" not in args  # merge and pull
 
 
 def check_uv(words: list[str], cwd: Path) -> Verdict | None:
     """`uv sync` in a linked worktree (without `--no-install-project`)."""
-    if Path(words[0]).name == "uv" and "sync" in words[1:] and "--no-install-project" not in words and in_linked_worktree(cwd):
+    if "sync" in words[1:] and "--no-install-project" not in words and in_linked_worktree(cwd):
         return Verdict("worktree-sync", "`uv sync` in a worktree repoints the shared editable install to it. Link the main .venv instead (CLAUDE.md, Worktrees); repair with `uv sync --frozen --group dev` in the main checkout.")
     return None
 
@@ -255,38 +290,69 @@ def _gh_parts(words: list[str]) -> tuple[list[str], str]:
     return positional, repo
 
 
-def check_gh(words: list[str]) -> Verdict | None:
-    """The `graphql`, `merge` and `upstream` rules for a `gh` command."""
-    parts, repo = _gh_parts(words)
-    group, verb = (parts + ["", ""])[:2]
-    joined = " ".join(words)
-    if group == "project" and verb in ("item-list", "field-list"):
-        return Verdict("graphql", f"`gh project {verb}` costs about {'100' if verb == 'item-list' else '150'} GraphQL points of the 5,000 an hour that all agents share. Use `python tools/board.py` (it reads the table for about 3 points) and `board.py budget`.")
-    if (group == "pr" and verb in ("merge", "ready")) or (group == "api" and GH_API_MERGE.search(joined)):
-        return Verdict("merge", "An agent never merges a pull request, marks it ready for review or turns on auto-merge: the user does. Ask the user.")
-    upstream = repo.lower().startswith("icams/") or bool(re.search(r"repos/icams/", joined, re.I))
-    if upstream and (verb in GH_WRITE_VERBS or (group == "api" and _api_writes(words))):
-        return Verdict("upstream", "Nothing is written on the upstream ICAMS repositories without an explicit go for that unit.")
-    return None
-
-
 def _api_writes(words: list[str]) -> bool:
     method = next((words[k + 1] for k, w in enumerate(words[:-1]) if w in ("-X", "--method")), "GET")
     fields = any(w in ("-f", "-F", "--field", "--raw-field", "--input") for w in words)
     return method.upper() != "GET" or fields
 
 
+def check_gh(words: list[str], env: dict[str, str]) -> Verdict | None:
+    """The `graphql`, `merge`, `draft`, `repo` and `upstream` rules for a `gh` command."""
+    parts, repo = _gh_parts(words)
+    repo = repo or env.get("GH_REPO", os.environ.get("GH_REPO", ""))
+    group, verb = (parts + ["", ""])[:2]
+    joined = " ".join(words)
+    if group == "project" and verb in GRAPHQL_POINTS:
+        return Verdict("graphql", f"`gh project {verb}` costs about {GRAPHQL_POINTS[verb]} GraphQL points of the 5,000 an hour that all agents share. Use `python tools/board.py` (it reads the table for about 3 points) and `board.py budget`.")
+    if (group == "pr" and verb in ("merge", "ready")) or (group == "api" and GH_API_MERGE.search(joined)):
+        return Verdict("merge", "An agent never merges a pull request, marks it ready for review or turns on auto-merge: the user does. Ask the user.")
+    upstream = repo.lower().startswith("icams/") or "repos/icams/" in joined.lower()
+    if upstream and (verb in GH_WRITE_VERBS or (group == "api" and _api_writes(words))):
+        return Verdict("upstream", "Nothing is written on the upstream ICAMS repositories without an explicit go for that unit.")
+    if group in ("pr", "issue") and verb in GH_WRITE_VERBS:
+        if not repo:
+            return Verdict("repo", f"Name the repository: add `--repo akwarii/grace-tensorpotential`; the default repository of gh here is the upstream one (`gh {group} {verb}`).")
+        if group == "pr" and verb == "create" and not {"--draft", "-d"} & set(words):
+            return Verdict("draft", "Open the pull request as a draft (`gh pr create --draft`); the user marks it ready and merges.")
+    return None
+
+
+def check_kill(words: list[str]) -> Verdict | None:
+    """The `kill` rule: no `kill`, `pkill` or `killall` naming a test or training process."""
+    if Path(words[0]).name in KILLERS and re.search(r"pytest|gracemaker", " ".join(words[1:])):
+        return Verdict("kill", "Never kill another agent's test or training process (it may be another agent's run). Wait for it, or ask the user.")
+    return None
+
+
+def _pytest_is_suite(args: list[str]) -> bool:
+    """Whether pytest arguments make a parallel or coverage run, or a whole-suite run (no test file or fast directory named)."""
+    if any(PARALLEL_FLAG.fullmatch(w) for w in args):
+        return True
+    targets = [w for w in args if not w.startswith("-")]
+    specific = any(".py" in t or "::" in t or t.startswith(FAST_TARGETS) for t in targets)
+    return not specific
+
+
 def is_suite_command(words: list[str]) -> bool:
-    """Whether the command starts a parallel or coverage pytest run, a gracemaker training or a TensorFlow baseline job."""
+    """Whether the command starts a parallel, coverage or whole-suite pytest run, a gracemaker training or a TensorFlow baseline job."""
     base = Path(words[0]).name
     if base in SHELLS:
         return False
-    names = {Path(w).name for w in words}
-    if "gracemaker" in names or any(s in names for s in SUITE_SCRIPTS) and "write" in words:
+    names = [Path(w).name for w in words]
+    if base == "gracemaker" or ((base in LAUNCHERS or base.startswith("python")) and "gracemaker" in names[:4]):
+        return not {"-h", "--help"} & set(words)
+    if "write" in words and any(s in names for s in SUITE_SCRIPTS):
         return True
-    if base in ("pytest", "py.test") or "pytest" in words:
-        return any(re.fullmatch(r"-n\d*|--numprocesses(=.*)?|--cov(=.*|-.*)?|--splits(=.*)?", w) for w in words)
+    for k, name in enumerate(names):
+        if name in ("pytest", "py.test"):
+            return _pytest_is_suite(words[k + 1 :])
     return False
+
+
+def _ps_args(line: str) -> str:
+    """The command-line part of a `ps -eo pid,etimes,args` line ("" for a malformed line)."""
+    parts = line.split(None, 2)
+    return parts[2] if len(parts) == 3 else ""
 
 
 def is_suite_process(args: str) -> bool:
@@ -301,12 +367,12 @@ def is_suite_process(args: str) -> bool:
     if not (base in ("pytest", "py.test", "gracemaker", "uv", "uvx") or base.startswith("python")):
         return False
     names = {Path(w).name for w in words[1:]} | {base}
-    return bool(names & {"pytest", "gracemaker", *SUITE_SCRIPTS}) or "-m pytest" in args
+    return bool(names & {"pytest", "gracemaker", *SUITE_SCRIPTS})
 
 
 def busy_reason(load1: float, process_lines: list[str], threshold: float = DEFAULT_BUSY_LOAD) -> str | None:
     """Why the machine is busy (a suite or training process runs, or the load is above `threshold`), else None."""
-    running = [ln.strip() for ln in process_lines if is_suite_process(ln.split(None, 2)[2] if len(ln.split(None, 2)) == 3 else "")]
+    running = [ln.strip() for ln in process_lines if is_suite_process(_ps_args(ln))]
     if running:
         return f"another test or training process is running: {running[0][:120]}"
     if load1 > threshold:
@@ -333,32 +399,39 @@ def check_busy(words: list[str]) -> Verdict | None:
     if not is_suite_command(words):
         return None
     load1, procs = machine_state()
-    threshold = float(os.environ.get("GRACE_BUSY_LOAD", DEFAULT_BUSY_LOAD))
-    reason = busy_reason(load1, procs, threshold)
+    reason = busy_reason(load1, procs, float(os.environ.get("GRACE_BUSY_LOAD", DEFAULT_BUSY_LOAD)))
     if reason is None:
         return None
-    return Verdict("busy", f"The machine is busy: {reason}. Start no full, -n or coverage run now; do work that needs no CPU, look again later and tell the user if waiting blocks you (CLAUDE.md, idle machine).")
+    return Verdict("busy", f"The machine is busy: {reason}. Start no full, -n or coverage run now; do work that needs no CPU (edits, ruff, ty, one test file serially), look again later and tell the user if waiting blocks you (CLAUDE.md, idle machine).")
 
 
-def evaluate(command: str, cwd: Path) -> list[Verdict]:
-    """Every rule the command breaks, honouring `cd` and `VAR=value` overrides."""
+def _checks(base: str, words: list[str], env: dict[str, str], where: Path) -> list[Verdict | None]:
+    """The verdicts of every rule that applies to one simple command."""
+    by_tool: dict[str, Callable[[], Verdict | None]] = {
+        "git": lambda: check_git(words, where),
+        "gh": lambda: check_gh(words, env),
+        "uv": lambda: check_uv(words, where),
+    }
+    return [by_tool.get(base, lambda: None)(), check_kill(words), check_busy(words)]
+
+
+def evaluate(command: str, cwd: Path, inherited: frozenset[str] = frozenset()) -> list[Verdict]:
+    """Every rule the command breaks, honouring `cd`, wrappers, inner scripts and `GRACE_HOOK_OVERRIDE`."""
     verdicts: list[Verdict] = []
     where = cwd
     for raw in split_commands(command):
-        words, env = _strip_assignments(raw)
+        words, env = _unwrap(*_strip_assignments(raw))
         if not words:
             continue
-        if Path(words[0]).name == "cd":
-            target = words[1] if len(words) > 1 else "~"
-            where = (where / Path(target).expanduser()).resolve() if target != "-" else where
-            continue
+        skip = inherited | overrides(env)
         base = Path(words[0]).name
-        found = [check_git(words, where)] if base == "git" else []
-        found += [check_gh(words)] if base == "gh" else []
-        found += [check_uv(words, where)] if base == "uv" else []
-        found.append(check_busy(words))
-        skip = overrides(env)
-        verdicts += [v for v in found if v is not None and v.rule not in skip and "all" not in skip]
+        inner = _inner_script(words)
+        if inner is not None:
+            verdicts += evaluate(inner, where, frozenset(skip))
+        elif base == "cd":
+            where = _chdir(where, words[1]) if len(words) > 1 and words[1] != "-" else where
+        elif "all" not in skip:
+            verdicts += [v for v in _checks(base, words, env, where) if v is not None and v.rule not in skip]
     return verdicts
 
 

@@ -74,8 +74,34 @@ def test_split_commands_dash_heredoc_allows_an_indented_terminator():
     assert found[-1] == ["ls"]
 
 
-def test_split_commands_expands_a_shell_c_script():
-    assert ["gh", "project", "item-list", "1"] in gb.split_commands("bash -c 'gh project item-list 1'")
+def test_a_here_string_is_not_a_here_document_and_hides_nothing(tmp_path):
+    assert rules("cat <<< foo\ngh pr merge 5", tmp_path) == ["merge"]
+
+
+def test_a_backslash_newline_joins_the_lines(tmp_path):
+    assert rules("gh pr \\\nmerge 5", tmp_path) == ["merge"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["bash -c 'gh project item-list 1'", "bash -lc 'gh project item-list 1'", "zsh -ic \"gh project item-list 1\"", "eval gh project item-list 1",
+     "env FOO=1 gh project item-list 1", "command gh project item-list 1", "timeout 5 gh project item-list 1", "sudo -u root gh project item-list 1",
+     "nice -n 5 gh project item-list 1", "time gh project item-list 1", "nohup gh project item-list 1", "exec gh project item-list 1"],
+)
+def test_wrappers_and_inner_scripts_are_looked_through(command, tmp_path):
+    assert rules(command, tmp_path) == ["graphql"]
+
+
+def test_an_override_written_outside_an_inner_script_applies_inside_it(tmp_path):
+    assert rules("GRACE_HOOK_OVERRIDE=merge bash -c 'gh pr merge 5'", tmp_path) == []
+    assert rules("GRACE_HOOK_OVERRIDE=merge bash -c 'gh pr merge 5; gh project item-list 1'", tmp_path) == ["graphql"]
+    assert rules("env GRACE_HOOK_OVERRIDE=all gh pr merge 5", tmp_path) == []
+
+
+def test_bash_without_a_script_and_a_bare_wrapper_are_harmless(tmp_path):
+    assert rules("bash script.sh", tmp_path) == []
+    assert rules("bash -c", tmp_path) == []
+    assert rules("env", tmp_path) == []
 
 
 def test_tokenize_falls_back_to_a_plain_split_on_an_unbalanced_quote():
@@ -124,7 +150,7 @@ def test_an_agent_never_merges_or_marks_ready(command, tmp_path):
         ("gh api -X DELETE repos/ICAMS/x/issues/3", ["upstream"]),
         ("gh issue view 3 --repo ICAMS/x", []),
         ("gh api repos/ICAMS/x/issues", []),
-        ("gh pr create --repo akwarii/x --title t", []),
+        ("gh pr create --repo akwarii/x --draft --title t", []),
     ],
 )
 def test_upstream_writes_are_refused_and_reads_are_allowed(command, expected, tmp_path):
@@ -254,8 +280,8 @@ def test_is_suite_process_looks_at_the_executable_not_at_a_shell_that_names_it(a
 
 def test_busy_reason_prefers_a_process_over_the_load_and_ignores_malformed_lines():
     assert gb.busy_reason(0.1, ["7 12"]) is None
-    assert "process" in gb.busy_reason(9.0, ["7 12 pytest tests"])
-    assert "load average is 9.0" in gb.busy_reason(9.0, [])
+    assert "process" in str(gb.busy_reason(9.0, ["7 12 pytest tests"]))
+    assert "load average is 9.0" in str(gb.busy_reason(9.0, []))
     assert gb.busy_reason(4.0, []) is None
 
 
@@ -334,3 +360,86 @@ def test_git_failures_read_as_no_state(monkeypatch, tmp_path):
 
     monkeypatch.setattr(gb.subprocess, "run", boom)
     assert gb.current_branch(tmp_path) == ""
+
+
+# ----------------------------------------------------------------------------------------------------- rules added after review
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("gh pr create --title t", ["repo"]),
+        ("gh issue create --title t", ["repo"]),
+        ("gh pr edit 3 --body b", ["repo"]),
+        ("gh pr view 3", []),
+        ("gh pr create --repo akwarii/x --title t", ["draft"]),
+        ("gh pr create --repo akwarii/x --draft --title t", []),
+        ("gh pr create --repo akwarii/x -d --title t", []),
+        ("gh issue create --repo akwarii/x --title t", []),
+        ("GH_REPO=ICAMS/x gh pr create --draft --title t", ["upstream"]),
+        ("GH_REPO=akwarii/x gh pr create --draft --title t", []),
+    ],
+)
+def test_gh_writes_name_their_repository_and_pull_requests_are_drafts(command, expected, tmp_path):
+    assert rules(command, tmp_path) == expected
+
+
+def test_gh_repo_environment_variable_of_the_hook_counts(monkeypatch, tmp_path):
+    monkeypatch.setenv("GH_REPO", "ICAMS/x")
+    assert rules("gh issue comment 3 --body b", tmp_path) == ["upstream"]
+
+
+def test_push_all_and_mirror_are_refused_from_any_branch(repo):
+    _, wt = repo
+    assert rules("git push --all origin", wt) == ["integration-branch"]
+    assert rules("git push --mirror origin", wt) == ["integration-branch"]
+
+
+def test_aborting_or_previewing_on_the_integration_branch_is_harmless(repo):
+    main, _ = repo
+    for sub in ("rebase --abort", "merge --abort", "commit --dry-run", "am --quit"):
+        assert rules(f"git {sub}", main) == [], sub
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["pkill -f pytest", "killall gracemaker", "pkill -9 -f 'python.*pytest'", "bash -c 'pkill -f gracemaker'"],
+)
+def test_killing_a_test_or_training_process_is_refused(command, tmp_path):
+    assert rules(command, tmp_path) == ["kill"]
+
+
+@pytest.mark.parametrize("command", ["kill 1234", "pkill -f my_server", "kill -9 $PID"])
+def test_other_kills_are_not_this_rules_business(command, tmp_path):
+    assert rules(command, tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "suite"),
+    [
+        ("pytest tests -q", True),
+        ("pytest", True),
+        ("uv run --frozen --no-sync pytest -q", True),
+        ("pytest tests/ -x", True),
+        ("pytest tests/test_x.py -n 2", True),
+        ("pytest tests_torch -q", False),
+        ("pytest tools/tests -q", False),
+        ("pytest tests/test_x.py::test_y", False),
+        ("pytest -k name tests/test_x.py", False),
+        ("gracemaker --help", False),
+        ("gracemaker -h input.yaml", False),
+        ("uv run --frozen gracemaker input.yaml", True),
+        ("git log -- gracemaker", False),
+        ("grep gracemaker README.md", False),
+    ],
+)
+def test_which_commands_count_as_suite_runs(command, suite):
+    assert gb.is_suite_command(gb.split_commands(command)[0]) is suite
+
+
+def test_a_busy_machine_refuses_a_whole_suite_run_even_without_parallelism(monkeypatch, tmp_path):
+    monkeypatch.setattr(gb, "machine_state", lambda: (9.0, []))
+    assert rules("pytest tests -q", tmp_path) == ["busy"]
+    assert rules("pytest tests_torch -q", tmp_path) == []
+    assert rules("gracemaker --help", tmp_path) == []
+    assert rules("git log -- gracemaker", tmp_path) == []
