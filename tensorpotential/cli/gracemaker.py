@@ -35,6 +35,7 @@ from tensorpotential.tpmodel import TPModel
 from tensorpotential.tensorpot import TensorPotential, get_output_dir
 from tensorpotential.utils import (
     convert_model_reduce_elements,
+    get_dtype_by_name,
     get_param_dtype_from_config,
     is_chief,
 )
@@ -386,8 +387,12 @@ class _Run:
     has_test_set: bool = False
     communicated_keys: Any = None
     instructions: Any = None
-    target_potential_file_name: str = ""
     tp: Any = None
+
+    @property
+    def target_potential_file_name(self) -> str:
+        """Where the model config of this run is saved: ``model.yaml`` in the output directory."""
+        return os.path.join(self.output_dir, MODEL_CONFIG_YAML)
 
 
 def _restarting(args_parse) -> bool:
@@ -589,29 +594,24 @@ def _infer_param_dtype(run: _Run) -> None:
     float32, corrupting the saved model.yaml.
     """
     name = run.potential_file_name
-    if name and not run.user_set_param_dtype:
-        if os.path.exists(name):
-            metadata = read_model_metadata(name)
-            if "param_dtype" in metadata:
-                from tensorpotential.utils import get_dtype_by_name
-
-                run.param_dtype = get_dtype_by_name(metadata["param_dtype"])
-                run.param_dtype_flag = metadata["param_dtype"]
-                log.info(
-                    f"param_dtype={run.param_dtype_flag} inferred from model.yaml metadata"
-                )
-            else:
-                run.param_dtype = tf.float64
-                run.param_dtype_flag = "float64"
-                log.info(
-                    "No param_dtype in model.yaml (old model) — using float64 for backward compatibility"
-                )
+    if name and not run.user_set_param_dtype and os.path.exists(name):
+        metadata = read_model_metadata(name)
+        if "param_dtype" in metadata:
+            run.param_dtype = get_dtype_by_name(metadata["param_dtype"])
+            run.param_dtype_flag = metadata["param_dtype"]
+            log.info(
+                f"param_dtype={run.param_dtype_flag} inferred from model.yaml metadata"
+            )
         else:
-            log.info(f"Using default model parameter dtype: {run.param_dtype_flag}")
+            run.param_dtype = tf.float64
+            run.param_dtype_flag = "float64"
+            log.info(
+                "No param_dtype in model.yaml (old model) — using float64 for backward compatibility"
+            )
     elif run.user_set_param_dtype:
         log.info(f"Model parameter dtype: {run.param_dtype_flag}")
     else:
-        # Fresh fit from scratch — no model.yaml exists yet
+        # Fresh fit from scratch (no model.yaml yet), or a model file that does not exist
         log.info(f"Using default model parameter dtype: {run.param_dtype_flag}")
 
 
@@ -856,7 +856,6 @@ def _build_model(run: _Run) -> None:
     _infer_param_dtype(run)
     _resolve_checkpoint_name(run)
     _reduce_elements_if_requested(run)
-    run.target_potential_file_name = os.path.join(run.output_dir, MODEL_CONFIG_YAML)
     _build_instructions(run)
     _inject_foundation_shift(run)
     run.tp = _create_tensorpotential(run)
