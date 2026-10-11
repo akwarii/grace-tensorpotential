@@ -14,14 +14,14 @@ behaviour-preserving checks, baselines), and note the conflict in a comment on t
 
 ## Working agreements
 
-Procedure (board commands, PR text, findings, Definition of Done): `grace-torch-ticket` skill; these rules hold even without it.
+Procedures: board commands, findings, Definition of Done: `grace-torch-ticket`; branch, tidy-up pass, PR text, commits: `grace-torch-pr`. These rules hold even without them.
 
 - **You may commit, and once the work of your issue is ready you open a draft pull request into `torch-backend` yourself and ask the user to review it. You never merge it, mark it ready for review or turn on auto-merge: the user does.** *Ready* means: the exit criterion is met,
   the checks the issue names are green, the tidy-up pass below is done, and the description from `python tools/board.py pr-body <ID>` passes `pr-check`. Commit on the issue's work branch (one concern per commit, never on `torch-backend` or `master`), push only that branch to the fork,
   then `python tools/board.py status <ID> "PR Open"` and tell the user the PR number and what to look at. Nothing is pushed to, or opened against, the upstream `ICAMS` repositories without an explicit go for that unit (no `pr/U*` branch on your own; the `upstream` remote has its push URL disabled).
 - **Tidy up your own code before you open the PR:** review the diff against `origin/torch-backend` through four lenses, each as its own review (a subagent per lens, or the `simplify` skill): **reuse** (existing helper, base class, duplication the diff adds), **simplification** (nesting, dead branches,
   complexity above 10), **efficiency** (only what a measurement shows, R7), **altitude** (right layer and module, public names, import direction). Fixes go in separate `refactor:` commits, then re-run the checks they can affect; list per lens in the PR (Review focus) what you found and left.
-  A lens touches only what the PR already changes (the rest is a finding on the issue); a documentation-only diff is exempt. Procedure: `grace-torch-ticket`.
+  A lens touches only what the PR already changes (the rest is a finding on the issue); a documentation-only diff is exempt. Procedure: `grace-torch-pr`.
 - **One agent, one issue, one git worktree** (`board.py` rewrites the whole issue body when it ticks a box). Never switch branches in, or run a branch-changing command on, a tree another agent or the user is using. After the merge and `board.py done`, remove the worktree without `--force`
   (if it refuses, report the uncommitted work); leave the remote branch unless the user says otherwise.
 - **Check that the machine is idle before any test, coverage, baseline, `gracemaker` or other TensorFlow job:** `uptime` and `ps -eo pid,etimes,args | grep '[p]ytest\|[g]racemaker'`. **Busy** = another test or training process runs (any worktree) or the 1-minute load is above 4 (14 cores).
@@ -44,7 +44,8 @@ Procedure (board commands, PR text, findings, Definition of Done): `grace-torch-
 
 | For | Look at |
 |---|---|
-| Board commands, findings, Definition of Done, PR text | skill `grace-torch-ticket` |
+| Board commands, findings, Definition of Done, creating and closing issues | skill `grace-torch-ticket` |
+| Branch and worktree, tidy-up pass, PR text, commit messages, upstream units | skill `grace-torch-pr` |
 | The rules of the torch backend (R1 to R9), the fork's issues | skill `grace-torch` |
 | Coverage rule, test layers, planted mutants, parallel runs | skill `grace-torch-tests`, rule `.claude/rules/testing.md` |
 | Baselines, golden fixtures, tolerances | skill `grace-torch-goldens`, `baselines/README.md`, `tests_torch/golden/README.md` |

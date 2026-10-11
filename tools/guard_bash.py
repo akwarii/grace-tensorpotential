@@ -64,7 +64,7 @@ GRAPHQL_POINTS = {"item-list": 100, "field-list": 150}
 SUITE_SCRIPTS = ("oracle_snapshot.py", "make_golden.py", "grace_probe.py")
 PARALLEL_FLAG = re.compile(r"-n\d*|--numprocesses(=.*)?|--cov(=.*|-.*)?|--splits(=.*)?")
 KILLERS = {"kill", "pkill", "killall"}
-FAST_TARGETS = ("tests_torch", "tools/")  # TF-free test directories that run in seconds
+FAST_TARGETS = ("tests_torch",)  # the TF-free test directory that runs in seconds (tools/tests holds TensorFlow tests: the generator takes minutes)
 
 
 @dataclass(frozen=True)

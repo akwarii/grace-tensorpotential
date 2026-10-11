@@ -10,7 +10,8 @@ through torch-sim. The TensorFlow code is the numerical oracle; the torch code i
 
 | Companion skill | Use it for |
 |---|---|
-| `grace-torch-ticket` | Taking a board issue from Todo to Done: the protocol, the board helper, findings, the PR |
+| `grace-torch-ticket` | Taking a board issue from Todo to Done: the protocol, the board helper, findings, the Definition of Done, creating and closing issues |
+| `grace-torch-pr` | The pull request of an issue: branch and worktree, the tidy-up pass, the description, commits, upstream units |
 | `grace-torch-tests` | The 90% coverage rule, the two test layers, planted mutants, parallel runs |
 | `grace-torch-goldens` | The committed baselines and golden fixtures, tolerances, debugging a mismatch |
 | `grace-torch-numerics` | Units, sign conventions, dtypes, derivatives, equivariance checks |
