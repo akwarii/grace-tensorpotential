@@ -3,18 +3,18 @@
 
 ### 03 September 2026: [0.6.1 Release](https://github.com/ICAMS/grace-tensorpotential/releases/tag/0.6.1)
 
-- **Foundation models re-exported.** The distributed models were rebuilt to fix a NaN in `virial_sigma` (the uncertainty contribution to the virial). Cached models now record where they were downloaded from, and the new `grace_models update` re-downloads only the copies that are out of date.
-- **Tunable uncertainty threshold.** `grace_uq build --threshold-percentile Q` puts `gamma = 1` at the Q-th percentile of the training distribution instead of the default robust outlier fence — for training sets where a large fraction of atoms reads `gamma > 1`. The artifact records which calibration was used, and `grace_uq info` reports it.
-- **Bulk prediction.** A new `predict_structures` helper evaluates a whole list of structures with a single calculator instance; `grace_predict` and `grace_uq predict` now both use it.
+- **Foundation models re-exported.** The distributed models were rebuilt to fix a NaN in `virial_sigma` (the uncertainty contribution to the virial). Cached models now record where they were downloaded from, and the new `grace models update` re-downloads only the copies that are out of date.
+- **Tunable uncertainty threshold.** `grace uq build --threshold-percentile Q` puts `gamma = 1` at the Q-th percentile of the training distribution instead of the default robust outlier fence — for training sets where a large fraction of atoms reads `gamma > 1`. The artifact records which calibration was used, and `grace uq info` reports it.
+- **Bulk prediction.** A new `predict_structures` helper evaluates a whole list of structures with a single calculator instance; `grace predict` and `grace uq predict` now both use it.
 
 ### 07 July 2026: [0.6.0 Release](https://github.com/ICAMS/grace-tensorpotential/releases/tag/0.6.0)
 
-- **Uncertainty estimates.** Models can now report a per-atom uncertainty score (gamma) that flags when a prediction is an extrapolation — useful for spotting unreliable regions and for active learning. Comes with a new `grace_uq` command line tool.
+- **Uncertainty estimates.** Models can now report a per-atom uncertainty score (gamma) that flags when a prediction is an extrapolation — useful for spotting unreliable regions and for active learning. Comes with a new `grace uq` command line tool.
 - **LAMMPS Kokkos support.** You can now export GRACE models for the fast Kokkos pair styles in LAMMPS. The uncertainty score can be carried along, so it's available during LAMMPS runs too.
 - **Foundation models on HuggingFace** ([AMS-ICAMS-RUB/grace-foundation-models](https://huggingface.co/AMS-ICAMS-RUB/grace-foundation-models)). The released models now include uncertainty support out of the box,
 -  **GRACE-3L-OMAT/OAM**. There are new, larger **3-layer models** (`GRACE-3L-OMAT-large` and `GRACE-3L-OMAT-large-ft-AM`).
 - **Faster and lighter by default.** Foundation models now use fp32 precision by default, which roughly halves memory use and about doubles speed. (fp64 versions are still available under the `-fp64` name.) 
-- **Better tooling.** A new `grace_dashboard` shows training curves and metrics in the browser; the `grace_models` command was reworked to list, inspect, and download models (including Kokkos weights); and training can now save and resume in the middle of an epoch.
+- **Better tooling.** A new `grace dashboard` shows training curves and metrics in the browser; the `grace models` command was reworked to list, inspect, and download models (including Kokkos weights); and training can now save and resume in the middle of an epoch.
 
 # Important Note  
 
@@ -22,7 +22,7 @@ If a model was fitted with `gracemaker` version < 0.5.1, it will not be compatib
 You can convert it to the new format using the following command:  
 
 ```bash
-grace_utils -p seed/1/model.yaml -c seed/1/checkpoints/checkpoint.best_test_loss.index update_model
+grace utils -p seed/1/model.yaml -c seed/1/checkpoints/checkpoint.best_test_loss.index update_model
 ```  
 
 This will generate new files with the "-converted" suffix, which you can replace the old files (`model.yaml` and checkpoints) with.

@@ -158,9 +158,10 @@ def test_documented_aux_model_command_is_accepted_by_the_parser():
     example = next(
         line
         for line in _docs_text().splitlines()
-        if line.startswith("grace_utils") and " aux_model " in line
+        if line.startswith("grace utils") and " aux_model " in line
     )
-    argv = example.split()
+    # the page writes ``grace utils ...``: the arguments after the sub-command word are those of grace_utils
+    argv = ["grace_utils", *example.split()[2:]]
     # aux_model itself is replaced: only the parsing of the documented command is under test.
     with (
         patch.object(sys, "argv", argv),

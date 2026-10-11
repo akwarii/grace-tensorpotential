@@ -585,3 +585,109 @@ def test_an_error_of_grace_is_red_on_a_terminal(monkeypatch):
         "grace: unknown subcommand 'nonsense'"
     )
     assert "\x1b[1;31m" in buffer.getvalue()
+
+
+# --- the documentation ------------------------------------------------------------------------------------------------------
+
+DOCS = REPO_ROOT / "docs" / "gracemaker"
+OLD_COMMANDS = (
+    "gracemaker",
+    "grace_utils",
+    "grace_uq",
+    "grace_models",
+    "grace_collect",
+    "grace_preprocess",
+    "grace_predict",
+    "grace_dashboard",
+)
+
+
+def fenced_blocks(path: Path) -> list[list[str]]:
+    """The lines of every fenced code block of a markdown page."""
+    blocks, current = [], None
+    for line in path.read_text().splitlines():
+        if line.strip().startswith("```"):
+            if current is None:
+                current = []
+            else:
+                blocks.append(current)
+                current = None
+        elif current is not None:
+            current.append(line)
+    return blocks
+
+
+def shown_commands(path: Path) -> list[list[str]]:
+    """The ``grace ...`` command lines shown in the code blocks of a page, as words up to the first option."""
+    import shlex
+
+    commands = []
+    for block in fenced_blocks(path):
+        for line in block:
+            if line.startswith("grace ") or line.strip() == "grace":
+                words = shlex.split(line, comments=True)[1:]
+                commands.append([
+                    w
+                    for i, w in enumerate(words)
+                    if not any(x.startswith("-") for x in words[: i + 1])
+                ])
+    return commands
+
+
+def test_cli_md_shows_commands_and_every_one_runs_with_help():
+    commands = shown_commands(DOCS / "cli.md")
+    assert (
+        [] in commands
+        and ["train"] in commands
+        and ["uq", "build"] in commands
+        and ["models", "list"] in commands
+    )
+    for words in commands:
+        code, out, err = run_grace(*words, "--help")
+        assert code == 0, (words, err)
+        assert out.strip(), words
+
+
+def test_cli_md_lists_every_sub_command_of_the_table_with_its_old_name():
+    text = (DOCS / "cli.md").read_text()
+    for command in grace.COMMANDS:
+        row = next(
+            (
+                line
+                for line in text.splitlines()
+                if line.startswith(f"| `grace {command.name}` |")
+            ),
+            None,
+        )
+        assert row is not None, command.name
+        assert f"`{OLD_NAME[command.name]}`" in row
+
+
+def test_cli_md_quotes_the_help_of_grace_train():
+    block = next(
+        b
+        for b in fenced_blocks(DOCS / "cli.md")
+        if b and b[0].startswith("usage: grace train")
+    )
+    code, out, _ = run_grace("train", "--help")
+    assert code == 0
+    assert normalise("\n".join(block)) == normalise(out)
+
+
+def test_the_pages_use_the_new_form_except_where_they_quote_a_script():
+    pages = [
+        REPO_ROOT / "README.md",
+        *sorted(DOCS.glob("*.md")),
+        REPO_ROOT / "docs" / "index.md",
+    ]
+    offenders = []
+    for page in pages:
+        for block in fenced_blocks(page):
+            if any(line.lstrip().startswith("usage:") for line in block):
+                continue  # a quoted help text keeps the name of the script
+            offenders += [
+                f"{page.name}: {line}"
+                for line in block
+                if line.split(" ")[0] in OLD_COMMANDS and " [-h]" not in line
+            ]
+    assert offenders == []

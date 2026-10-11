@@ -1,3 +1,9 @@
+!!! note
+    Every command of this page is also a sub-command of `grace` (`grace collect`, `grace models`, `grace utils`,
+    `grace predict`, `grace preprocess`, `grace uq`, `grace dashboard`, `grace extxyz2df`, `grace df2extxyz`). The old
+    names used in the headings and in the usage text below keep working and print the same output; see
+    [the command line](cli.md).
+
 ## `grace_collect`
 
 Utility to collect VASP calculations from a top-level directory and store them
@@ -109,7 +115,7 @@ options:
 
 Example:
 ```bash
-grace_models list
+grace models list
 ```
 
 See [foundation models](../foundation/#downloading-foundation-models) for the
@@ -120,12 +126,12 @@ model tables and the cache location.
 The cache is keyed by model name, so upgrading `tensorpotential` on its own never
 refreshes an already-downloaded payload. When a model is re-exported upstream —
 as in 0.6.1, where the UQ-enabled models were rebuilt to fix a NaN in
-`virial_sigma` — `grace_models update` is what brings the local copy in line:
+`virial_sigma` — `grace models update` is what brings the local copy in line:
 
 ```bash
-grace_models update GRACE-2L-OAM        # a single model
-grace_models update --all --dry-run     # report what is stale, download nothing
-grace_models update --all               # refresh everything that is stale
+grace models update GRACE-2L-OAM        # a single model
+grace models update --all --dry-run     # report what is stale, download nothing
+grace models update --all               # refresh everything that is stale
 ```
 
 Every cached model and checkpoint directory carries a `.grace_origin.json`
@@ -142,7 +148,7 @@ transfer leaves the previous model in place.
     it would have done and moves on — update that store yourself.
 
 `kokkos.npz` is distributed separately and is not part of the refreshed payload,
-so re-fetch it with `grace_models download <model> --kokkos` after an update if
+so re-fetch it with `grace models download <model> --kokkos` after an update if
 you use the [Kokkos pair styles](#export-to-npz-for-lammps-kokkos-pair-style).
 `update` reminds you whenever it replaces a directory that had one.
 ___
@@ -233,7 +239,7 @@ If a model was fitted with `gracemaker` version < 0.5, it will break in the newe
 Conversion to the new format can be easily done via:
  
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.best_test_loss.index  -os dict update_model
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.best_test_loss.index  -os dict update_model
 ```
 one needs to provide path `-p` to the previously fitted `model.yaml`, `-c` path to the `checkpoint` of the corresponding model.
 New updated `checkpoint` files and `model.yaml` will be saved with the suffix provided via `-os`.
@@ -244,7 +250,7 @@ If you have a model that was fitted for large number of chemical elements, for e
 you're interested only in a few specific, you can reduce the large model to the specified chemistry.
 For example, selecting only  Mo, Nb, Ta and W from a large model:
 ```bash
-grace_utils -p /path/to/model-dict.yaml -c /path/to/checkpoint/checkpoint-dict.index  -os MoNbTaW reduce_elements -e Mo Nb Ta W
+grace utils -p /path/to/model-dict.yaml -c /path/to/checkpoint/checkpoint-dict.index  -os MoNbTaW reduce_elements -e Mo Nb Ta W
 ```
 
 #### Change model parameters' floating point precision
@@ -254,7 +260,7 @@ Conversion between the two can be done with the `cast_model_param` utility,
 for example to convert from single to double precision:
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint.index -os "double" cast_model_param -curr fp32 -to fp64
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint.index -os "double" cast_model_param -curr fp32 -to fp64
 ```
 
 
@@ -262,12 +268,12 @@ grace_utils -p /path/to/model.yaml -c /path/to/checkpoint.index -os "double" cas
 
 Export model.yaml + checkpoint into saved_model format:
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export -n my_saved_model
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export -n my_saved_model
 ```
 
 For GRACE-FS model, one can export to GRACE-FS/C++ format(.yaml) by adding `-sf` flag:
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export -n my_GRACE-FS.yaml -sf
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export -n my_GRACE-FS.yaml -sf
 ```
 
 #### Export to .npz for LAMMPS Kokkos pair style
@@ -279,7 +285,7 @@ LAMMPS runtime. The architecture (1L, 2L or 3L) is auto-detected from the
 model's instructions.
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export_kokkos -o grace_weights.npz
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index export_kokkos -o grace_weights.npz
 ```
 
 Use the resulting file in your LAMMPS input as:
@@ -309,7 +315,7 @@ thresholds, and the per-element force-error model — directly into the
 exported `.npz`:
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index \
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index \
             export_kokkos -o grace_weights.npz \
             --uq-artifacts /path/to/gmm_artifacts.npz
 ```
@@ -337,7 +343,7 @@ precision** on energies and forces — well within typical MD requirements.
 To print summary of the GRACE model with different level of verbosity (0 - least, 1 - moderate and 2 - most verbose):
 
 ```bash
-grace_utils -p /path/to/model.yaml summary -v 1
+grace utils -p /path/to/model.yaml summary -v 1
 ```
 
 #### Upgrade model with auxiliary compute functions
@@ -351,7 +357,7 @@ The keys must be instructions of the model: the default `I_nl_LN I` suits only m
 For GRACE-1L models `-ck` is not used.
 
 ```bash
-grace_utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index aux_model -o /path/to/upgraded_model -ck I I_out_0_LN
+grace utils -p /path/to/model.yaml -c /path/to/checkpoint/checkpoint.index aux_model -o /path/to/upgraded_model -ck I I_out_0_LN
 ```
 
 ## `grace_predict`
@@ -372,9 +378,9 @@ options:
 
 ### Python API: `predict_structures`
 
-`grace_predict` is a thin wrapper around `predict_structures`, which evaluates any
+`grace predict` is a thin wrapper around `predict_structures`, which evaluates any
 ASE calculator over a list of structures. It is the same code path that
-[`grace_uq predict`](../uq/#cli-tool-grace_uq) uses, so it is also the way to get
+[`grace uq predict`](../uq/#cli-tool-grace_uq) uses, so it is also the way to get
 per-atom `gamma` for a whole dataset from Python:
 
 ```python
@@ -457,7 +463,7 @@ GRACE models, calibrate the per-atom extrapolation grade `gamma`, and stamp the
 artifacts into checkpoints / exports.
 
 See the dedicated [Uncertainty Quantification](../uq/) page for the full
-`grace_uq build` usage, the Python API, and how to bake UQ into `.npz` /
+`grace uq build` usage, the Python API, and how to bake UQ into `.npz` /
 saved-model exports.
 
 ## `grace_dashboard`
@@ -490,5 +496,5 @@ options:
 
 Example — scan the current directory and open the dashboard at `http://localhost:5000/`:
 ```bash
-grace_dashboard
+grace dashboard
 ```
