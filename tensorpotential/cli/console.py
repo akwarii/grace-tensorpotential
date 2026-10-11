@@ -1,7 +1,7 @@
 """The shared console of the command-line tools.
 
 One :class:`rich.console.Console` for the standard output and one for the standard error, and the few helpers that print
-through them: a line of text, an error line, a status line, styled segments, and a table of commands.
+through them: a line of text, an error line, a status line, ANSI-styled text, and a table of commands.
 
 The rule of this module is that **rich only styles**. A message is written as the text it is (no markup is read, nothing is
 highlighted, wrapped or replaced), so that when the output is not a terminal (a pipe, a file, a SLURM log) every message is
@@ -15,7 +15,7 @@ The module imports no TensorFlow and is on the import contract of the TensorFlow
 from __future__ import annotations
 
 import functools
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import TextIO
 
 from rich.console import Console
@@ -115,14 +115,13 @@ def print_success(message: str) -> None:
     say(message, style=SUCCESS_STYLE)
 
 
-def print_segments(segments: Iterable[tuple[str, str | None]]) -> None:
-    """Write a text made of styled segments, each ``(text, style)``, followed by a newline.
+def print_ansi(text: str) -> None:
+    """Write a text that carries ANSI style escapes, followed by a newline.
 
-    The unstyled text is the concatenation of the segments, so a text written as segments reads the same on a pipe as
-    the string it replaces.
+    On a terminal the escapes style the text; on anything else (and with ``NO_COLOR``) they are dropped, so the text reads
+    the same on a pipe as the plain string it replaces.
     """
-    parts = [(text, style) if style else text for text, style in segments]
-    get_console().print(Text.assemble(*parts), soft_wrap=True)
+    get_console().print(Text.from_ansi(text), soft_wrap=True)
 
 
 def command_table_text(

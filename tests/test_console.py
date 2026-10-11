@@ -92,12 +92,8 @@ def test_error_lines_go_to_the_standard_error_status_and_success_to_the_output(c
     assert out == "working [1/3]\ndone\n"
 
 
-def test_segments_read_as_their_concatenation_without_styles(capsys):
-    console.print_segments([
-        ("grace", "bold"),
-        (" <subcommand> [options]\n", None),
-        ("build", "cyan"),
-    ])
+def test_ansi_text_reads_without_its_escapes_when_it_is_not_a_terminal(capsys):
+    console.print_ansi("\033[1mgrace\033[0m <subcommand> [options]\n\033[36mbuild\033[0m")
     assert capsys.readouterr().out == "grace <subcommand> [options]\nbuild\n"
 
 
@@ -110,9 +106,9 @@ def test_a_message_is_styled_on_a_terminal_and_its_text_is_unchanged(on_terminal
     assert has_colour(err.getvalue())
 
 
-def test_segments_are_styled_on_a_terminal(on_terminal):
+def test_ansi_text_is_styled_on_a_terminal(on_terminal):
     out, _ = on_terminal
-    console.print_segments([("a", "bold"), (" b ", None), ("c", "green")])
+    console.print_ansi("\033[1ma\033[0m b \033[32mc\033[0m")
     assert ANSI.sub("", out.getvalue()) == "a b c\n"
     assert "\x1b[1ma" in out.getvalue()
     assert has_colour(out.getvalue())
