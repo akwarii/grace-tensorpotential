@@ -1114,3 +1114,34 @@ def test_script_main_hands_its_prog_name_to_the_library(script_env):
     gracemaker_script.main(["input.yaml"])
     gracemaker_script.main(["input.yaml"], prog="grace train")
     assert script_env["progs"] == ["gracemaker", "grace train"]
+
+
+def test_importing_the_script_does_not_configure_logging():
+    from tests.fresh_python import run_fresh_python
+
+    code = (
+        "import logging\n"
+        "before = list(logging.getLogger().handlers)\n"
+        "import tensorpotential.scripts.gracemaker\n"
+        "print(before == list(logging.getLogger().handlers), logging.getLogger().level)\n"
+    )
+    result = run_fresh_python(code, Path("."))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().splitlines()[-1] == "True 30"
+
+
+def test_the_script_main_configures_logging_when_it_runs(script_env):
+    root = logging.getLogger()
+    saved_handlers, saved_level = list(root.handlers), root.level
+    for handler in saved_handlers:
+        root.removeHandler(handler)
+    try:
+        gracemaker_script.main(["input.yaml"])
+        assert root.handlers, "basicConfig was not called"
+        assert root.level == logging.INFO
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        for handler in saved_handlers:
+            root.addHandler(handler)
+        root.setLevel(saved_level)

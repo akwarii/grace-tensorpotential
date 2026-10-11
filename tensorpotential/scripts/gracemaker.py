@@ -6,7 +6,6 @@ import sys
 from collections.abc import Sequence
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
 log = logging.getLogger()
 
 
@@ -66,6 +65,7 @@ def _detect_multigpu_intent(argv):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = 'gracemaker') -> int:
+    logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
     argv = sys.argv[1:] if argv is None else list(argv)
 
     strategy = None
