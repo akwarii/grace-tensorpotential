@@ -542,6 +542,20 @@ class TestGenerateTensorProperty:
         assert "stress" in offered
         assert "my_custom" in offered
 
+    @pytest.mark.parametrize("per_structure", [True, False])
+    def test_rank1_from_a_single_vector_per_row(self, monkeypatch, per_structure):
+        self._patch(monkeypatch, select_return="src")
+        vector = np.array([0.5, -1.0, 2.0])
+        df = pd.DataFrame([{"ase_atoms": _atoms(4), "src": vector}])
+        s = _make_state([1], per_structure=per_structure)
+        df_out = _generate_tensor_property_interactive(df, s)
+        np.testing.assert_array_equal(df_out["tensor_property"].iloc[0], vector.reshape(1, 3))
+
+    def test_rank1_with_an_unrecognised_shape_returns_none(self, monkeypatch):
+        self._patch(monkeypatch, select_return="src")
+        df = pd.DataFrame([{"ase_atoms": _atoms(4), "src": np.random.randn(5)}])
+        assert _generate_tensor_property_interactive(df, _make_state([1])) is None
+
     def test_unrecognised_shape_returns_none(self, monkeypatch):
         self._patch(monkeypatch, select_return="src")
         # shape (4, 7) — not recognised for rank-2
