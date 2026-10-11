@@ -10,7 +10,6 @@ This file consolidates what previously lived in:
   - test_uq_cli_strategies.py
 """
 
-import inspect
 import os
 import subprocess
 import sys
@@ -889,11 +888,12 @@ def test_extrap_filter_zero_pool_warns(synthetic_df, caplog):
 
 def test_default_min_per_element_floor_is_d_plus_one():
     """grace_uq select must default the per-element stratification floor to
-    D + 1. Source-level check avoids a full CLI invocation."""
-    src = inspect.getsource(select_mod.select_main)
-    assert "D + 1" in src or "(D + 1)" in src, (
-        "select_main must default min_per_element floor to D+1"
-    )
+    D + 1 (the floor is computed by ``_floor_per_element``; ``tests/test_select.py`` checks it end to end)."""
+    import argparse
+
+    args = argparse.Namespace(min_per_element=None)
+    assert select_mod._floor_per_element(args, 17) == 18
+    assert select_mod._floor_per_element(argparse.Namespace(min_per_element=3), 17) == 3
 
 
 def test_select_uq_is_optional(tmp_path):
