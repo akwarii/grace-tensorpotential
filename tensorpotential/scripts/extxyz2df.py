@@ -7,10 +7,9 @@ from tensorpotential.cli.data import load_extxyz
 from tensorpotential.formatting import sizeof_fmt
 
 import logging
+from tensorpotential.scripts._script_logging import configure_logging
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
+logger = configure_logging()
 
 
 

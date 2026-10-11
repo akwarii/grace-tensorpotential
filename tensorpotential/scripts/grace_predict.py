@@ -9,15 +9,14 @@ import pandas as pd
 from tqdm import tqdm
 
 from tensorpotential.calculator import TPCalculator, predict_structures
+from tensorpotential.scripts._script_logging import configure_logging
 
 # only the NumPy deprecation that ASE triggers on every structure is hidden; pandas and
 # TensorFlow warnings stay visible
 warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"ase(\.|$)")
 
 
-LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
-logger = logging.getLogger()
+logger = configure_logging()
 
 
 def set_magmom(at, magmoms):

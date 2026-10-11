@@ -432,9 +432,17 @@ def test_the_master_without_data_and_without_artifact_is_an_error(tmp_path, caps
     assert "--restart was given" not in err
 
 
-def test_restart_does_not_fall_through_to_the_export_of_an_existing_artifact(
-    tmp_path, capsys
+@pytest.mark.parametrize(
+    ("flag", "message"),
+    [
+        ("--restart", "--restart was given but no training data could be located."),
+        ("--no-export", "Nothing to do: --train-data not provided and --no-export set"),
+    ],
+)
+def test_an_existing_artifact_is_not_exported_when_the_options_forbid_it(
+    tmp_path, capsys, flag, message
 ):
+    # --restart asks for a full rebuild; --no-export leaves nothing to do without training data
     (tmp_path / "a.npz").write_bytes(b"")
     err = fails(
         capsys,
@@ -442,22 +450,9 @@ def test_restart_does_not_fall_through_to_the_export_of_an_existing_artifact(
         str(tmp_path / "absent.pkl.gz"),
         "--artifact-path",
         str(tmp_path / "a.npz"),
-        "--restart",
+        flag,
     )
-    assert "--restart was given but no training data could be located." in err
-
-
-def test_exporting_nothing_is_an_error(tmp_path, capsys):
-    (tmp_path / "a.npz").write_bytes(b"")
-    err = fails(
-        capsys,
-        "--train-data",
-        str(tmp_path / "absent.pkl.gz"),
-        "--artifact-path",
-        str(tmp_path / "a.npz"),
-        "--no-export",
-    )
-    assert "Nothing to do: --train-data not provided and --no-export set" in err
+    assert message in err
 
 
 def test_a_filter_function_that_cannot_be_imported_fails_before_any_worker_starts(
