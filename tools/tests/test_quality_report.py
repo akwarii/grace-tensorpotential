@@ -149,6 +149,16 @@ def run(root: Path, *args: str) -> int:
     return qr.main([*args, "--root", str(root)])
 
 
+def append(path: Path, text: str) -> None:
+    """Append ``text`` to ``path``."""
+    with path.open("a") as out:
+        out.write(text)
+
+
+OK = "quality report: ok\n"
+JUNIT = '<testsuite><testcase name="a" time="2"/></testsuite>'
+
+
 def save(root: Path, cov: dict | None = None) -> Path:
     """Write a coverage report below ``root``."""
     return write(root / "cov.json", json.dumps(report(cov or COVERAGE)))
@@ -271,21 +281,17 @@ def test_lint_findings_are_summed_per_tool_and_rule(lint: dict) -> None:
 def test_junit_metrics_sum_cases_and_time_over_the_files(tmp_path: Path) -> None:
     one = write(
         tmp_path / "1.xml",
-        '<testsuites><testsuite><testcase name="a" time="1.25"/><testcase name="b" time="2"/></testsuite></testsuites>',
+        '<testsuites><testsuite><testcase name="a" time="1.5"/><testcase name="b" time="2"/></testsuite></testsuites>',
     )
     two = write(tmp_path / "2.xml", '<testsuite><testcase name="c"/></testsuite>')
     assert qr.junit_metrics([one, two]) == {
         "tests.count": qr.Metric("info", 3),
-        "tests.seconds": qr.Metric("info", 3.2),
+        "tests.seconds": qr.Metric("info", 3.5),
     }
 
 
-@pytest.mark.parametrize(
-    "text", ['{"modules": {"loss.py": 0.8, "tpmodel.py": {"score": 0.6}}}']
-)
-def test_mutation_scores_are_read_as_numbers_or_objects(
-    tmp_path: Path, text: str
-) -> None:
+def test_mutation_scores_are_read_as_numbers_or_objects(tmp_path: Path) -> None:
+    text = '{"modules": {"loss.py": 0.8, "tpmodel.py": {"score": 0.6}}}'
     metrics = qr.mutation_metrics(write(tmp_path / "m.json", text))
     assert metrics == {
         "mutation.loss.py": qr.Metric("score", 0.8),
@@ -313,75 +319,76 @@ def test_lint_metrics_read_the_real_measure_on_a_scratch_project(
         text[text.index("[tool.ruff]") : text.index("[dependency-groups]")]
         + f'[tool.ty.environment]\npython = "{sys.prefix}"\n',
     )
-    write(tmp_path / "legacy" / "mod.py", "try:\n    pass\nexcept:\n    pass\n")
+    write(
+        tmp_path / "legacy" / "mod.py",
+        "def f(a: int = None):\n    try:\n        pass\n    except:\n        pass\n",
+    )
     write(tmp_path / "baselines" / "legacy_files.txt", "legacy/mod.py\n")
     write(
         tmp_path / "tests_torch" / "test_bad.py",
         "def f(a):\n    try:\n        pass\n    except:\n        pass\n",
     )
     metrics = qr.lint_metrics(tmp_path)
-    assert metrics["lint.ruff.E722"] == qr.count(
-        1
-    )  # the legacy file; the strict one is counted apart
+    # the legacy file is counted by rule, the file of the strict package apart
+    assert metrics["lint.ruff.E722"] == qr.count(1)
+    assert metrics["lint.ty.invalid-parameter-default"] == qr.count(1)
     assert metrics["lint.strict"].value >= 1
 
 
 # --- logic: the metric, the comparison and the table ----------------------------------------
 
 
-def test_a_metric_survives_its_json_form() -> None:
-    for metric in (
-        qr.count(3),
-        qr.ratio(2, 5),
-        qr.Metric("score", 0.5),
-        qr.Metric("info", 4),
-    ):
-        assert qr.Metric.from_json(metric.to_json()) == metric
+@pytest.mark.parametrize(
+    "metric",
+    [qr.count(3), qr.ratio(2, 5), qr.Metric("score", 0.5), qr.Metric("info", 4)],
+)
+def test_a_metric_survives_its_json_form(metric: qr.Metric) -> None:
+    assert qr.Metric.from_json(metric.to_json()) == metric
+
+
+def test_a_ratio_stores_its_parts_and_shows_a_share() -> None:
     assert "value" not in qr.ratio(2, 5).to_json()
     assert qr.ratio(1, 4).shown() == "25.00% (1/4)"
     assert qr.count(3).shown() == "3"
     assert qr.ratio(0, 0).share == 1.0
 
 
+SCORE = qr.Metric("score", 0.8)
+
+
 @pytest.mark.parametrize(
-    ("kind", "old", "new", "expected"),
+    ("old", "new", "expected"),
     [
-        ("count", qr.count(3), qr.count(4), True),
-        ("count", qr.count(3), qr.count(3), False),
-        ("count", qr.count(3), qr.count(2), False),
-        ("count", None, qr.count(1), True),  # a rule that was absent counted zero
-        ("count", qr.count(3), None, False),
-        ("score", qr.Metric("score", 0.8), qr.Metric("score", 0.7), True),
-        ("score", qr.Metric("score", 0.8), qr.Metric("score", 0.8), False),
-        ("score", qr.Metric("score", 0.8), None, False),
+        (qr.count(3), qr.count(4), True),
+        (qr.count(3), qr.count(3), False),
+        (qr.count(3), qr.count(2), False),
+        (None, qr.count(1), True),  # a rule that was absent counted zero
+        (None, qr.count(0), False),
+        (SCORE, qr.Metric("score", 0.7), True),
+        (SCORE, SCORE, False),
+        (None, SCORE, False),
+        (qr.ratio(8, 10), qr.ratio(8, 11), True),  # share fell, one more missing
+        (qr.ratio(8, 10), qr.ratio(7, 8), False),  # the share rose
         (
-            "ratio",
-            qr.ratio(8, 10),
-            qr.ratio(8, 11),
-            True,
-        ),  # share fell, one more missing
-        ("ratio", qr.ratio(8, 10), qr.ratio(7, 8), False),  # the share rose
-        (
-            "ratio",
             qr.ratio(8, 10),
             qr.ratio(7, 9),
             False,
         ),  # share fell, the missing part did not grow
-        ("ratio", qr.ratio(8, 10), qr.ratio(80, 100), False),
+        (qr.ratio(8, 10), qr.ratio(80, 100), False),
+        (qr.ratio(8, 10), qr.ratio(79, 100), True),  # 79% and 21 missing against 2
+        (None, qr.ratio(1, 2), False),
         (
-            "ratio",
-            qr.ratio(8, 10),
-            qr.ratio(79, 100),
-            True,
-        ),  # 79% and 21 missing against 2
-        ("ratio", None, qr.ratio(1, 2), False),
-        ("ratio", qr.ratio(1, 2), None, False),
+            qr.Metric("info", 1),
+            qr.Metric("info", 9),
+            False,
+        ),  # reported, never ratcheted
+        (None, qr.Metric("info", 9), False),
     ],
 )
 def test_worse_follows_the_direction_of_each_kind(
-    kind: str, old: qr.Metric | None, new: qr.Metric | None, expected: bool
+    old: qr.Metric | None, new: qr.Metric, expected: bool
 ) -> None:
-    assert qr.worse(old, new, kind) is expected
+    assert qr.worse(old, new) is expected
 
 
 def test_regressions_skip_info_and_the_groups_that_were_not_measured() -> None:
@@ -389,17 +396,19 @@ def test_regressions_skip_info_and_the_groups_that_were_not_measured() -> None:
         "todo.markers": qr.count(1),
         "coverage.data": qr.ratio(9, 10),
         "lint.strict": qr.count(0),
+        "tests.count": qr.Metric("info", 1),
     }
     now = {
         "todo.markers": qr.count(2),
         "coverage.data": qr.ratio(1, 10),
-        "tests.count": qr.Metric("info", 1),
+        "tests.count": qr.Metric("info", 0),
     }
     assert qr.regressions(base, now, {"todo"}) == ["todo.markers: 1 -> 2"]
     assert qr.regressions(base, now, {"coverage"}) == [
         "coverage.data: 90.00% (9/10) -> 10.00% (1/10)"
     ]
     assert qr.regressions(base, now, {"tests"}) == []
+    assert qr.regressions(base, now, set()) == []
 
 
 def test_a_new_count_above_zero_is_a_regression_and_a_gone_count_is_not() -> None:
@@ -451,11 +460,10 @@ def test_the_tree_passes_its_own_baseline(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     cov = recorded(tree, capsys)
-    assert check(tree, capsys, "--coverage", str(cov)) == (0, "quality report: ok\n")
+    assert check(tree, capsys, "--coverage", str(cov)) == (0, OK)
     stored = json.loads((tree / "baselines" / "quality.json").read_text())["metrics"]
     assert stored["todo.markers"] == {"kind": "count", "value": 1.0}
     assert stored["coverage.total"] == {"kind": "ratio", "have": 22, "total": 29}
-    assert not [n for n in stored if n.startswith("tests.")]
 
 
 @pytest.mark.usefixtures("lint")
@@ -463,8 +471,7 @@ def test_one_more_marker_fails_and_names_the_metric(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     cov = recorded(tree, capsys)
-    with (tree / "tensorpotential" / "api.py").open("a") as out:
-        out.write("# TODO(#2) again\n")
+    append(tree / "tensorpotential" / "api.py", "# TODO(#2) again\n")
     assert check(tree, capsys, "--coverage", str(cov)) == (
         1,
         "worse: todo.markers: 1 -> 2\n",
@@ -476,8 +483,7 @@ def test_one_lower_annotation_share_fails_and_names_the_metric(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     cov = recorded(tree, capsys)
-    with (tree / "tensorpotential" / "api.py").open("a") as out:
-        out.write("\n\ndef added(a):\n    return a\n")
+    append(tree / "tensorpotential" / "api.py", "\n\ndef added(a):\n    return a\n")
     status, out = check(tree, capsys, "--coverage", str(cov))
     assert status == 1
     assert "worse: api.return_annotations: 75.00% (6/8) -> 66.67% (6/9)" in out
@@ -516,7 +522,7 @@ def test_a_removed_covered_file_is_not_a_coverage_regression(
     smaller = {k: v for k, v in COVERAGE.items() if k != "tensorpotential/data/b.py"}
     assert (
         check(tree, capsys, "--coverage", str(save(tree, smaller)))[0] == 0
-    )  # 11/14 = 78.6% < 84%, but fewer missing
+    )  # 11/14 = 78.6% < 84.2%, but the same 3 missing
 
 
 def test_a_lint_rise_and_a_strict_finding_fail(
@@ -547,8 +553,10 @@ def test_one_more_upstream_file_fails(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     cov = recorded(tree, capsys)
-    with (tree / "tools" / "divergence.yaml").open("a") as out:
-        out.write("- {path: c.py, reason: r, milestone: m, upstream: pending}\n")
+    append(
+        tree / "tools" / "divergence.yaml",
+        "- {path: c.py, reason: r, milestone: m, upstream: pending}\n",
+    )
     assert check(tree, capsys, "--coverage", str(cov)) == (
         1,
         "worse: divergence.upstream_files: 2 -> 3\n",
@@ -596,11 +604,11 @@ def test_record_without_coverage_keeps_the_coverage_entries(
     assert run(tree, "record", "--no-coverage") == 0
     capsys.readouterr()
     after = qr.load_baseline(tree / "baselines" / "quality.json")
-    assert {n: m for n, m in after.items() if n.startswith("coverage.")} == {
-        n: m for n, m in before.items() if n.startswith("coverage.")
-    }
+    kept = {n: m for n, m in before.items() if n.startswith("coverage.")}
+    assert kept
+    assert {n: m for n, m in after.items() if n.startswith("coverage.")} == kept
     assert after["lint.ruff.C901"] == qr.count(1)
-    assert check(tree, capsys, "--no-coverage") == (0, "quality report: ok\n")
+    assert check(tree, capsys, "--no-coverage") == (0, OK)
 
 
 @pytest.mark.usefixtures("lint")
@@ -621,9 +629,7 @@ def test_the_first_record_without_a_baseline_and_a_check_without_one(
 def test_report_prints_the_table_and_writes_json_and_markdown(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    junit = write(
-        tree / "j.xml", '<testsuite><testcase name="a" time="2"/></testsuite>'
-    )
+    junit = write(tree / "j.xml", JUNIT)
     assert run(tree, "report", "--no-coverage", "--junit", str(junit)) == 0
     out = capsys.readouterr().out
     assert "| todo.markers | 1 |  |" in out
@@ -654,42 +660,43 @@ def test_report_prints_the_table_and_writes_json_and_markdown(
 def test_info_metrics_are_reported_and_never_recorded_or_compared(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    junit = write(
-        tree / "j.xml", '<testsuite><testcase name="a" time="2"/></testsuite>'
-    )
+    junit = write(tree / "j.xml", JUNIT)
     assert run(tree, "record", "--no-coverage", "--junit", str(junit)) == 0
     capsys.readouterr()
     write(
         junit,
         '<testsuite><testcase name="a" time="9"/><testcase name="b"/></testsuite>',
     )
-    assert check(tree, capsys, "--no-coverage", "--junit", str(junit)) == (
-        0,
-        "quality report: ok\n",
-    )
+    assert check(tree, capsys, "--no-coverage", "--junit", str(junit)) == (0, OK)
     assert "tests.count" not in qr.load_baseline(tree / "baselines" / "quality.json")
 
 
 @pytest.mark.usefixtures("lint")
-def test_inputs_that_cannot_be_used_are_an_error_not_a_pass(
+@pytest.mark.usefixtures("lint")
+@pytest.mark.parametrize(
+    ("path", "text", "message"),
+    [
+        ("absent.json", None, "cannot read"),
+        ("nobranch.json", json.dumps(report(COVERAGE, branch=False)), "branch"),
+    ],
+)
+def test_a_coverage_report_that_cannot_be_used_is_an_error_not_a_pass(
+    tree: Path,
+    capsys: pytest.CaptureFixture[str],
+    path: str,
+    text: str | None,
+    message: str,
+) -> None:
+    if text is not None:
+        write(tree / path, text)
+    assert run(tree, "report", "--coverage", str(tree / path)) == 2
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("lint")
+def test_a_mutation_file_that_cannot_be_used_is_an_error_not_a_skip(
     tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert run(tree, "report", "--coverage", str(tree / "absent.json")) == 2
-    assert "cannot read" in capsys.readouterr().err
-    assert (
-        run(
-            tree,
-            "report",
-            "--coverage",
-            str(
-                write(
-                    tree / "nobranch.json", json.dumps(report(COVERAGE, branch=False))
-                )
-            ),
-        )
-        == 2
-    )
-    assert "branch" in capsys.readouterr().err
     write(tree / "baselines" / "mutation_score.json", "[]")
     assert run(tree, "report", "--no-coverage") == 2
     assert "mutation score" in capsys.readouterr().err
@@ -712,7 +719,22 @@ def test_the_baseline_can_be_recorded_from_the_counts_of_the_coverage_ratchet(
     assert qr.load_baseline(tree / "baselines" / "quality.json")[
         "coverage.total"
     ] == qr.ratio(22, 29)
-    assert check(tree, capsys, "--coverage", str(save(tree))) == (
-        0,
-        "quality report: ok\n",
-    )
+    assert check(tree, capsys, "--coverage", str(save(tree))) == (0, OK)
+
+
+@pytest.mark.usefixtures("lint")
+@pytest.mark.parametrize(
+    ("path", "text"),
+    [
+        ("tools/divergence.yaml", "not a list\n"),
+        ("tools/divergence.yaml", "- [unclosed\n"),
+        ("baselines/quality.json", "{}"),
+        ("baselines/quality.json", '{"metrics": {"a.b": {"value": 1}}}'),
+    ],
+)
+def test_a_ledger_or_baseline_that_cannot_be_read_is_an_error_not_a_regression(
+    tree: Path, capsys: pytest.CaptureFixture[str], path: str, text: str
+) -> None:
+    write(tree / path, text)
+    assert run(tree, "check", "--no-coverage") == 2
+    assert capsys.readouterr().err.startswith("quality_report: ")

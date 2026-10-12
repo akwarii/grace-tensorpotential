@@ -2,7 +2,9 @@
 
 The metrics that say whether the code gets better or worse come from six tools and three baseline files; this
 tool collects them in one table (JSON and markdown) and ``check`` fails when a ratcheted one is worse than in
-``baselines/quality.json``. Library means ``tensorpotential/`` without ``compat/pace/`` (out of scope for every issue).
+``baselines/quality.json``. Library means the tree ``check_clones.py`` calls ``library`` (``tensorpotential/`` without
+``compat/pace/``, out of scope for every issue); the ``coverage``, ``clones``, ``api`` and ``todo`` groups are scoped to it,
+the ``lint`` and ``divergence`` groups are those of the whole repository, as their tools measure it.
 
 Metrics, by group (the name of a metric is ``group.detail``):
 
@@ -42,18 +44,22 @@ import json
 import re
 import sys
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import check_clones
 import coverage_ratchet
 import divergence
 import lint_ratchet
+import yaml
 
 BASELINE = Path("baselines/quality.json")
 MUTATION_FILE = Path("baselines/mutation_score.json")
-LIBRARY = "tensorpotential"
-EXCLUDED = ("tensorpotential/compat/pace/",)
+_LIBRARY_TREE = next(t for t in check_clones.TREES if t.name == "library")
+LIBRARY = _LIBRARY_TREE.path
+EXCLUDED = tuple(f"{LIBRARY}/{name}/" for name in _LIBRARY_TREE.exclude)
 MARKER = re.compile(r"\b(TODO|FIXME|XXX)\b")
 EPS = 1e-9
 
@@ -66,7 +72,7 @@ class ReportError(RuntimeError):
 class Metric:
     """One number: ``count`` (lower is better), ``ratio`` (``have`` of ``total``), ``score`` or ``info``."""
 
-    kind: str
+    kind: Literal["count", "ratio", "score", "info"]
     value: float = 0.0
     have: int = 0
     total: int = 0
@@ -112,12 +118,17 @@ def ratio(have: int, total: int) -> Metric:
     return Metric("ratio", have=have, total=total)
 
 
+def in_library(path: str) -> bool:
+    """Whether a repository-relative path lies in the library and outside the excluded packages."""
+    return path.startswith(f"{LIBRARY}/") and not path.startswith(EXCLUDED)
+
+
 def library_files(root: Path) -> list[Path]:
     """List the ``.py`` files of the library, sorted, without the excluded packages."""
     return sorted(
         path
         for path in (root / LIBRARY).rglob("*.py")
-        if not path.relative_to(root).as_posix().startswith(EXCLUDED)
+        if in_library(path.relative_to(root).as_posix())
     )
 
 
@@ -127,10 +138,9 @@ def lint_metrics(root: Path) -> Metrics:
     found = lint_ratchet.measure(root, legacy)
     out: Metrics = {"lint.strict": count(len(found["strict"]))}
     for tool in ("ruff", "ty"):
-        totals: dict[str, int] = {}
+        totals: Counter[str] = Counter()
         for rules in found[tool].values():
-            for rule, n in rules.items():
-                totals[rule] = totals.get(rule, 0) + n
+            totals.update(rules)
         out.update({f"lint.{tool}.{rule}": count(n) for rule, n in totals.items()})
     return out
 
@@ -143,14 +153,14 @@ def package_of(path: str) -> str:
 
 def coverage_metrics(counts: coverage_ratchet.Counts) -> Metrics:
     """Sum executed over total statements plus branches per package and in total."""
-    per: dict[str, list[int]] = {}
+    covered: Counter[str] = Counter()
+    total: Counter[str] = Counter()
     for path, entry in counts.items():
-        if path.startswith(f"{LIBRARY}/") and not path.startswith(EXCLUDED):
+        if in_library(path):
             for key in (package_of(path), "total"):
-                acc = per.setdefault(key, [0, 0])
-                acc[0] += entry["covered"]
-                acc[1] += entry["total"]
-    return {f"coverage.{k}": ratio(*v) for k, v in sorted(per.items())}
+                covered[key] += entry["covered"]
+                total[key] += entry["total"]
+    return {f"coverage.{k}": ratio(covered[k], total[k]) for k in sorted(total)}
 
 
 def clone_metrics(root: Path) -> Metrics:
@@ -164,15 +174,16 @@ def clone_metrics(root: Path) -> Metrics:
     return out
 
 
-def _public_functions(tree: ast.AST) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+_Function = ast.FunctionDef | ast.AsyncFunctionDef
+
+
+def _public_functions(tree: ast.Module | ast.ClassDef) -> list[_Function]:
     """Functions and methods reachable through public names only (nested functions are not API)."""
-    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
-    for node in getattr(tree, "body", []):
+    found: list[_Function] = []
+    for node in tree.body:
         if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
             found += _public_functions(node)
-        elif isinstance(
-            node, ast.FunctionDef | ast.AsyncFunctionDef
-        ) and not node.name.startswith("_"):
+        elif isinstance(node, _Function) and not node.name.startswith("_"):
             found.append(node)
     return found
 
@@ -193,27 +204,27 @@ def api_metrics(root: Path) -> Metrics:
 
 
 def todo_metrics(root: Path) -> Metrics:
-    """Lines of the library with a ``TODO``, ``FIXME`` or ``XXX`` marker."""
-    n = 0
-    for path in library_files(root):
-        n += sum(
-            bool(MARKER.search(line))
-            for line in path.read_text(encoding="utf-8").splitlines()
-        )
-    return {"todo.markers": count(n)}
+    """Count the lines of the library with a ``TODO``, ``FIXME`` or ``XXX`` marker (two on a line count once)."""
+    lines = (
+        line
+        for path in library_files(root)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    )
+    return {"todo.markers": count(sum(bool(MARKER.search(line)) for line in lines))}
 
 
 def divergence_metrics(root: Path) -> Metrics:
     """Rows of the divergence ledger: one per upstream file the fork modifies."""
-    return {
-        "divergence.upstream_files": count(
-            len(divergence.load_ledger(root / "tools" / "divergence.yaml"))
-        )
-    }
+    try:
+        rows = divergence.load_ledger(root / "tools" / "divergence.yaml")
+    except (SystemExit, yaml.YAMLError) as err:  # load_ledger exits with a message
+        msg = f"the divergence ledger cannot be read: {err}"
+        raise ReportError(msg) from err
+    return {"divergence.upstream_files": count(len(rows))}
 
 
 def junit_metrics(junit_files: list[Path]) -> Metrics:
-    """Test count and summed duration (seconds) of junit files, reported only."""
+    """Count the ``testcase`` entries and sum their seconds over junit files, reported only."""
     cases = []
     for path in junit_files:
         root = ET.parse(path).getroot()  # noqa: S314 - our own pytest output
@@ -253,11 +264,13 @@ def coverage_counts(
 
 def collect(root: Path, args: argparse.Namespace) -> tuple[Metrics, set[str]]:
     """All metrics of the tree and the groups that were measured."""
-    metrics: Metrics = {}
-    for part in (
-        lint_metrics(root), clone_metrics(root), api_metrics(root), todo_metrics(root), divergence_metrics(root)
-    ):  # fmt: skip
-        metrics.update(part)
+    metrics: Metrics = {
+        **lint_metrics(root),
+        **clone_metrics(root),
+        **api_metrics(root),
+        **todo_metrics(root),
+        **divergence_metrics(root),
+    }
     groups = {"lint", "clones", "api", "todo", "divergence"}
     counts = coverage_counts(root, args)
     if counts is not None:
@@ -285,31 +298,28 @@ def group_of(name: str) -> str:
     return name.split(".", 1)[0]
 
 
-def worse(old: Metric | None, new: Metric | None, kind: str) -> bool:
-    """Whether ``new`` is worse than ``old`` for a ratcheted ``kind``; an absent count is zero, an absent other one never fails."""
-    if kind == "count":
-        return (new.value if new else 0.0) > (old.value if old else 0.0) + EPS
-    if old is None or new is None:
+def worse(old: Metric | None, new: Metric) -> bool:
+    """Whether ``new`` is worse than ``old``; an absent count was zero, another absent metric never fails."""
+    if new.kind == "count":
+        return new.value > (old.value if old else 0.0) + EPS
+    if old is None:
         return False
-    if kind == "score":
+    if new.kind == "score":
         return new.value < old.value - EPS
-    return new.share < old.share - EPS and new.total - new.have > old.total - old.have
+    if new.kind == "ratio":
+        return (
+            new.share < old.share - EPS and new.total - new.have > old.total - old.have
+        )
+    return False  # info is reported, never ratcheted
 
 
 def regressions(base: Metrics, now: Metrics, groups: set[str]) -> list[str]:
-    """``metric: old -> new`` for each ratcheted metric of a measured group that got worse."""
-    kinds = {n: m.kind for n, m in base.items()} | {
-        n: m.kind for n, m in now.items() if m.kind == "count"
-    }
+    """``metric: old -> new`` for each metric of a measured group that got worse; a gone metric is not."""
     lines = []
-    for name in sorted(kinds):
-        if group_of(name) not in groups or kinds[name] == "info":
-            continue
-        old, new = base.get(name), now.get(name)
-        if worse(old, new, kinds[name]):
-            lines.append(
-                f"{name}: {old.shown() if old else '0'} -> {new.shown() if new else '0'}"
-            )
+    for name, new in sorted(now.items()):
+        old = base.get(name)
+        if group_of(name) in groups and worse(old, new):
+            lines.append(f"{name}: {old.shown() if old else '0'} -> {new.shown()}")
     return lines
 
 
@@ -360,6 +370,7 @@ def cmd_check(now: Metrics, groups: set[str], args: argparse.Namespace) -> int:
 def cmd_record(now: Metrics, groups: set[str], args: argparse.Namespace) -> int:
     """Write the baseline: the ratcheted metrics measured now, plus the entries of the groups not measured."""
     old = load_baseline(args.baseline) if args.baseline.is_file() else {}
+    # the first record has nothing to be worse than; a group the baseline lacks is new, not worse
     lines = regressions(old, now, groups & {group_of(n) for n in old})
     if lines and not args.allow_worse:
         sys.stdout.write(
@@ -409,9 +420,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run ``report``, ``check`` or ``record``; return the process exit status."""
     args = _parser().parse_args(argv)
     root = args.root.resolve()
-    args.baseline = (
-        args.baseline if args.baseline.is_absolute() else root / args.baseline
-    )
+    args.baseline = root / args.baseline
     try:
         now, groups = collect(root, args)
         if args.command == "check":
@@ -425,6 +434,8 @@ def main(argv: list[str] | None = None) -> int:
         lint_ratchet.ToolError,
         check_clones.ToolError,
         OSError,
+        KeyError,
+        TypeError,
     ) as err:
         sys.stderr.write(f"quality_report: {err}\n")
         return 2

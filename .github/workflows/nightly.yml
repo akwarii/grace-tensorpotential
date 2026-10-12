@@ -116,6 +116,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
+        # the newest Tests run of the commit, whatever started it: the schedule run of 02:10 for the nightly run, the run of
+        # the push or of the pull request for a manual one; gh run watch waits for it to finish
         run: |
           run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow tests.yaml --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -z "$run_id" ]; then
