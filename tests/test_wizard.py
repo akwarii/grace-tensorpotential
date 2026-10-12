@@ -323,10 +323,8 @@ def test_e2e_fs_lbfgsb(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "_section", lambda title: None)
     _mirror_prompts(monkeypatch)
 
-    # Force non-questionary path for the review loop
-    monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", False)
-    # Provide "" to the review loop input → triggers "ok" (confirm)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "")
+    # the review question needs a terminal: confirm it
+    monkeypatch.setattr(wizard.questionary, "select", lambda *a, **k: _AskReturns("ok"))
 
     monkeypatch.chdir(tmp_path)
 
@@ -356,8 +354,7 @@ def test_e2e_adam_has_scheduler(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "_section", lambda title: None)
     _mirror_prompts(monkeypatch)
 
-    monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", False)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "")
+    monkeypatch.setattr(wizard.questionary, "select", lambda *a, **k: _AskReturns("ok"))
 
     monkeypatch.chdir(tmp_path)
 
@@ -576,8 +573,7 @@ def test_the_prompt_helpers_live_in_cli_prompts_and_are_still_importable_from_th
 
     for name in (
         "_ask_select", "_ask_text", "_ask_path", "_ask_confirm", "_section", "_success", "_info", "_warning", "_error",
-        "_print_header", "_tip_path_input", "_section_dataset", "_HAS_QUESTIONARY", "_HAS_RICH", "_rich_console",
-        "_QUESTIONARY_STYLE", "input_choice", "input_with_default", "input_no_default", "no_readline",
+        "_print_header", "_tip_path_input", "_section_dataset", "_rich_console", "_QUESTIONARY_STYLE",
     ):  # fmt: skip
         assert getattr(wizard, name) is getattr(prompts, name), name
 
@@ -606,7 +602,6 @@ def recorded_console(monkeypatch):
     console = Console(record=True, width=200, force_terminal=False)
     monkeypatch.setattr(wizard, "_rich_console", console)
     monkeypatch.setattr(prompts, "_rich_console", console)
-    monkeypatch.setattr(wizard, "_HAS_RICH", True)
     return console
 
 
@@ -714,7 +709,6 @@ def _drive_wizard(monkeypatch, tmp_path, review_answers, fit_type="fit from scra
     _mirror_prompts(monkeypatch)
     # the external boundary of the terminal: questionary.select would need a tty
     monkeypatch.setattr(wizard.questionary, "select", review_select)
-    monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", True)
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as exc_info:
         wizard.generate_template_input()

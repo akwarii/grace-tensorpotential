@@ -9,8 +9,6 @@ from typing import Any
 from importlib import resources
 
 from tensorpotential.cli.prompts import (  # noqa: F401  (re-exported: the names live in cli/prompts.py, other code imports them from here)
-    _HAS_QUESTIONARY,
-    _HAS_RICH,
     _QUESTIONARY_STYLE,
     Panel,
     _ask_confirm,
@@ -26,10 +24,6 @@ from tensorpotential.cli.prompts import (  # noqa: F401  (re-exported: the names
     _success,
     _tip_path_input,
     _warning,
-    input_choice,
-    input_no_default,
-    input_with_default,
-    no_readline,
     questionary,
     rich_box,
 )
@@ -194,7 +188,7 @@ _VARIANT_DESC = {
 def _ask_foundation_model() -> str:
     def _choice(value, desc_map):
         label = desc_map.get(value, value)
-        return questionary.Choice(label, value=value) if _HAS_QUESTIONARY else value
+        return questionary.Choice(label, value=value)
 
     # 1. Tier
     tier = _ask_select(
@@ -574,89 +568,56 @@ def _section_weighting(s: _WizardState) -> _WizardState:
 
 
 def _show_review(s: _WizardState):
-    if _HAS_RICH:
-        from rich.table import Table
+    from rich.table import Table
 
-        t = Table(box=rich_box.SIMPLE, show_header=False, padding=(0, 2))
-        t.add_column("key", style="dim", no_wrap=True)
-        t.add_column("value", style="bold")
+    t = Table(box=rich_box.SIMPLE, show_header=False, padding=(0, 2))
+    t.add_column("key", style="dim", no_wrap=True)
+    t.add_column("value", style="bold")
 
-        t.add_row("Fit type", s.fit_type)
-        t.add_row("Train file", s.train_filename)
-        t.add_row(
-            "Test",
-            s.test_filename if s.use_separate_test else f"split {s.test_size:.0%}",
+    t.add_row("Fit type", s.fit_type)
+    t.add_row("Train file", s.train_filename)
+    t.add_row(
+        "Test",
+        s.test_filename if s.use_separate_test else f"split {s.test_size:.0%}",
+    )
+    t.add_row("Save dataset", "True" if not s.use_separate_test else "False")
+    if s.load_existing_model:
+        label = (
+            "Previous model" if s.fit_type == "continue fit" else "Foundation model"
         )
-        t.add_row("Save dataset", "True" if not s.use_separate_test else "False")
-        if s.load_existing_model:
-            label = (
-                "Previous model" if s.fit_type == "continue fit" else "Foundation model"
-            )
-            t.add_row(label, s.foundation_model_name)
-            if s.checkpoint_name:
-                t.add_row("Checkpoint", os.path.basename(s.checkpoint_name))
-        else:
-            t.add_row(
-                "Model",
-                f"{s.preset_name} / {s.preset_complexity}  cutoff={s.cutoff} Å",
-            )
-        if s.load_existing_model and s.fit_type == "finetune foundation model":
-            t.add_row("Finetuning mode", s.finetune_mode)
-        t.add_row("Eval initial stats", str(s.eval_init_stats))
-        t.add_row("Reset epoch/step", str(s.reset_epoch_and_step))
-        t.add_row("Optimizer", s.optimizer)
-        stress_part = f"  S={s.stress_loss_weight}" if s.use_stress else ""
-        t.add_row(
-            "Loss",
-            f"{s.loss_type}  E={s.energy_loss_weight}  F={s.force_loss_weight}{stress_part}",
-        )
-        if not s.load_existing_model:
-            t.add_row("Param dtype", s.param_dtype)
-        t.add_row("Weighting", s.weighting_scheme)
-        t.add_row("Batch size", str(s.batch_size))
-        t.add_row("Total updates", str(s.target_total_updates))
-
-        _rich_console.print()
-        _rich_console.print(
-            Panel(
-                t,
-                title="[bold]Review[/bold]",
-                border_style="cyan",
-                box=rich_box.ROUNDED,
-            )
-        )
+        t.add_row(label, s.foundation_model_name)
+        if s.checkpoint_name:
+            t.add_row("Checkpoint", os.path.basename(s.checkpoint_name))
     else:
-        print("\n--- Review ---")
-        print(f"  Fit type:     {s.fit_type}")
-        print(f"  Train file:  {s.train_filename}")
-        print(
-            f"  Test:        {s.test_filename if s.use_separate_test else f'split {s.test_size}'}"
+        t.add_row(
+            "Model",
+            f"{s.preset_name} / {s.preset_complexity}  cutoff={s.cutoff} Å",
         )
-        print(f"  Save dataset: {'True' if not s.use_separate_test else 'False'}")
-        if s.load_existing_model:
-            label = (
-                "Previous model" if s.fit_type == "continue fit" else "Foundation model"
-            )
-            print(
-                f"  {label}:" + " " * (10 - len(label)) + f"{s.foundation_model_name}"
-            )
-            if s.checkpoint_name:
-                print(f"  Checkpoint:  {os.path.basename(s.checkpoint_name)}")
-        else:
-            print(
-                f"  Model:       {s.preset_name}/{s.preset_complexity}  cutoff={s.cutoff}"
-            )
-        if s.load_existing_model and s.fit_type == "finetune foundation model":
-            print(f"  Finetune:    {s.finetune_mode}")
-        print(f"  Eval init:   {s.eval_init_stats}")
-        print(f"  Reset epoch: {s.reset_epoch_and_step}")
-        print(f"  Optimizer:   {s.optimizer}")
-        if not s.load_existing_model:
-            print(f"  Param dtype: {s.param_dtype}")
-        print(f"  Loss:        {s.loss_type}  F={s.force_loss_weight}")
-        print(f"  Weighting:   {s.weighting_scheme}  batch={s.batch_size}")
-        print(f"  Total updates: {s.target_total_updates}")
-        print("--------------")
+    if s.load_existing_model and s.fit_type == "finetune foundation model":
+        t.add_row("Finetuning mode", s.finetune_mode)
+    t.add_row("Eval initial stats", str(s.eval_init_stats))
+    t.add_row("Reset epoch/step", str(s.reset_epoch_and_step))
+    t.add_row("Optimizer", s.optimizer)
+    stress_part = f"  S={s.stress_loss_weight}" if s.use_stress else ""
+    t.add_row(
+        "Loss",
+        f"{s.loss_type}  E={s.energy_loss_weight}  F={s.force_loss_weight}{stress_part}",
+    )
+    if not s.load_existing_model:
+        t.add_row("Param dtype", s.param_dtype)
+    t.add_row("Weighting", s.weighting_scheme)
+    t.add_row("Batch size", str(s.batch_size))
+    t.add_row("Total updates", str(s.target_total_updates))
+
+    _rich_console.print()
+    _rich_console.print(
+        Panel(
+            t,
+            title="[bold]Review[/bold]",
+            border_style="cyan",
+            box=rich_box.ROUNDED,
+        )
+    )
 
 
 def _apply_state(s: _WizardState, template: str) -> str:
@@ -857,24 +818,17 @@ def generate_template_input():
         while True:
             _show_review(s)
 
-            if _HAS_QUESTIONARY:
-                redo_choices = [
-                    questionary.Choice("Yes, write input.yaml", value="ok")
-                ] + [
-                    questionary.Choice(f"Re-do: {name}", value=i)
-                    for i, (name, _) in enumerate(sections)
-                ]
-                answer = questionary.select(
-                    "Looks good?", choices=redo_choices, style=_QUESTIONARY_STYLE
-                ).ask()
-                if answer is None:
-                    raise KeyboardInterrupt
-            else:
-                print("Re-do a section? Enter number or press Enter to confirm:")
-                for i, (name, _) in enumerate(sections):
-                    print(f"  {i + 1}. {name}")
-                raw = input("Section number (Enter = confirm): ").strip()
-                answer = "ok" if not raw else int(raw) - 1
+            redo_choices = [
+                questionary.Choice("Yes, write input.yaml", value="ok")
+            ] + [
+                questionary.Choice(f"Re-do: {name}", value=i)
+                for i, (name, _) in enumerate(sections)
+            ]
+            answer = questionary.select(
+                "Looks good?", choices=redo_choices, style=_QUESTIONARY_STYLE
+            ).ask()
+            if answer is None:
+                raise KeyboardInterrupt
 
             if answer == "ok":
                 break
@@ -887,23 +841,17 @@ def generate_template_input():
             print(output, file=f)
 
     except KeyboardInterrupt:
-        if _HAS_RICH:
-            _rich_console.print("\n[bold red]Interrupted.[/bold red] Exiting.")
-        else:
-            print("\nInterrupted. Exiting.")
+        _rich_console.print("\n[bold red]Interrupted.[/bold red] Exiting.")
         sys.exit(0)
 
-    if _HAS_RICH:
-        _rich_console.print()
-        _rich_console.print(
-            Panel(
-                "[bold green]input.yaml[/bold green] written successfully!",
-                border_style="green",
-                box=rich_box.ROUNDED,
-                expand=False,
-            )
+    _rich_console.print()
+    _rich_console.print(
+        Panel(
+            "[bold green]input.yaml[/bold green] written successfully!",
+            border_style="green",
+            box=rich_box.ROUNDED,
+            expand=False,
         )
-        _rich_console.print()
-    else:
-        print("\nInput file written to `input.yaml`")
+    )
+    _rich_console.print()
     sys.exit(0)
