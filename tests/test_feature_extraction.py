@@ -566,3 +566,61 @@ def test_the_shard_progress_counts_the_batches_that_are_read(
     assert len(results) == 2
     last = capsys.readouterr().out.strip().splitlines()[-1]
     assert last.startswith("Rd | 100% (2/2 batches)") and last.endswith("| done")
+
+
+def test_the_rows_carrying_a_weight_are_the_features_of_the_structure_that_has_it(
+    uq_setup, feature_model, calculator
+):
+    weights = [1.0, 2.0, 0.5, 4.0]
+    atoms = _structures(uq_setup, n=4, weights=weights)
+    results = _batched(uq_setup, feature_model, atoms)
+    found_features = np.concatenate([f for f, _, _ in results])
+    found_weights = np.concatenate([w for _, _, w in results])
+    for weight, atom in zip(weights, atoms):
+        alone = next(
+            fe.extract_features(
+                calculator, [atom.copy()], element_map=uq_setup["element_map"]
+            )
+        )[0]
+        rows = found_features[found_weights == weight]
+        assert rows.shape == alone.shape
+        np.testing.assert_allclose(
+            np.sort(np.linalg.norm(rows, axis=1)),
+            np.sort(np.linalg.norm(alone, axis=1)),
+            rtol=1e-8,
+            atol=1e-10,
+        )
+
+
+def test_the_shard_iterator_drops_the_padding_atoms_of_a_batch(
+    tmp_path, uq_setup, feature_model
+):
+    from tensorpotential.data.databuilder import (
+        GeometricalDataBuilder,
+        construct_batches,
+        get_number_of_real_atoms,
+        get_number_of_real_neigh,
+        get_number_of_real_struc,
+    )
+
+    builder = GeometricalDataBuilder(uq_setup["element_map"], cutoff=6.0)
+    batch = construct_batches(
+        _structures(uq_setup, n=2), [builder], batch_size=2, verbose=False
+    )[0]
+    real_atoms = get_number_of_real_atoms(batch)
+    builder.pad_batch(
+        batch,
+        {
+            constants.PAD_MAX_N_ATOMS: real_atoms + 7,
+            constants.PAD_MAX_N_NEIGHBORS: get_number_of_real_neigh(batch) + 50,
+            constants.PAD_MAX_N_STRUCTURES: get_number_of_real_struc(batch) + 1,
+        },
+    )
+    assert len(batch[constants.ATOMIC_MU_I]) == real_atoms + 7
+    shard = _save_shard(tmp_path / "padded", [batch])
+
+    ((features, elements, weights),) = fe.tf_dataset_feature_iterator(
+        [shard], feature_model, verbose=False
+    )
+
+    assert features.shape[0] == elements.shape[0] == weights.shape[0] == real_atoms
