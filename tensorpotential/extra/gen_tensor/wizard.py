@@ -53,18 +53,16 @@ _TENSOR_CHOICES_MAP = {
 
 
 def _section_tensor_components(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.prompts import _ask_select, _section, _success, _HAS_QUESTIONARY
+    from tensorpotential.cli.prompts import _ask_select, _section, _success
 
     _section("Tensor type")
 
-    if _HAS_QUESTIONARY:
-        import questionary
-        choices = [
-            questionary.Choice(desc, value=key)
-            for key, (_, desc) in _TENSOR_CHOICES_MAP.items()
-        ]
-    else:
-        choices = list(_TENSOR_CHOICES_MAP.keys())
+    import questionary
+
+    choices = [
+        questionary.Choice(desc, value=key)
+        for key, (_, desc) in _TENSOR_CHOICES_MAP.items()
+    ]
 
     chosen_key = _ask_select("Tensor type:", choices=choices, default="[0, 1, 2]")
     s.tensor_components = _TENSOR_CHOICES_MAP[chosen_key][0]
@@ -74,7 +72,7 @@ def _section_tensor_components(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_per_structure(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.prompts import _ask_select, _section, _success, _HAS_QUESTIONARY
+    from tensorpotential.cli.prompts import _ask_select, _section, _success
 
     _section("Per-structure")
 
@@ -83,12 +81,10 @@ def _section_tensor_per_structure(s: _WizardStateTensor) -> _WizardStateTensor:
         "per-structure": "per-structure — one tensor per structure  (e.g. stress × volume)",
     }
 
-    if _HAS_QUESTIONARY:
-        import questionary
-        choices = [questionary.Choice(desc, value=key)
-                   for key, desc in _PER_STRUCTURE_DESCS.items()]
-    else:
-        choices = list(_PER_STRUCTURE_DESCS.keys())
+    import questionary
+
+    choices = [questionary.Choice(desc, value=key)
+               for key, desc in _PER_STRUCTURE_DESCS.items()]
 
     answer = _ask_select(
         "Property granularity:", choices=choices, default="per-atom"
@@ -99,7 +95,7 @@ def _section_tensor_per_structure(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _section_tensor_model(s: _WizardStateTensor) -> _WizardStateTensor:
-    from tensorpotential.cli.prompts import _ask_select, _ask_text, _section, _success, _HAS_QUESTIONARY
+    from tensorpotential.cli.prompts import _ask_select, _ask_text, _section, _success
 
     _section("Model")
 
@@ -108,11 +104,9 @@ def _section_tensor_model(s: _WizardStateTensor) -> _WizardStateTensor:
         "TENSOR_2L": "TENSOR_2L — 2 message-passing layers, more expressive (lmax=4, embedding=128)",
     }
 
-    if _HAS_QUESTIONARY:
-        import questionary
-        choices = [questionary.Choice(desc, value=key) for key, desc in _PRESET_DESCS.items()]
-    else:
-        choices = list(_PRESET_DESCS.keys())
+    import questionary
+
+    choices = [questionary.Choice(desc, value=key) for key, desc in _PRESET_DESCS.items()]
 
     s.preset = _ask_select("Model preset:", choices=choices, default="TENSOR_1L")
     _success(f"Preset: {s.preset}")
@@ -195,71 +189,52 @@ def _section_tensor_precision(s: _WizardStateTensor) -> _WizardStateTensor:
 
 
 def _show_review_tensor(s: _WizardStateTensor):
-    from tensorpotential.cli.prompts import _HAS_RICH
+    from tensorpotential.cli.prompts import _rich_console
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich import box as rich_box
 
-    if _HAS_RICH:
-        from tensorpotential.cli.prompts import _rich_console
-        from rich.table import Table
-        from rich.panel import Panel
-        from rich import box as rich_box
+    t = Table(box=rich_box.SIMPLE, show_header=False, padding=(0, 2))
+    t.add_column("key", style="dim", no_wrap=True)
+    t.add_column("value", style="bold")
 
-        t = Table(box=rich_box.SIMPLE, show_header=False, padding=(0, 2))
-        t.add_column("key", style="dim", no_wrap=True)
-        t.add_column("value", style="bold")
-
-        t.add_row("Tensor components", str(s.tensor_components))
-        t.add_row("Tensor rank", str(s.tensor_rank))
-        t.add_row("Per structure", str(s.per_structure))
-        t.add_row("Preset", s.preset)
-        t.add_row("Cutoff", f"{s.cutoff} Å")
-        t.add_row("Compute energy", str(s.compute_energy))
-        t.add_row("Compute forces", str(s.compute_forces))
-        t.add_row("Loss type", s.loss_type)
-        tensor_loss_str = f"weight={s.tensor_weight}"
+    t.add_row("Tensor components", str(s.tensor_components))
+    t.add_row("Tensor rank", str(s.tensor_rank))
+    t.add_row("Per structure", str(s.per_structure))
+    t.add_row("Preset", s.preset)
+    t.add_row("Cutoff", f"{s.cutoff} Å")
+    t.add_row("Compute energy", str(s.compute_energy))
+    t.add_row("Compute forces", str(s.compute_forces))
+    t.add_row("Loss type", s.loss_type)
+    tensor_loss_str = f"weight={s.tensor_weight}"
+    if s.loss_type == "huber":
+        tensor_loss_str += f", delta={s.tensor_delta}"
+    t.add_row("Tensor loss", tensor_loss_str)
+    if s.compute_energy:
+        ef_str = f"weight={s.energy_weight}"
         if s.loss_type == "huber":
-            tensor_loss_str += f", delta={s.tensor_delta}"
-        t.add_row("Tensor loss", tensor_loss_str)
-        if s.compute_energy:
-            ef_str = f"weight={s.energy_weight}"
-            if s.loss_type == "huber":
-                ef_str += f", delta={s.energy_delta}"
-            t.add_row("Energy loss", ef_str)
-        if s.compute_forces:
-            t.add_row("Forces loss", f"weight={s.forces_weight}")
-        t.add_row("Train file", s.train_filename)
-        t.add_row(
-            "Test",
-            s.test_filename if s.use_separate_test else f"split {s.test_size:.0%}",
-        )
-        t.add_row("Batch size", str(s.batch_size))
-        t.add_row("Total updates", str(s.target_total_updates))
-        t.add_row("Param dtype", s.param_dtype)
+            ef_str += f", delta={s.energy_delta}"
+        t.add_row("Energy loss", ef_str)
+    if s.compute_forces:
+        t.add_row("Forces loss", f"weight={s.forces_weight}")
+    t.add_row("Train file", s.train_filename)
+    t.add_row(
+        "Test",
+        s.test_filename if s.use_separate_test else f"split {s.test_size:.0%}",
+    )
+    t.add_row("Batch size", str(s.batch_size))
+    t.add_row("Total updates", str(s.target_total_updates))
+    t.add_row("Param dtype", s.param_dtype)
 
-        _rich_console.print()
-        _rich_console.print(
-            Panel(
-                t,
-                title="[bold]Review[/bold]",
-                border_style="cyan",
-                box=rich_box.ROUNDED,
-            )
+    _rich_console.print()
+    _rich_console.print(
+        Panel(
+            t,
+            title="[bold]Review[/bold]",
+            border_style="cyan",
+            box=rich_box.ROUNDED,
         )
-    else:
-        print("\n--- Review ---")
-        print(f"  Tensor components: {s.tensor_components}  rank={s.tensor_rank}")
-        print(f"  Per structure:     {s.per_structure}")
-        print(f"  Preset:            {s.preset}  cutoff={s.cutoff} Å")
-        print(f"  Compute energy:    {s.compute_energy}")
-        print(f"  Compute forces:    {s.compute_forces}")
-        print(f"  Loss:              {s.loss_type}  tensor_w={s.tensor_weight}")
-        print(f"  Train file:        {s.train_filename}")
-        print(
-            f"  Test:              {s.test_filename if s.use_separate_test else f'split {s.test_size}'}"
-        )
-        print(f"  Batch size:        {s.batch_size}")
-        print(f"  Total updates:     {s.target_total_updates}")
-        print(f"  Param dtype:       {s.param_dtype}")
-        print("--------------")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -779,11 +754,15 @@ fit:
 
 def run_gen_tensor_wizard():
     """Entry point called from the main wizard when user picks 'Generic Tensors (L<=2)'."""
+    import questionary
+    from rich import box as rich_box
+    from rich.panel import Panel
+
     from tensorpotential.cli.prompts import (
-        _section_dataset,
-        _HAS_QUESTIONARY,
-        _HAS_RICH,
+        _QUESTIONARY_STYLE,
         _print_header,
+        _rich_console,
+        _section_dataset,
     )
 
     _print_header()
@@ -810,27 +789,17 @@ def run_gen_tensor_wizard():
         while True:
             _show_review_tensor(s)
 
-            if _HAS_QUESTIONARY:
-                import questionary
-                from tensorpotential.cli.prompts import _QUESTIONARY_STYLE
-
-                redo_choices = [
-                    questionary.Choice("Yes, write input.yaml", value="ok")
-                ] + [
-                    questionary.Choice(f"Re-do: {name}", value=i)
-                    for i, (name, _) in enumerate(sections)
-                ]
-                answer = questionary.select(
-                    "Looks good?", choices=redo_choices, style=_QUESTIONARY_STYLE
-                ).ask()
-                if answer is None:
-                    raise KeyboardInterrupt
-            else:
-                print("Re-do a section? Enter number or press Enter to confirm:")
-                for i, (name, _) in enumerate(sections):
-                    print(f"  {i + 1}. {name}")
-                raw = input("Section number (Enter = confirm): ").strip()
-                answer = "ok" if not raw else int(raw) - 1
+            redo_choices = [
+                questionary.Choice("Yes, write input.yaml", value="ok")
+            ] + [
+                questionary.Choice(f"Re-do: {name}", value=i)
+                for i, (name, _) in enumerate(sections)
+            ]
+            answer = questionary.select(
+                "Looks good?", choices=redo_choices, style=_QUESTIONARY_STYLE
+            ).ask()
+            if answer is None:
+                raise KeyboardInterrupt
 
             if answer == "ok":
                 break
@@ -846,28 +815,17 @@ def run_gen_tensor_wizard():
             f.write(output)
 
     except KeyboardInterrupt:
-        if _HAS_RICH:
-            from tensorpotential.cli.prompts import _rich_console
-            _rich_console.print("\n[bold red]Interrupted.[/bold red] Exiting.")
-        else:
-            print("\nInterrupted. Exiting.")
+        _rich_console.print("\n[bold red]Interrupted.[/bold red] Exiting.")
         sys.exit(0)
 
-    if _HAS_RICH:
-        from tensorpotential.cli.prompts import _rich_console
-        from rich.panel import Panel
-        from rich import box as rich_box
-
-        _rich_console.print()
-        _rich_console.print(
-            Panel(
-                "[bold green]input.yaml[/bold green] written successfully!",
-                border_style="green",
-                box=rich_box.ROUNDED,
-                expand=False,
-            )
+    _rich_console.print()
+    _rich_console.print(
+        Panel(
+            "[bold green]input.yaml[/bold green] written successfully!",
+            border_style="green",
+            box=rich_box.ROUNDED,
+            expand=False,
         )
-        _rich_console.print()
-    else:
-        print("\nInput file written to `input.yaml`")
+    )
+    _rich_console.print()
     sys.exit(0)
