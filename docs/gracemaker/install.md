@@ -15,7 +15,7 @@ For [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-
 Then, create a new environment:
 
 ```bash
-micromamba create -n grace python=3.11 
+micromamba create -n grace python=3.12 
 micromamba activate grace
 ```
 
@@ -49,7 +49,7 @@ PyTorch come with extras, so install the one you need:
     process that loads both: with `tensorflow` first, loading `triton` (a PyTorch dependency, imported by `torch_sim`)
     currently crashes with a segmentation fault.
 
-The package needs Python 3.11 or newer.
+The package needs Python 3.12 or newer.
 
 For the latest developer version, clone the `grace-tensorpotential` repository:
 

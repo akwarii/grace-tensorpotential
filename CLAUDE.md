@@ -50,7 +50,7 @@ Procedures: board commands, findings, Definition of Done: `grace-torch-ticket`; 
 | Coverage rule, test layers, planted mutants, parallel runs | skill `grace-torch-tests`, rule `.claude/rules/testing.md` |
 | Baselines, golden fixtures, tolerances | skill `grace-torch-goldens`, `baselines/README.md`, `tests_torch/golden/README.md` |
 | Units, signs, dtypes, derivatives | skill `grace-torch-numerics` |
-| CI, packaging, runner memory, runtime of the suite | `.github/CI.md` |
+| CI, required checks, packaging, runner memory, runtime of the suite | `.github/CI.md` |
 | Spec sheets and the instruction registry | `docs/torch_backend/spec/README.md` |
 | Area gotchas (instructions, data, Keras 3, TF-free packages, golden, CI) | `.claude/rules/*.md`: each loads when you read or edit a file its `paths` match |
 
@@ -101,9 +101,11 @@ Not in a normal run: `test_structured_grid.py` (skipped on public master: needs 
 A test writes only into `tmp_path` or a scratch directory; `git status` is clean after a run. The full suite takes about 15 minutes at `-n 4` on an idle machine: run it in the background (figures and CI shards: `.github/CI.md`).
 **A whole-suite `-n 4` run needs more than 18 GB of the 30 GB** (workers of 4 to 6 GB) and has taken the desktop session down: run the CI shards one after another inside `systemd-run --user --scope -p MemoryMax=18G -p MemorySwapMax=2G` (recipe and findings: `.github/CI.md`, "Locally").
 
+**Required checks of a pull request (CI3; the owner sets them in the repository settings, detail in `.github/CI.md`):** `lint`; `test-core`; `test-torch (2.3.3)`, `test-torch (3.0.3)`; `test-tf (group 1 of 4)` to `(group 4 of 4)`; `quality-gates` (coverage ratchet, and touched units at 90% on a pull request); `wheel`, `wheel-smoke`, `extras-resolve`. CI does not run `board.py lint` (it needs a project-scope token, so it stays in the agent procedure), the real-weight and foundation-model tests, or any GPU test.
+
 ## Code style
 
-- Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
+- Python 3.12+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
 - **Legacy code stays as it is**: no repo-wide reformat, no file splitting (`instructions/compute.py` is about 4,900 lines and upstream merges depend on its shape), no renames; improve a unit only
   while you are already changing it. An issue whose job is to change legacy code (clean-up, quality, deduplication, packaging, performance) says what may change; the coverage and comparison rules govern it and it is not widened.
 - New packages get the strict ruff set from the **single ruff configuration in `pyproject.toml`** (no `ruff.toml`; `per-file-ignores` switch the strict families off outside the new packages, listed there and in `tools/lint_ratchet.py`, so a plain `ruff check` stays quiet on legacy code). **Strict by default (TOOL3):** `tools/lint_ratchet.py` ignores that switch and decides by `baselines/legacy_files.txt` (every file that existed outside the new packages; it only shrinks, a hand-added entry fails `check`): a file in neither that list nor a new package, so any **new file in `cli/`, `data/`, `tests/`, `tools/`, ...**, must have no ruff finding (docstrings and plain `assert` are allowed in test files) and no ty finding without the `[[tool.ty.overrides]]`; a legacy file may not raise its count of E, F, ERA001, C901, PLR0912/0913/0915, BLE001, B, RUF012, NPY002, SIM, RET, PLW, PTH and S (without S101).

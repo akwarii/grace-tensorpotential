@@ -7,10 +7,6 @@ A refactor that moves a file must not reset what the ratchets know about it. ``l
 
 from __future__ import annotations
 
-from typing import TypeVar
-
-T = TypeVar("T")
-
 
 def parse_moves(pairs: list[list[str]] | None) -> dict[str, str]:
     """``{old: new}`` from the ``--moved OLD NEW`` pairs; a pair that cannot be a move is an error."""
@@ -26,7 +22,7 @@ def parse_moves(pairs: list[list[str]] | None) -> dict[str, str]:
     return moves
 
 
-def rekey(table: dict[str, T], moves: dict[str, str]) -> dict[str, T]:
+def rekey[T](table: dict[str, T], moves: dict[str, str]) -> dict[str, T]:
     """``table`` with the key of every moved file replaced by its new path."""
     out: dict[str, T] = {}
     for key, value in table.items():

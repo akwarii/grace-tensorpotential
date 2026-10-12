@@ -1,7 +1,7 @@
 # The wheel and the extras (CI1, D17a), on every pull request and every push to the integration branch:
 #   wheel           builds the wheel, checks its file list and metadata against upstream and the declared extras
-#   wheel-smoke     installs the wheel into a clean venv (base, torch, tf) and runs the smoke test, on Python 3.11 and 3.13
-#   extras-resolve  resolves each extra with uv, on Python 3.11 and 3.13; an empty extra fails
+#   wheel-smoke     installs the wheel into a clean venv (base, torch, tf) and runs the smoke test, on Python 3.12 and 3.13
+#   extras-resolve  resolves each extra with uv, on Python 3.12 and 3.13; an empty extra fails
 # Every action is pinned to a commit; the token has read access only.
 
 name: Wheel
@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.13"]
+        python: ["3.12", "3.13"]
         extra: ["none", "torch", "tf"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -97,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.13"]
+        python: ["3.12", "3.13"]
         extra: ["tf", "torch", "torch-sim", "all"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
