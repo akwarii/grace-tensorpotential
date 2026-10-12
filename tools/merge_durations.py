@@ -1,4 +1,4 @@
-"""Merge the per-shard test durations of the ``Durations`` workflow, and warn when the committed file is stale.
+r"""Merge the per-shard test durations of the ``Durations`` workflow, and warn when the committed file is stale.
 
 The four ``test-tf`` shards are balanced by ``tests/.test_durations`` (``pytest-split``). The ``Durations`` workflow
 runs each shard with ``--store-durations --clean-durations`` on the hosted runner, so a shard file holds exactly the
@@ -95,7 +95,7 @@ def load_durations(path: Path) -> dict[str, float]:
 
 
 def format_durations(durations: dict[str, float]) -> str:
-    """The text of a durations file: sorted keys, four-space indent, trailing newline."""
+    """Return the text of a durations file: sorted keys, four-space indent, trailing newline."""
     return json.dumps(durations, sort_keys=True, indent=4) + "\n"
 
 
@@ -163,7 +163,7 @@ def merge(committed: dict[str, float], shards: list[dict[str, float]]) -> MergeR
 
 
 def summary_markdown(result: MergeResult) -> str:
-    """The Markdown summary of a merge, for ``$GITHUB_STEP_SUMMARY``."""
+    """Return the Markdown summary of a merge, for ``$GITHUB_STEP_SUMMARY``."""
     total = sum(result.durations.values())
     return (
         "### Test durations\n\n"
@@ -184,7 +184,7 @@ def parse_collected(text: str) -> set[str]:
 def staleness_message(
     committed: dict[str, float], collected: set[str], threshold: float = STALE_THRESHOLD
 ) -> str | None:
-    """A GitHub ``::warning::`` line when more than ``threshold`` of the collected tests are unknown, else ``None``.
+    """Return a GitHub ``::warning::`` line when more than ``threshold`` of the collected tests are unknown, else ``None``.
 
     Raises
     ------
