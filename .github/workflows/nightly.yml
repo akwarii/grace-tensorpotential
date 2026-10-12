@@ -1,6 +1,8 @@
 # The slow checks of CI1 (D17a), scheduled because they are heavy on hosted runners:
 #   both-stacks     one environment with the all extra: TensorFlow and torch import side by side
 #   torch-sim-main  the torch extra with torch-sim from its main branch, to see an upstream break early
+#   quality-report  tools/quality_report.py (TOOL4): the metrics of the library in one table (job summary), failing when
+#                   one is worse than baselines/quality.json; the coverage is that of the Tests run of the same commit
 # The test suites (core, torch, TensorFlow) are in tests.yaml, which also runs every night.
 #
 # GitHub starts scheduled workflows from the default branch only, so the schedule is live once this file is there;
@@ -87,3 +89,64 @@ jobs:
           if compgen -G "tests_torch/test_torchsim*.py" > /dev/null; then
             .venv-sim/bin/python -m pytest tests_torch -v -p no:cacheprovider --timeout=900 -k torchsim
           fi
+
+  quality-report:
+    # The coverage comes from the Tests workflow (test-tf uploads one data file and one junit file per shard): the job
+    # waits for the Tests run of this commit, downloads them and combines them. A run for a change of this file
+    # (pull_request) has no such run to wait for and reports without coverage. board.py lint needs a token with
+    # project scope, which CI does not have, so it is not part of the report.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install the development environment (ruff and ty at the versions of uv.lock, coverage.py)
+        run: uv sync --frozen --group dev
+      - name: Download the coverage data and the junit files of the Tests run of this commit
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow tests.yaml --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$run_id" ]; then
+            echo "::error::no Tests run for $SHA: run the Tests workflow on this commit first"
+            exit 1
+          fi
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status > /dev/null
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --pattern 'coverage-group-*' --dir shards
+      - name: Combine the shards into one coverage report
+        if: github.event_name != 'pull_request'
+        run: |
+          uv run --frozen --no-sync python -m coverage combine shards/*
+          uv run --frozen --no-sync python -m coverage json -o cov.json
+      - name: Quality report (fails when a metric is worse than baselines/quality.json)
+        env:
+          # the lint baselines were recorded with PYTHONPATH on the repository root (see lint.yaml)
+          PYTHONPATH: ${{ github.workspace }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            coverage_args="--no-coverage"
+          else
+            coverage_args="--coverage cov.json --junit shards/*/junit.group-*.xml"
+          fi
+          uv run --frozen --no-sync python tools/quality_report.py check $coverage_args \
+            --markdown "$GITHUB_STEP_SUMMARY" --json quality.json
+      - name: Keep the metrics of this run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quality-report
+          path: quality.json
+          if-no-files-found: ignore
+          retention-days: 90
