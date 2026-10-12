@@ -3,9 +3,7 @@
 ``gracemaker -t`` (``cli/wizard.py``) and the generic-tensor wizard (``extra/gen_tensor/wizard.py``) ask their questions
 and print their messages through these helpers, and neither imports the other: this module is what they share. A question
 is asked with ``questionary`` (a terminal is needed) and a message is printed through the shared rich console
-(:mod:`tensorpotential.cli.console`); both are dependencies of the package.
-
-``_HAS_QUESTIONARY`` and ``_HAS_RICH`` select the ``input()`` and plain-text fallbacks instead; tests switch them. The names and behaviour
+(:mod:`tensorpotential.cli.console`); both are dependencies of the package, so there is no plain-text fallback. The names
 are those of the helpers when they lived in ``cli/wizard.py``, which still re-exports them.
 """
 
@@ -14,8 +12,7 @@ from __future__ import annotations
 import sys
 from typing import Any, Protocol
 
-# questionary and rich are dependencies of the package (pyproject.toml); the two flags say which world is active, and tests
-# switch them.
+# questionary and rich are dependencies of the package (pyproject.toml).
 import questionary
 from questionary import Style as QStyle
 from rich import box as rich_box
@@ -36,16 +33,7 @@ _QUESTIONARY_STYLE = QStyle([
     ("text", ""),
     ("disabled", "fg:#858585 italic"),
 ])
-_HAS_QUESTIONARY = True
 _rich_console = get_console()
-_HAS_RICH = True
-
-try:
-    import readline  # noqa: F401
-
-    no_readline = False
-except ImportError:
-    no_readline = True
 
 
 class DatasetState(Protocol):
@@ -57,111 +45,54 @@ class DatasetState(Protocol):
     test_size: float
 
 
-def _write(text: str = "") -> None:
-    """Write a line of plain text to the standard output."""
-    sys.stdout.write(text + "\n")
-
-
-# ---------------------------------------------------------------------------
-# Plain input fallbacks
-# ---------------------------------------------------------------------------
-
-
-def input_choice(query, choices, default_choice):
-    """Input from stdin with list of available choices and default choice."""
-    choices = list(choices)
-    if default_choice not in choices:
-        raise AssertionError(default_choice)
-    while True:
-        choice = (
-            input(
-                query
-                + f", available options: {', '.join(choices)} (default = {default_choice}): "
-            )
-            or default_choice
-        )
-        if choice in choices:
-            return choice
-
-
-def input_with_default(query, default_choice: Any = None):
-    """Input from stdin with default value."""
-    return input(query + ": ") or default_choice
-
-
-def input_no_default(query):
-    """Input from stdin without default."""
-    while True:
-        choice = input(query)
-        if choice:
-            return choice
-
-
 # ---------------------------------------------------------------------------
 # Rich / Questionary helpers
 # ---------------------------------------------------------------------------
 
 
 def _print_header():
-    if _HAS_RICH:
-        _rich_console.print()
-        _rich_console.print(
-            Panel(
-                RichText.assemble(
-                    ("GRACEmaker ", "bold cyan"),
-                    ("input.yaml", "bold white"),
-                    (" wizard", "bold cyan"),
-                ),
-                subtitle="[dim]navigate with arrow keys · confirm with Enter[/dim]",
-                border_style="cyan",
-                box=rich_box.ROUNDED,
-                expand=False,
-            )
+    _rich_console.print()
+    _rich_console.print(
+        Panel(
+            RichText.assemble(
+                ("GRACEmaker ", "bold cyan"),
+                ("input.yaml", "bold white"),
+                (" wizard", "bold cyan"),
+            ),
+            subtitle="[dim]navigate with arrow keys · confirm with Enter[/dim]",
+            border_style="cyan",
+            box=rich_box.ROUNDED,
+            expand=False,
         )
-        _rich_console.print()
-    else:
-        _write("=" * 50)
-        _write("  GRACEmaker input.yaml wizard")
-        _write("=" * 50)
-
-
-def _emit(rich_markup: str, plain: str) -> None:
-    """Print ``rich_markup`` through the shared console, or ``plain`` when rich is switched off."""
-    if _HAS_RICH:
-        _rich_console.print(rich_markup)
-    else:
-        _write(plain)
+    )
+    _rich_console.print()
 
 
 def _info(msg: str):
-    _emit(f"  [dim]→[/dim] {msg}", f"  -> {msg}")
+    _rich_console.print(f"  [dim]→[/dim] {msg}")
 
 
 def _success(msg: str):
-    _emit(f"  [bold green]✓[/bold green] {msg}", f"  OK: {msg}")
+    _rich_console.print(f"  [bold green]✓[/bold green] {msg}")
 
 
 def _warning(msg: str):
-    _emit(f"  [bold orange1]![/bold orange1] {msg}", f"  WARNING: {msg}")
+    _rich_console.print(f"  [bold orange1]![/bold orange1] {msg}")
 
 
 def _error(msg: str):
-    _emit(f"  [bold red]✗[/bold red] {msg}", f"  ERROR: {msg}")
+    _rich_console.print(f"  [bold red]✗[/bold red] {msg}")
 
 
 def _section(title: str):
-    _emit(f"\n[bold cyan]── {title}[/bold cyan]", f"\n-- {title}")
+    _rich_console.print(f"\n[bold cyan]── {title}[/bold cyan]")
 
 
 def _tip_path_input():
     """Print a one-line hint explaining how to enter file paths."""
-    if _HAS_QUESTIONARY:
-        tip = "Tab ↹ autocompletes path  ·  ↑↓ navigates history"
-    elif not no_readline:
-        tip = "↑↓ for command history  ·  Tab may autocomplete (readline)"
-    else:
-        tip = "Type or paste the full file path"
-    _emit(f"  [dim italic]{tip}[/dim italic]", f"  ({tip})")
+    _rich_console.print(
+        "  [dim italic]Tab ↹ autocompletes path  ·  ↑↓ navigates history[/dim italic]"
+    )
 
 
 def _answered(question: Any) -> Any:
@@ -173,54 +104,41 @@ def _answered(question: Any) -> Any:
 
 
 def _ask_select(message, choices, default=None):
-    if _HAS_QUESTIONARY:
-        choice_list = list(choices)
-        # choices may be questionary.Choice objects; find matching default
-        def_val = default
-        if def_val not in choice_list:
-            # try matching by .value for Choice objects
-            def_val = next(
-                (c for c in choice_list if getattr(c, "value", c) == default),
-                choice_list[0],
-            )
-        return _answered(
-            questionary.select(
-                message, choices=choice_list, default=def_val, style=_QUESTIONARY_STYLE
-            )
+    choice_list = list(choices)
+    # choices may be questionary.Choice objects; find matching default
+    def_val = default
+    if def_val not in choice_list:
+        # try matching by .value for Choice objects
+        def_val = next(
+            (c for c in choice_list if getattr(c, "value", c) == default),
+            choice_list[0],
         )
-    # extract string values from Choice objects if needed
-    str_choices = [getattr(c, "value", c) for c in choices]
-    return input_choice(
-        message, str_choices, default if default in str_choices else str_choices[0]
+    return _answered(
+        questionary.select(
+            message, choices=choice_list, default=def_val, style=_QUESTIONARY_STYLE
+        )
     )
 
 
 def _ask_text(message, default=None):
-    if _HAS_QUESTIONARY:
-        result = _answered(
-            questionary.text(
-                message,
-                default=str(default) if default is not None else "",
-                style=_QUESTIONARY_STYLE,
-            )
+    result = _answered(
+        questionary.text(
+            message,
+            default=str(default) if default is not None else "",
+            style=_QUESTIONARY_STYLE,
         )
-        return result if result else default
-    return input_with_default(message, default)
+    )
+    return result if result else default
 
 
 def _ask_path(message):
-    if _HAS_QUESTIONARY:
-        return _answered(questionary.path(message, style=_QUESTIONARY_STYLE))
-    return input_no_default(message + " ")
+    return _answered(questionary.path(message, style=_QUESTIONARY_STYLE))
 
 
 def _ask_confirm(message, default=True):
-    if _HAS_QUESTIONARY:
-        return _answered(
-            questionary.confirm(message, default=default, style=_QUESTIONARY_STYLE)
-        )
-    ans = input_choice(message, ["yes", "no"], "yes" if default else "no")
-    return ans == "yes"
+    return _answered(
+        questionary.confirm(message, default=default, style=_QUESTIONARY_STYLE)
+    )
 
 
 # ---------------------------------------------------------------------------
