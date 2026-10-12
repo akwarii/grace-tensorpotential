@@ -1,0 +1,8 @@
+{
+ "files": {
+  "tensorpotential/data/tpatoms.py": 9,
+  "tensorpotential/instructions/compute.py": 1
+ },
+ "min_confidence": 80,
+ "tool": "vulture 2.16"
+}
