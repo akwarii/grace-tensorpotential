@@ -96,6 +96,7 @@ prek install                                               # hooks on changed fi
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load --cov=tensorpotential --cov-branch --cov-report=json:cov.json <same --ignore options>
 python tools/check_touched_coverage.py --coverage cov.json [--base origin/torch-backend] [--unit PATH::Class.method]   # touched units: 90%
 python tools/coverage_ratchet.py check cov.json            # a file fails when its share falls below baselines/coverage_baseline.json and its uncovered count rises
+python tools/quality_report.py check --ratchet-coverage   # one table (lint, coverage per package, clones, annotation and docstring share, TODO markers, upstream files modified) against baselines/quality.json; nightly job; `record` after a drop (a rise needs --allow-worse)
 python tools/junit_outcomes.py compare baselines/outcomes_pd2.json new.json   # also tools/ast_manifest.py and tools/check_clones.py
 ```
 

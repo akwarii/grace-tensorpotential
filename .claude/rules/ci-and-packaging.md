@@ -19,6 +19,6 @@ paths:
   Locally a whole-suite `-n 4` run needs more than 18 GB: run the shards one after another under `systemd-run --user --scope -p MemoryMax=18G -p MemorySwapMax=2G`. Workflows, measurements, package discovery, the regeneration commands: `.github/CI.md`.
 
 ```bash
-# CI runs the suite as 4 pytest-split shards balanced by tests/.test_durations (regenerating it, running a shard locally: .github/CI.md)
+# CI runs the suite as 4 pytest-split shards balanced by tests/.test_durations (regenerate it with the Durations workflow and tools/merge_durations.py, never on a developer machine; running a shard locally: .github/CI.md)
 uv run --frozen --no-sync pytest --noconftest tests/test_packaging.py   # wheel contents and extras; also tools/wheel_smoke.py, tools/resolve_extras.py (CI runs them: .github/CI.md)
 ```
