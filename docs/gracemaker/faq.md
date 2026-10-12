@@ -59,16 +59,10 @@ This can be used alongside `input.yaml::cutoff`.
 
 ---
 
-## Is it safe to load a dataset (`.pkl.gz`) or a model from someone else?
+## Is it safe to load a dataset (`.pkl.gz`) from someone else?
 
-Datasets in `.pkl.gz` format are pandas pickles; unpickling executes code stored in the file, so a dataset from an
-unknown source can run arbitrary commands when `gracemaker`, `grace_predict`, `grace_preprocess` or `df2extxyz` reads it.
-Use datasets you produced yourself or that come from a trusted source, or exchange structures as extended XYZ and
-convert them with `extxyz2df`.
-
-Model files are checked when they are loaded: a `__cls__` entry of a `model.yaml` must be a dotted path that resolves to
-an instruction class (it is imported, never executed), and a downloaded archive is rejected when it holds absolute
-or `..` names, or links and special files that point outside its folder.
+No. A `.pkl.gz` dataset is a pandas pickle, and unpickling runs code stored in the file: read only datasets you made
+yourself or got from a trusted source, or exchange structures as extended XYZ and convert them with `extxyz2df`.
 
 ---
 

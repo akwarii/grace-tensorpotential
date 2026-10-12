@@ -51,12 +51,6 @@ PyTorch come with extras, so install the one you need:
 
 The package needs Python 3.11 or newer.
 
-!!! warning "Load only files you trust"
-    A `.pkl.gz` dataset is a pandas pickle, and unpickling runs code contained in the file: read only datasets that you
-    produced yourself or that come from a source you trust. A foundation-model archive or `model.yaml` is
-    checked on load (the class names it contains are looked up, never executed, and an archive with links that leave
-    its folder is refused), but a model file from an unknown source is still untrusted input.
-
 For the latest developer version, clone the `grace-tensorpotential` repository:
 
 ```bash

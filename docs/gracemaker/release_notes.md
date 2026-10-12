@@ -10,8 +10,6 @@ A `model.yaml` and a downloaded model archive are untrusted input, and they are 
   package keep working. A name that a module does not define is now a `ValueError`, no longer an `ImportError`.
 * **A downloaded archive may not hold links or special files that point outside its folder**; the check also applies to
   Python 3.11.0 to 3.11.3, which lack the `tarfile` data filter, by refusing every link and special file.
-* **Datasets in `.pkl.gz` format are unchanged** and stay pandas pickles: read only files from a trusted source (see
-  [the FAQ](faq.md)).
 
 ## A single `grace` command
 
