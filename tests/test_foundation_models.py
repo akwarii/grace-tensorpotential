@@ -362,14 +362,12 @@ def test_without_the_data_filter_every_link_and_special_file_is_refused(
 def test_without_the_data_filter_a_plain_archive_is_extracted(tmp_path, monkeypatch):
     monkeypatch.delattr(tarfile, "data_filter")  # see above
     archive = tmp_path / "ok.tar.gz"
-    _make_tar(archive, {"top": None, "top/model.yaml": b"a: 1
-"})
+    _make_tar(archive, {"top": None, "top/model.yaml": b"a: 1\n"})
     out = tmp_path / "out"
     out.mkdir()
 
     assert fm.safe_extract(str(archive), path=str(out)) == "top"
-    assert (out / "top" / "model.yaml").read_bytes() == b"a: 1
-"
+    assert (out / "top" / "model.yaml").read_bytes() == b"a: 1\n"
 
 
 # --- the streaming download ---
