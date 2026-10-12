@@ -53,6 +53,14 @@ Non-physical units (argument parsing, plumbing) need the logic layer only.
 index or dropped term) in a scratch copy: every one must make a test fail. A survivor means the test is rewritten, not the mutant dropped. An automated
 mutation tool may be added to the `dev` group; say which and from where before downloading it.
 
+How to run them without a tool (TEST11): a script copies `tensorpotential/`, `tests/`, `conftest.py` and `pytest.ini` into a scratch directory, replaces one exact text in the copy
+(assert it occurs once), and runs the test files with `PYTHONPATH=<scratch>` and the scratch directory as working directory; a nonzero exit is a caught mutant, and a table of
+`id, mutated file, old text, new text, test files` is the evidence for the PR. Pitfalls found there: (1) copy the tests too, because the root `conftest.py` puts its own directory first
+on `sys.path` (prepend import mode), so a copy of the package alone is never imported and every mutant "survives"; check `tensorpotential.__file__` in the child first. (2) Give every
+mutant the test files that own the mutated code (a mutant of the piecewise force loss survives `tests/test_loss.py` alone), and run an unselected `-k` list never: a test left out of
+the filter makes a mutant survive. (3) A mutant that is equivalent (a `<=` turned `<` at a point where the function is continuous) is replaced, not counted. (4) A symmetric toy
+(an isotropic spring, a central force) cannot tell two components of a symmetric tensor apart: use an anisotropic one for virial and stress oracles.
+
 ## Mocks are a guideline, not a rule
 
 Prefer real objects. A mock, stub or monkeypatch is acceptable to replace an external boundary (network, clock, absent hardware, a slow download) or
@@ -80,6 +88,9 @@ count of mock uses before and after when you change a test file.
 - Share real expensive objects (built models, prepared data, trained tiny models) through module- or session-scoped fixtures when tests only read them,
   with a check that they are not mutated. Merge training runs that differ only in what is asserted afterwards, keeping every assertion. Reduce work
   only where the assertion does not depend on it, and list each cut; never relax a tolerance for speed.
+- A test that hangs in TensorFlow is not interrupted by `--timeout` (pytest-timeout cannot break a C++ wait): look at the process with `ps`, kill it by its PID, and find the test with `-v`.
+  Known case: `tf.data.Dataset.from_generator(...)` followed by `Dataset.save(...)` never returns; build a saved dataset with `from_tensors(...)` and `.concatenate(...)`.
+- `pytest.approx(...) == <tf.Tensor>` raises "Attempt to convert a value with an unsupported type": put `float(...)` or `.numpy()` on the tensor side. A loss of order 1e12 (random weights) needs a regularisation or comparison term large enough to stand out of its rounding; seed `tf.random.set_seed` and `np.random.seed` before building such a model so the size does not change between runs.
 - `@pytest.mark.slow` for tests of 30 s or more gives a fast loop (`-m "not slow"`); CI and gates run everything, and nothing is skipped by default.
 - Compare a run with the baselines: same counts, same outcome per test id (`tools/junit_outcomes.py compare`).
 - A coverage run writes `.coverage*` into the working directory, and a second `--cov` run in the same directory while a full run is going is combined into its report: run one coverage job per worktree, or filter the report before `coverage_ratchet.py record`.
