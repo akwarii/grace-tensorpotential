@@ -686,6 +686,8 @@ def test_the_selection_keeps_the_embedding_rows_of_the_chosen_elements_in_the_re
     assert isinstance(tp, TensorPotential)
     np.testing.assert_array_equal(embedding.w.numpy(), rows[[2, 0]])
     assert [s.decode() for s in embedding.element_map_symbols.numpy()] == ["Ta", "Mo"]
+    # the constructor arguments that go into the saved yaml name the elements in the requested order
+    assert embedding._init_args["element_map"] == {"Ta": 0, "Mo": 1}
 
 
 def test_converting_with_an_unknown_parameter_dtype_is_refused(tmp_path):
