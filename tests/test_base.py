@@ -18,6 +18,7 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+import importlib
 import inspect
 import logging
 from collections import Counter
@@ -51,6 +52,8 @@ from tests.tolerances import FLOAT64_ARITHMETIC
 TESTS_DIR = Path(__file__).parent
 
 ELEMENT_MAP = {"Cu": 0, "Zn": 1}
+
+MODEL_YAMLS = sorted((TESTS_DIR / "data" / "model_yamls").glob("*.yaml"))
 
 # a small element set and small sizes: only the structure of the model matters here, not its accuracy
 PRESET_CASES: dict[str, dict[str, Any]] = {
@@ -372,7 +375,7 @@ def test_str_to_class_name_without_module_is_an_error():
 
 
 def test_str_to_class_unknown_class_in_a_known_module():
-    with pytest.raises(ImportError, match="cannot import name 'NoSuchInstruction'"):
+    with pytest.raises(ValueError, match="has no attribute `NoSuchInstruction`"):
         str_to_class("tensorpotential.instructions.compute.NoSuchInstruction")
 
 
@@ -402,28 +405,143 @@ def test_str_to_class_reaches_an_object_through_the_instructions_getattr_shim():
     assert resolved is read_model_metadata
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="PINNED (TEST8 finding): str_to_class builds source text from the string and exec()s it, so a "
-    "__cls__ value can carry statements; it should reject anything that is not a dotted path. "
-    "Remove the marker when it does.",
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # harmless payload: it would rebind the result to the builtin len instead of importing os.path.join
+        "os.path import join as EXTRACTED_C; EXTRACTED_C = len #.join",
+        "os.path import join as other #.join",
+        "os.path.join; print(1)",
+        "os.path.join\n",
+        "os..path",
+        ".os.path",
+        "os.path.",
+        "os.path.jo-in",
+        "os path.join",
+        "",
+        123,
+    ],
 )
-def test_str_to_class_rejects_a_string_that_is_not_a_dotted_path():
-    # harmless payload: it rebinds the result to the builtin len instead of importing os.path.join
-    with pytest.raises((ValueError, ImportError, SyntaxError)):
-        str_to_class("os.path import join as EXTRACTED_C; EXTRACTED_C = len #.join")
-
-
-def test_str_to_class_import_that_binds_nothing_is_an_error():
-    # reachable only through the statement injection above: the source runs but never binds EXTRACTED_C
+def test_str_to_class_rejects_a_string_that_is_not_a_dotted_path(payload):
     with pytest.raises(ValueError, match="Couldn't deserialize class"):
-        str_to_class("os.path import join as other #.join")
+        str_to_class(payload)
+
+
+def test_str_to_class_never_imports_the_module_of_a_rejected_string(monkeypatch):
+    imported = []
+    # Records the call at the boundary of the unit; the import itself is not wanted here.
+    monkeypatch.setattr(
+        importlib, "import_module", lambda name: imported.append(name) or None
+    )
+
+    with pytest.raises(ValueError):
+        str_to_class("os.path import join; len")
+
+    assert imported == []
+
+
+def test_str_to_class_base_accepts_the_class_itself_and_a_subclass():
+    from tensorpotential.instructions.compute import BondLength
+
+    path = "tensorpotential.instructions.compute.BondLength"
+    assert str_to_class(path, base=BondLength) is BondLength
+    assert str_to_class(path, base=TPInstruction) is BondLength
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "os.getcwd",  # a callable that is not a class
+        "os.path",  # a module
+        "pathlib.Path",  # a class that is not an instruction
+    ],
+)
+def test_str_to_class_base_rejects_what_is_not_a_subclass(path):
+    with pytest.raises(ValueError, match="not a subclass of"):
+        str_to_class(path, base=TPInstruction)
+
+
+def test_str_to_class_does_not_mistake_a_broken_module_for_a_missing_name(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "broken_instruction_mod.py").write_text("raise AttributeError('boom')\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(AttributeError, match="boom"):
+        str_to_class("broken_instruction_mod.Thing")
+
+
+def test_str_to_class_without_base_still_resolves_a_function():
+    # `cli/prepare.py` resolves the model function named in the user's own input.yaml
+    assert str_to_class("os.path.join") is os.path.join
+
+
+def _evil_module(tmp_path, monkeypatch) -> Path:
+    """A module on ``sys.path`` whose callables leave a marker file when they are called."""
+    marker = tmp_path / "called"
+    (tmp_path / "evil_instruction_mod.py").write_text(
+        "from pathlib import Path\n"
+        f"MARKER = Path({str(marker)!r})\n"
+        "def run(**kwargs):\n    MARKER.write_text('function')\n"
+        "class NotAnInstruction:\n"
+        "    def __init__(self, **kwargs):\n        MARKER.write_text('class')\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    return marker
+
+
+@pytest.mark.parametrize(
+    "path", ["evil_instruction_mod.run", "evil_instruction_mod.NotAnInstruction"]
+)
+def test_from_dict_rejects_the_object_before_calling_it(tmp_path, monkeypatch, path):
+    marker = _evil_module(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError, match="not a subclass of"):
+        TPInstruction.from_dict({"__cls__": path, "name": "x"})
+
+    assert not marker.exists()
+
+
+def test_from_dict_rejects_a_sibling_of_the_class_it_is_called_on():
+    from tensorpotential.instructions.compute import BondLength
+
+    with pytest.raises(ValueError, match="not a subclass of"):
+        BondLength.from_dict(
+            {"__cls__": "tensorpotential.instructions.compute.ScalarChemicalEmbedding"}
+        )
+
+
+def test_load_instructions_rejects_a_payload_in_a_yaml(tmp_path, monkeypatch):
+    marker = _evil_module(tmp_path, monkeypatch)
+    # not a literal `"__cls__": "<path>"`: tests/test_import_gates.py scans the tests for those and must resolve them
+    payload = {"A": dict([("__cls__", "evil_instruction_mod.run"), ("name", "A")])}
+    path = tmp_path / "model.yaml"
+    path.write_text(yaml.safe_dump(payload))
+
+    with pytest.raises(ValueError, match="not a subclass of"):
+        load_instructions(str(path))
+
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("path", MODEL_YAMLS, ids=lambda p: p.name)
+def test_every_foundation_model_yaml_still_loads(path):
+    raw = yaml.safe_load(path.read_text())
+    entries, _ = _extract_instructions_data(raw)
+
+    loaded = load_instructions(str(path))
+
+    assert len(loaded) == len(entries) > 0
+    assert [class_to_str(type(ins)) for ins in loaded.values()] == [
+        entry["__cls__"] for entry in entries
+    ]
 
 
 def test_every_class_of_the_table_is_reached_by_its_own_path():
     for path, cls in signatures.instruction_classes().items():
         assert class_to_str(cls) == path
         assert str_to_class(path) is cls
+        assert str_to_class(path, base=TPInstruction) is cls
 
 
 # ------------------------------------------------------------------------------- load_instructions
@@ -546,13 +664,13 @@ def test_load_bad_constructor_argument_is_logged_and_raised(tmp_path, caplog):
     assert "Can't load instruction from" in caplog.text
 
 
-def test_load_unknown_class_is_an_import_error(tmp_path):
+def test_load_unknown_class_is_a_value_error(tmp_path):
     dicts = small_preset_dicts()
     name = next(iter(dicts))
     dicts[name]["__cls__"] = "tensorpotential.instructions.compute.NoSuchInstruction"
     path = write_yaml(tmp_path / "m.yaml", {"instructions": dicts})
 
-    with pytest.raises(ImportError, match="NoSuchInstruction"):
+    with pytest.raises(ValueError, match="NoSuchInstruction"):
         load_instructions(path)
 
 

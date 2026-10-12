@@ -260,6 +260,116 @@ def test_an_absolute_top_level_member_counts_as_a_second_top_level_item(tmp_path
         fm.safe_extract(str(archive), path=str(tmp_path))
 
 
+def _tar_with_link(path: Path, name: str, target: str, kind: bytes = tarfile.SYMTYPE):
+    """A .tar.gz with the folder top, a regular file top/real.txt and one link member name."""
+    with tarfile.open(path, "w:gz") as tar:
+        top = tarfile.TarInfo("top")
+        top.type = tarfile.DIRTYPE
+        top.mode = 0o755
+        tar.addfile(top)
+        real = tarfile.TarInfo("top/real.txt")
+        real.size = 4
+        tar.addfile(real, io.BytesIO(b"data"))
+        link = tarfile.TarInfo(name)
+        link.type = kind
+        link.linkname = target
+        tar.addfile(link)
+    return path
+
+
+def test_only_the_requested_members_are_extracted(tmp_path):
+    archive = tmp_path / "ok.tar.gz"
+    _make_tar(archive, {"top": None, "top/keep.txt": b"1", "top/skip.txt": b"2"})
+    out = tmp_path / "out"
+    out.mkdir()
+    with tarfile.open(archive, "r:gz") as tar:
+        members = [m for m in tar.getmembers() if m.name != "top/skip.txt"]
+
+    fm.safe_extract(str(archive), path=str(out), members=members)
+
+    assert (out / "top" / "keep.txt").exists()
+    assert not (out / "top" / "skip.txt").exists()
+
+
+@pytest.mark.parametrize(
+    ("kind", "target"),
+    [
+        (tarfile.SYMTYPE, "../../outside"),  # relative link out of the target directory
+        (tarfile.SYMTYPE, "/etc"),  # absolute link
+        (tarfile.LNKTYPE, "../outside"),  # hard link out of the target directory
+    ],
+)
+def test_a_link_that_escapes_the_target_is_refused(tmp_path, kind, target):
+    archive = _tar_with_link(tmp_path / "link.tar.gz", "top/link", target, kind)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    with pytest.raises(ValueError, match="Unsafe archive member"):
+        fm.safe_extract(str(archive), path=str(out))
+    assert not (out / "top" / "link").is_symlink()
+
+
+def test_a_file_written_through_a_planted_link_is_refused(tmp_path):
+    """A link to a directory outside, then a regular member below it: the write would land outside out."""
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    archive = tmp_path / "through.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        top = tarfile.TarInfo("top")
+        top.type = tarfile.DIRTYPE
+        tar.addfile(top)
+        link = tarfile.TarInfo("top/dir")
+        link.type = tarfile.SYMTYPE
+        link.linkname = str(victim)
+        tar.addfile(link)
+        payload = tarfile.TarInfo("top/dir/payload.txt")
+        payload.size = 5
+        tar.addfile(payload, io.BytesIO(b"owned"))
+    out = tmp_path / "out"
+    out.mkdir()
+
+    with pytest.raises(ValueError, match="Unsafe archive member"):
+        fm.safe_extract(str(archive), path=str(out))
+    assert list(victim.iterdir()) == []
+
+
+def test_a_link_that_stays_inside_the_target_is_extracted(tmp_path):
+    archive = _tar_with_link(tmp_path / "ok.tar.gz", "top/alias.txt", "real.txt")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    fm.safe_extract(str(archive), path=str(out))
+
+    assert (out / "top" / "alias.txt").read_bytes() == b"data"
+
+
+@pytest.mark.parametrize("kind", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE])
+def test_without_the_data_filter_every_link_and_special_file_is_refused(
+    tmp_path, monkeypatch, kind
+):
+    # Replaces the capability of the interpreter (the filter exists from Python 3.11.4), the one thing a
+    # test cannot choose; the member check that stands in for it is the unit under test.
+    monkeypatch.delattr(tarfile, "data_filter")
+    archive = _tar_with_link(tmp_path / "odd.tar.gz", "top/odd", "real.txt", kind)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    with pytest.raises(ValueError, match="link or special file"):
+        fm.safe_extract(str(archive), path=str(out))
+    assert list(out.iterdir()) == []
+
+
+def test_without_the_data_filter_a_plain_archive_is_extracted(tmp_path, monkeypatch):
+    monkeypatch.delattr(tarfile, "data_filter")  # see above
+    archive = tmp_path / "ok.tar.gz"
+    _make_tar(archive, {"top": None, "top/model.yaml": b"a: 1\n"})
+    out = tmp_path / "out"
+    out.mkdir()
+
+    assert fm.safe_extract(str(archive), path=str(out)) == "top"
+    assert (out / "top" / "model.yaml").read_bytes() == b"a: 1\n"
+
+
 # --- the streaming download ---
 
 

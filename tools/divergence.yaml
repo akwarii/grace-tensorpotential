@@ -79,8 +79,8 @@
   upstream: pending
 
 - path: tensorpotential/calculator/foundation_models.py
-  reason: 'commented-out code removed'
-  milestone: [CLEAN2]
+  reason: 'commented-out code removed; archive extraction rejects link and special members (tarfile data filter, manual check before Python 3.11.4)'
+  milestone: [CLEAN2, SAFE3]
   upstream: pending
 
 - path: tensorpotential/cli/data.py
@@ -199,8 +199,8 @@
   upstream: pending
 
 - path: tensorpotential/instructions/base.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); FunctionReduce methods consolidated, unused symbols module removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, QUAL3, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); FunctionReduce methods consolidated, unused symbols module removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); str_to_class validates a dotted path and imports it instead of exec, and from_dict rejects a class that is not a subclass of the class it is called on'
+  milestone: [CLEAN2, QUAL1, QUAL3, CORE1, SAFE3]
   upstream: pending
 
 - path: tensorpotential/instructions/compute.py
