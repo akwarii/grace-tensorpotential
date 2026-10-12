@@ -177,4 +177,9 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: .venv-gates/bin/python tools/check_touched_coverage.py --coverage cov.json --base "origin/$BASE_REF"
+        # HEAD is the merge commit GitHub made when the run started; the base branch may have moved since, and a diff
+        # against its tip would count the commits merged meanwhile as touched. The merge-base is what the pull request changes.
+        run: |
+          base=$(git merge-base HEAD "origin/$BASE_REF")
+          echo "touched units against $base"
+          .venv-gates/bin/python tools/check_touched_coverage.py --coverage cov.json --base "$base"
