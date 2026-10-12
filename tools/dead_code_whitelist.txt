@@ -1,0 +1,8 @@
+# Names that tools/dead_code.py must treat as alive although nothing in tensorpotential/ calls them (DEPS4).
+# One name or glob pattern per line, the reason after '#'. A line that starts with '@' is a decorator pattern:
+# a function with that decorator is alive. Keep an entry only while the reason holds.
+#
+# The two __getattr__ shims (tpmodel.py, instructions/__init__.py) need no entry: vulture ignores dunder names.
+# Console-script targets (main) need no entry: each module calls its own main() under __name__ == '__main__'.
+
+@app.route*  # flask routes of grace_dashboard.py are called by the web server

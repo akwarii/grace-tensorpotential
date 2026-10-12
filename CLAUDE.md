@@ -87,6 +87,8 @@ uv run --frozen --no-sync ruff format --preview NEW_FILE   # NEW files only, nev
 uv run --frozen --no-sync ty check NEW_PACKAGE             # strict in the new packages; [[tool.ty.overrides]] relax legacy
 uv run --frozen --no-sync python tools/lint_ratchet.py check   # legacy counts per (file, rule) may not rise, a file outside baselines/legacy_files.txt and the new packages gets the whole strict set; `record` after a drop (a rise needs --allow-rise); `--moved OLD NEW` follows a moved file (also in tools/coverage_ratchet.py)
 uv run --frozen --no-sync lint-imports                     # import contract: TF-free modules never reach tensorflow
+uv run --frozen --no-sync deptry tensorpotential           # declared against imported dependencies (DEPS4); the whitelist, each entry with its reason, is [tool.deptry.per_rule_ignores] in pyproject.toml
+uv run --frozen --no-sync python tools/dead_code.py check  # vulture findings (80% confidence, compat/pace excluded) may not rise per file (baselines/dead_code.json); `list` prints them, `record` after a drop (a rise needs --allow-rise); alive-but-invisible names go in tools/dead_code_whitelist.txt
 uv run --frozen --no-sync python tools/divergence.py check --pr-branches   # every upstream file the fork modifies has a row in tools/divergence.yaml (same PR); no fork-only path on a pr/U* branch
 prek install                                               # hooks on changed files (.pre-commit-config.yaml): strict ruff, ty, ratchet
 

@@ -929,13 +929,10 @@ class TestApplyStateTensor:
 # ---------------------------------------------------------------------------
 # The sections, the review and the entry point, driven through the real prompt helpers.
 #
-# The prompts are answered at the outer boundary only: typed lines for ``input()`` (plain world: no questionary, no rich) or
-# a fake of the interactive ``questionary`` functions (they need a terminal), so the tests stay valid wherever the
-# prompt helpers live (``cli.wizard`` today, ``cli.prompts`` after CLI1 task 4: both modules are switched when both exist).
+# The prompts are answered at the outer boundary only: a fake of the interactive ``questionary`` functions (they need a
+# terminal), so the tests stay valid wherever the prompt helpers live. Messages go through the real rich console.
 # ---------------------------------------------------------------------------
 
-import builtins  # noqa: E402
-import importlib  # noqa: E402
 import sys  # noqa: E402
 import types  # noqa: E402
 
@@ -944,41 +941,64 @@ import yaml  # noqa: E402
 from tensorpotential.extra.gen_tensor import wizard as gen_wizard  # noqa: E402
 
 
-def _prompt_modules():
-    modules = [_cli_wizard]
-    try:
-        modules.append(importlib.import_module("tensorpotential.cli.prompts"))
-    except ImportError:
-        pass
-    return modules
+def _value_of(choice):
+    return getattr(choice, "value", choice)
 
 
-def _set_world(monkeypatch, *, rich: bool, questionary: bool) -> None:
-    for module in _prompt_modules():
-        monkeypatch.setattr(module, "_HAS_RICH", rich)
-        monkeypatch.setattr(module, "_HAS_QUESTIONARY", questionary)
+class ScriptedQuestionary:
+    """Answers the questionary prompts in order: the fakes of ``select``, ``text``, ``confirm`` and ``path``.
+
+    An empty answer is the default of the question (the first choice when it has none); ``yes`` and ``no`` answer a
+    confirmation; on the review question ``""`` confirms and a section number (from 1) asks to redo that section; an
+    exception instance is raised from the question. ``asked`` collects the messages.
+    """
+
+    def __init__(self, answers):
+        self.remaining = list(answers)
+        self.asked = []
+
+    def take(self, message):
+        self.asked.append(message)
+        if not self.remaining:
+            raise AssertionError(f"unexpected prompt: {message!r}")
+        answer = self.remaining.pop(0)
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+
+    @staticmethod
+    def returning(value):
+        return types.SimpleNamespace(ask=lambda: value)
+
+    def select(self, message, choices, default=None, **kwargs):
+        answer = self.take(message)
+        if message == "Looks good?":
+            return self.returning("ok" if answer == "" else int(answer) - 1)
+        if answer == "":
+            answer = _value_of(default if default is not None else choices[0])
+        return self.returning(answer)
+
+    def text(self, message, default="", **kwargs):
+        return self.returning(self.take(message))
+
+    def confirm(self, message, default=True, **kwargs):
+        answer = self.take(message)
+        return self.returning(default if answer == "" else answer == "yes")
+
+    def path(self, message, **kwargs):
+        return self.returning(self.take(message))
 
 
 @pytest.fixture
 def typed(monkeypatch):
-    """Plain world; ``typed("a", "", "b")`` makes ``input()`` return those lines in order and returns the prompts shown."""
+    """``typed("a", "", "b")`` scripts the answers of the questionary prompts and returns the messages asked."""
+    import questionary
 
-    def install(*lines, rich: bool = False):
-        _set_world(monkeypatch, rich=rich, questionary=False)
-        prompts = []
-        remaining = list(lines)
-
-        def fake_input(prompt=""):
-            prompts.append(prompt)
-            if not remaining:
-                raise AssertionError(f"unexpected prompt: {prompt!r}")
-            line = remaining.pop(0)
-            if isinstance(line, BaseException):
-                raise line
-            return line
-
-        monkeypatch.setattr(builtins, "input", fake_input)
-        return prompts
+    def install(*answers):
+        script = ScriptedQuestionary(answers)
+        for name in ("select", "text", "confirm", "path"):
+            monkeypatch.setattr(questionary, name, getattr(script, name))
+        return script.asked
 
     return install
 
@@ -988,15 +1008,11 @@ def accept_defaults(monkeypatch):
     """Questionary world: every prompt returns its default (the first choice when it has none, ``train.pkl.gz`` for a path)."""
     import questionary
 
-    _set_world(monkeypatch, rich=False, questionary=True)
     asked = []
-
-    def value_of(choice):
-        return getattr(choice, "value", choice)
 
     def select(message, choices, default=None, **kwargs):
         asked.append(("select", message, list(choices)))
-        answer = value_of(default) if default is not None else value_of(choices[0])
+        answer = _value_of(default) if default is not None else _value_of(choices[0])
         return types.SimpleNamespace(ask=lambda: answer)
 
     def text(message, default="", **kwargs):
@@ -1139,20 +1155,6 @@ def _full_state(**changes) -> _WizardStateTensor:
     return state
 
 
-def test_plain_review_lists_every_choice(monkeypatch, capsys):
-    _set_world(monkeypatch, rich=False, questionary=False)
-    gen_wizard._show_review_tensor(_full_state(use_separate_test=True, test_filename="test.pkl.gz"))
-    out = capsys.readouterr().out
-    for fragment in ("--- Review ---", "[0, 2]", "TENSOR_2L  cutoff=5.0", "Compute forces:    True", "train.pkl.gz", "test.pkl.gz", "Batch size:        4"):
-        assert fragment in out
-
-
-def test_plain_review_shows_the_test_fraction_without_a_separate_file(monkeypatch, capsys):
-    _set_world(monkeypatch, rich=False, questionary=False)
-    gen_wizard._show_review_tensor(_full_state(test_size=0.1))
-    assert "split 0.1" in capsys.readouterr().out
-
-
 @pytest.mark.parametrize(
     ("changes", "present", "absent"),
     [
@@ -1163,7 +1165,6 @@ def test_plain_review_shows_the_test_fraction_without_a_separate_file(monkeypatc
     ],
 )
 def test_rich_review_is_a_panel_with_the_rows_that_apply(monkeypatch, capsys, changes, present, absent):
-    _set_world(monkeypatch, rich=True, questionary=False)
     gen_wizard._show_review_tensor(_full_state(**changes))
     out = capsys.readouterr().out
     assert "Review" in out
@@ -1198,22 +1199,22 @@ def test_the_wizard_writes_input_yaml_from_the_answers_and_exits_0(typed, monkey
     run_wizard(monkeypatch, tmp_path)
     config = yaml.safe_load((tmp_path / "input.yaml").read_text())
     assert config["data"]["filename"] == "train.pkl.gz"
-    assert "Input file written to `input.yaml`" in capsys.readouterr().out
+    assert "input.yaml written successfully!" in capsys.readouterr().out
 
 
 def test_a_section_can_be_redone_after_the_review(typed, monkeypatch, tmp_path):
-    # the review asks for a section number: 4 is "Model"; then the second review is confirmed
+    # the review asks to redo section 4, "Model" (the list starts at 1); then the second review is confirmed
     prompts = typed(*DEFAULT_ANSWERS, "4", "TENSOR_2L", "4", "", "no")
     run_wizard(monkeypatch, tmp_path)
-    assert prompts.count("Section number (Enter = confirm): ") == 2
-    assert prompts.count("Model preset:, available options: TENSOR_1L, TENSOR_2L (default = TENSOR_1L): ") == 2
+    assert prompts.count("Looks good?") == 2
+    assert prompts.count("Model preset:") == 2
     text = (tmp_path / "input.yaml").read_text()
     assert "TENSOR_2L" in text
     assert yaml.safe_load(text)["data"]["filename"] == "train.pkl.gz"
 
 
 def test_the_wizard_with_rich_prints_panels(typed, monkeypatch, tmp_path, capsys):
-    typed(*DEFAULT_ANSWERS, "", "no", rich=True)
+    typed(*DEFAULT_ANSWERS, "", "no")
     run_wizard(monkeypatch, tmp_path)
     out = capsys.readouterr().out
     assert "GRACEmaker input.yaml wizard" in out
@@ -1233,13 +1234,6 @@ def test_an_interrupted_wizard_exits_0_without_writing_a_file(typed, monkeypatch
     typed("train.pkl.gz", KeyboardInterrupt())
     run_wizard(monkeypatch, tmp_path)
     assert "Interrupted. Exiting." in capsys.readouterr().out
-    assert not (tmp_path / "input.yaml").exists()
-
-
-def test_an_interrupted_wizard_with_rich_says_so_in_red(typed, monkeypatch, tmp_path, capsys):
-    typed(KeyboardInterrupt(), rich=True)
-    run_wizard(monkeypatch, tmp_path)
-    assert "Interrupted." in capsys.readouterr().out
     assert not (tmp_path / "input.yaml").exists()
 
 

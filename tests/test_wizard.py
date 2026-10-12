@@ -323,10 +323,8 @@ def test_e2e_fs_lbfgsb(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "_section", lambda title: None)
     _mirror_prompts(monkeypatch)
 
-    # Force non-questionary path for the review loop
-    monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", False)
-    # Provide "" to the review loop input → triggers "ok" (confirm)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "")
+    # the review question needs a terminal: confirm it
+    monkeypatch.setattr(wizard.questionary, "select", lambda *a, **k: _AskReturns("ok"))
 
     monkeypatch.chdir(tmp_path)
 
@@ -356,8 +354,7 @@ def test_e2e_adam_has_scheduler(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "_section", lambda title: None)
     _mirror_prompts(monkeypatch)
 
-    monkeypatch.setattr(wizard, "_HAS_QUESTIONARY", False)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "")
+    monkeypatch.setattr(wizard.questionary, "select", lambda *a, **k: _AskReturns("ok"))
 
     monkeypatch.chdir(tmp_path)
 
@@ -576,8 +573,7 @@ def test_the_prompt_helpers_live_in_cli_prompts_and_are_still_importable_from_th
 
     for name in (
         "_ask_select", "_ask_text", "_ask_path", "_ask_confirm", "_section", "_success", "_info", "_warning", "_error",
-        "_print_header", "_tip_path_input", "_section_dataset", "_HAS_QUESTIONARY", "_HAS_RICH", "_rich_console",
-        "_QUESTIONARY_STYLE", "input_choice", "input_with_default", "input_no_default", "no_readline",
+        "_print_header", "_tip_path_input", "_section_dataset", "_rich_console", "_QUESTIONARY_STYLE",
     ):  # fmt: skip
         assert getattr(wizard, name) is getattr(prompts, name), name
 
@@ -590,3 +586,177 @@ def test_the_wizard_prints_through_the_shared_console():
     # so identity with get_console() depends on the test order, but the wizard and the prompts must share one object
     assert wizard._rich_console is prompts._rich_console
     assert isinstance(wizard._rich_console, Console)
+
+
+# ---------------------------------------------------------------------------
+# The review table and the review loop of the entry point (rich and questionary: the world of a terminal)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def recorded_console(monkeypatch):
+    """A rich console that records what the wizard prints; the wizard and the prompts both print through it."""
+    import tensorpotential.cli.prompts as prompts
+    from rich.console import Console
+
+    console = Console(record=True, width=200, force_terminal=False)
+    monkeypatch.setattr(wizard, "_rich_console", console)
+    monkeypatch.setattr(prompts, "_rich_console", console)
+    return console
+
+
+def _review_text(console, **state) -> str:
+    wizard._show_review(_make_state(**state))
+    return console.export_text()
+
+
+def test_show_review_scratch_fit_lists_model_and_precision(recorded_console):
+    text = _review_text(recorded_console, preset_complexity="large", param_dtype="float64")
+    for expected in ("Review", "Fit type", "fit from scratch", "train.pkl.gz", "split 5%", "Save dataset", "True"):
+        assert expected in text, expected
+    assert "GRACE_1LAYER_latest / large  cutoff=6.0" in text
+    assert "Param dtype" in text and "float64" in text
+    assert "Previous model" not in text and "Finetuning mode" not in text
+    assert "S=" not in text
+
+
+def test_show_review_separate_test_file_turns_the_dataset_saving_off(recorded_console):
+    text = _review_text(recorded_console, use_separate_test=True, test_filename="test.pkl.gz")
+    assert "test.pkl.gz" in text
+    assert "split" not in text
+    assert "False" in text
+
+
+def test_show_review_continue_fit_names_the_previous_model_and_the_checkpoint(recorded_console):
+    text = _review_text(
+        recorded_console,
+        fit_type="continue fit",
+        load_existing_model=True,
+        foundation_model_name="seed/model.yaml",
+        checkpoint_name="seed/checkpoints/best",
+    )
+    assert "Previous model" in text and "seed/model.yaml" in text
+    assert "Checkpoint" in text and "best" in text
+    assert "Param dtype" not in text  # the dtype is read from the model being loaded
+    assert "Finetuning mode" not in text
+
+
+def test_show_review_foundation_finetune_shows_the_mode(recorded_console):
+    text = _review_text(
+        recorded_console,
+        fit_type="finetune foundation model",
+        load_existing_model=True,
+        foundation_model_name="GRACE-2L-OMAT",
+        finetune_mode="frozen",
+    )
+    assert "Foundation model" in text and "GRACE-2L-OMAT" in text
+    assert "Finetuning mode" in text and "frozen" in text
+    assert "Checkpoint" not in text
+
+
+def test_show_review_stress_loss_adds_its_weight(recorded_console):
+    text = _review_text(recorded_console, use_stress=True, stress_loss_weight=64.0)
+    assert "S=64.0" in text
+    assert "E=16" in text and "F=32" in text
+
+
+def test_show_review_reports_optimizer_batch_and_updates(recorded_console):
+    text = _review_text(recorded_console, optimizer="L-BFGS-B", batch_size=8, target_total_updates=500)
+    for expected in ("Optimizer", "L-BFGS-B", "Batch size", "8", "Total updates", "500", "Weighting", "uniform"):
+        assert expected in text, expected
+
+
+class _AskReturns:
+    """What ``questionary.select(...)`` returns: an object whose ``ask()`` gives the scripted answer."""
+
+    def __init__(self, answer):
+        self._answer = answer
+
+    def ask(self):
+        return self._answer
+
+
+def _drive_wizard(monkeypatch, tmp_path, review_answers, fit_type="fit from scratch"):
+    """Run ``generate_template_input`` with default answers; the review question gets ``review_answers`` in order.
+
+    Returns the list of ``(message, choice values)`` the review question was asked with.
+    """
+    asked = []
+    answers = iter(review_answers)
+
+    def fake_select(msg, choices, default=None):
+        if "Fit type" in msg:
+            return fit_type
+        if "Optimizer" in msg:
+            return "L-BFGS-B"
+        if "Model preset" in msg:
+            return "FS"
+        return default
+
+    def review_select(message, choices, style=None):
+        asked.append((message, [c.value for c in choices]))
+        return _AskReturns(next(answers))
+
+    monkeypatch.setattr(wizard, "_ask_select", fake_select)
+    monkeypatch.setattr(wizard, "_ask_text", lambda msg, default=None: default)
+    monkeypatch.setattr(wizard, "_ask_path", lambda msg: "train.pkl.gz")
+    monkeypatch.setattr(wizard, "_ask_confirm", lambda msg, default=True: default)
+    monkeypatch.setattr(wizard, "_print_header", lambda: None)
+    monkeypatch.setattr(wizard, "_show_review", lambda s: None)
+    monkeypatch.setattr(wizard, "_info", lambda msg: None)
+    monkeypatch.setattr(wizard, "_success", lambda msg: None)
+    monkeypatch.setattr(wizard, "_section", lambda title: None)
+    _mirror_prompts(monkeypatch)
+    # the external boundary of the terminal: questionary.select would need a tty
+    monkeypatch.setattr(wizard.questionary, "select", review_select)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        wizard.generate_template_input()
+    assert exc_info.value.code == 0
+    return asked
+
+
+def test_review_loop_confirms_and_writes_input_yaml(monkeypatch, tmp_path, recorded_console):
+    asked = _drive_wizard(monkeypatch, tmp_path, ["ok"])
+    assert len(asked) == 1
+    message, values = asked[0]
+    assert message == "Looks good?"
+    assert values == ["ok", 0, 1, 2, 3, 4, 5]  # one "Re-do" per section after the fit type
+    assert "optimizer: L-BFGS-B" in (tmp_path / "input.yaml").read_text()
+    assert "input.yaml written successfully!" in recorded_console.export_text()
+
+
+def test_review_loop_redoes_the_chosen_section_then_confirms(monkeypatch, tmp_path, recorded_console):
+    redone = []
+    real = wizard._section_loss
+
+    def counting_loss(s):
+        redone.append("loss")
+        return real(s)
+
+    monkeypatch.setattr(wizard, "_section_loss", counting_loss)
+    asked = _drive_wizard(monkeypatch, tmp_path, [4, "ok"])  # 4 = "Loss function"
+    assert len(asked) == 2
+    assert redone == ["loss", "loss"]  # once in the first pass, once for the re-do
+    assert (tmp_path / "input.yaml").exists()
+
+
+def test_review_loop_interrupt_exits_cleanly_without_writing(monkeypatch, tmp_path, recorded_console):
+    asked = _drive_wizard(monkeypatch, tmp_path, [None])
+    assert len(asked) == 1
+    assert not (tmp_path / "input.yaml").exists()
+    text = recorded_console.export_text()
+    assert "Interrupted." in text and "written successfully" not in text
+
+
+def test_generic_tensor_choice_hands_over_to_the_tensor_wizard(monkeypatch, tmp_path, recorded_console):
+    called = []
+    # the tensor wizard is a separate unit with its own tests; here only the hand-over is observed
+    monkeypatch.setattr(wizard, "run_gen_tensor_wizard", lambda: called.append(True))
+    monkeypatch.setattr(wizard, "_ask_select", lambda msg, choices, default=None: "Generic Tensors (L<=2)")
+    monkeypatch.setattr(wizard, "_print_header", lambda: None)
+    monkeypatch.setattr(wizard, "_section", lambda title: None)
+    monkeypatch.chdir(tmp_path)
+    wizard.generate_template_input()
+    assert called == [True]
+    assert not (tmp_path / "input.yaml").exists()

@@ -39,8 +39,7 @@
    "PTH119": 2,
    "PTH120": 1,
    "PTH123": 4,
-   "RET504": 1,
-   "S202": 1
+   "RET504": 1
   },
   "tensorpotential/cli/data.py": {
    "B905": 2,
@@ -104,12 +103,12 @@
    "RUF012": 1
   },
   "tensorpotential/cli/wizard.py": {
-   "C901": 3,
-   "PLR0912": 3,
-   "PLR0915": 3,
+   "C901": 2,
+   "PLR0912": 2,
+   "PLR0915": 2,
    "PTH110": 3,
    "PTH118": 5,
-   "PTH119": 3,
+   "PTH119": 2,
    "PTH120": 1,
    "PTH123": 1,
    "PTH207": 1,
@@ -361,7 +360,6 @@
    "RET503": 1,
    "RET504": 2,
    "RET505": 1,
-   "S102": 1,
    "SIM102": 1
   },
   "tensorpotential/instructions/compute.py": {
@@ -815,8 +813,7 @@
   },
   "tests/test_gen_tensor_wizard.py": {
    "NPY002": 32,
-   "S301": 1,
-   "SIM105": 1
+   "S301": 1
   },
   "tests/test_grace.py": {
    "S301": 2

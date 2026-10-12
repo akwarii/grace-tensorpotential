@@ -123,6 +123,8 @@ dev = [
     "pytest-timeout",  # per-test limit in CI: a hang becomes a failing test, not a dead runner (CI2)
     "pytest-split",    # shards the TensorFlow suite by measured duration (CI2)
     "import-linter",
+    "deptry",  # declared against imported dependencies (DEPS4)
+    "vulture",  # dead-code ratchet behind tools/dead_code.py (DEPS4)
     "ruff==0.16.7",
     "ty==0.0.84",  # pre-1.0: rules change between releases, bump on purpose
 ]
@@ -179,3 +181,13 @@ ignore_imports = [
     "tensorpotential.calculator.foundation_models -> tensorpotential.calculator.asecalculator",
     "tensorpotential -> tensorflow",
 ]
+
+# Declared against imported dependencies (DEPS4): `deptry tensorpotential` must exit 0. Every entry says why it is not a finding.
+[tool.deptry.per_rule_ignores]
+# pyace is the optional ACE package that compat/pace imports (legacy, out of scope for every issue)
+DEP001 = ["pyace"]
+# extras of the torch backend: torch_backend/ imports them once its instructions land (TORCH issues)
+DEP002 = ["torch", "torch-sim-atomistic", "vesin"]
+# matplotlib comes with ase (plots of the utils, the dataset plotter and the UQ thresholds), keras and absl with the tf extra;
+# declaring them would be a new runtime dependency, which is a decision of the owner
+DEP003 = ["matplotlib", "keras", "absl"]

@@ -1,14 +1,12 @@
 """Tests for tensorpotential.cli.prompts: the prompt and message helpers of the input wizards.
 
-Both worlds of each helper are exercised by switching the module flags: with or without ``questionary`` (a fake replaces its
-interactive prompts, an external boundary that needs a terminal) and with or without ``rich`` (the plain text is checked
-character for character, the rich text by its words and glyph).
+A fake replaces the interactive prompts of ``questionary`` (an external boundary that needs a terminal); the messages go
+through the real rich console and are checked by their words and glyph.
 """
 
 from __future__ import annotations
 
 import ast
-import builtins
 import types
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,10 +34,7 @@ def silence_output(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Prompt and output helpers (the layer CLI1 moves to ``cli/P.py`` on top of a shared console).
-# Both worlds of each helper are exercised by switching the module flags: with or without ``questionary`` (a fake
-# replaces its interactive prompts, an external boundary that needs a terminal) and with or without ``rich``
-# (the plain text is checked character for character, the rich text by its words and glyph).
+# Prompt and output helpers (on top of the shared console)
 # ---------------------------------------------------------------------------
 
 
@@ -63,48 +58,6 @@ class FakeQuestionary:
         raise AttributeError(name)
 
 
-@pytest.fixture
-def plain(monkeypatch):
-    """No rich, no questionary: the plain-text world."""
-    monkeypatch.setattr(P, "_HAS_RICH", False)
-    monkeypatch.setattr(P, "_HAS_QUESTIONARY", False)
-
-
-@pytest.fixture
-def scripted_input(monkeypatch):
-    """``input()`` returns the scripted lines in order; the prompts shown are recorded."""
-
-    def install(*lines):
-        prompts = []
-        remaining = list(lines)
-
-        def fake_input(prompt=""):
-            prompts.append(prompt)
-            return remaining.pop(0)
-
-        monkeypatch.setattr(builtins, "input", fake_input)
-        return prompts
-
-    return install
-
-
-@pytest.mark.parametrize(
-    ("helper", "plain_text"),
-    [
-        (P._info, "  -> hello\n"),
-        (P._success, "  OK: hello\n"),
-        (P._warning, "  WARNING: hello\n"),
-        (P._error, "  ERROR: hello\n"),
-        (P._section, "\n-- hello\n"),
-    ],
-)
-def test_message_helpers_print_plain_text_without_rich(
-    plain, capsys, helper, plain_text
-):
-    helper("hello")
-    assert capsys.readouterr().out == plain_text
-
-
 @pytest.mark.parametrize(
     ("helper", "glyph"),
     [
@@ -115,131 +68,30 @@ def test_message_helpers_print_plain_text_without_rich(
         (P._section, "──"),
     ],
 )
-def test_message_helpers_print_the_message_with_a_glyph_with_rich(
-    monkeypatch, capsys, helper, glyph
-):
-    monkeypatch.setattr(P, "_HAS_RICH", True)
+def test_message_helpers_print_the_message_with_a_glyph(capsys, helper, glyph):
     helper("hello")
     out = capsys.readouterr().out
     assert "hello" in out
     assert glyph in out
 
 
-def test_header_is_a_ruled_title_without_rich_and_a_panel_with_rich(
-    monkeypatch, capsys
-):
-    monkeypatch.setattr(P, "_HAS_RICH", False)
-    P._print_header()
-    assert (
-        capsys.readouterr().out
-        == "=" * 50 + "\n  GRACEmaker input.yaml wizard\n" + "=" * 50 + "\n"
-    )
-    monkeypatch.setattr(P, "_HAS_RICH", True)
+def test_header_is_a_panel_with_the_title_and_the_navigation_hint(capsys):
     P._print_header()
     out = capsys.readouterr().out
     assert "GRACEmaker input.yaml wizard" in out
     assert "navigate with arrow keys" in out
 
 
-@pytest.mark.parametrize(
-    ("has_questionary", "has_readline", "tip"),
-    [
-        (True, True, "Tab ↹ autocompletes path"),
-        (False, True, "↑↓ for command history"),
-        (False, False, "Type or paste the full file path"),
-    ],
-)
-def test_path_tip_depends_on_what_the_terminal_offers(
-    monkeypatch, capsys, has_questionary, has_readline, tip
-):
-    monkeypatch.setattr(P, "_HAS_RICH", False)
-    monkeypatch.setattr(P, "_HAS_QUESTIONARY", has_questionary)
-    monkeypatch.setattr(P, "no_readline", not has_readline)
+def test_path_tip_says_what_the_questionary_path_prompt_offers(capsys):
     P._tip_path_input()
-    out = capsys.readouterr().out
-    assert tip in out
-    assert out.startswith("  (") and out.endswith(")\n")
+    assert "Tab ↹ autocompletes path" in capsys.readouterr().out
 
 
-def test_path_tip_with_rich_is_printed_by_the_console(monkeypatch, capsys):
-    monkeypatch.setattr(P, "_HAS_RICH", True)
-    monkeypatch.setattr(P, "_HAS_QUESTIONARY", False)
-    monkeypatch.setattr(P, "no_readline", True)
-    P._tip_path_input()
-    assert "Type or paste the full file path" in capsys.readouterr().out
-
-
-# --- plain input fallbacks ---------------------------------------------------------------------------------------------
-
-
-def test_input_choice_repeats_until_a_choice_is_valid_and_empty_means_the_default(
-    scripted_input,
-):
-    prompts = scripted_input(
-        "maybe",
-        "",
-    )
-    assert P.input_choice("Pick", ["a", "b"], "b") == "b"
-    assert prompts == ["Pick, available options: a, b (default = b): "] * 2
-
-
-def test_input_choice_rejects_a_default_that_is_not_a_choice():
-    with pytest.raises(AssertionError):
-        P.input_choice("Pick", ["a", "b"], "c")
-
-
-def test_input_with_default_returns_the_typed_text_or_the_default(scripted_input):
-    prompts = scripted_input("typed", "")
-    assert P.input_with_default("Name", "dflt") == "typed"
-    assert P.input_with_default("Name", "dflt") == "dflt"
-    assert prompts == ["Name: ", "Name: "]
-
-
-def test_input_no_default_asks_again_until_something_is_typed(scripted_input):
-    prompts = scripted_input("", "", "value")
-    assert P.input_no_default("Path ") == "value"
-    assert prompts == ["Path "] * 3
-
-
-# --- ask helpers without questionary -------------------------------------------------------------------------------------
-
-
-def test_ask_select_without_questionary_takes_the_values_of_choice_objects(
-    plain, scripted_input
-):
-    choices = [
-        types.SimpleNamespace(value="x", title="X title"),
-        types.SimpleNamespace(value="y", title="Y title"),
-    ]
-    prompts = scripted_input("y")
-    assert P._ask_select("Which", choices, default="x") == "y"
-    assert prompts == ["Which, available options: x, y (default = x): "]
-
-
-def test_ask_select_without_questionary_falls_back_to_the_first_choice_for_an_unknown_default(
-    plain, scripted_input
-):
-    scripted_input("")
-    assert P._ask_select("Which", ["p", "q"], default="zzz") == "p"
-
-
-def test_ask_text_and_path_and_confirm_without_questionary(plain, scripted_input):
-    scripted_input("typed", "", "some/file", "no", "", "yes")
-    assert P._ask_text("Name", "dflt") == "typed"
-    assert P._ask_text("Name", "dflt") == "dflt"
-    assert P._ask_path("File:") == "some/file"
-    assert P._ask_confirm("Sure?", default=True) is False
-    assert P._ask_confirm("Sure?", default=False) is False
-    assert P._ask_confirm("Sure?", default=False) is True
-
-
-# --- ask helpers with questionary ----------------------------------------------------------------------------------------
+# --- ask helpers ----------------------------------------------------------------------------------------------------------
 
 
 @pytest.fixture
 def with_questionary(monkeypatch):
-    monkeypatch.setattr(P, "_HAS_QUESTIONARY", True)
-
     def install(*answers):
         fake = FakeQuestionary(*answers)
         monkeypatch.setattr(P, "questionary", fake, raising=False)
