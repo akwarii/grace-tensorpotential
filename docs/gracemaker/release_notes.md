@@ -1,5 +1,16 @@
 # Release notes
 
+## Model files are checked on load
+
+A `model.yaml` and a downloaded model archive are untrusted input, and they are now treated so.
+
+* **A `__cls__` entry is looked up, never executed.** It must be a dotted path (`package.module.Name`) that resolves to a
+  subclass of the instruction class being loaded; anything else (a statement, a function, a class that is not an
+  instruction) stops the load with a `ValueError` before the object is called. Instruction classes defined in your own
+  package keep working. A name that a module does not define is now a `ValueError`, no longer an `ImportError`.
+* **A downloaded archive may not hold links or special files that point outside its folder**; the check also applies to
+  Python 3.11.0 to 3.11.3, which lack the `tarfile` data filter, by refusing every link and special file.
+
 ## A single `grace` command
 
 `grace <subcommand>` runs the console commands of the package: `grace train` is `gracemaker`, `grace uq build` is

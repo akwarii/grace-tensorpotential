@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import inspect
 import logging
+import re
 import warnings
 
 from abc import ABC, abstractmethod
@@ -91,24 +93,53 @@ def class_to_str(cls):
     return cls.__module__ + "." + cls.__qualname__
 
 
-def str_to_class(class_name):
+_DOTTED_PATH = re.compile(r"[A-Za-z_]\w*(\.[A-Za-z_]\w*)+")
+
+
+def str_to_class(class_name, base=None):
+    """Resolve a dotted path ``package.module.Name`` to the object it names.
+
+    The path comes from a ``model.yaml`` (or an ``input.yaml``), which may be downloaded, so it is
+    validated as a dotted Python path and looked up with ``importlib``; it is never executed. Importing the
+    module still runs that module's own import-time code.
+
+    Parameters
+    ----------
+    class_name : str or None
+        Dotted path; ``None`` gives ``None``.
+    base : type, optional
+        When given, the resolved object must be a class deriving from it.
+
+    Raises
+    ------
+    ValueError
+        The string is not a dotted path, the module has no such name, or the object is not a subclass of ``base``.
+    ModuleNotFoundError
+        The module part cannot be imported.
+    """
     if class_name is None:
         return None
-    module = ".".join(class_name.split(".")[:-1])
-    name = class_name.split(".")[-1]
-    context = {}
-    if module:
-        exec(
-            "from {module} import {name} as EXTRACTED_C; EXTRACTED_C".format(
-                module=module, name=name
-            ),
-            context,  # Pass the context dictionary explicitly
+    if not isinstance(class_name, str) or not _DOTTED_PATH.fullmatch(class_name):
+        raise ValueError("Couldn't deserialize class `{}`".format(class_name))
+    module, _, name = class_name.rpartition(".")
+    imported = importlib.import_module(module)
+    try:
+        resolved = getattr(imported, name)
+    except AttributeError as err:
+        raise ValueError(
+            "Couldn't deserialize class `{}`: module `{}` has no attribute `{}`".format(
+                class_name, module, name
+            )
+        ) from err
+    if base is not None and not (
+        isinstance(resolved, type) and issubclass(resolved, base)
+    ):
+        raise ValueError(
+            "Couldn't deserialize class `{}`: it is not a subclass of `{}`".format(
+                class_name, class_to_str(base)
+            )
         )
-    else:
-        raise ValueError("Couldn't deserialize class `{}`".format(class_name))
-    if "EXTRACTED_C" not in context:
-        raise ValueError("Couldn't deserialize class `{}`".format(class_name))
-    return context["EXTRACTED_C"]
+    return resolved
 
 
 def recursive_walk_and_modify(obj, callback):
@@ -215,7 +246,7 @@ def capture_init_args(cls):
     def from_dict(cls, dct):
         dct = dct.copy()
         if "__cls__" in dct:
-            cls = str_to_class(dct.pop("__cls__"))
+            cls = str_to_class(dct.pop("__cls__"), base=cls)
         # TODO: call pre_deserialize ?
         return cls(**dct)
 

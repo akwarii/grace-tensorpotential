@@ -59,6 +59,13 @@ This can be used alongside `input.yaml::cutoff`.
 
 ---
 
+## Is it safe to load a dataset (`.pkl.gz`) from someone else?
+
+No. A `.pkl.gz` dataset is a pandas pickle, and unpickling runs code stored in the file: read only datasets you made
+yourself or got from a trusted source, or exchange structures as extended XYZ and convert them with `extxyz2df`.
+
+---
+
 ## How to provide custom weights?
 
 To assign custom weights to each structure, include the following columns in the DataFrame:
