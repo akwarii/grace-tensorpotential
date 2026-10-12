@@ -49,8 +49,8 @@
   upstream: never
 
 - path: pyproject.toml
-  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract and the Python 3.11 floor; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py; drops tf_keras from the tf extra and forbids keras in the TensorFlow-free modules'
-  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3, CLI1]
+  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract, the Python 3.12 floor and the deptry whitelist; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py; drops tf_keras from the tf extra and forbids keras in the TensorFlow-free modules'
+  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3, CLI1, DEPS4]
   upstream: never
 
 - path: pytest.ini
@@ -574,13 +574,13 @@
   upstream: pending
 
 - path: tensorpotential/cli/wizard.py
-  reason: 'the prompt helpers and the dataset question live in cli/prompts.py (shared console); cli.wizard re-exports every old name'
-  milestone: [CLI1]
+  reason: 'the prompt helpers and the dataset question live in cli/prompts.py (shared console); cli.wizard re-exports the old names except the input() fallbacks, which are removed (questionary and rich are required, so the plain-text branches of the review table, the review loop and the closing messages are gone)'
+  milestone: [CLI1, DEPS4]
   upstream: pending
 
 - path: tensorpotential/extra/gen_tensor/wizard.py
-  reason: 'imports the prompt helpers from cli/prompts.py, which ends the import cycle with cli/wizard.py'
-  milestone: [CLI1]
+  reason: 'imports the prompt helpers from cli/prompts.py, which ends the import cycle with cli/wizard.py; the plain-text fallbacks (no questionary, no rich) of the sections, the review and the entry point are removed'
+  milestone: [CLI1, DEPS4]
   upstream: pending
 
 - path: tensorpotential/uq/cli/build/data_resolve.py
