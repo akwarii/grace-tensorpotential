@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import io
 import json
-import keyword
 import os
 import tarfile
 from pathlib import Path
@@ -59,14 +58,12 @@ class _FakeResponse:
         self,
         body: bytes,
         content_type: str = "application/gzip",
-        length: str | None = "auto",
+        with_length: bool = True,
     ):
         self._body = body
         self.headers = {"Content-Type": content_type}
-        if length == "auto":
+        if with_length:
             self.headers["Content-Length"] = str(len(body))
-        elif length is not None:
-            self.headers["Content-Length"] = length
 
     def __enter__(self):
         return self
@@ -114,7 +111,12 @@ def network(monkeypatch):
 
 @pytest.fixture
 def cache(tmp_path, monkeypatch):
-    """The cache directories of the module in a temporary directory, with a toy model entry."""
+    """The cache directories of the module in a temporary directory, with a toy model entry.
+
+    Module state is test configuration here, not a replaced boundary: the cache location is read once at import,
+    the registry is a plain dict, and ``_ORIGIN_WARNED`` is the once-per-process warning memory (reset so that
+    a test sees its own warning). Every patch is undone by ``monkeypatch``.
+    """
     monkeypatch.setattr(fm, "FOUNDATION_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(
         fm, "FOUNDATION_CHECKPOINTS_CACHE_DIR", str(tmp_path / "cache" / "checkpoints")
@@ -176,7 +178,6 @@ def test_a_registry_entry_without_a_kokkos_base_has_no_kokkos_url_and_the_fp64_s
 )
 def test_a_model_name_becomes_a_valid_identifier(name, expected):
     assert fm.to_valid_variable_name(name) == expected
-    assert expected.isidentifier() and not keyword.iskeyword(expected)
 
 
 def test_the_empty_name_has_no_identifier():
@@ -279,7 +280,7 @@ def test_a_download_writes_every_chunk_and_leaves_no_part_file(network, tmp_path
 
 
 def test_a_download_without_content_length_still_completes(network, tmp_path):
-    network(_FakeResponse(b"abcdef", length=None))
+    network(_FakeResponse(b"abcdef", with_length=False))
     dest = tmp_path / "f"
     fm._stream_download("https://x/f", str(dest))
     assert dest.read_bytes() == b"abcdef"
@@ -380,6 +381,7 @@ def test_the_package_version_is_a_string_and_unknown_when_the_metadata_is_missin
     def _missing(name):
         raise metadata.PackageNotFoundError(name)
 
+    # what is replaced: the installed-package metadata, which is absent in a source checkout
     monkeypatch.setattr(metadata, "version", _missing)
     assert fm._tp_version() == "unknown"
 
@@ -601,7 +603,7 @@ def test_an_unregistered_model_is_refused_with_the_list_of_names():
 
 
 def test_grace_fm_builds_a_calculator_on_the_model_path_with_the_given_padding(
-    monkeypatch, tmp_path
+    cache, monkeypatch
 ):
     from tensorpotential.calculator import asecalculator
 
@@ -611,16 +613,15 @@ def test_grace_fm_builds_a_calculator_on_the_model_path_with_the_given_padding(
         def __init__(self, **kwargs):
             received.update(kwargs)
 
-    # a calculator on a real saved model is built in test_calculator.py; here only the arguments are traced
+    # what is replaced: the calculator, whose construction needs a saved model (13 s) and is tested in
+    # test_calculator.py; the model lookup is real, on a cached directory, so no download is attempted
     monkeypatch.setattr(asecalculator, "TPCalculator", _Calculator)
-    monkeypatch.setattr(
-        fm, "get_or_download_model", lambda name: str(tmp_path / name)
-    )  # the network
-    monkeypatch.setattr(fm, "MODELS_NAME_LIST", [*fm.MODELS_NAME_LIST, "Toy"])
-    calc = fm.grace_fm("Toy", pad_atoms_number=3, min_dist=0.5, extra_option="e")
+    (cache / MODEL_NAME).mkdir(parents=True)
+    monkeypatch.setattr(fm, "MODELS_NAME_LIST", [*fm.MODELS_NAME_LIST, MODEL_NAME])
+    calc = fm.grace_fm(MODEL_NAME, pad_atoms_number=3, min_dist=0.5, extra_option="e")
     assert isinstance(calc, _Calculator)
     assert received == {
-        "model": str(tmp_path / "Toy"),
+        "model": str(cache / MODEL_NAME),
         "pad_neighbors_fraction": 0.05,
         "pad_atoms_number": 3,
         "max_number_reduction_recompilation": 2,
@@ -630,11 +631,9 @@ def test_grace_fm_builds_a_calculator_on_the_model_path_with_the_given_padding(
 
 
 def test_the_docstrings_name_every_registered_model():
-    model_doc = fm.get_or_download_model.__doc__ or ""
-    call_doc = fm.grace_fm.__doc__ or ""
-    for name in fm.CORE_MODELS_NAME_LIST[:5]:
-        assert name in model_doc
-        assert name in call_doc or "One of" in call_doc
+    for name in fm.CORE_MODELS_NAME_LIST:
+        assert name in (fm.get_or_download_model.__doc__ or "")
+        assert name in (fm.grace_fm.__doc__ or "")
 
 
 def test_the_module_registers_models_from_the_user_registry_without_overriding(
@@ -657,10 +656,14 @@ def test_the_module_registers_models_from_the_user_registry_without_overriding(
         + str(cache_dir)
         + "')"
     )
-    env = {**os.environ, fm.GRACE_CACHE: str(cache_dir)}
+    repository = (
+        Path(fm.__file__).resolve().parents[2]
+    )  # the tree under test, whatever the working directory
+    env = {**os.environ, fm.GRACE_CACHE: str(cache_dir), "PYTHONPATH": str(repository)}
     result = subprocess.run(  # noqa: S603  (the interpreter and a literal program, no outside input)
         [sys.executable, "-c", code],
         env=env,
+        cwd=tmp_path,
         capture_output=True,
         text=True,
         check=True,

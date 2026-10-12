@@ -40,17 +40,18 @@ from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 def _frame(
     hull: list[float],
     pbc: list[bool] | None = None,
-    symbols: list[str] | None = None,
-    force_scale: float = 1.0,
+    forces: list[np.ndarray] | None = None,
 ) -> pd.DataFrame:
-    """A frame of structures with 2 atoms each: ``hull`` is the distance to the convex hull per atom."""
+    """A frame of Cu2 structures: ``hull`` is the distance to the convex hull per atom, ``forces`` one (2, 3) array each."""
     n = len(hull)
     rng = np.random.default_rng(0)
     pbc = pbc if pbc is not None else [True] * n
-    symbols = symbols if symbols is not None else ["Cu"] * n
+    forces = (
+        forces if forces is not None else [rng.normal(size=(2, 3)) for _ in range(n)]
+    )
     atoms = [
-        Atoms(f"{s}2", positions=[[0, 0, 0], [0, 0, 2.5]], cell=[5] * 3, pbc=p)
-        for s, p in zip(symbols, pbc, strict=True)
+        Atoms("Cu2", positions=[[0, 0, 0], [0, 0, 2.5]], cell=[5] * 3, pbc=p)
+        for p in pbc
     ]
     return pd.DataFrame({
         "ase_atoms": atoms,
@@ -58,24 +59,13 @@ def _frame(
         E_CHULL_DIST_PER_ATOM: hull,
         E_CORRECTED_PER_ATOM_COLUMN: [-3.0 + h for h in hull],
         ENERGY_CORRECTED_COL: [2 * (-3.0 + h) for h in hull],
-        FORCES_COL: [force_scale * rng.normal(size=(2, 3)) for _ in range(n)],
+        FORCES_COL: pd.Series(forces, dtype=object),
         NUMBER_OF_ATOMS: [2] * n,
     })
 
 
-def _set_forces(frame: pd.DataFrame, row: int, forces: np.ndarray) -> None:
-    """Replace the forces of one row (a cell that holds an array is written through the whole column)."""
-    values = frame[FORCES_COL].tolist()
-    values[frame.index.get_loc(row)] = forces
-    frame[FORCES_COL] = pd.Series(values, index=frame.index, dtype=object)
-
-
-def _policy(**kwargs) -> EnergyBasedWeightingPolicy:
-    return EnergyBasedWeightingPolicy(**kwargs)
-
-
 def _weights(frame: pd.DataFrame, **kwargs) -> pd.DataFrame:
-    return _policy(**kwargs).generate_weights(frame.copy())
+    return EnergyBasedWeightingPolicy(**kwargs).generate_weights(frame.copy())
 
 
 # --- check_df_non_empty ---
@@ -97,7 +87,7 @@ def test_a_non_empty_frame_passes():
 
 
 def test_the_constructor_keeps_its_arguments_and_the_defaults():
-    p = _policy()
+    p = EnergyBasedWeightingPolicy()
     assert (p.nfit, p.cutoff, p.DElow, p.DEup, p.DE, p.DF) == (
         None,
         None,
@@ -112,19 +102,19 @@ def test_the_constructor_keeps_its_arguments_and_the_defaults():
 
 @pytest.mark.parametrize("text", ["none", "None", "NONE"])
 def test_the_string_none_for_wlow_means_no_adjustment(text):
-    assert _policy(wlow=text).wlow is None
+    assert EnergyBasedWeightingPolicy(wlow=text).wlow is None
 
 
 def test_a_numeric_wlow_is_kept_as_given():
-    assert _policy(wlow=0.75).wlow == 0.75
+    assert EnergyBasedWeightingPolicy(wlow=0.75).wlow == 0.75
     assert (
-        _policy(wlow="0.75").wlow == "0.75"
+        EnergyBasedWeightingPolicy(wlow="0.75").wlow == "0.75"
     )  # converted to float only when the weights are made
 
 
 def test_the_string_form_lists_every_selection_setting():
     text = str(
-        _policy(
+        EnergyBasedWeightingPolicy(
             nfit=5,
             DElow=0.5,
             DEup=4.0,
@@ -146,14 +136,14 @@ def test_the_string_form_lists_every_selection_setting():
 
 
 def test_without_any_count_the_whole_dataset_is_fitted():
-    policy = _policy()
+    policy = EnergyBasedWeightingPolicy()
     result = policy.generate_weights(_frame([0.1, 0.2, 0.3]))
     assert policy.nfit == 3
     assert len(result) == 3
 
 
 def test_both_tier_counts_set_nfit_to_their_sum():
-    policy = _policy(n_lower=2, n_upper=1)
+    policy = EnergyBasedWeightingPolicy(n_lower=2, n_upper=1)
     policy.generate_weights(_frame([0.1, 0.2, 0.3, 2.0, 3.0]))
     assert policy.nfit == 3
 
@@ -163,7 +153,7 @@ def test_a_single_tier_count_without_nfit_is_refused(counts):
     with pytest.raises(
         ValueError, match=r"nfit is None\. Please provide both n_lower and n_upper"
     ):
-        _policy(**counts).generate_weights(_frame([0.1, 0.2]))
+        EnergyBasedWeightingPolicy(**counts).generate_weights(_frame([0.1, 0.2]))
 
 
 @pytest.mark.parametrize(
@@ -173,7 +163,9 @@ def test_nfit_together_with_a_tier_count_is_refused(counts):
     with pytest.raises(
         ValueError, match=r"nfit is not None\. No n_lower or n_upper is expected"
     ):
-        _policy(nfit=3, **counts).generate_weights(_frame([0.1, 0.2]))
+        EnergyBasedWeightingPolicy(nfit=3, **counts).generate_weights(
+            _frame([0.1, 0.2])
+        )
 
 
 # --- reference type ---
@@ -222,7 +214,10 @@ def test_the_zero_formation_energy_frame_clips_negative_formation_energies_and_s
     result = _weights(frame, energy="zero_formation_energy", DEup=100.0, DElow=0.5)
     # the negative one becomes 0 before the shift, the minimum is then 0 already
     np.testing.assert_allclose(
-        result["effective_energy"].sort_index(), [0.0, 0.2, 0.9], rtol=1e-9, atol=1e-9
+        result["effective_energy"].sort_index(),
+        [0.0, 0.2, 0.9],
+        rtol=ARITH.rtol,
+        atol=ARITH.atol,
     )
 
 
@@ -258,17 +253,14 @@ def test_a_frame_with_nothing_below_the_upper_energy_is_refused():
 
 
 def test_structures_with_a_force_above_dfup_are_removed():
-    frame = _frame([0.1, 0.2, 0.3])
-    _set_forces(
-        frame,
-        1,
-        np.array([
-            [6.0, 8.0, 0.0],
-            [0.0, 0.0, 0.0],
-        ]),
-    )  # longest force vector: 10
-    _set_forces(frame, 0, np.array([[3.0, 4.0, 0.0], [0.0, 0.0, 1.0]]))  # 5
-    _set_forces(frame, 2, np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.5]]))
+    frame = _frame(
+        [0.1, 0.2, 0.3],
+        forces=[
+            np.array([[3.0, 4.0, 0.0], [0.0, 0.0, 1.0]]),  # longest force vector: 5
+            np.array([[6.0, 8.0, 0.0], [0.0, 0.0, 0.0]]),  # 10
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.5]]),  # 0.5
+        ],
+    )
     assert sorted(_weights(frame, DFup=5.0).index) == [
         0,
         2,
@@ -278,7 +270,7 @@ def test_structures_with_a_force_above_dfup_are_removed():
 
 def test_dfup_that_removes_everything_is_refused():
     with pytest.raises(RuntimeError, match="empty dataset"):
-        _weights(_frame([0.1, 0.2], force_scale=100.0), DFup=1e-6)
+        _weights(_frame([0.1, 0.2], forces=[np.full((2, 3), 100.0)] * 2), DFup=1e-6)
 
 
 # --- the selection of structures ---
@@ -350,7 +342,7 @@ def test_energy_weights_follow_one_over_the_squared_shifted_energy_and_sum_to_on
     np.testing.assert_allclose(
         result[DATA_ENERGY_WEIGHTS], raw / raw.sum(), rtol=ARITH.rtol
     )
-    assert result[DATA_ENERGY_WEIGHTS].sum() == pytest.approx(1.0, abs=1e-12)
+    assert result[DATA_ENERGY_WEIGHTS].sum() == pytest.approx(1.0, rel=ARITH.rtol)
 
 
 def test_the_energy_offset_de_enters_through_its_absolute_value():
@@ -375,29 +367,31 @@ def test_the_virial_weight_equals_the_energy_weight():
 def test_wlow_rescales_the_low_tier_to_its_share_and_the_upper_tier_to_the_rest():
     result = _weights(_frame([0.0, 0.5, 2.0, 3.0]), DElow=1.0, wlow=0.75).sort_index()
     weights = result[DATA_ENERGY_WEIGHTS]
-    assert weights[[0, 1]].sum() == pytest.approx(0.75, rel=1e-12)
-    assert weights[[2, 3]].sum() == pytest.approx(0.25, rel=1e-12)
+    assert weights[[0, 1]].sum() == pytest.approx(0.75, rel=ARITH.rtol)
+    assert weights[[2, 3]].sum() == pytest.approx(0.25, rel=ARITH.rtol)
     # inside a tier the proportions of 1 / (E + DE)^2 stay
     assert weights[0] / weights[1] == pytest.approx(
-        (0.5 + 1.0) ** 2 / (0.0 + 1.0) ** 2, rel=1e-12
+        (0.5 + 1.0) ** 2 / (0.0 + 1.0) ** 2, rel=ARITH.rtol
     )
     assert weights[2] / weights[3] == pytest.approx(
-        (3.0 + 1.0) ** 2 / (2.0 + 1.0) ** 2, rel=1e-12
+        (3.0 + 1.0) ** 2 / (2.0 + 1.0) ** 2, rel=ARITH.rtol
     )
 
 
 def test_wlow_given_as_a_string_is_converted():
     result = _weights(_frame([0.0, 2.0]), DElow=1.0, wlow="0.5")
-    assert result[DATA_ENERGY_WEIGHTS].sort_index()[0] == pytest.approx(0.5, rel=1e-12)
+    assert result[DATA_ENERGY_WEIGHTS].sort_index()[0] == pytest.approx(
+        0.5, rel=ARITH.rtol
+    )
 
 
 def test_with_only_low_structures_wlow_is_raised_to_one_with_a_warning(caplog):
-    policy = _policy(wlow=0.6)
+    policy = EnergyBasedWeightingPolicy(wlow=0.6)
     with caplog.at_level(logging.WARNING):
         result = policy.generate_weights(_frame([0.0, 0.5]))
     assert "All structures were taken from low-tier" in caplog.text
     assert policy.wlow == 1.0  # pinned: the policy object is changed by the call
-    assert result[DATA_ENERGY_WEIGHTS].sum() == pytest.approx(1.0, abs=1e-12)
+    assert result[DATA_ENERGY_WEIGHTS].sum() == pytest.approx(1.0, rel=ARITH.rtol)
     assert "No weights adjustment possible" in caplog.text
 
 
@@ -427,23 +421,13 @@ def test_without_wlow_the_tiers_are_not_rescaled(caplog):
 
 
 def test_force_weights_follow_one_over_force_squared_plus_df_times_the_energy_weight():
-    frame = _frame([0.0, 3.0])
-    _set_forces(
-        frame,
-        0,
-        np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 2.0, 0.0],
-        ]),
-    )  # |f|^2 = 1, 4
-    _set_forces(
-        frame,
-        1,
-        np.array([
-            [0.0, 0.0, 3.0],
-            [0.0, 0.0, 0.0],
-        ]),
-    )  # |f|^2 = 9, 0
+    frame = _frame(
+        [0.0, 3.0],
+        forces=[
+            np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]),  # |f|^2 = 1, 4
+            np.array([[0.0, 0.0, 3.0], [0.0, 0.0, 0.0]]),  # |f|^2 = 9, 0
+        ],
+    )
     result = _weights(frame, DF=1.0, DElow=0.5).sort_index()
     e_raw = np.array([1.0, 1.0 / 16.0])
     e_w = e_raw / e_raw.sum()
@@ -453,9 +437,9 @@ def test_force_weights_follow_one_over_force_squared_plus_df_times_the_energy_we
     ]
     total = sum(p.sum() for p in per_atom)
     for found, expected in zip(result[DATA_FORCE_WEIGHTS], per_atom, strict=True):
-        np.testing.assert_allclose(found, expected / total, rtol=1e-12)
+        np.testing.assert_allclose(found, expected / total, rtol=ARITH.rtol)
     assert sum(w.sum() for w in result[DATA_FORCE_WEIGHTS]) == pytest.approx(
-        1.0, abs=1e-12
+        1.0, rel=ARITH.rtol
     )
 
 
@@ -473,8 +457,8 @@ def test_forces_are_converted_to_arrays_and_must_match_the_atom_count():
     result = _weights(frame)
     assert all(isinstance(f, np.ndarray) for f in result[FORCES_COL])
 
-    broken = _frame([0.0, 1.0])
-    _set_forces(broken, 0, np.zeros((3, 3)))  # three force vectors for two atoms
+    # three force vectors for two atoms
+    broken = _frame([0.0, 1.0], forces=[np.zeros((3, 3)), np.zeros((2, 3))])
     with pytest.raises(
         AssertionError, match="Number of atoms doesn't corresponds to shape of forces"
     ):
@@ -487,7 +471,7 @@ def test_forces_are_converted_to_arrays_and_must_match_the_atom_count():
 def test_the_input_frame_gains_the_effective_energy_column_when_nothing_is_filtered():
     # pinned: the policy writes into the frame it is given (a copy is made only by a filter)
     frame = _frame([0.0, 0.5])
-    _policy().generate_weights(frame)
+    EnergyBasedWeightingPolicy().generate_weights(frame)
     assert "effective_energy" in frame.columns
     assert DATA_ENERGY_WEIGHTS not in frame.columns
 
@@ -495,7 +479,7 @@ def test_the_input_frame_gains_the_effective_energy_column_when_nothing_is_filte
 def test_the_weights_leave_the_input_values_unchanged():
     frame = _frame([0.0, 0.5, 2.0])
     before = frame[[E_CHULL_DIST_PER_ATOM, ENERGY_CORRECTED_COL]].copy()
-    _policy().generate_weights(frame)
+    EnergyBasedWeightingPolicy().generate_weights(frame)
     pd.testing.assert_frame_equal(
         frame[[E_CHULL_DIST_PER_ATOM, ENERGY_CORRECTED_COL]], before
     )

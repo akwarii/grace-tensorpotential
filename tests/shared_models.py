@@ -15,7 +15,9 @@ import numpy as np
 import tensorflow as tf
 
 from tensorpotential import TPModel
+from tensorpotential.potentials import get_preset
 from tensorpotential.potentials.presets import GRACE_2LAYER_v2_25
+from tensorpotential.tpmodel import to_instructions_list
 
 
 def weights_fingerprint(model: TPModel) -> str:
@@ -77,3 +79,29 @@ class CuTwoLayerModels:
             for dense, model in self._models.items()
             if weights_fingerprint(model) != self._fingerprints[dense]
         ]
+
+
+def linear_instructions(element_map: dict[str, int]) -> dict:
+    """Fresh instructions of a tiny ``LINEAR`` model (instructions are built once: never cache the result)."""
+    return get_preset("LINEAR")(
+        element_map=element_map,
+        lmax=1,
+        n_rad_max=4,
+        n_rad_base=4,
+        embedding_size=4,
+        rcut=5.0,
+    ).get_instructions()
+
+
+def l2_regularised_variables(instructions) -> list[tf.Variable]:
+    """The trainable variables counted by the L2 loss: those of every instruction that has an L2 loss.
+
+    An instruction owns the variables of the instructions it refers to, so a shared variable appears once per
+    instruction that reaches it (the L2 loss counts it that many times).
+    """
+    return [
+        variable
+        for instruction in to_instructions_list(instructions)
+        if hasattr(instruction, "compute_l2_regularization_loss")
+        for variable in instruction.trainable_variables
+    ]

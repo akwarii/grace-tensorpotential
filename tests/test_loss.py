@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import cast
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -53,7 +53,9 @@ from tensorpotential.loss import (
     energy_offset_error,
     huber,
 )
+from tests.shared_models import l2_regularised_variables
 from tests.tolerances import FINITE_DIFFERENCE_F64 as FD
+from tests.tolerances import FLOAT32_ELEMENTWISE
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
 DELTA = (
@@ -62,6 +64,7 @@ DELTA = (
 NORM_THRESHOLD = (
     1.5  # A force norm that splits the reference forces of the batch in two
 )
+PERFECT_PREDICTION_LOSS = 1e-8  # the largest loss of a perfect prediction: the norm guard EPSILON gives its square root
 EPSILON = 1e-10  # LossComponent.build: the guard of a norm or an absolute value at zero
 FD_STEP = 1e-6  # the step assumed by FINITE_DIFFERENCE_F64 in tests/tolerances.py, for a loss of order 1
 ATOM_COUNTS = (2, 1, 3)  # atoms of the three structures of the batch
@@ -166,8 +169,8 @@ def _offset_pairs(b: _Batch, kernel) -> tuple[float, float]:
     e_pred = (b.e_pred / b.n_atoms).ravel()
     weight = b.e_weight.ravel()
     num = den = 0.0
-    for i in range(3):
-        for j in range(3):
+    for i in range(len(weight)):
+        for j in range(len(weight)):
             w_ij = weight[i] * weight[j]
             w_ij = np.sqrt(w_ij + 1e-16) if w_ij != 0 else 0.0
             offset_error = abs(e_true[i] - e_true[j]) - abs(e_pred[i] - e_pred[j])
@@ -559,67 +562,40 @@ def test_a_structure_without_atoms_counts_as_one_atom_instead_of_dividing_by_zer
         )
 
 
-def test_a_zero_weight_structure_does_not_contribute(batch, tensors):
+@pytest.mark.parametrize(
+    "name",
+    ["sse_energy", "sse_energy_per_atom", "mae_energy_per_atom", "offset_energy"],
+)
+def test_a_zero_weight_structure_does_not_contribute(name, batch, tensors):
+    """A structure of weight zero gives the value of the batch without it, atom counts of the others kept."""
     input_data, predictions = tensors
     zero = batch.e_weight.copy()
     zero[1] = 0.0
-    dropped = {
-        **input_data,
-        constants.DATA_ENERGY_WEIGHTS: _const(zero, tf.float64),
-    }
-    for name in (
-        "sse_energy",
-        "sse_energy_per_atom",
-        "mae_energy_per_atom",
-        "offset_energy",
-    ):
-        case = CASES[name]
-        component = _build(case)
-        found = component.compute_loss_component(
-            input_data=dropped, predictions=predictions
-        ).numpy()
-        # the remaining structures 0 and 2 alone, with their own atom counts
-        keep = [0, 2]
-        sub = _Batch(
-            *(
-                getattr(batch, field)[keep]
-                if field in {"e_true", "e_pred", "e_weight", "n_atoms"}
-                else getattr(batch, field)
-                for field in _Batch.__dataclass_fields__
-            )
-        )
-        if name == "offset_energy":
-            num, den = _offset_pairs_subset(sub)
-        else:
-            num, den = case.oracle(sub)
-        _assert_close(found, num / den)
-
-
-def _offset_pairs_subset(b: _Batch) -> tuple[float, float]:
-    e_true = (b.e_true / b.n_atoms).ravel()
-    e_pred = (b.e_pred / b.n_atoms).ravel()
-    weight = b.e_weight.ravel()
-    num = den = 0.0
-    for i in range(len(weight)):
-        for j in range(len(weight)):
-            w_ij = np.sqrt(weight[i] * weight[j] + 1e-16)
-            num += (
-                w_ij
-                * 0.5
-                * (abs(e_true[i] - e_true[j]) - abs(e_pred[i] - e_pred[j])) ** 2
-            )
-            den += w_ij
-    return num, den
+    dropped = {**input_data, constants.DATA_ENERGY_WEIGHTS: _const(zero, tf.float64)}
+    keep = [0, 2]
+    without = replace(
+        batch,
+        e_true=batch.e_true[keep],
+        e_pred=batch.e_pred[keep],
+        e_weight=batch.e_weight[keep],
+        n_atoms=batch.n_atoms[keep],
+    )
+    case = CASES[name]
+    found = _build(case).compute_loss_component(
+        input_data=dropped, predictions=predictions
+    )
+    num, den = case.oracle(without)
+    _assert_close(found.numpy(), num / den)
 
 
 def test_a_perfect_prediction_has_zero_loss_in_every_smooth_component():
-    perfect = _make_batch()
-    perfect = _Batch(**{
-        **perfect.__dict__,
-        "e_pred": perfect.e_true,
-        "f_pred": perfect.f_true,
-        "v_pred": perfect.v_true,
-    })
+    reference = _make_batch()
+    perfect = replace(
+        reference,
+        e_pred=reference.e_true,
+        f_pred=reference.f_true,
+        v_pred=reference.v_true,
+    )
     input_data, predictions = _tensors(perfect)
     for name, case in CASES.items():
         component = _build(case)
@@ -627,7 +603,7 @@ def test_a_perfect_prediction_has_zero_loss_in_every_smooth_component():
             input_data=input_data, predictions=predictions
         ).numpy()
         # a norm term is guarded by the epsilon, so it is the square root of 1e-10 apart at most
-        assert abs(value) < 1e-8, name
+        assert abs(value) < PERFECT_PREDICTION_LOSS, name
 
 
 # --- the energy offset helper and the Huber kernel ---
@@ -661,7 +637,7 @@ def test_huber_is_quadratic_inside_delta_and_linear_outside_by_hand():
     values = huber(_const([0.0, 0.5, -0.5, 1.0, 3.0, -3.0], tf.float64), delta=1.0)
     # 0.5 x^2 for |x| <= 1 (the boundary included), delta |x| - delta^2 / 2 beyond
     np.testing.assert_allclose(
-        values.numpy(), [0.0, 0.125, 0.125, 0.5, 2.5, 2.5], rtol=1e-15
+        values.numpy(), [0.0, 0.125, 0.125, 0.5, 2.5, 2.5], rtol=ARITH.rtol
     )
 
 
@@ -672,15 +648,12 @@ def test_huber_follows_the_dtype_of_its_error():
 # --- derivatives ---
 
 
-def _loss_of(component, input_data, predictions, shifts, scale):
-    shifted_inputs = dict(input_data)
-    shifted_predictions = dict(predictions)
-    for key, direction in shifts.items():
-        target = shifted_inputs if key in input_data else shifted_predictions
-        target[key] = target[key] + scale * direction
-    return component.compute_loss_component(
-        input_data=shifted_inputs, predictions=shifted_predictions
-    )
+def _shifted(tensors, directions, scale):
+    """The tensors with ``scale`` times the direction added to those that have one."""
+    return {
+        k: v + scale * directions[k] if k in directions else v
+        for k, v in tensors.items()
+    }
 
 
 @pytest.mark.parametrize("case", CASES.values(), ids=CASES.keys())
@@ -700,33 +673,29 @@ def test_the_gradient_of_a_component_matches_a_finite_difference_of_its_value(
         for key, value in floats.items()
     }
 
-    # the derivative tape must see every float tensor the loss reads
-    watched_inputs = {**input_data}
-    watched_predictions = {**predictions}
+    # the tape watches every float tensor; one the loss does not read has a zero derivative, and the
+    # central difference below would disagree with a loss that ignored an input it should read
     with tf.GradientTape() as tape:
-        for key in floats:
-            tape.watch(
-                watched_inputs[key] if key in input_data else watched_predictions[key]
-            )
+        for tensor in floats.values():
+            tape.watch(tensor)
         value = component.compute_loss_component(
-            input_data=watched_inputs, predictions=watched_predictions
+            input_data=input_data, predictions=predictions
         )
     gradients = tape.gradient(
-        value,
-        [
-            watched_inputs[k] if k in input_data else watched_predictions[k]
-            for k in floats
-        ],
+        value, list(floats.values()), unconnected_gradients=tf.UnconnectedGradients.ZERO
     )
     analytic = sum(
         float(tf.reduce_sum(g * directions[k]))
         for k, g in zip(floats, gradients, strict=True)
-        if g is not None
     )
 
-    plus = _loss_of(component, input_data, predictions, directions, FD_STEP)
-    minus = _loss_of(component, input_data, predictions, directions, -FD_STEP)
-    numeric = float(plus - minus) / (2 * FD_STEP)
+    def loss_at(scale):
+        return component.compute_loss_component(
+            input_data=_shifted(input_data, directions, scale),
+            predictions=_shifted(predictions, directions, scale),
+        )
+
+    numeric = float(loss_at(FD_STEP) - loss_at(-FD_STEP)) / (2 * FD_STEP)
     _assert_close(analytic, numeric, FD)
 
 
@@ -766,7 +735,9 @@ def test_building_a_component_makes_a_fixed_weight_variable_and_the_epsilon(case
     assert not component.loss_component_weight.trainable
     assert _value(component.loss_component_weight) == 0.75
     assert component.epsilon.dtype == tf.float32
-    np.testing.assert_allclose(float(component.epsilon), EPSILON, rtol=1e-6)
+    np.testing.assert_allclose(
+        float(component.epsilon), EPSILON, rtol=FLOAT32_ELEMENTWISE.rtol
+    )
 
 
 @pytest.mark.parametrize("case", CASES.values(), ids=CASES.keys())
@@ -1004,7 +975,6 @@ def _regularised_model():
     """A real, cheap model whose instructions report an L2 loss, all trainable weights set to 0.5."""
     from tensorpotential.potentials import get_preset
     from tensorpotential.tensorpot import TensorPotential
-    from tensorpotential.tpmodel import to_instructions_list
 
     preset = get_preset("GRACE_2LAYER_v1_24")
     instructions = preset(element_map={"Be": 0, "Li": 1}, lmax=0).get_instructions()
@@ -1014,10 +984,7 @@ def _regularised_model():
     # each instruction that reports an L2 loss counts every trainable variable it owns, the variables of
     # the instructions it refers to included: with every weight 0.5 the sum is 0.25 per element
     elements = sum(
-        int(np.prod(variable.shape))
-        for instruction in to_instructions_list(model.instructions)
-        if hasattr(instruction, "compute_l2_regularization_loss")
-        for variable in instruction.trainable_variables
+        int(np.prod(v.shape)) for v in l2_regularised_variables(model.instructions)
     )
     return model, 0.25 * elements
 

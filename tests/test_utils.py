@@ -395,16 +395,13 @@ def test_only_the_chief_or_the_first_worker_is_chief(strategy, expected):
 # ------------------------------------------------------------------ the fit-metrics helpers
 
 
-def _write_fit(folder, test_f, train_f=None, depa=None, finished=False, epochs=None):
+def _write_fit(folder, test_f, finished=False):
     """A fit folder as gracemaker writes it: one entry per epoch, flattened metric names as keys."""
     folder.mkdir(parents=True, exist_ok=True)
-    n = len(test_f)
-    train_f = train_f if train_f is not None else [2 * v for v in test_f]
-    depa = depa if depa is not None else [0.1 * v for v in test_f]
-    for name, values in (("test", test_f), ("train", train_f)):
+    for name, scale in (("test", 1.0), ("train", 2.0)):
         rows = [
-            {"epoch": (epochs or list(range(n)))[i], "rmse/f_comp": values[i], "rmse/depa": depa[i]}
-            for i in range(n)
+            {"epoch": i, "rmse/f_comp": scale * v, "rmse/depa": 0.1 * scale * v}
+            for i, v in enumerate(test_f)
         ]
         (folder / f"{name}_metrics.yaml").write_text(yaml.safe_dump(rows))
     if finished:
@@ -416,7 +413,7 @@ def _write_fit(folder, test_f, train_f=None, depa=None, finished=False, epochs=N
 def matplotlib_axes():
     import matplotlib
 
-    matplotlib.use("Agg")
+    matplotlib.use("Agg")  # no display on a test machine: the backend is the hardware boundary replaced
     from matplotlib import pyplot as plt
 
     yield plt
@@ -545,9 +542,9 @@ def test_process_fit_dict_names_the_runs_and_picks_the_best_epoch_of_each(tmp_pa
     assert list(best["shortname"]) == ["b", "b", "a", "a"]
     # grouped by setting: mean, std (n - 1), min and the list
     column = grouped["rmse/f_comp"]
-    np.testing.assert_allclose(column.loc["a", "mean"], 0.35, rtol=1e-12)
-    np.testing.assert_allclose(column.loc["a", "std"], np.std([0.3, 0.4], ddof=1), rtol=1e-12)
-    np.testing.assert_allclose(column.loc["b", "min"], 0.1, rtol=1e-12)
+    np.testing.assert_allclose(column.loc["a", "mean"], 0.35, rtol=ARITH.rtol)
+    np.testing.assert_allclose(column.loc["a", "std"], np.std([0.3, 0.4], ddof=1), rtol=ARITH.rtol)
+    np.testing.assert_allclose(column.loc["b", "min"], 0.1, rtol=ARITH.rtol)
     assert sorted(column.loc["b", "list"]) == [0.1, 0.2]
 
 
@@ -565,7 +562,13 @@ def test_process_fit_dict_without_alignment_cuts_the_prefix_at_the_character(tmp
 
 
 def _fit(test, train, name="fit"):
-    frame = lambda v: pd.DataFrame({"rmse/f_comp": v, "rmse/depa": [x / 10 for x in v], "step": [10 * i for i in range(len(v))]})  # noqa: E731
+    def frame(values):
+        return pd.DataFrame({
+            "rmse/f_comp": values,
+            "rmse/depa": [x / 10 for x in values],
+            "step": [10 * i for i in range(len(values))],
+        })
+
     return {"test": frame(test), "train": frame(train), "name": name, "shortname": name}
 
 
@@ -621,7 +624,7 @@ def test_the_dashboard_plots_the_energy_and_force_metrics_of_every_included_fit(
     assert len(ax_e.lines) == 2 and len(ax_f.lines) == 2
     assert ax_e.get_ylabel() == "rmse/depa" and ax_f.get_ylabel() == "rmse/f_comp"
     assert [line.get_label() for line in ax_f.lines] == ["A(400.0)", "B(200.0)"]
-    np.testing.assert_allclose(ax_e.lines[0].get_ydata(), [0.05, 0.04], rtol=1e-12)
+    np.testing.assert_allclose(ax_e.lines[0].get_ydata(), [0.05, 0.04], rtol=ARITH.rtol)
     assert fig is ax_e.figure
 
 
@@ -686,14 +689,15 @@ def test_the_selection_keeps_the_embedding_rows_of_the_chosen_elements_in_the_re
     assert isinstance(tp, TensorPotential)
     np.testing.assert_array_equal(embedding.w.numpy(), rows[[2, 0]])
     assert [s.decode() for s in embedding.element_map_symbols.numpy()] == ["Ta", "Mo"]
-    # the constructor arguments that go into the saved yaml name the elements in the requested order
+    # the constructor arguments that go into the saved yaml name the elements in the requested order (read from the
+    # instruction: `convert_model_reduce_elements` writes the yaml in the test above, not this function)
     assert embedding._init_args["element_map"] == {"Ta": 0, "Mo": 1}
 
 
 def test_converting_with_an_unknown_parameter_dtype_is_refused(tmp_path):
     with pytest.raises(AssertionError, match="Unknown dtype <dtype: 'int32'>. Supported dtypes"):
         convert_model_reduce_elements(
-            {"Mo": 0}, "a.yaml", "ckpt", "b.yaml", "ckpt2", param_dtype=tf.int32
+            {"Mo": 0}, str(tmp_path / "a.yaml"), str(tmp_path / "ckpt"), str(tmp_path / "b.yaml"), str(tmp_path / "ckpt2"), param_dtype=tf.int32
         )
 
 
@@ -708,6 +712,6 @@ def test_converting_a_model_in_the_old_list_format_exits_with_a_hint(tmp_path, c
     old = tmp_path / "old.yaml"
     old.write_text(yaml.safe_dump(records))
     with caplog.at_level(logging.INFO), pytest.raises(SystemExit) as stop:
-        convert_model_reduce_elements({"Mo": 0}, str(old), "ckpt", "b.yaml", "ckpt2", param_dtype=tf.float64)
+        convert_model_reduce_elements({"Mo": 0}, str(old), str(tmp_path / "ckpt"), str(tmp_path / "b.yaml"), str(tmp_path / "ckpt2"), param_dtype=tf.float64)
     assert stop.value.code == 0  # pinned: not an error status although nothing was converted
     assert "is NOT in new format" in caplog.text

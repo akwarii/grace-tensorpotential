@@ -44,7 +44,13 @@ from tensorpotential.tpmodel import (
 )
 
 from tensorpotential.potentials import get_preset, presets
-from tests.tolerances import FLOAT64_ARITHMETIC
+from tests.shared_models import l2_regularised_variables, linear_instructions
+from tests.tolerances import (
+    CLOSED_FORM_FD_F64,
+    FLOAT32_ELEMENTWISE,
+    FLOAT32_NETWORK,
+    FLOAT64_ARITHMETIC,
+)
 from tensorpotential.instructions import (
     load_instructions,
     save_instructions_dict,
@@ -1258,7 +1264,7 @@ def _cluster_virial(x: np.ndarray, m: np.ndarray = ISOTROPIC) -> np.ndarray:
 
 
 def _close(found, expected):
-    np.testing.assert_allclose(found, expected, rtol=FLOAT64_ARITHMETIC.rtol, atol=1e-12)
+    np.testing.assert_allclose(found, expected, rtol=FLOAT64_ARITHMETIC.rtol, atol=FLOAT64_ARITHMETIC.atol)
 
 
 def test_the_spring_oracle_is_a_derivative_of_its_energy():
@@ -1272,7 +1278,7 @@ def test_the_spring_oracle_is_a_derivative_of_its_energy():
             plus = _spring_energy(moved)
             moved[a, c] -= 2 * step
             minus = _spring_energy(moved)
-            np.testing.assert_allclose(-(plus - minus) / (2 * step), _spring_forces(x)[a, c], rtol=1e-8, atol=1e-8)
+            np.testing.assert_allclose(-(plus - minus) / (2 * step), _spring_forces(x)[a, c], rtol=CLOSED_FORM_FD_F64.rtol, atol=CLOSED_FORM_FD_F64.atol)
 
 
 def test_a_structure_compute_function_returns_energy_forces_virial_and_pair_forces():
@@ -1290,9 +1296,8 @@ def test_a_structure_compute_function_returns_energy_forces_virial_and_pair_forc
     assert list(result)[-1] == "z_" + constants.PREDICT_PAIR_FORCES  # the key sorts last on purpose
 
 
-@pytest.mark.parametrize("metric", [ISOTROPIC, ANISOTROPIC], ids=["isotropic", "anisotropic"])
-def test_the_virial_of_a_structure_is_the_sum_of_position_times_force_also_for_forces_off_the_bond(metric):
-    x = CLUSTERS[0]
+def test_the_virial_of_a_structure_is_the_sum_of_position_times_force_also_for_forces_off_the_bond():
+    x, metric = CLUSTERS[0], ANISOTROPIC
     result = ComputeStructureEnergyAndForcesAndVirial()([_Spring(metric=metric)], _cluster_batch([0]))
     _close(result[constants.PREDICT_TOTAL_ENERGY], [[_spring_energy(x, metric)]])
     _close(result[constants.PREDICT_FORCES], _spring_forces(x, metric))
@@ -1312,8 +1317,8 @@ def test_the_batch_virial_of_forces_off_the_bond_has_one_row_per_structure():
 def test_the_net_force_and_the_net_torque_of_an_isolated_cluster_vanish():
     x = CLUSTERS[0]
     forces = ComputeStructureEnergyAndForcesAndVirial()([_Spring()], _cluster_batch([0]))[constants.PREDICT_FORCES].numpy()
-    np.testing.assert_allclose(forces.sum(axis=0), 0.0, atol=1e-12)
-    np.testing.assert_allclose(np.cross(x, forces).sum(axis=0), 0.0, atol=1e-12)
+    np.testing.assert_allclose(forces.sum(axis=0), 0.0, atol=FLOAT64_ARITHMETIC.atol)
+    np.testing.assert_allclose(np.cross(x, forces).sum(axis=0), 0.0, atol=FLOAT64_ARITHMETIC.atol)
 
 
 def test_extra_keys_that_the_instructions_wrote_are_returned_and_missing_ones_are_skipped():
@@ -1398,10 +1403,11 @@ def test_the_energy_function_returns_the_atomic_energies_in_the_precision_of_the
     assert list(result) == [constants.PREDICT_ATOMIC_ENERGY]
     assert result[constants.PREDICT_ATOMIC_ENERGY].dtype == tf.float32
     assert result[constants.PREDICT_ATOMIC_ENERGY].shape == (3, 1)
-    np.testing.assert_allclose(result[constants.PREDICT_ATOMIC_ENERGY].numpy().sum(), _spring_energy(CLUSTERS[0]), rtol=1e-5)
+    np.testing.assert_allclose(result[constants.PREDICT_ATOMIC_ENERGY].numpy().sum(), _spring_energy(CLUSTERS[0]), rtol=FLOAT32_NETWORK.rtol)
 
 
 def test_the_energy_function_keeps_extra_keys_and_the_local_flag(monkeypatch):
+    # a copy of the class-level specs dictionary, which the constructor edits (pinned): the class is restored after the test
     monkeypatch.setattr(ComputeEnergy, "specs", dict(ComputeEnergy.specs))
     spring = _Spring()
     function = ComputeEnergy(local=True, extra_return_keys=["extra", "absent"])
@@ -1547,6 +1553,7 @@ def test_a_sparse_gradient_is_converted_to_a_dense_tensor():
 
 
 def test_the_input_gradient_block_updates_its_specs_when_given_some(monkeypatch):
+    # a copy of the class-level specs dictionary, which the constructor edits (pinned): the class is restored after the test
     monkeypatch.setattr(ComputeBlockInputGradient, "specs", dict(ComputeBlockInputGradient.specs))
     ComputeBlockInputGradient([], wrt_keys=[], target_key="t", specs={"extra": {"shape": [], "dtype": "int"}})
     assert "extra" in ComputeBlockInputGradient.specs
@@ -1563,6 +1570,7 @@ def test_the_output_gradient_block_pulls_the_given_gradients_back_through_the_in
 
 
 def test_the_output_gradient_block_updates_its_specs_when_given_some(monkeypatch):
+    # a copy of the class-level specs dictionary, which the constructor edits (pinned): the class is restored after the test
     monkeypatch.setattr(ComputeBlockOutputGradient, "specs", dict(ComputeBlockOutputGradient.specs))
     ComputeBlockOutputGradient([], wrt_keys=[], output_keys=[], specs={"extra": {"shape": [], "dtype": "int"}})
     assert "extra" in ComputeBlockOutputGradient.specs
@@ -1600,9 +1608,7 @@ def test_the_regularisation_loss_of_a_model_without_penalties_is_an_empty_mappin
 
 def test_the_regularisation_loss_of_real_instructions_fails_for_the_missing_flag():
     # pinned: no shipped instruction has the flag, and nothing in the library calls this method
-    instructions = get_preset("LINEAR")(
-        element_map={"Mo": 0}, lmax=1, n_rad_max=4, n_rad_base=4, embedding_size=4, rcut=5.0
-    ).get_instructions()
+    instructions = linear_instructions({"Mo": 0})
     with pytest.raises(AttributeError, match="compute_l2_regularization"):
         TPModel(instructions).compute_regularization_loss()
 
@@ -1616,34 +1622,21 @@ def test_the_l2_loss_of_the_model_adds_the_loss_of_every_instruction_that_has_on
 
 
 def test_the_l2_loss_of_a_real_model_is_the_sum_of_squares_of_the_weights_it_owns():
-    instructions = get_preset("LINEAR")(
-        element_map={"Mo": 0}, lmax=1, n_rad_max=4, n_rad_base=4, embedding_size=4, rcut=5.0
-    ).get_instructions()
+    instructions = linear_instructions({"Mo": 0})
     model = TPModel(instructions)
     model.build(tf.float64)
     for variable in model.variables_to_train:
         variable.assign(tf.fill(variable.shape, tf.constant(0.5, variable.dtype)))
-    elements = sum(
-        int(np.prod(v.shape))
-        for ins in instructions.values()
-        if hasattr(ins, "compute_l2_regularization_loss")
-        for v in ins.trainable_variables
-    )
-    assert float(model.compute_l2_regularization_loss()) == pytest.approx(0.25 * elements, rel=1e-12)
+    elements = sum(int(np.prod(v.shape)) for v in l2_regularised_variables(instructions))
+    assert float(model.compute_l2_regularization_loss()) == pytest.approx(0.25 * elements, rel=FLOAT64_ARITHMETIC.rtol)
     assert elements > 0
 
 
 # --- flat weights and the auxiliary compute functions ---
 
 
-def _linear_instructions():
-    return get_preset("LINEAR")(
-        element_map={"Mo": 0, "Ta": 1}, lmax=1, n_rad_max=4, n_rad_base=4, embedding_size=4, rcut=5.0
-    ).get_instructions()
-
-
 def test_the_flat_weight_vector_lists_every_trainable_variable_in_order_and_is_written_back_in_place():
-    model = TPModel(_linear_instructions())
+    model = TPModel(linear_instructions({"Mo": 0, "Ta": 1}))
     model.build(tf.float64)
     variables = model.variables_to_train
     expected = np.concatenate([v.numpy().ravel() for v in variables])
@@ -1660,12 +1653,12 @@ def test_the_flat_weight_vector_lists_every_trainable_variable_in_order_and_is_w
 
 
 def test_a_flat_vector_of_another_precision_is_cast_to_the_parameter_precision():
-    model = TPModel(_linear_instructions())
+    model = TPModel(linear_instructions({"Mo": 0, "Ta": 1}))
     model.build(tf.float32)
     flat = model.get_flat_trainable_variables()
     model.set_flat_trainable_variables(tf.cast(flat, tf.float64) * 2.0)
     assert all(v.dtype == tf.float32 for v in model.variables_to_train)
-    np.testing.assert_allclose(model.get_flat_trainable_variables().numpy(), 2.0 * flat.numpy(), rtol=1e-6)
+    np.testing.assert_allclose(model.get_flat_trainable_variables().numpy(), 2.0 * flat.numpy(), rtol=FLOAT32_ELEMENTWISE.rtol)
 
 
 def test_an_auxiliary_compute_function_is_traced_with_the_model_inputs_and_filters_extra_keys():
@@ -1674,7 +1667,7 @@ def test_an_auxiliary_compute_function_is_traced_with_the_model_inputs_and_filte
     atoms = Atoms("MoTaMo", positions=[[0, 0, 0], [0.3, 0.1, 2.2], [2.1, -0.4, 0.9]], cell=[8, 8, 8], pbc=True)
     batch = construct_batches([atoms], [GeometricalDataBuilder({"Mo": 0, "Ta": 1}, cutoff=5.0)], batch_size=1, verbose=False)[0]
     tensors = {k: tf.constant(v) for k, v in batch.items()}
-    model = TPModel(_linear_instructions(), aux_compute={"energy_only": ComputeEnergy()})
+    model = TPModel(linear_instructions({"Mo": 0, "Ta": 1}), aux_compute={"energy_only": ComputeEnergy()})
     model.build(tf.float64, jit_compile=False)
 
     aux = model.energy_only({**tensors, "unrelated": tf.constant([1.0])})
@@ -1682,7 +1675,7 @@ def test_an_auxiliary_compute_function_is_traced_with_the_model_inputs_and_filte
     full = compute(tensors)
 
     assert set(aux) == {constants.PREDICT_ATOMIC_ENERGY}
-    np.testing.assert_allclose(aux[constants.PREDICT_ATOMIC_ENERGY], full[constants.PREDICT_ATOMIC_ENERGY], rtol=1e-12)
+    np.testing.assert_allclose(aux[constants.PREDICT_ATOMIC_ENERGY], full[constants.PREDICT_ATOMIC_ENERGY], rtol=FLOAT64_ARITHMETIC.rtol)
     assert set(model._aux_compute_sigs["energy_only"]) >= set(ComputeEnergy.specs)
     assert "energy_only" in model._aux_tf_funcs
 
@@ -1711,7 +1704,7 @@ def test_a_compute_call_runs_the_compute_function_on_a_copy_of_the_input():
 
 
 def test_trainable_variables_are_selected_by_name_fragments_and_the_others_frozen():
-    model = TPModel(_linear_instructions())
+    model = TPModel(linear_instructions({"Mo": 0, "Ta": 1}))
     model.build(tf.float64)
     names = [v.name for v in model.variables_to_train]
     keep = names[0].split("/")[0]

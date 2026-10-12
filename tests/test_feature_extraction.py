@@ -15,10 +15,10 @@ from __future__ import annotations
 import functools
 import os
 from collections.abc import Generator
+from types import SimpleNamespace
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
-import operator
 from typing import Any, cast
 
 import numpy as np
@@ -35,9 +35,9 @@ from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 # --- PerAtomWeightBuilder ---
 
 
-def _atoms(symbols="CuCu", weight=None) -> Atoms:
+def _atoms(n_atoms=2, weight=None) -> Atoms:
     atoms = Atoms(
-        symbols, positions=[[0, 0, 0], [0, 0, 2.5], [2.5, 0, 0]][: len(symbols) // 2]
+        f"Cu{n_atoms}", positions=[[0, 0, 0], [0, 0, 2.5], [2.5, 0, 0]][:n_atoms]
     )
     if weight is not None:
         atoms.info[uqc.UQ_WEIGHT] = weight
@@ -46,8 +46,8 @@ def _atoms(symbols="CuCu", weight=None) -> Atoms:
 
 def test_the_builder_gives_every_atom_the_weight_of_its_structure_or_one():
     builder = fe.PerAtomWeightBuilder()
-    plain = builder.extract_from_ase_atoms(_atoms("CuCuCu"))
-    weighted = builder.extract_from_ase_atoms(_atoms("CuCuCu", weight=2.5))
+    plain = builder.extract_from_ase_atoms(_atoms(3))
+    weighted = builder.extract_from_ase_atoms(_atoms(3, weight=2.5))
     np.testing.assert_array_equal(plain[uqc.UQ_WEIGHT], [1.0, 1.0, 1.0])
     np.testing.assert_array_equal(weighted[uqc.UQ_WEIGHT], [2.5, 2.5, 2.5])
     assert weighted[uqc.UQ_WEIGHT].dtype == np.float64
@@ -56,17 +56,17 @@ def test_the_builder_gives_every_atom_the_weight_of_its_structure_or_one():
 def test_a_weight_given_as_an_integer_or_a_string_becomes_a_float():
     builder = fe.PerAtomWeightBuilder()
     assert (
-        builder.extract_from_ase_atoms(_atoms("CuCu", weight=3))[uqc.UQ_WEIGHT].dtype
+        builder.extract_from_ase_atoms(_atoms(2, weight=3))[uqc.UQ_WEIGHT].dtype
         == np.float64
     )
     np.testing.assert_array_equal(
-        builder.extract_from_ase_atoms(_atoms("CuCu", weight="4"))[uqc.UQ_WEIGHT],
+        builder.extract_from_ase_atoms(_atoms(2, weight="4"))[uqc.UQ_WEIGHT],
         [4.0, 4.0],
     )
 
 
 def test_a_row_is_read_through_its_atoms_object():
-    row = {"ase_atoms": _atoms("CuCu", weight=0.5)}
+    row = {"ase_atoms": _atoms(2, weight=0.5)}
     np.testing.assert_array_equal(
         fe.PerAtomWeightBuilder().extract_from_row(row)[uqc.UQ_WEIGHT], [0.5, 0.5]
     )
@@ -125,7 +125,7 @@ def test_a_duration_is_written_as_hours_minutes_and_seconds_without_empty_leadin
 def test_a_progress_line_shows_percent_count_elapsed_time_and_the_remaining_time(
     monkeypatch, capsys
 ):
-    monkeypatch.setattr(fe.time, "time", _Clock(100.0, 110.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(100.0, 110.0)))
     printer = fe.ProgressPrinter(total=100, desc="Work", unit="structs", interval=0.0)
     printer.update(25)  # clock 110: 10 s elapsed, a quarter done: 30 s to go
     assert (
@@ -135,14 +135,14 @@ def test_a_progress_line_shows_percent_count_elapsed_time_and_the_remaining_time
 
 
 def test_a_progress_line_without_a_total_shows_only_the_count(monkeypatch, capsys):
-    monkeypatch.setattr(fe.time, "time", _Clock(0.0, 61.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(0.0, 61.0)))
     printer = fe.ProgressPrinter(desc="Count", unit="batches", interval=0.0)
     printer.update(4)
     assert capsys.readouterr().out == "Count | 4 batches | elapsed 1m01s\n"
 
 
 def test_a_total_of_zero_is_treated_as_no_total(monkeypatch, capsys):
-    monkeypatch.setattr(fe.time, "time", _Clock(0.0, 5.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(0.0, 5.0)))
     fe.ProgressPrinter(total=0, desc="Z", interval=0.0).update(2)
     assert capsys.readouterr().out == "Z | 2 items | elapsed 5s\n"
 
@@ -150,7 +150,7 @@ def test_a_total_of_zero_is_treated_as_no_total(monkeypatch, capsys):
 def test_updates_inside_the_interval_print_nothing_and_the_next_one_after_it_prints(
     monkeypatch, capsys
 ):
-    monkeypatch.setattr(fe.time, "time", _Clock(0.0, 3.0, 12.0, 14.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(0.0, 3.0, 12.0, 14.0)))
     printer = fe.ProgressPrinter(total=10, desc="P", unit="u", interval=10.0)
     printer.update(
         1
@@ -165,7 +165,7 @@ def test_updates_inside_the_interval_print_nothing_and_the_next_one_after_it_pri
 
 
 def test_closing_prints_the_final_line_with_full_percent_and_done(monkeypatch, capsys):
-    monkeypatch.setattr(fe.time, "time", _Clock(0.0, 90.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(0.0, 90.0)))
     printer = fe.ProgressPrinter(total=40, desc="Fin", unit="u", interval=1e9)
     printer.update(10)  # no line: inside the interval
     capsys.readouterr()
@@ -174,14 +174,14 @@ def test_closing_prints_the_final_line_with_full_percent_and_done(monkeypatch, c
 
 
 def test_closing_without_a_total_says_done_after_the_count(monkeypatch, capsys):
-    monkeypatch.setattr(fe.time, "time", _Clock(0.0, 7.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(0.0, 7.0)))
     printer = fe.ProgressPrinter(desc="N", unit="u")
     printer.close()
     assert capsys.readouterr().out == "N | 0 u | elapsed 7s | done\n"
 
 
 def test_the_percentage_is_capped_at_one_hundred(monkeypatch, capsys):
-    monkeypatch.setattr(fe.time, "time", _Clock(0.0, 1.0))
+    monkeypatch.setattr(fe, "time", SimpleNamespace(time=_Clock(0.0, 1.0)))
     fe.ProgressPrinter(total=4, desc="C", unit="u", interval=0.0).update(9)
     assert "100% (9/4 u)" in capsys.readouterr().out
 
@@ -256,19 +256,13 @@ def test_without_an_element_map_the_features_use_the_alphabetical_one_of_all_str
         )
     )
     assert len(from_generator) == 3
+    symbols = sorted({s for a in atoms for s in a.get_chemical_symbols()})
     for (feat_a, idx_a), (feat_b, idx_b), at in zip(
         from_generator, explicit, atoms, strict=True
     ):
         assert feat_a.shape == (len(at), uq_setup["feature_dim"])
         np.testing.assert_allclose(feat_a, feat_b, rtol=ARITH.rtol, atol=ARITH.atol)
         np.testing.assert_array_equal(idx_a, idx_b)
-        symbols = sorted(
-            set(
-                functools.reduce(
-                    operator.iadd, (a.get_chemical_symbols() for a in atoms), []
-                )
-            )
-        )
         np.testing.assert_array_equal(
             idx_a, [symbols.index(s) for s in at.get_chemical_symbols()]
         )
@@ -285,14 +279,14 @@ def test_the_features_of_a_structure_are_attached_to_a_calculator_on_the_structu
 # --- the batched iterator ---
 
 
-def _batched(uq_setup, model, atoms, **kwargs):
+def _batched(uq_setup, model, atoms, verbose=False, **kwargs):
     return list(
         fe.batched_feature_iterator(
             atoms,
             model,
             element_map=uq_setup["element_map"],
             cutoff=6.0,
-            verbose=False,
+            verbose=verbose,
             **kwargs,
         )
     )
@@ -346,11 +340,14 @@ def test_the_batched_features_equal_the_per_structure_features_of_the_calculator
     np.testing.assert_allclose(
         np.sort(np.linalg.norm(batched, axis=1)),
         np.sort(np.linalg.norm(single, axis=1)),
-        rtol=1e-8,
-        atol=1e-10,
+        rtol=ARITH.rtol,
+        atol=ARITH.atol,
     )
     np.testing.assert_allclose(
-        np.sort(batched.sum(axis=1)), np.sort(single.sum(axis=1)), rtol=1e-8, atol=1e-10
+        np.sort(batched.sum(axis=1)),
+        np.sort(single.sum(axis=1)),
+        rtol=ARITH.rtol,
+        atol=ARITH.atol,
     )
 
 
@@ -375,16 +372,13 @@ def test_a_source_without_length_takes_its_size_from_the_argument_and_reports_pr
     uq_setup, feature_model, capsys
 ):
     atoms = _structures(uq_setup, n=3)
-    results = list(
-        fe.batched_feature_iterator(
-            _CountedAtoms(atoms),
-            feature_model,
-            element_map=uq_setup["element_map"],
-            cutoff=6.0,
-            verbose=True,
-            desc="Feat",
-            total_num_structures=3,
-        )
+    results = _batched(
+        uq_setup,
+        feature_model,
+        _CountedAtoms(atoms),
+        verbose=True,
+        desc="Feat",
+        total_num_structures=3,
     )
     out = capsys.readouterr().out.strip().splitlines()
     assert sum(len(f) for f, _, _ in results) == sum(len(a) for a in atoms)
@@ -398,15 +392,12 @@ def test_a_size_estimate_that_refines_is_followed_by_the_progress_report(
 ):
     atoms = _structures(uq_setup, n=2)
     estimate = _Estimate(total=2)
-    list(
-        fe.batched_feature_iterator(
-            _CountedAtoms(atoms),
-            feature_model,
-            element_map=uq_setup["element_map"],
-            cutoff=6.0,
-            verbose=True,
-            total_num_structures=estimate,
-        )
+    _batched(
+        uq_setup,
+        feature_model,
+        _CountedAtoms(atoms),
+        verbose=True,
+        total_num_structures=estimate,
     )
     assert "(2/2 structs)" in capsys.readouterr().out.splitlines()[-1]
 
@@ -547,41 +538,32 @@ def test_a_sampled_fraction_is_reproducible_with_the_seed(
         for s in (1, 1, 2)
     ]
     assert runs[0] == runs[1]
+    assert (
+        runs[0] != runs[2]
+    )  # the batches alternate in size, so another selection shows
     assert 0 < len(runs[0]) < 16  # a half, not all or none, for a fair draw
 
 
-def test_the_shard_progress_counts_batches_also_when_they_are_skipped(
-    tmp_path, feature_model, shard_batches, capsys
+@pytest.mark.parametrize(
+    ("frac", "n_read"), [(0.0, 0), (None, 2)], ids=["all_skipped", "all_read"]
+)
+def test_the_shard_progress_counts_every_batch_whether_it_is_skipped_or_read(
+    tmp_path, feature_model, shard_batches, capsys, frac, n_read
 ):
     shard = _save_shard(tmp_path / "s", shard_batches)
-    list(
+    results = list(
         fe.tf_dataset_feature_iterator(
             [shard],
             feature_model,
-            frac=0.0,
+            frac=frac,
             verbose=True,
             total_num_batches=2,
             desc="Sh",
         )
     )
-    lines = capsys.readouterr().out.strip().splitlines()
-    assert lines[-1].startswith("Sh | 100% (2/2 batches)") and lines[-1].endswith(
-        "| done"
-    )
-
-
-def test_the_shard_progress_counts_the_batches_that_are_read(
-    tmp_path, feature_model, shard_batches, capsys
-):
-    shard = _save_shard(tmp_path / "s", shard_batches)
-    results = list(
-        fe.tf_dataset_feature_iterator(
-            [shard], feature_model, verbose=True, total_num_batches=2, desc="Rd"
-        )
-    )
-    assert len(results) == 2
     last = capsys.readouterr().out.strip().splitlines()[-1]
-    assert last.startswith("Rd | 100% (2/2 batches)") and last.endswith("| done")
+    assert len(results) == n_read
+    assert last.startswith("Sh | 100% (2/2 batches)") and last.endswith("| done")
 
 
 def test_the_rows_carrying_a_weight_are_the_features_of_the_structure_that_has_it(
@@ -603,8 +585,8 @@ def test_the_rows_carrying_a_weight_are_the_features_of_the_structure_that_has_i
         np.testing.assert_allclose(
             np.sort(np.linalg.norm(rows, axis=1)),
             np.sort(np.linalg.norm(alone, axis=1)),
-            rtol=1e-8,
-            atol=1e-10,
+            rtol=ARITH.rtol,
+            atol=ARITH.atol,
         )
 
 

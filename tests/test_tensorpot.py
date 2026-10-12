@@ -47,7 +47,10 @@ from tensorpotential.tpmodel import ComputeBatchEnergyForcesVirials, ComputeEner
 
 import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
 
+from tests.shared_models import l2_regularised_variables
 from tests.tolerances import FINITE_DIFFERENCE_F64 as FD
+from tests.tolerances import FIRST_ORDER_DECREASE as FIRST_ORDER
+from tests.tolerances import LOSS_DIFFERENCE_F64 as LOSS_DIFFERENCE
 from tests.legacy_keras_checkpoint import (
     LEGACY_CHECKPOINT,
     LEGACY_EPOCH,
@@ -466,7 +469,7 @@ def _apply_step(tp: TensorPotential, step: int) -> None:
     tp.optimizer.apply_gradients(zip(grads, variables))
 
 
-def _adam_oracle(w0, grads, *, amsgrad: bool, decay: float = 0.0) -> list[np.ndarray]:
+def _adam_oracle(w0, grads, *, amsgrad: bool, decay: float = 0.0, lr: float = ADAM_LR) -> list[np.ndarray]:
     """Weights after each step of Adam: bias-corrected moments, optional amsgrad and decoupled decay.
 
     The decay acts on the weights before the step, scaled by the learning rate: ``w -> w (1 - lr wd)``.
@@ -475,11 +478,11 @@ def _adam_oracle(w0, grads, *, amsgrad: bool, decay: float = 0.0) -> list[np.nda
     m, v, v_max = np.zeros_like(w), np.zeros_like(w), np.zeros_like(w)
     out = []
     for t, g in enumerate(grads, start=1):
-        w = w - w * ADAM_LR * decay
+        w = w - w * lr * decay
         m = BETA_1 * m + (1 - BETA_1) * g
         v = BETA_2 * v + (1 - BETA_2) * g * g
         v_max = np.maximum(v_max, v)
-        alpha = ADAM_LR * np.sqrt(1 - _through_float32(BETA_2) ** t) / (1 - _through_float32(BETA_1) ** t)
+        alpha = lr * np.sqrt(1 - _through_float32(BETA_2) ** t) / (1 - _through_float32(BETA_1) ** t)
         w = w - alpha * m / (np.sqrt(v_max if amsgrad else v) + EPSILON)
         out.append(w)
     return out
@@ -1079,6 +1082,13 @@ def _call(function: Any, *arguments):
     return function(*arguments)
 
 
+def _assert_components(result, components, phase: str, scale: float = 1.0) -> None:
+    """Each ``loss_component/<name>/<phase>`` entry of a step equals the component of ``model_grad`` times ``scale``."""
+    for name, value in components.items():
+        found = float(result[f"loss_component/{name}/{phase}"])
+        assert found == pytest.approx(scale * float(value), rel=ARITH.rtol)
+
+
 def _total_loss(tp: TensorPotential, batch) -> float:
     return float(_model_grad(tp, batch)[0])
 
@@ -1086,14 +1096,6 @@ def _total_loss(tp: TensorPotential, batch) -> float:
 def _set_weights(tp: TensorPotential, values) -> None:
     for variable, value in zip(tp.model.variables_to_train, values, strict=True):
         variable.assign(value)
-
-
-def _first_adam_step(w0, gradient, lr: float) -> np.ndarray:
-    """One bias-corrected Adam step from zero moments, with the beta powers rounded through float32."""
-    m = (1 - BETA_1) * gradient
-    v = (1 - BETA_2) * gradient**2
-    alpha = lr * np.sqrt(1 - _through_float32(BETA_2)) / (1 - _through_float32(BETA_1))
-    return w0 - alpha * m / (np.sqrt(v) + EPSILON)
 
 
 def test_the_predict_signatures_hold_the_model_and_metric_inputs_but_not_the_loss_inputs():
@@ -1130,12 +1132,12 @@ def test_model_grad_returns_loss_predictions_gradients_and_the_components_per_ba
     assert [g.shape for g in gradients] == [v.shape for v in tp.model.variables_to_train]
     assert set(components) == {"energy", "forces", "virial"}
     # the total is the sum of the components before the division by the batch size
-    assert float(total) == pytest.approx(GLOBAL_BATCH_SIZE * sum(float(v) for v in components.values()), rel=1e-12)
+    assert float(total) == pytest.approx(GLOBAL_BATCH_SIZE * sum(float(v) for v in components.values()), rel=ARITH.rtol)
     # the energy term from its formula, with the predictions of the same call
     weight = batch[constants.DATA_ENERGY_WEIGHTS].numpy()
     residual = predictions[constants.PREDICT_TOTAL_ENERGY].numpy() - batch[constants.DATA_REFERENCE_ENERGY].numpy()
     expected = np.sum(weight * residual**2) / np.sum(weight) / GLOBAL_BATCH_SIZE
-    assert float(components["energy"]) == pytest.approx(expected, rel=1e-12)
+    assert float(components["energy"]) == pytest.approx(expected, rel=ARITH.rtol)
 
 
 def _directional_derivative_check(tp: TensorPotential, batch) -> tuple[float, float]:
@@ -1170,19 +1172,12 @@ def test_the_loss_can_be_divided_by_the_batch_size_once_more():
     batch = _training_batch()
     plain = float(_model_grad(tp, batch)[0])
     tp.loss_norm_by_batch_size = True
-    assert float(_model_grad(tp, batch)[0]) == pytest.approx(plain / GLOBAL_BATCH_SIZE, rel=1e-12)
+    assert float(_model_grad(tp, batch)[0]) == pytest.approx(plain / GLOBAL_BATCH_SIZE, rel=ARITH.rtol)
 
 
 def _l2_sum(tp: TensorPotential) -> float:
     """Sum of squares of the variables that every L2-regularised instruction owns, by hand."""
-    from tensorpotential.tpmodel import to_instructions_list
-
-    return sum(
-        float(np.sum(v.numpy() ** 2))
-        for instruction in to_instructions_list(tp.model.instructions)
-        if hasattr(instruction, "compute_l2_regularization_loss")
-        for v in instruction.trainable_variables
-    )
+    return sum(float(np.sum(v.numpy() ** 2)) for v in l2_regularised_variables(tp.model.instructions))
 
 
 def test_a_regularisation_loss_adds_its_weighted_l2_sum_to_the_total_and_to_the_gradient():
@@ -1193,7 +1188,7 @@ def test_a_regularisation_loss_adds_its_weighted_l2_sum_to_the_total_and_to_the_
     cast(Any, tp).regularization_loss = None
     without = float(_model_grad(tp, batch)[0])
 
-    assert with_l2 - without == pytest.approx(L2_WEIGHT * _l2_sum(tp), rel=1e-6)
+    assert with_l2 - without == pytest.approx(L2_WEIGHT * _l2_sum(tp), rel=LOSS_DIFFERENCE.rtol)
     np.testing.assert_allclose(numeric, analytic, rtol=FD.rtol, atol=FD.atol)
 
 
@@ -1207,11 +1202,10 @@ def test_one_train_step_applies_the_first_adam_step_of_the_gradient_it_reports()
 
     for variable, w0, gradient in zip(tp.model.variables_to_train, start, gradients, strict=True):
         np.testing.assert_allclose(
-            variable.numpy(), _first_adam_step(w0, gradient.numpy(), TRAIN_LR), rtol=1e-9, atol=1e-12
+            variable.numpy(), _adam_oracle(w0, [gradient.numpy()], amsgrad=False, lr=TRAIN_LR)[0], rtol=ARITH.rtol, atol=ARITH.atol
         )
-    assert float(result["total_loss/train"]) == pytest.approx(float(total), rel=1e-12)
-    for name, value in components.items():
-        assert float(result[f"loss_component/{name}/train"]) == pytest.approx(float(value), rel=1e-12)
+    assert float(result["total_loss/train"]) == pytest.approx(float(total), rel=ARITH.rtol)
+    _assert_components(result, components, "train")
     assert {"abs/de/per_struct", "sqr/f_comp/per_struct", "abs/virial/per_struct"} <= set(result)
 
 
@@ -1225,7 +1219,7 @@ def test_one_train_step_lowers_the_loss_by_the_first_order_amount():
     # Adam's first step moves every weight by about the learning rate against the sign of its gradient
     first_order = TRAIN_LR * sum(float(tf.reduce_sum(tf.abs(g))) for g in gradients)
     assert after < before
-    assert before - after == pytest.approx(first_order, rel=1e-2)
+    assert before - after == pytest.approx(first_order, rel=FIRST_ORDER.rtol)
 
 
 def test_a_test_step_reports_the_loss_at_the_test_batch_size_and_leaves_the_weights_alone():
@@ -1238,12 +1232,11 @@ def test_a_test_step_reports_the_loss_at_the_test_batch_size_and_leaves_the_weig
 
     np.testing.assert_array_equal(_weights(tp), start)
     # model_grad divides by the batch size of 2, the test step by 4
-    assert float(result["total_loss/test"]) == pytest.approx(float(total), rel=1e-12)
-    for name, value in components.items():
-        assert float(result[f"loss_component/{name}/test"]) == pytest.approx(float(value) / 2, rel=1e-12)
+    assert float(result["total_loss/test"]) == pytest.approx(float(total), rel=ARITH.rtol)
+    _assert_components(result, components, "test", scale=0.5)
     assert "abs/depa/per_struct" in result
     tp.loss_norm_by_batch_size = True
-    assert float(tp.test_step(batch)["total_loss/test"]) == pytest.approx(float(total) / 4, rel=1e-12)
+    assert float(tp.test_step(batch)["total_loss/test"]) == pytest.approx(float(total) / 4, rel=ARITH.rtol)
 
 
 def test_a_bfgs_step_reports_the_flat_gradient_and_leaves_the_weights_alone():
@@ -1256,9 +1249,8 @@ def test_a_bfgs_step_reports_the_flat_gradient_and_leaves_the_weights_alone():
 
     np.testing.assert_array_equal(_weights(tp), start)
     np.testing.assert_array_equal(result["total_jac"].numpy(), _flat(g.numpy() for g in gradients))
-    assert float(result["total_loss/train"]) == pytest.approx(float(total), rel=1e-12)
-    for name, value in components.items():
-        assert float(result[f"loss_component/{name}/train"]) == pytest.approx(float(value), rel=1e-12)
+    assert float(result["total_loss/train"]) == pytest.approx(float(total), rel=ARITH.rtol)
+    _assert_components(result, components, "train")
     assert "abs/de/per_struct" in result
 
 
@@ -1276,11 +1268,11 @@ def test_the_distributed_steps_of_the_default_strategy_take_one_batch_or_a_list_
     bfgs = _call(tp.distributed_bfgs_train_step, [batch])
 
     for result in tests:
-        assert float(result["total_loss/test"]) == pytest.approx(total, rel=1e-12)
+        assert float(result["total_loss/test"]) == pytest.approx(total, rel=ARITH.rtol)
     for result in trains:
-        assert float(result["total_loss/train"]) == pytest.approx(total, rel=1e-12)
+        assert float(result["total_loss/train"]) == pytest.approx(total, rel=ARITH.rtol)
     assert bfgs["total_jac"].shape[0] == sum(int(np.prod(v.shape)) for v in start)
-    assert float(bfgs["total_loss/train"]) == pytest.approx(total, rel=1e-12)
+    assert float(bfgs["total_loss/train"]) == pytest.approx(total, rel=ARITH.rtol)
 
 
 def test_the_distributed_bfgs_step_needs_a_list_of_batches():
@@ -1428,7 +1420,9 @@ def test_a_failure_while_saving_with_aux_computes_falls_back_to_the_standard_mod
 
 def test_a_failure_while_saving_with_a_uq_model_is_raised_instead_of_falling_back(tmp_path):
     tp = _tp()
-    with pytest.raises(Exception):  # noqa: B017  (the type is the one the failing split raises)
+    # the split fails on the unknown key before the UQ model is touched (an object stands in for it); without a
+    # UQ model the same call falls back to the standard save (test above)
+    with pytest.raises(KeyError, match="no_such_key_1"):
         tp.save_model_with_aux_computes(
             exact_path=str(tmp_path / "aux"),
             communicated_keys=["no_such_key_1", "no_such_key_2"],
