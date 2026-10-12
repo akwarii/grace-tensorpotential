@@ -15,10 +15,13 @@ while a lot of covered code is added next to it. Together they fail exactly the 
 untested code without improving the share. The lower share of an accepted file becomes the new
 baseline at the next ``record``, so the uncovered count can only go down from there.
 
+``--moved OLD NEW`` (repeatable) says that a file moved: the baseline entry of ``OLD`` is read as the
+entry of ``NEW``, so a move neither resets the file nor hides a fall at the new path.
+
 Usage::
 
-    python tools/coverage_ratchet.py record COVERAGE_JSON [--baseline FILE] [--allow-fall]
-    python tools/coverage_ratchet.py check COVERAGE_JSON [--baseline FILE] [--tolerance PP]
+    python tools/coverage_ratchet.py record COVERAGE_JSON [--baseline FILE] [--allow-fall] [--moved OLD NEW]
+    python tools/coverage_ratchet.py check COVERAGE_JSON [--baseline FILE] [--tolerance PP] [--moved OLD NEW]
 
 ``COVERAGE_JSON`` is a coverage.py report (``--cov-report=json``) made with ``--cov-branch`` over
 the whole suite. ``--tolerance`` is in percentage points (default 0: coverage of lines does not
@@ -32,6 +35,8 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
+from ratchet_moves import parse_moves, rekey
 
 BASELINE = Path("baselines/coverage_baseline.json")
 
@@ -94,9 +99,19 @@ def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def check(report: dict, baseline: Path, tolerance: float = 0.0) -> int:
+def _baseline_files(baseline: Path, moves: dict[str, str] | None) -> Counts:
+    """Per-file counts of the baseline, with the moved files under their new paths (ValueError on a clash)."""
+    return rekey(_load(baseline)["files"], moves or {})
+
+
+def check(
+    report: dict,
+    baseline: Path,
+    tolerance: float = 0.0,
+    moves: dict[str, str] | None = None,
+) -> int:
     """Print the files that broke the ratchet; return 1 if there are any."""
-    base = _load(baseline)["files"]
+    base = _baseline_files(baseline, moves)
     now = counts_from_report(report)
     problems = falls(base, now, tolerance)
     gone = sorted(set(base) - set(now))
@@ -109,11 +124,17 @@ def check(report: dict, baseline: Path, tolerance: float = 0.0) -> int:
     return 1 if problems else 0
 
 
-def record(report: dict, baseline: Path, *, allow_fall: bool = False) -> int:
+def record(
+    report: dict,
+    baseline: Path,
+    moves: dict[str, str] | None = None,
+    *,
+    allow_fall: bool = False,
+) -> int:
     """Write the baseline from ``report``; refuse a fall unless ``allow_fall``."""
     now = counts_from_report(report)
     if baseline.is_file() and not allow_fall:
-        problems = falls(_load(baseline)["files"], now)
+        problems = falls(_baseline_files(baseline, moves), now)
         if problems:
             sys.stdout.write(
                 "refusing to record a fall (use --allow-fall):\n"
@@ -144,13 +165,18 @@ def main(argv: list[str] | None = None) -> int:
         "--tolerance", type=float, default=0.0, help="percentage points"
     )
     parser.add_argument("--allow-fall", action="store_true")
+    parser.add_argument(
+        "--moved", nargs=2, action="append", default=[], metavar=("OLD", "NEW"),
+        help="a file moved from OLD to NEW; its baseline entry follows it",
+    )  # fmt: skip
     args = parser.parse_args(argv)
     try:
+        moves = parse_moves(args.moved)
         report = json.loads(args.coverage.read_text(encoding="utf-8"))
         if args.command == "record":
-            return record(report, args.baseline, allow_fall=args.allow_fall)
-        return check(report, args.baseline, args.tolerance)
-    except (RatchetError, OSError, json.JSONDecodeError, KeyError) as err:
+            return record(report, args.baseline, moves, allow_fall=args.allow_fall)
+        return check(report, args.baseline, args.tolerance, moves)
+    except (RatchetError, OSError, json.JSONDecodeError, KeyError, ValueError) as err:
         sys.stderr.write(f"coverage_ratchet: {err}\n")
         return 2
 

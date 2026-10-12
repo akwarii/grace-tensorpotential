@@ -58,6 +58,13 @@ Background: the `Decisions` issue.
 """
 
 
+def find(pattern, text):
+    """The match of `pattern` in `text`; a miss is a bug of the fake, not of the tool."""
+    m = re.search(pattern, text)
+    assert m, f"{pattern} not found in {text}"
+    return m
+
+
 class FakeGH:
     """In-memory stand-in for the `gh` calls of board.py."""
 
@@ -145,6 +152,10 @@ class FakeGH:
         self.page_size = 100  # items per page of the table query
         self.remaining = 4990  # what the rate-limit fields of the fake report
         self.draft_items = 0  # table rows that are not issues
+        self.extra_fields = False  # whether the project has Stage, Runs on, Priority, Upstream, Kind and Days
+        self.item_fields = {}  # (item key, field name) -> value written by `create`
+        self.blocked = []  # (issue number, blocking issue number) relations added
+        self.labels = {}  # issue number -> labels given at creation
         self.options = {
             "opt-todo": "Todo",
             "opt-prog": "In Progress",
@@ -190,6 +201,66 @@ class FakeGH:
         data = {"rateLimit": self.rate(cost=1), "node": {"items": page}}
         return json.dumps({"data": data})
 
+    def field_list(self):
+        """Answer `gh project field-list`."""
+        options = [{"name": n, "id": i} for i, n in self.options.items()]
+        fields = [
+            {"name": "Title", "id": "f0"},
+            {"name": "Status", "id": "fs", "options": options},
+        ]
+        if self.extra_fields:
+            select = lambda n, names: {"name": n, "id": f"f-{n}", "options": [{"name": x, "id": f"o-{n}-{x}"} for x in names]}  # noqa: E731
+            fields += [
+                select("Stage", [str(k) for k in range(9)]),
+                select("Runs on", ["local", "HPC", "GPU", "user"]),
+                select("Priority", ["P0", "P1", "P2", "P3", "gate"]),
+                select("Upstream", ["none", "candidate"]),
+                select("Kind", ["milestone", "gate"]),
+                {"name": "Days", "id": "f-Days"},
+            ]
+        if self.text_fields:
+            fields += [
+                {"name": "Blocked by", "id": "fb"},
+                {"name": "PR", "id": "fp"},
+            ]
+        return json.dumps({"fields": fields})
+
+    def graphql(self, args):
+        """Answer one `gh api graphql` call."""
+        query = args[3]
+        if "items(first" in query:
+            return self.items_page(args)
+        if "rateLimit" in query:
+            return json.dumps({"data": {"rateLimit": self.rate(cost=1)}})
+        if "$field" in query:  # a text cell: set, or cleared when there is no $text
+            kv = dict(a.split("=", 1) for a in args[3::2])
+            key = kv["item"].removeprefix("item-")
+            column = {"fb": "Blocked by", "fp": "PR"}[kv["field"]]
+            if "$text" in query:
+                self.text[key, column] = kv["text"]
+            else:
+                self.text.pop((key, column), None)
+            self.cell_writes += 1
+            return ""
+        if "addBlockedBy" in query:
+            issue, blocking = find(r'issueId: "node-(\d+)", blockingIssueId: "node-(\d+)"', query).groups()
+            self.blocked.append((int(issue), int(blocking)))
+            return ""
+        if "repository(owner" in query:
+            nodes = {f"n{n}": {"id": f"node-{n}"} for n in re.findall(r"n(\d+): issue", query)}
+            return json.dumps({"data": {"repository": nodes}})
+        field_match = re.search(r'fieldId:"([^"]+)"', query)
+        if field_match and field_match.group(1) != "fs":
+            key = find(r'itemId:"item-([^"]+)"', query).group(1)
+            number, option = find(r'value:\{(?:number:([\d.]+)|singleSelectOptionId:"o-[^-]+(?: on)?-([^"]+)")', query).groups()
+            self.item_fields[key, field_match.group(1).removeprefix("f-")] = number or option
+            return ""
+        item_match = re.search(r'itemId:"item-([^"]+)"', query)
+        option_match = re.search(r'singleSelectOptionId:"([^"]+)"', query)
+        assert item_match and option_match
+        self.status[item_match.group(1)] = self.options[option_match.group(1)]
+        return ""
+
     def __call__(self, *args):
         self.calls.append(args)
         head = args[:2]
@@ -206,8 +277,21 @@ class FakeGH:
         if head == ("issue", "close"):
             self.closed.append(int(args[2]))
             return ""
+        if head == ("issue", "create"):
+            number = max(int(i["number"]) for i in self.issues) + 1
+            title = args[args.index("--title") + 1]
+            self.issues.append({"number": number, "title": title, "state": "OPEN", "body": args[args.index("--body") + 1]})
+            self.labels[number] = [args[k + 1] for k, a in enumerate(args) if a == "--label"]
+            return f"https://github.com/akwarii/grace-tensorpotential/issues/{number}"
+        if head == ("issue", "view") and "--json" in args:
+            return self.issue(int(args[2]))["body"]
         if head == ("issue", "view"):
             return f"issue {args[2]} with comments"
+        if head == ("project", "item-add"):
+            number = int(args[args.index("--url") + 1].rsplit("/", 1)[1])
+            key = board.item_id_of(self.issue(number)["title"])
+            self.status[key] = "Todo"
+            return json.dumps({"id": f"item-{key}"})
         if head == ("project", "list"):
             return json.dumps({
                 "projects": [
@@ -216,38 +300,9 @@ class FakeGH:
                 ]
             })
         if head == ("project", "field-list"):
-            options = [{"name": n, "id": i} for i, n in self.options.items()]
-            fields = [
-                {"name": "Title", "id": "f0"},
-                {"name": "Status", "id": "fs", "options": options},
-            ]
-            if self.text_fields:
-                fields += [
-                    {"name": "Blocked by", "id": "fb"},
-                    {"name": "PR", "id": "fp"},
-                ]
-            return json.dumps({"fields": fields})
+            return self.field_list()
         if head == ("api", "graphql"):
-            query = args[3]
-            if "items(first" in query:
-                return self.items_page(args)
-            if "rateLimit" in query:
-                return json.dumps({"data": {"rateLimit": self.rate(cost=1)}})
-            if "$field" in query:  # a text cell: set, or cleared when there is no $text
-                kv = dict(a.split("=", 1) for a in args[3::2])
-                key = kv["item"].removeprefix("item-")
-                column = {"fb": "Blocked by", "fp": "PR"}[kv["field"]]
-                if "$text" in query:
-                    self.text[key, column] = kv["text"]
-                else:
-                    self.text.pop((key, column), None)
-                self.cell_writes += 1
-                return ""
-            item_match = re.search(r'itemId:"item-([^"]+)"', query)
-            option_match = re.search(r'singleSelectOptionId:"([^"]+)"', query)
-            assert item_match and option_match
-            self.status[item_match.group(1)] = self.options[option_match.group(1)]
-            return ""
+            return self.graphql(args)
         if head == ("pr", "list"):
             state = args[args.index("--state") + 1]
             if state == "merged":
@@ -1215,3 +1270,227 @@ def test_other_failures_do_not_query_the_rate_limit(monkeypatch):
     with pytest.raises(SystemExit, match="boom"):
         board.gh("issue", "list")
     assert len(seen) == 1
+
+
+# ---------------------------------------------------------------- create
+
+
+def new_body(deps="#3, #2", blocks="none", extra="", refs="Refs #<this issue>"):
+    return f"""**Depends on:** {deps} · **Blocks:** {blocks} · **Related:** none
+
+## Context
+
+- Stage 0: Cleanup
+- Estimate: 2.5 focused days
+- Priority: P3 (no score)
+- Runs on: local
+
+## Work
+
+Do the work.{extra}
+
+## Exit criterion
+
+It works.
+
+## Out of scope
+
+- The Work of any other issue.
+
+## Decisions it depends on
+
+None specific to this issue.
+
+## Definition of Done
+
+Tick each box with the evidence (`python tools/board.py check NEW1 <n> --note ...`).
+
+- [ ] Exit criterion met
+- [ ] A pull request referencing this issue (`{refs}`) is merged into `torch-backend`
+
+---
+Background: the `Decisions` issue.
+"""
+
+
+@pytest.fixture
+def full(fake):
+    """The fake with every column `create` writes: the select fields, Days and the two text columns."""
+    fake.extra_fields = True
+    fake.text_fields = True
+    return fake
+
+
+def create_args(tmp_path, body, **kw):
+    path = tmp_path / "body.md"
+    path.write_text(body)
+    opts = {"id": "QUAL4", "title": "Tidy things", "body": str(path), "stage": "0", "days": 2.5, "priority": "P3", "runs_on": "local",
+            "kind": "milestone", "upstream": "none", "label": None, "no_mirror": False, "yes": False}
+    return ns(**{**opts, **kw})
+
+
+def test_depends_numbers_reads_only_the_depends_part_of_the_first_line():
+    assert board.depends_numbers(new_body(deps="#3, #2")) == [3, 2]
+    assert board.depends_numbers("**Depends on:** none · **Blocks:** #9 · **Related:** #8\n") == []
+    assert board.depends_numbers("no dependency line") == []
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("**Depends on:** #1 · **Blocks:** none · **Related:** none", "**Depends on:** #1 · **Blocks:** #7 · **Related:** none"),
+        ("**Depends on:** #1 · **Blocks:** #4, #5 · **Related:** #2", "**Depends on:** #1 · **Blocks:** #4, #5, #7 · **Related:** #2"),
+        ("**Depends on:** #1 · **Blocks:** #7 · **Related:** none", "**Depends on:** #1 · **Blocks:** #7 · **Related:** none"),
+        ("something else", "something else"),
+    ],
+)
+def test_with_block_adds_the_number_once(line, expected):
+    assert board.with_block(line, 7) == expected
+
+
+def test_a_prefix_of_a_longer_number_is_not_taken_for_the_number_in_blocks():
+    line = "**Depends on:** #1 · **Blocks:** #70 · **Related:** none"
+    assert board.with_block(line, 7).endswith("**Blocks:** #70, #7 · **Related:** none")
+
+
+@pytest.mark.parametrize(
+    ("body", "item_id", "expected"),
+    [
+        (new_body(), "lower1", "is not an id"),
+        (new_body(), "CLEAN1", "already used"),
+        (new_body(), "M0.1", "is not an id"),
+        ("no dependency line\n\n## Context\n", "NEW1", "first line must be"),
+        (new_body(deps="#3, #99"), "NEW1", "#99 on the depends line is not an issue"),
+        (new_body().replace("## Exit criterion\n\nIt works.\n\n", ""), "NEW1", "section 'Exit criterion' is missing"),
+        (new_body(refs="Refs #5"), "NEW1", "Refs #<this issue>"),
+        (new_body(extra=" See <the other thing> here."), "NEW1", "placeholder left in the text: <the other thing>"),
+    ],
+)
+def test_check_new_issue_names_each_problem(body, item_id, expected, fake):
+    problems = board.check_new_issue(item_id, body, board.issues())
+    assert any(expected in p for p in problems), problems
+
+
+def test_check_new_issue_accepts_the_template_and_ignores_code_span_placeholders(fake):
+    assert board.check_new_issue("NEW1", new_body(), board.issues()) == []
+    assert board.check_new_issue("GATE-NEW", new_body(), board.issues()) == []
+
+
+def test_create_without_yes_is_a_dry_run_that_writes_nothing(fake, tmp_path, capsys):
+    board.cmd_create(create_args(tmp_path, new_body()))
+    out = capsys.readouterr().out
+    assert "dry run: would create QUAL4 — Tidy things" in out
+    assert "add --yes" in out
+    assert not [c for c in fake.calls if c[:2] in (("issue", "create"), ("issue", "edit"), ("project", "item-add"))]
+
+
+def test_create_refuses_a_body_with_problems_and_creates_nothing(fake, tmp_path, capsys):
+    with pytest.raises(SystemExit, match="nothing was created"):
+        board.cmd_create(create_args(tmp_path, new_body(deps="#3, #99"), yes=True))
+    assert "CREATE " in capsys.readouterr().out
+    assert not [c for c in fake.calls if c[:2] == ("issue", "create")]
+
+
+def test_create_makes_the_issue_puts_it_on_the_board_and_wires_the_dependencies(full, tmp_path, capsys):
+    fake = full
+    fake.issue(3)["body"] = issue_body("#2", 60, "#4", legacy="M0.2")
+    fake.issue(2)["state"] = "CLOSED"  # a closed dependency still blocks (the relation), but its Blocks line is not edited
+    before_2 = fake.issue(2)["body"]
+    board.cmd_create(create_args(tmp_path, new_body(extra=" Mail a.b@example.org."), yes=True, label=["extra"], days=2.5))
+    created = fake.issue(7)
+    assert created["title"] == "QUAL4 — Tidy things"
+    assert "Refs #7" in created["body"]
+    assert "<this issue>" not in created["body"]
+    assert "<email>" in created["body"]  # sanitised before it is posted
+    assert fake.labels[7] == ["stage:0", "P3", "extra"]
+    assert fake.status["QUAL4"] == "Todo"
+    assert {k[1]: v for k, v in fake.item_fields.items() if k[0] == "QUAL4"} == {
+        "Stage": "0", "Runs on": "local", "Priority": "P3", "Upstream": "none", "Kind": "milestone", "Days": "2.5"}
+    assert sorted(fake.blocked) == [(7, 2), (7, 3)]
+    assert fake.issue(3)["body"].split("\n")[0] == "**Depends on:** #2 · **Blocks:** #4, #7 · **Related:** none"
+    assert fake.issue(2)["body"] == before_2
+    assert "#7 is on the board" in capsys.readouterr().out
+
+
+def test_create_with_no_mirror_leaves_the_blocking_issues_alone(full, tmp_path):
+    fake = full
+    before = fake.issue(3)["body"]
+    board.cmd_create(create_args(tmp_path, new_body(deps="#3"), yes=True, no_mirror=True))
+    assert fake.issue(3)["body"] == before
+    assert fake.blocked == [(7, 3)]
+
+
+def test_create_without_dependencies_adds_no_relation(full, tmp_path):
+    fake = full
+    board.cmd_create(create_args(tmp_path, new_body(deps="none"), yes=True))
+    assert fake.blocked == []
+
+
+def test_set_field_refuses_an_option_the_project_does_not_have(full):
+    with pytest.raises(SystemExit, match="has no option 'P9'"):
+        board.set_field("item-X", "Priority", "P9")
+
+
+def test_create_is_reachable_from_the_command_line(fake, tmp_path, monkeypatch, capsys):
+    path = tmp_path / "b.md"
+    path.write_text(new_body())
+    monkeypatch.setattr(sys, "argv", ["board.py", "create", "QUAL4", "Tidy", "--body", str(path), "--stage", "0", "--days", "2.5"])
+    board.main()
+    assert "dry run" in capsys.readouterr().out
+
+
+def test_set_field_refuses_a_column_the_project_does_not_have(fake):
+    with pytest.raises(SystemExit, match="no 'Stage' column"):
+        board.set_field("item-X", "Stage", "0")
+
+
+def test_check_new_issue_rejects_left_over_template_comments_and_comment_only_sections(fake):
+    body = new_body().replace("It works.", "<!-- say how it is finished -->")
+    problems = board.check_new_issue("NEW1", body, board.issues())
+    assert any("template comments are still present" in p for p in problems)
+    assert any("section 'Exit criterion' is missing or empty" in p for p in problems)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        ("- Estimate: 2.5 focused days", "- Estimate: 4 focused days", "days 4 but the option says 2.5"),
+        ("- Stage 0: Cleanup", "- Stage 1: Ground truth", "stage 1 but the option says 0"),
+        ("- Priority: P3 (no score)", "- Priority: P1 (no score)", "priority P1 but the option says P3"),
+        ("- Runs on: local", "- Runs on: HPC", "runs on HPC but the option says local"),
+    ],
+)
+def test_the_context_lines_must_agree_with_the_options(old, new, expected, fake, tmp_path, capsys):
+    with pytest.raises(SystemExit, match="nothing was created"):
+        board.cmd_create(create_args(tmp_path, new_body().replace(old, new), yes=True))
+    assert expected in capsys.readouterr().out
+
+
+def test_a_context_without_those_lines_is_not_compared():
+    assert board.check_context("## Context\n\n- nothing here\n", {"stage": "0", "days": "1", "priority": "P3", "runs on": "local"}) == []
+
+
+def test_a_failed_board_setup_names_the_recovery_and_leaves_the_issue(fake, tmp_path, capsys):
+    # the fake project lacks the Stage column: set_field stops after the issue exists
+    with pytest.raises(SystemExit, match="no 'Stage' column"):
+        board.cmd_create(create_args(tmp_path, new_body(), yes=True))
+    assert fake.issue(7)["title"] == "QUAL4 — Tidy things"
+    assert "exists but its board setup failed" in capsys.readouterr().err
+
+
+def test_set_status_still_refreshes_the_options_when_one_was_added(fake):
+    board.reset_cache()
+    board.project_meta()
+    fake.options["opt-new"] = "In Review"
+    board.STATUSES.append("In Review")
+    try:
+        board.set_status("CLEAN1", "In Review")
+    finally:
+        board.STATUSES.remove("In Review")
+    assert fake.status["CLEAN1"] == "In Review"
+
+
+def test_an_estimate_is_compared_as_a_number_not_as_text(fake, tmp_path, capsys):
+    body = new_body().replace("- Estimate: 2.5 focused days", "- Estimate: 2 focused days")
+    board.cmd_create(create_args(tmp_path, body, days=2.0))
+    assert "dry run" in capsys.readouterr().out

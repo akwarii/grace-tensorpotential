@@ -310,3 +310,64 @@ def test_field_names_match_what_coverage_py_writes(tmp_path):
     counts = cr.counts_from_report(json.loads((tmp_path / "cov.json").read_text()))
     # m.py: def, if, return 1, return 2 = 4 statements, 2 branches; run with f(1): 3 + 1 executed
     assert counts["m.py"] == {"covered": 4, "total": 6}
+
+
+# --- moved files ---------------------------------------------------------------------------------
+
+
+def test_a_moved_file_keeps_its_baseline_and_is_not_reported_gone(tmp_path, capsys):
+    baseline = record_baseline(tmp_path, report({"old/a.py": (80, 100, 0, 0)}))
+    capsys.readouterr()
+    now = write(tmp_path, "c1.json", report({"new/a.py": (80, 100, 0, 0)}))
+    args = ["check", str(now), "--baseline", str(baseline)]
+    assert cr.main([*args, "--moved", "old/a.py", "new/a.py"]) == 0
+    out = capsys.readouterr().out
+    assert "0 fell, 0 gone, 0 new" in out
+    assert cr.main(args) == 0  # without the option the file is only gone and new
+    assert "gone: old/a.py" in capsys.readouterr().out
+
+
+def test_a_fall_of_a_moved_file_is_refused_at_its_new_path(tmp_path, capsys):
+    baseline = record_baseline(tmp_path, report({"old/a.py": (80, 100, 0, 0)}))
+    capsys.readouterr()
+    now = write(tmp_path, "c1.json", report({"new/a.py": (70, 100, 0, 0)}))
+    args = ["check", str(now), "--baseline", str(baseline)]
+    assert cr.main([*args, "--moved", "old/a.py", "new/a.py"]) == 1
+    assert "fell: new/a.py 80.00% -> 70.00%, uncovered 20 -> 30" in capsys.readouterr().out
+    assert cr.main(args) == 0  # unmoved, the new path has no baseline to fall from
+
+
+def test_record_with_moved_writes_the_new_path_and_drops_the_old(tmp_path):
+    baseline = record_baseline(tmp_path, report({"old/a.py": (80, 100, 0, 0)}))
+    now = write(tmp_path, "c1.json", report({"new/a.py": (80, 100, 0, 0)}))
+    args = ["record", str(now), "--baseline", str(baseline)]
+    assert cr.main([*args, "--moved", "old/a.py", "new/a.py"]) == 0
+    assert set(json.loads(baseline.read_text())["files"]) == {"new/a.py"}
+
+
+def test_record_with_moved_refuses_a_fall_of_the_moved_file(tmp_path, capsys):
+    baseline = record_baseline(tmp_path, report({"old/a.py": (80, 100, 0, 0)}))
+    before = baseline.read_text()
+    now = write(tmp_path, "c1.json", report({"new/a.py": (70, 100, 0, 0)}))
+    capsys.readouterr()
+    args = ["record", str(now), "--baseline", str(baseline)]
+    assert cr.main([*args, "--moved", "old/a.py", "new/a.py"]) == 1
+    assert "refusing to record a fall" in capsys.readouterr().out
+    assert baseline.read_text() == before
+
+
+def test_moved_onto_a_file_that_has_its_own_baseline_is_an_error(tmp_path, capsys):
+    baseline = record_baseline(
+        tmp_path, report({"a.py": (8, 10, 0, 0), "b.py": (5, 5, 0, 0)})
+    )
+    capsys.readouterr()
+    now = write(tmp_path, "c1.json", report({"b.py": (5, 5, 0, 0)}))
+    args = ["check", str(now), "--baseline", str(baseline)]
+    assert cr.main([*args, "--moved", "a.py", "b.py"]) == 2
+    assert "b.py would hold two" in capsys.readouterr().err
+
+
+def test_a_move_onto_itself_is_an_error(tmp_path, capsys):
+    cov = write(tmp_path, "cov.json", BASE)
+    assert cr.main(["check", str(cov), "--moved", "a.py", "a.py"]) == 2
+    assert "the same" in capsys.readouterr().err
