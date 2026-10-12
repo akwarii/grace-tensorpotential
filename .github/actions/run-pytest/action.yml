@@ -46,7 +46,7 @@ inputs:
     required: false
     default: ""
   log-file:
-    description: Also write the pytest output to this file (CI4, the ids of a --collect-only -q run); empty = the job log only
+    description: Also write the pytest output to this file (CI4, the ids of a --collect-only -qq run); empty = the job log only
     required: false
     default: ""
 

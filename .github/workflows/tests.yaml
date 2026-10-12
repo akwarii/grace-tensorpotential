@@ -127,8 +127,8 @@ jobs:
           python: .venv/bin/python
           path-prepend: ${{ github.workspace }}/.venv/bin
           tests: tests
-          # the -v of the action and this -q cancel out: one node id per line
-          extra-args: --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py --collect-only -q
+          # the -v of the action and these -qq leave verbosity -1, which prints one node id per line (-q alone gives the tree)
+          extra-args: --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py --collect-only -qq
           log-file: collected.txt
       - name: Notice when tests/.test_durations does not know more than 10 percent of the tests (CI4)
         if: matrix.group == 1
