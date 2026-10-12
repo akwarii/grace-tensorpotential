@@ -945,53 +945,60 @@ def _value_of(choice):
     return getattr(choice, "value", choice)
 
 
-@pytest.fixture
-def typed(monkeypatch):
-    """``typed("a", "", "b")`` answers the questions in order and returns the messages asked.
+class ScriptedQuestionary:
+    """Answers the questionary prompts in order: the fakes of ``select``, ``text``, ``confirm`` and ``path``.
 
     An empty answer is the default of the question (the first choice when it has none); ``yes`` and ``no`` answer a
     confirmation; on the review question ``""`` confirms and a section number (from 1) asks to redo that section; an
-    exception instance is raised from the question.
+    exception instance is raised from the question. ``asked`` collects the messages.
     """
+
+    def __init__(self, answers):
+        self.remaining = list(answers)
+        self.asked = []
+
+    def take(self, message):
+        self.asked.append(message)
+        if not self.remaining:
+            raise AssertionError(f"unexpected prompt: {message!r}")
+        answer = self.remaining.pop(0)
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+
+    @staticmethod
+    def returning(value):
+        return types.SimpleNamespace(ask=lambda: value)
+
+    def select(self, message, choices, default=None, **kwargs):
+        answer = self.take(message)
+        if message == "Looks good?":
+            return self.returning("ok" if answer == "" else int(answer) - 1)
+        if answer == "":
+            answer = _value_of(default if default is not None else choices[0])
+        return self.returning(answer)
+
+    def text(self, message, default="", **kwargs):
+        return self.returning(self.take(message))
+
+    def confirm(self, message, default=True, **kwargs):
+        answer = self.take(message)
+        return self.returning(default if answer == "" else answer == "yes")
+
+    def path(self, message, **kwargs):
+        return self.returning(self.take(message))
+
+
+@pytest.fixture
+def typed(monkeypatch):
+    """``typed("a", "", "b")`` scripts the answers of the questionary prompts and returns the messages asked."""
     import questionary
 
     def install(*answers):
-        asked = []
-        remaining = list(answers)
-
-        def take(message):
-            asked.append(message)
-            if not remaining:
-                raise AssertionError(f"unexpected prompt: {message!r}")
-            answer = remaining.pop(0)
-            if isinstance(answer, BaseException):
-                raise answer
-            return answer
-
-        def select(message, choices, default=None, **kwargs):
-            answer = take(message)
-            if message == "Looks good?":
-                answer = "ok" if answer == "" else int(answer) - 1
-            elif answer == "":
-                answer = _value_of(default) if default is not None else _value_of(choices[0])
-            return types.SimpleNamespace(ask=lambda: answer)
-
-        def text(message, default="", **kwargs):
-            answer = take(message)
-            return types.SimpleNamespace(ask=lambda: answer)
-
-        def confirm(message, default=True, **kwargs):
-            answer = take(message)
-            value = default if answer == "" else answer == "yes"
-            return types.SimpleNamespace(ask=lambda: value)
-
-        def path(message, **kwargs):
-            answer = take(message)
-            return types.SimpleNamespace(ask=lambda: answer)
-
-        for name, fake in (("select", select), ("text", text), ("confirm", confirm), ("path", path)):
-            monkeypatch.setattr(questionary, name, fake)
-        return asked
+        script = ScriptedQuestionary(answers)
+        for name in ("select", "text", "confirm", "path"):
+            monkeypatch.setattr(questionary, name, getattr(script, name))
+        return script.asked
 
     return install
 
