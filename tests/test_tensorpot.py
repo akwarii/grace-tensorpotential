@@ -1020,6 +1020,7 @@ def test_a_checkpoint_with_other_optimizer_options_is_treated_the_same_way(tmp_p
 
 TRAIN_LR = 1e-9  # small enough that the first Adam step lowers a loss of this size to first order
 GLOBAL_BATCH_SIZE = 2  # structures of the batch
+L2_WEIGHT = 1e3  # large enough for the L2 term to stand out of the rounding of a loss of order 1e12
 FD_UNIT_STEP = 1e-6  # step along a unit direction of weight space; the loss is of order 1e12 and smooth
 
 
@@ -1062,6 +1063,8 @@ def _training_tp(**kwargs) -> TensorPotential:
         "eager_mode": True,
         **kwargs,
     }
+    tf.random.set_seed(1)  # the initial weights, hence the size of the loss, are the same in every run
+    np.random.seed(1)
     return _tp(**options)
 
 
@@ -1172,14 +1175,14 @@ def _l2_sum(tp: TensorPotential) -> float:
 
 
 def test_a_regularisation_loss_adds_its_weighted_l2_sum_to_the_total_and_to_the_gradient():
-    tp = _training_tp(regularization_loss=LossFunction({"l2": L2Loss(1.0)}))
+    tp = _training_tp(regularization_loss=LossFunction({"l2": L2Loss(L2_WEIGHT)}))
     batch = _training_batch()
     with_l2 = float(tp.model_grad(batch)[0])
     analytic, numeric = _directional_derivative_check(tp, batch)
     tp.regularization_loss = None
     without = float(tp.model_grad(batch)[0])
 
-    assert with_l2 - without == pytest.approx(_l2_sum(tp), rel=1e-6)
+    assert with_l2 - without == pytest.approx(L2_WEIGHT * _l2_sum(tp), rel=1e-6)
     np.testing.assert_allclose(numeric, analytic, rtol=FD.rtol, atol=FD.atol)
 
 
