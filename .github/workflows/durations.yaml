@@ -8,8 +8,6 @@
 # is read-only; download the artifact and commit it on a work branch. The shards need every test to pass, so a failing
 # shard stops the merge.
 # GitHub starts scheduled and dispatched workflows from the default branch only, so this one is live once the file is there.
-# TEMPORARY (CI4, task 4): the pull_request trigger below runs it once from the pull request and is removed before the
-# pull request is ready.
 
 name: Durations
 
@@ -17,9 +15,6 @@ on:
   schedule:
     - cron: "30 3 * * 0"
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/durations.yaml"
 
 permissions:
   contents: read
