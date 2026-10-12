@@ -74,3 +74,18 @@ EXTXYZ_TEXT_ROUNDTRIP = Tolerance(rtol=0.0, atol=1e-8)
 # both are the same CODATA value up to the digits typed, so 1e-6 relative flags a wrong factor of ten or a missing sign
 # and nothing smaller.
 HAND_UNIT_CONVERSION = Tolerance(rtol=1e-6, atol=0.0)
+
+# A closed-form float64 force of a few springs between atoms of order 1 A against a central difference of the energy
+# (step 1e-6): the energy is quadratic, so the truncation vanishes and the error is the roundoff of the difference,
+# 5e-10 relative at worst for the test cluster; the row leaves a factor of 20.
+CLOSED_FORM_FD_F64 = Tolerance(rtol=1e-8, atol=1e-8)
+
+# The decrease of a loss after one step against its first-order prediction ``lr * sum |g|``: the second-order term
+# of a step this small is 8e-6 of the first (measured on the tiny training model), so 1e-3 flags a wrong sign or
+# factor and nothing smaller.
+FIRST_ORDER_DECREASE = Tolerance(rtol=1e-3, atol=0.0)
+
+# The difference of two float64 losses of order 1e12 (random weights of the tiny training model), which have a
+# resolution of 2e-4, against a term of order 3e8 that one of them contains: the rounding is about 1e-12 of the
+# term, so 1e-6 leaves room for a loss ten times larger.
+LOSS_DIFFERENCE_F64 = Tolerance(rtol=1e-6, atol=0.0)
