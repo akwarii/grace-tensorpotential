@@ -91,14 +91,17 @@ select = [
 ignore = ["E501", "E741", "N806", "N803", "PLR2004"]
 
 [tool.ruff.lint.per-file-ignores]
-# Everything outside the new packages: the strict families are off (E, F and ERA001 stay on).
+# Everything outside the new packages: the strict families are off (E, F and ERA001 stay on), which keeps a plain
+# `ruff check` quiet on legacy code. tools/lint_ratchet.py drops this entry and decides by baselines/legacy_files.txt:
+# a file in neither that list nor a new package gets the whole strict set, a legacy file keeps counted findings.
 "!{tensorpotential/torch_backend,tensorpotential/core,tests_torch}/**" = [
     "I", "UP", "B", "SIM", "C4", "RUF", "PD", "NPY", "PIE", "PLE", "PLW", "PERF", "RET", "PTH",
     "T20", "W", "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "D", "BLE", "TRY", "S", "ARG",
     "A", "TD", "FIX",
 ]
-# New tests: no docstrings, plain asserts.
-"tests_torch/**" = ["D", "S101"]
+# New tests: no docstrings, plain asserts. The tests of the legacy directories too: a test file that is not in
+# baselines/legacy_files.txt is checked by tools/lint_ratchet.py with the whole strict set except these two.
+"{tests_torch,tests,tools/tests}/**" = ["D", "S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
