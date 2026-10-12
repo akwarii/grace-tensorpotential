@@ -34,7 +34,6 @@ from tensorpotential.data.weighting import (
     EnergyBasedWeightingPolicy,
     check_df_non_empty,
 )
-
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
 
@@ -51,7 +50,7 @@ def _frame(
     symbols = symbols if symbols is not None else ["Cu"] * n
     atoms = [
         Atoms(f"{s}2", positions=[[0, 0, 0], [0, 0, 2.5]], cell=[5] * 3, pbc=p)
-        for s, p in zip(symbols, pbc)
+        for s, p in zip(symbols, pbc, strict=True)
     ]
     return pd.DataFrame({
         "ase_atoms": atoms,
@@ -62,6 +61,13 @@ def _frame(
         FORCES_COL: [force_scale * rng.normal(size=(2, 3)) for _ in range(n)],
         NUMBER_OF_ATOMS: [2] * n,
     })
+
+
+def _set_forces(frame: pd.DataFrame, row: int, forces: np.ndarray) -> None:
+    """Replace the forces of one row (a cell that holds an array is written through the whole column)."""
+    values = frame[FORCES_COL].tolist()
+    values[frame.index.get_loc(row)] = forces
+    frame[FORCES_COL] = pd.Series(values, index=frame.index, dtype=object)
 
 
 def _policy(**kwargs) -> EnergyBasedWeightingPolicy:
@@ -77,7 +83,8 @@ def _weights(frame: pd.DataFrame, **kwargs) -> pd.DataFrame:
 
 def test_an_empty_frame_is_refused_with_a_hint_about_the_filters():
     with pytest.raises(
-        RuntimeError, match="Couldn't operate with empty dataset. Try to reduce filters"
+        RuntimeError,
+        match=r"Couldn't operate with empty dataset\. Try to reduce filters",
     ):
         check_df_non_empty(pd.DataFrame())
 
@@ -154,7 +161,7 @@ def test_both_tier_counts_set_nfit_to_their_sum():
 @pytest.mark.parametrize("counts", [{"n_lower": 2}, {"n_upper": 2}])
 def test_a_single_tier_count_without_nfit_is_refused(counts):
     with pytest.raises(
-        ValueError, match="nfit is None. Please provide both n_lower and n_upper"
+        ValueError, match=r"nfit is None\. Please provide both n_lower and n_upper"
     ):
         _policy(**counts).generate_weights(_frame([0.1, 0.2]))
 
@@ -164,7 +171,7 @@ def test_a_single_tier_count_without_nfit_is_refused(counts):
 )
 def test_nfit_together_with_a_tier_count_is_refused(counts):
     with pytest.raises(
-        ValueError, match="nfit is not None. No n_lower or n_upper is expected"
+        ValueError, match=r"nfit is not None\. No n_lower or n_upper is expected"
     ):
         _policy(nfit=3, **counts).generate_weights(_frame([0.1, 0.2]))
 
@@ -252,12 +259,16 @@ def test_a_frame_with_nothing_below_the_upper_energy_is_refused():
 
 def test_structures_with_a_force_above_dfup_are_removed():
     frame = _frame([0.1, 0.2, 0.3])
-    frame.at[1, FORCES_COL] = np.array([
-        [6.0, 8.0, 0.0],
-        [0.0, 0.0, 0.0],
-    ])  # longest force vector: 10
-    frame.at[0, FORCES_COL] = np.array([[3.0, 4.0, 0.0], [0.0, 0.0, 1.0]])  # 5
-    frame.at[2, FORCES_COL] = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.5]])
+    _set_forces(
+        frame,
+        1,
+        np.array([
+            [6.0, 8.0, 0.0],
+            [0.0, 0.0, 0.0],
+        ]),
+    )  # longest force vector: 10
+    _set_forces(frame, 0, np.array([[3.0, 4.0, 0.0], [0.0, 0.0, 1.0]]))  # 5
+    _set_forces(frame, 2, np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.5]]))
     assert sorted(_weights(frame, DFup=5.0).index) == [
         0,
         2,
@@ -417,14 +428,22 @@ def test_without_wlow_the_tiers_are_not_rescaled(caplog):
 
 def test_force_weights_follow_one_over_force_squared_plus_df_times_the_energy_weight():
     frame = _frame([0.0, 3.0])
-    frame.at[0, FORCES_COL] = np.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 2.0, 0.0],
-    ])  # |f|^2 = 1, 4
-    frame.at[1, FORCES_COL] = np.array([
-        [0.0, 0.0, 3.0],
-        [0.0, 0.0, 0.0],
-    ])  # |f|^2 = 9, 0
+    _set_forces(
+        frame,
+        0,
+        np.array([
+            [1.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+        ]),
+    )  # |f|^2 = 1, 4
+    _set_forces(
+        frame,
+        1,
+        np.array([
+            [0.0, 0.0, 3.0],
+            [0.0, 0.0, 0.0],
+        ]),
+    )  # |f|^2 = 9, 0
     result = _weights(frame, DF=1.0, DElow=0.5).sort_index()
     e_raw = np.array([1.0, 1.0 / 16.0])
     e_w = e_raw / e_raw.sum()
@@ -433,7 +452,7 @@ def test_force_weights_follow_one_over_force_squared_plus_df_times_the_energy_we
         np.array([1 / 10.0, 1 / 1.0]) * e_w[1],
     ]
     total = sum(p.sum() for p in per_atom)
-    for found, expected in zip(result[DATA_FORCE_WEIGHTS], per_atom):
+    for found, expected in zip(result[DATA_FORCE_WEIGHTS], per_atom, strict=True):
         np.testing.assert_allclose(found, expected / total, rtol=1e-12)
     assert sum(w.sum() for w in result[DATA_FORCE_WEIGHTS]) == pytest.approx(
         1.0, abs=1e-12
@@ -444,7 +463,7 @@ def test_the_force_offset_df_enters_through_its_absolute_value():
     frame = _frame([0.0, 1.0])
     plus = _weights(frame, DF=2.0)[DATA_FORCE_WEIGHTS].sort_index()
     minus = _weights(frame, DF=-2.0)[DATA_FORCE_WEIGHTS].sort_index()
-    for a, b in zip(plus, minus):
+    for a, b in zip(plus, minus, strict=True):
         np.testing.assert_allclose(a, b, rtol=ARITH.rtol)
 
 
@@ -455,7 +474,7 @@ def test_forces_are_converted_to_arrays_and_must_match_the_atom_count():
     assert all(isinstance(f, np.ndarray) for f in result[FORCES_COL])
 
     broken = _frame([0.0, 1.0])
-    broken.at[0, FORCES_COL] = np.zeros((3, 3))  # three force vectors for two atoms
+    _set_forces(broken, 0, np.zeros((3, 3)))  # three force vectors for two atoms
     with pytest.raises(
         AssertionError, match="Number of atoms doesn't corresponds to shape of forces"
     ):

@@ -14,6 +14,8 @@ import inspect
 import logging
 import os
 import warnings
+from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -1024,7 +1026,7 @@ L2_WEIGHT = 1e3  # large enough for the L2 term to stand out of the rounding of 
 FD_UNIT_STEP = 1e-6  # step along a unit direction of weight space; the loss is of order 1e12 and smooth
 
 
-def _training_batch() -> dict[str, tf.Tensor]:
+def _training_batch() -> dict[str, Any]:
     """Two periodic structures (3 and 2 atoms), random reference energies, forces and virials."""
     rng = np.random.default_rng(0)
     structures = []
@@ -1064,16 +1066,25 @@ def _training_tp(**kwargs) -> TensorPotential:
         **kwargs,
     }
     tf.random.set_seed(1)  # the initial weights, hence the size of the loss, are the same in every run
-    np.random.seed(1)
     return _tp(**options)
 
 
+def _model_grad(tp: TensorPotential, batch) -> tuple:
+    """``tp.model_grad`` (a ``tf.function`` set on the instance, which the type checker does not see)."""
+    grad: Any = tp.model_grad
+    return grad(batch)
+
+
+def _call(function: Any, *arguments):
+    return function(*arguments)
+
+
 def _total_loss(tp: TensorPotential, batch) -> float:
-    return float(tp.model_grad(batch)[0])
+    return float(_model_grad(tp, batch)[0])
 
 
 def _set_weights(tp: TensorPotential, values) -> None:
-    for variable, value in zip(tp.model.variables_to_train, values):
+    for variable, value in zip(tp.model.variables_to_train, values, strict=True):
         variable.assign(value)
 
 
@@ -1114,7 +1125,7 @@ def test_the_grad_signatures_of_a_model_without_loss_and_metrics_are_the_model_o
 def test_model_grad_returns_loss_predictions_gradients_and_the_components_per_batch_size():
     tp = _training_tp()
     batch = _training_batch()
-    total, predictions, gradients, components = tp.model_grad(batch)
+    total, predictions, gradients, components = _model_grad(tp, batch)
 
     assert [g.shape for g in gradients] == [v.shape for v in tp.model.variables_to_train]
     assert set(components) == {"energy", "forces", "virial"}
@@ -1135,11 +1146,11 @@ def _directional_derivative_check(tp: TensorPotential, batch) -> tuple[float, fl
     norm = np.sqrt(sum(np.sum(d**2) for d in directions))
     directions = [d / norm for d in directions]
     start = [v.numpy().copy() for v in variables]
-    gradients = tp.model_grad(batch)[2]
-    analytic = sum(float(tf.reduce_sum(g * d)) for g, d in zip(gradients, directions))
+    gradients = _model_grad(tp, batch)[2]
+    analytic = sum(float(tf.reduce_sum(g * d)) for g, d in zip(gradients, directions, strict=True))
 
     def shifted(step: float) -> float:
-        _set_weights(tp, [w + step * d for w, d in zip(start, directions)])
+        _set_weights(tp, [w + step * d for w, d in zip(start, directions, strict=True)])
         return _total_loss(tp, batch)
 
     numeric = (shifted(FD_UNIT_STEP) - shifted(-FD_UNIT_STEP)) / (2 * FD_UNIT_STEP)
@@ -1157,9 +1168,9 @@ def test_the_gradient_of_model_grad_matches_a_central_difference_of_its_loss(opt
 def test_the_loss_can_be_divided_by_the_batch_size_once_more():
     tp = _training_tp()
     batch = _training_batch()
-    plain = float(tp.model_grad(batch)[0])
+    plain = float(_model_grad(tp, batch)[0])
     tp.loss_norm_by_batch_size = True
-    assert float(tp.model_grad(batch)[0]) == pytest.approx(plain / GLOBAL_BATCH_SIZE, rel=1e-12)
+    assert float(_model_grad(tp, batch)[0]) == pytest.approx(plain / GLOBAL_BATCH_SIZE, rel=1e-12)
 
 
 def _l2_sum(tp: TensorPotential) -> float:
@@ -1177,10 +1188,10 @@ def _l2_sum(tp: TensorPotential) -> float:
 def test_a_regularisation_loss_adds_its_weighted_l2_sum_to_the_total_and_to_the_gradient():
     tp = _training_tp(regularization_loss=LossFunction({"l2": L2Loss(L2_WEIGHT)}))
     batch = _training_batch()
-    with_l2 = float(tp.model_grad(batch)[0])
+    with_l2 = float(_model_grad(tp, batch)[0])
     analytic, numeric = _directional_derivative_check(tp, batch)
-    tp.regularization_loss = None
-    without = float(tp.model_grad(batch)[0])
+    cast(Any, tp).regularization_loss = None
+    without = float(_model_grad(tp, batch)[0])
 
     assert with_l2 - without == pytest.approx(L2_WEIGHT * _l2_sum(tp), rel=1e-6)
     np.testing.assert_allclose(numeric, analytic, rtol=FD.rtol, atol=FD.atol)
@@ -1190,11 +1201,11 @@ def test_one_train_step_applies_the_first_adam_step_of_the_gradient_it_reports()
     tp = _training_tp()
     batch = _training_batch()
     start = [v.numpy().copy() for v in tp.model.variables_to_train]
-    total, _, gradients, components = tp.model_grad(batch)
+    total, _, gradients, components = _model_grad(tp, batch)
 
     result = tp.train_step(batch)
 
-    for variable, w0, gradient in zip(tp.model.variables_to_train, start, gradients):
+    for variable, w0, gradient in zip(tp.model.variables_to_train, start, gradients, strict=True):
         np.testing.assert_allclose(
             variable.numpy(), _first_adam_step(w0, gradient.numpy(), TRAIN_LR), rtol=1e-9, atol=1e-12
         )
@@ -1208,7 +1219,7 @@ def test_one_train_step_lowers_the_loss_by_the_first_order_amount():
     tp = _training_tp()
     batch = _training_batch()
     before = _total_loss(tp, batch)
-    gradients = tp.model_grad(batch)[2]
+    gradients = _model_grad(tp, batch)[2]
     tp.train_step(batch)
     after = _total_loss(tp, batch)
     # Adam's first step moves every weight by about the learning rate against the sign of its gradient
@@ -1221,7 +1232,7 @@ def test_a_test_step_reports_the_loss_at_the_test_batch_size_and_leaves_the_weig
     tp = _training_tp(global_test_batch_size=4)
     batch = _training_batch()
     start = _weights(tp)
-    total, _, _, components = tp.model_grad(batch)
+    total, _, _, components = _model_grad(tp, batch)
 
     result = tp.test_step(batch)
 
@@ -1239,7 +1250,7 @@ def test_a_bfgs_step_reports_the_flat_gradient_and_leaves_the_weights_alone():
     tp = _training_tp()
     batch = _training_batch()
     start = _weights(tp)
-    total, _, gradients, components = tp.model_grad(batch)
+    total, _, gradients, components = _model_grad(tp, batch)
 
     result = tp.train_bfgs_step(batch)
 
@@ -1257,12 +1268,12 @@ def test_the_distributed_steps_of_the_default_strategy_take_one_batch_or_a_list_
     start = [v.numpy().copy() for v in tp.model.variables_to_train]
     total = _total_loss(tp, batch)
 
-    tests = [tp.distributed_test_step(batch), tp.distributed_test_step([batch])]
+    tests = [_call(tp.distributed_test_step, batch), _call(tp.distributed_test_step, [batch])]
     trains = []
     for argument in (batch, [batch]):
-        trains.append(tp.distributed_train_step(argument))
+        trains.append(_call(tp.distributed_train_step, argument))
         _set_weights(tp, start)  # the second call must see the weights of the first
-    bfgs = tp.distributed_bfgs_train_step([batch])
+    bfgs = _call(tp.distributed_bfgs_train_step, [batch])
 
     for result in tests:
         assert float(result["total_loss/test"]) == pytest.approx(total, rel=1e-12)
@@ -1276,7 +1287,7 @@ def test_the_distributed_bfgs_step_needs_a_list_of_batches():
     # pinned: unlike the other distributed steps it indexes its argument by the replica id unconditionally
     tp = _training_tp()
     with pytest.raises(KeyError):
-        tp.distributed_bfgs_train_step(_training_batch())
+        _call(tp.distributed_bfgs_train_step, _training_batch())
 
 
 class _TwoReplicas:
@@ -1304,7 +1315,7 @@ def test_reduce_dict_leaves_a_single_replica_result_alone():
 
 def test_reduce_dict_joins_the_per_structure_values_and_sums_the_losses_over_two_replicas():
     tp = _tp()
-    tp.strategy = _TwoReplicas()
+    cast(Any, tp).strategy = _TwoReplicas()
     a, b = tf.constant([[1.0], [2.0]]), tf.constant([[3.0]])
     result = {
         "abs/de/per_struct": _PerReplica(a, b),  # what a real strategy returns for a per-replica value
@@ -1345,26 +1356,28 @@ def test_the_chief_writes_to_the_path_it_was_given(strategy, tmp_path):
 def test_a_non_chief_worker_writes_to_a_temporary_path_that_is_removed_afterwards(tmp_path):
     target = str(tmp_path / "out" / "file")
     with _chief_or_discardable_path(target, _Cluster("worker", 1)) as path:
+        written = Path(path).parent
         assert path != target
-        assert os.path.basename(path) == "file"
-        assert os.path.basename(os.path.dirname(path)).startswith("tp_nonchief_")
-        assert os.path.isdir(os.path.dirname(path))
-        written = os.path.dirname(path)
-    assert not os.path.exists(written)
+        assert Path(path).name == "file"
+        assert written.name.startswith("tp_nonchief_")
+        assert written.is_dir()
+    assert not written.exists()
     assert not (tmp_path / "out").exists()
 
 
 def test_a_non_chief_temporary_path_is_removed_when_the_body_raises(tmp_path):
-    with pytest.raises(RuntimeError, match="boom"):
-        with _chief_or_discardable_path(str(tmp_path / "x"), _Cluster("worker", 3)) as path:
-            written = os.path.dirname(path)
-            raise RuntimeError("boom")
-    assert not os.path.exists(written)
+    with (
+        pytest.raises(RuntimeError, match="boom"),
+        _chief_or_discardable_path(str(tmp_path / "x"), _Cluster("worker", 3)) as path,
+    ):
+        written = Path(path).parent
+        raise RuntimeError("boom")
+    assert not written.exists()
 
 
 def test_a_non_chief_path_that_ends_in_a_separator_gets_the_name_out(tmp_path):
     with _chief_or_discardable_path(str(tmp_path / "dir") + os.sep, _Cluster("worker", 1)) as path:
-        assert os.path.basename(path) == "out"
+        assert Path(path).name == "out"
 
 
 def test_saving_a_checkpoint_to_a_bare_file_name_writes_into_the_working_directory(tmp_path, monkeypatch):
@@ -1389,7 +1402,7 @@ def test_save_model_writes_the_serving_model_to_a_bare_name_in_the_working_direc
 
 def test_a_non_chief_worker_writes_its_checkpoint_nowhere(tmp_path):
     tp = _tp()
-    tp.strategy = _Cluster("worker", 2)
+    cast(Any, tp).strategy = _Cluster("worker", 2)
     tp.save_checkpoint(checkpoint_name=str(tmp_path / "ckpt" / "state"))
     assert not (tmp_path / "ckpt").exists()
 

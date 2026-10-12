@@ -529,7 +529,7 @@ def _fit_dict(tmp_path):
 
 def test_process_fit_dict_names_the_runs_and_picks_the_best_epoch_of_each(tmp_path):
     fits, runs = _fit_dict(tmp_path)
-    prefix_names = {str(tmp_path / n): fd for n, fd in zip(runs, fits.values())}
+    prefix_names = {str(tmp_path / n): fd for n, fd in zip(runs, fits.values(), strict=True)}
     prefix, best, grouped = process_fit_dict(prefix_names, fkey="rmse/f_comp", align_folder=True)
 
     assert prefix.endswith("/m/")

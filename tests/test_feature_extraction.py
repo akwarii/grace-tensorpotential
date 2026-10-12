@@ -12,24 +12,25 @@ atoms. The model comes from the ``uq_setup`` fixture (``tests/conftest.py``), ra
 
 from __future__ import annotations
 
+import functools
 import os
+from collections.abc import Generator
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+import operator
+from typing import Any, cast
+
 import numpy as np
 import pytest
+import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
+from ase import Atoms
 
 from tensorpotential import constants
 from tensorpotential.uq import constants as uqc
 from tensorpotential.uq import feature_extraction as fe
-
-import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
-
 from tests.shared_models import weights_fingerprint
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
-
-from ase import Atoms
-
 
 # --- PerAtomWeightBuilder ---
 
@@ -212,7 +213,8 @@ def feature_model(uq_setup):
     tp = TensorPotential(instructions, param_dtype=tf.float64)
     tp.load_checkpoint(uq_setup["checkpoint"])
     tp.model.decorate_compute_function()
-    tp.model.compute_function.extra_return_keys = [uqc.FEATURES]
+    compute_function: Any = tp.model.compute_function
+    compute_function.extra_return_keys = [uqc.FEATURES]
     before = weights_fingerprint(tp.model)
     yield tp.model
     assert weights_fingerprint(tp.model) == before, "a test changed the shared model"
@@ -254,11 +256,19 @@ def test_without_an_element_map_the_features_use_the_alphabetical_one_of_all_str
         )
     )
     assert len(from_generator) == 3
-    for (feat_a, idx_a), (feat_b, idx_b), at in zip(from_generator, explicit, atoms):
+    for (feat_a, idx_a), (feat_b, idx_b), at in zip(
+        from_generator, explicit, atoms, strict=True
+    ):
         assert feat_a.shape == (len(at), uq_setup["feature_dim"])
         np.testing.assert_allclose(feat_a, feat_b, rtol=ARITH.rtol, atol=ARITH.atol)
         np.testing.assert_array_equal(idx_a, idx_b)
-        symbols = sorted(set(sum((a.get_chemical_symbols() for a in atoms), [])))
+        symbols = sorted(
+            set(
+                functools.reduce(
+                    operator.iadd, (a.get_chemical_symbols() for a in atoms), []
+                )
+            )
+        )
         np.testing.assert_array_equal(
             idx_a, [symbols.index(s) for s in at.get_chemical_symbols()]
         )
@@ -295,13 +305,13 @@ def test_the_weights_of_the_batches_follow_the_structures_whatever_the_bucketing
     atoms = _structures(uq_setup, weights=weights)
     results = _batched(uq_setup, feature_model, atoms)
 
-    expected_total = sum(w * len(a) for w, a in zip(weights, atoms))
+    expected_total = sum(w * len(a) for w, a in zip(weights, atoms, strict=True))
     assert sum(w.sum() for _, _, w in results) == pytest.approx(
         expected_total, rel=ARITH.rtol
     )
     # per weight value, the number of atoms carrying it is the atom count of the structure that has it
     found = np.concatenate([w for _, _, w in results])
-    for weight, atom in zip(weights, atoms):
+    for weight, atom in zip(weights, atoms, strict=True):
         assert np.sum(found == weight) == len(atom)
     assert all(w.dtype == np.float64 for _, _, w in results)
 
@@ -405,13 +415,16 @@ def test_the_progress_report_is_closed_when_the_consumer_stops_early(
     uq_setup, feature_model, capsys
 ):
     atoms = _structures(uq_setup, n=5)
-    iterator = fe.batched_feature_iterator(
-        atoms,
-        feature_model,
-        element_map=uq_setup["element_map"],
-        cutoff=6.0,
-        verbose=True,
-        max_num_neighbours_per_batch=200,
+    iterator = cast(
+        "Generator",
+        fe.batched_feature_iterator(
+            atoms,
+            feature_model,
+            element_map=uq_setup["element_map"],
+            cutoff=6.0,
+            verbose=True,
+            max_num_neighbours_per_batch=200,
+        ),
     )
     next(iterator)
     iterator.close()
@@ -428,12 +441,13 @@ def test_a_quiet_run_prints_nothing(uq_setup, feature_model, capsys):
 
 def _save_shard(path, batches):
     """Save batches (dicts of numpy arrays) as a GZIP TF dataset, one element per batch."""
-    dataset = None
-    for batch in batches:
-        element = tf.data.Dataset.from_tensors({
-            k: tf.constant(v) for k, v in batch.items()
-        })
-        dataset = element if dataset is None else dataset.concatenate(element)
+    elements = [
+        tf.data.Dataset.from_tensors({k: tf.constant(v) for k, v in batch.items()})
+        for batch in batches
+    ]
+    dataset = functools.reduce(
+        lambda joined, element: joined.concatenate(element), elements
+    )
     tf.data.Dataset.save(dataset, str(path), compression="GZIP")
     return str(path)
 
@@ -473,7 +487,9 @@ def test_the_shard_iterator_gives_the_features_of_every_batch_with_unit_weights(
         fe.tf_dataset_feature_iterator([shard], feature_model, verbose=False)
     )
     assert len(results) == len(shard_batches)
-    for (features, elements, weights), batch in zip(results, shard_batches):
+    for (features, elements, weights), batch in zip(
+        results, shard_batches, strict=True
+    ):
         direct, direct_elements = _direct_features(feature_model, batch)
         np.testing.assert_allclose(features, direct, rtol=ARITH.rtol, atol=ARITH.atol)
         np.testing.assert_array_equal(elements, direct_elements)
@@ -576,7 +592,7 @@ def test_the_rows_carrying_a_weight_are_the_features_of_the_structure_that_has_i
     results = _batched(uq_setup, feature_model, atoms)
     found_features = np.concatenate([f for f, _, _ in results])
     found_weights = np.concatenate([w for _, _, w in results])
-    for weight, atom in zip(weights, atoms):
+    for weight, atom in zip(weights, atoms, strict=True):
         alone = next(
             fe.extract_features(
                 calculator, [atom.copy()], element_map=uq_setup["element_map"]

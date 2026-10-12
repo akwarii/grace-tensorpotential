@@ -77,7 +77,7 @@ class _FakeResponse:
     def raise_for_status(self):
         return None
 
-    def iter_content(self, chunk_size):
+    def iter_content(self, **_kwargs):
         for start in range(
             0, len(self._body), 4
         ):  # chunks smaller than asked for: the unit must keep them all
@@ -215,7 +215,7 @@ def test_a_top_level_file_instead_of_a_folder_is_refused(tmp_path):
     archive = tmp_path / "file.tar.gz"
     _make_tar(archive, {"lonely.txt": b"x"})
     with pytest.raises(
-        ValueError, match="Expected a directory, but found a file: lonely.txt"
+        ValueError, match=r"Expected a directory, but found a file: lonely\.txt"
     ):
         fm.safe_extract(str(archive), path=str(tmp_path))
     assert not (tmp_path / "lonely.txt").exists()
@@ -332,7 +332,7 @@ def test_a_transient_error_is_retried_and_the_next_attempt_succeeds(network, tmp
 
 def test_a_half_written_part_file_is_removed_when_the_transfer_fails(network, tmp_path):
     class _Broken(_FakeResponse):
-        def iter_content(self, chunk_size):
+        def iter_content(self, **_kwargs):
             yield b"abc"
             raise requests.ConnectionError("cut")
 
@@ -357,7 +357,7 @@ def test_the_description_defaults_to_the_file_name(network, tmp_path, monkeypatc
         def __exit__(self, *exc):
             return False
 
-        def update(self, n):
+        def update(self, _n):
             return None
 
     monkeypatch.setattr(fm, "tqdm", _Bar)  # the progress bar only draws on a terminal
@@ -472,8 +472,9 @@ def test_a_cached_model_is_used_without_the_network_and_its_origin_is_checked(
     assert "may be outdated" in captured.err  # no sidecar: counted as outdated
 
 
+@pytest.mark.usefixtures("cache")
 def test_an_explicit_model_path_is_used_and_never_checked_or_downloaded(
-    cache, network, monkeypatch, tmp_path, capsys
+    network, monkeypatch, tmp_path, capsys
 ):
     local = tmp_path / "mine"
     local.mkdir()
@@ -483,7 +484,8 @@ def test_an_explicit_model_path_is_used_and_never_checked_or_downloaded(
     assert "may be outdated" not in capsys.readouterr().err
 
 
-def test_a_model_without_url_that_is_not_cached_is_refused(cache, monkeypatch):
+@pytest.mark.usefixtures("cache")
+def test_a_model_without_url_that_is_not_cached_is_refused(monkeypatch):
     monkeypatch.delitem(fm.MODELS_METADATA[MODEL_NAME], fm.MODEL_URL_KEY)
     with pytest.raises(
         ValueError, match=f"No available URL to download for {MODEL_NAME}"
@@ -491,11 +493,10 @@ def test_a_model_without_url_that_is_not_cached_is_refused(cache, monkeypatch):
         fm.get_or_download_model(MODEL_NAME)
 
 
-def test_an_aliased_name_resolves_to_the_registered_model(cache, monkeypatch, capsys):
+def test_an_aliased_name_resolves_to_the_registered_model(cache, monkeypatch):
     monkeypatch.setitem(fm.MODELS_ALIASES_DICT, "Old-Name", MODEL_NAME)
     (cache / MODEL_NAME).mkdir(parents=True)
     assert fm.get_or_download_model("Old-Name") == str(cache / MODEL_NAME)
-    assert fm.get_or_download_checkpoint.__name__ == "get_or_download_checkpoint"
 
 
 def test_a_missing_license_is_reported_as_not_provided(cache, monkeypatch, capsys):
@@ -541,7 +542,8 @@ def test_a_cached_checkpoint_is_checked_for_its_origin_unless_the_entry_names_a_
     assert "may be outdated" not in capsys.readouterr().err
 
 
-def test_a_checkpoint_without_url_that_is_not_cached_is_refused(cache, monkeypatch):
+@pytest.mark.usefixtures("cache")
+def test_a_checkpoint_without_url_that_is_not_cached_is_refused(monkeypatch):
     monkeypatch.delitem(fm.MODELS_METADATA[MODEL_NAME], fm.CHECKPOINT_URL_KEY)
     with pytest.raises(
         ValueError, match=f"No available checkpoint URL for {MODEL_NAME}"
@@ -562,7 +564,8 @@ def test_the_kokkos_file_is_downloaded_next_to_the_model_and_then_reused(
     assert "Using cached kokkos.npz" in capsys.readouterr().out
 
 
-def test_a_sciebo_kokkos_link_gets_the_download_suffix(cache, network, monkeypatch):
+@pytest.mark.usefixtures("cache")
+def test_a_sciebo_kokkos_link_gets_the_download_suffix(network, monkeypatch):
     monkeypatch.setitem(
         fm.MODELS_METADATA[MODEL_NAME], fm.KOKKOS_URL_KEY, "https://uni.sciebo.de/s/k"
     )
@@ -580,7 +583,8 @@ def test_a_kokkos_file_without_url_is_refused(cache, monkeypatch):
     assert not (cache / MODEL_NAME).exists()
 
 
-def test_the_kokkos_lookup_uses_an_explicit_model_path(cache, monkeypatch, tmp_path):
+@pytest.mark.usefixtures("cache")
+def test_the_kokkos_lookup_uses_an_explicit_model_path(monkeypatch, tmp_path):
     local = tmp_path / "mine"
     local.mkdir()
     (local / "kokkos.npz").write_bytes(b"")
@@ -626,9 +630,11 @@ def test_grace_fm_builds_a_calculator_on_the_model_path_with_the_given_padding(
 
 
 def test_the_docstrings_name_every_registered_model():
+    model_doc = fm.get_or_download_model.__doc__ or ""
+    call_doc = fm.grace_fm.__doc__ or ""
     for name in fm.CORE_MODELS_NAME_LIST[:5]:
-        assert name in fm.get_or_download_model.__doc__
-        assert name in fm.grace_fm.__doc__ or "One of" in fm.grace_fm.__doc__
+        assert name in model_doc
+        assert name in call_doc or "One of" in call_doc
 
 
 def test_the_module_registers_models_from_the_user_registry_without_overriding(
@@ -652,7 +658,7 @@ def test_the_module_registers_models_from_the_user_registry_without_overriding(
         + "')"
     )
     env = {**os.environ, fm.GRACE_CACHE: str(cache_dir)}
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603  (the interpreter and a literal program, no outside input)
         [sys.executable, "-c", code],
         env=env,
         capture_output=True,

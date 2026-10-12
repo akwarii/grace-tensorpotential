@@ -1,6 +1,7 @@
 import json
 import os
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -1215,7 +1216,7 @@ class _Spring:
         )
 
 
-def _cluster_batch(structures: list[int]) -> dict[str, tf.Tensor]:
+def _cluster_batch(structures: list[int]) -> dict[str, Any]:
     """The tensors of a batch of the chosen clusters: every ordered pair of atoms of a structure is a bond."""
     ind_i, ind_j, vectors, bond_structure, atom_structure = [], [], [], [], []
     offset = 0
@@ -1434,9 +1435,9 @@ def test_the_placeholder_function_returns_the_placeholder_the_instructions_leave
 
 def test_the_abstract_function_bases_cannot_be_called_or_made():
     with pytest.raises(TypeError, match="abstract"):
-        TrainFunction()
+        TrainFunction()  # ty: ignore[call-non-callable]
     with pytest.raises(TypeError, match="abstract"):
-        ComputeFunction()
+        ComputeFunction()  # ty: ignore[call-non-callable]
 
     class _Train(TrainFunction):
         def __call__(self, *args, **kwargs):
@@ -1654,7 +1655,7 @@ def test_the_flat_weight_vector_lists_every_trainable_variable_in_order_and_is_w
     sizes = [int(np.prod(v.shape)) for v in variables]
     assert [int(x) for x in model.slices] == [0, *np.cumsum(sizes)]
     model.set_flat_trainable_variables(flat + 1.0)
-    for variable, before in zip(variables, np.split(expected, np.cumsum(sizes)[:-1])):
+    for variable, before in zip(variables, np.split(expected, np.cumsum(sizes)[:-1]), strict=True):
         np.testing.assert_array_equal(variable.numpy().ravel(), before + 1.0)
 
 
@@ -1677,7 +1678,8 @@ def test_an_auxiliary_compute_function_is_traced_with_the_model_inputs_and_filte
     model.build(tf.float64, jit_compile=False)
 
     aux = model.energy_only({**tensors, "unrelated": tf.constant([1.0])})
-    full = model.compute(tensors)
+    compute: Any = model.compute
+    full = compute(tensors)
 
     assert set(aux) == {constants.PREDICT_ATOMIC_ENERGY}
     np.testing.assert_allclose(aux[constants.PREDICT_ATOMIC_ENERGY], full[constants.PREDICT_ATOMIC_ENERGY], rtol=1e-12)
@@ -1701,7 +1703,8 @@ def test_a_compute_call_runs_the_compute_function_on_a_copy_of_the_input():
     model = TPModel([spring])
     batch = _cluster_batch([0])
     keys = set(batch)
-    result = model.compute(batch)
+    compute: Any = model.compute
+    result = compute(batch)
     assert set(batch) == keys
     assert spring.calls == [{"training": False, "local": False}]
     _close(result[constants.PREDICT_FORCES], _spring_forces(CLUSTERS[0]))
@@ -1745,4 +1748,4 @@ def test_the_moved_symbols_of_the_projection_module_are_still_reachable_from_tpm
     assert tpmodel.RandomProjectedBasisFeatures is uq_instructions.RandomProjectedBasisFeatures
     assert tpmodel.generate_rp_matrix is uq_instructions.generate_rp_matrix
     with pytest.raises(AttributeError, match="module 'tensorpotential.tpmodel' has no attribute 'nothing_here'"):
-        tpmodel.nothing_here
+        _ = tpmodel.nothing_here

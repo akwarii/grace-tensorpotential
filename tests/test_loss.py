@@ -16,12 +16,15 @@ the unit. ``tests/test_loss_piecewise_linear.py`` covers the piecewise-linear co
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import numpy as np
 import pytest
+import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
 
 from tensorpotential import constants
 from tensorpotential.loss import (
@@ -30,8 +33,6 @@ from tensorpotential.loss import (
     LossComponent,
     LossFunction,
     RegularizationLossComponent,
-    WHuberForceCompNormLoss,
-    WSMAEForceLoss,
     WeightedHuberEnergyPerAtomLoss,
     WeightedHuberForceLoss,
     WeightedHuberStressLoss,
@@ -45,14 +46,13 @@ from tensorpotential.loss import (
     WeightedSSEForceLoss,
     WeightedSSEStressLoss,
     WeightedSSEVirialLoss,
+    WHuberForceCompNormLoss,
+    WSMAEForceLoss,
     compute_energy_per_atom_error,
     compute_nat_per_structure,
     energy_offset_error,
     huber,
 )
-
-import tensorflow as tf  # after tensorpotential, which applies the TensorFlow options first
-
 from tests.tolerances import FINITE_DIFFERENCE_F64 as FD
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
@@ -65,6 +65,16 @@ NORM_THRESHOLD = (
 EPSILON = 1e-10  # LossComponent.build: the guard of a norm or an absolute value at zero
 FD_STEP = 1e-6  # the step assumed by FINITE_DIFFERENCE_F64 in tests/tolerances.py, for a loss of order 1
 ATOM_COUNTS = (2, 1, 3)  # atoms of the three structures of the batch
+
+
+def _value(variable) -> float:
+    """The Python float held by a variable or tensor."""
+    return float(np.asarray(variable))
+
+
+def _const(value, dtype=None) -> tf.Tensor:
+    """A constant tensor (``tf.constant`` is typed as possibly an operation)."""
+    return cast(tf.Tensor, tf.constant(value, dtype=dtype))
 
 
 def _assert_close(found, expected, tolerance=ARITH) -> None:
@@ -115,20 +125,20 @@ def _tensors(batch: _Batch) -> tuple[dict[str, tf.Tensor], dict[str, tf.Tensor]]
     f64 = tf.float64
     atom_map = np.repeat(np.arange(3), ATOM_COUNTS).astype(np.int32)
     input_data = {
-        constants.DATA_REFERENCE_ENERGY: tf.constant(batch.e_true, f64),
-        constants.DATA_ENERGY_WEIGHTS: tf.constant(batch.e_weight, f64),
-        constants.DATA_REFERENCE_FORCES: tf.constant(batch.f_true, f64),
-        constants.DATA_FORCE_WEIGHTS: tf.constant(batch.f_weight, f64),
-        constants.DATA_REFERENCE_VIRIAL: tf.constant(batch.v_true, f64),
-        constants.DATA_VIRIAL_WEIGHTS: tf.constant(batch.v_weight, f64),
-        constants.DATA_VOLUME: tf.constant(batch.volume, f64),
-        constants.ATOMS_TO_STRUCTURE_MAP: tf.constant(atom_map, tf.int32),
-        constants.N_STRUCTURES_BATCH_TOTAL: tf.constant(3, tf.int32),
+        constants.DATA_REFERENCE_ENERGY: _const(batch.e_true, f64),
+        constants.DATA_ENERGY_WEIGHTS: _const(batch.e_weight, f64),
+        constants.DATA_REFERENCE_FORCES: _const(batch.f_true, f64),
+        constants.DATA_FORCE_WEIGHTS: _const(batch.f_weight, f64),
+        constants.DATA_REFERENCE_VIRIAL: _const(batch.v_true, f64),
+        constants.DATA_VIRIAL_WEIGHTS: _const(batch.v_weight, f64),
+        constants.DATA_VOLUME: _const(batch.volume, f64),
+        constants.ATOMS_TO_STRUCTURE_MAP: _const(atom_map, tf.int32),
+        constants.N_STRUCTURES_BATCH_TOTAL: _const(3, tf.int32),
     }
     predictions = {
-        constants.PREDICT_TOTAL_ENERGY: tf.constant(batch.e_pred, f64),
-        constants.PREDICT_FORCES: tf.constant(batch.f_pred, f64),
-        constants.PREDICT_VIRIAL: tf.constant(batch.v_pred, f64),
+        constants.PREDICT_TOTAL_ENERGY: _const(batch.e_pred, f64),
+        constants.PREDICT_FORCES: _const(batch.f_pred, f64),
+        constants.PREDICT_VIRIAL: _const(batch.v_pred, f64),
     }
     return input_data, predictions
 
@@ -284,9 +294,9 @@ def _huber_stress(b, compute_invariants=False):
 class _Case:
     """A loss component, the keyword arguments that build it, and the oracle of its value."""
 
-    cls: type
+    cls: type[LossComponent]
     kwargs: dict
-    oracle: object
+    oracle: Callable[[_Batch], tuple[float, float]]
 
 
 def _case(cls, oracle, **kwargs) -> _Case:
@@ -453,7 +463,7 @@ def test_calling_a_component_multiplies_its_value_by_the_component_weight(
 
 
 @pytest.mark.parametrize("case", CASES.values(), ids=CASES.keys())
-def test_a_component_leaves_its_input_dictionaries_alone(case, batch, tensors):
+def test_a_component_leaves_its_input_dictionaries_alone(case, tensors):
     input_data, predictions = tensors
     component = _build(case)
     before = {k: v.numpy().copy() for k, v in {**input_data, **predictions}.items()}
@@ -476,28 +486,29 @@ def test_a_component_leaves_its_input_dictionaries_alone(case, batch, tensors):
 def test_the_sse_energy_loss_of_two_structures_by_hand():
     # weights 1 and 3, residuals 1 and 2: (1 * 1 + 3 * 4) / (1 + 3) = 13 / 4
     input_data = {
-        constants.DATA_REFERENCE_ENERGY: tf.constant([[0.0], [0.0]], tf.float64),
-        constants.DATA_ENERGY_WEIGHTS: tf.constant([[1.0], [3.0]], tf.float64),
+        constants.DATA_REFERENCE_ENERGY: _const([[0.0], [0.0]], tf.float64),
+        constants.DATA_ENERGY_WEIGHTS: _const([[1.0], [3.0]], tf.float64),
     }
-    predictions = {
-        constants.PREDICT_TOTAL_ENERGY: tf.constant([[1.0], [-2.0]], tf.float64)
-    }
+    predictions = {constants.PREDICT_TOTAL_ENERGY: _const([[1.0], [-2.0]], tf.float64)}
     component = WeightedSSEEnergyLoss(loss_component_weight=1.0)
     component.build(tf.float64)
-    assert component.compute_loss_component(input_data, predictions).numpy() == 3.25
+    assert (
+        component.compute_loss_component(
+            input_data=input_data, predictions=predictions
+        ).numpy()
+        == 3.25
+    )
 
 
 def test_the_energy_per_atom_losses_divide_by_the_atom_count_of_each_structure_by_hand():
     # structures of 2 and 4 atoms, residuals 1 and 2 eV: per-atom residuals 0.5 and 0.5, equal weights
     input_data = {
-        constants.DATA_REFERENCE_ENERGY: tf.constant([[0.0], [0.0]], tf.float64),
-        constants.DATA_ENERGY_WEIGHTS: tf.constant([[1.0], [1.0]], tf.float64),
-        constants.ATOMS_TO_STRUCTURE_MAP: tf.constant([0, 0, 1, 1, 1, 1], tf.int32),
-        constants.N_STRUCTURES_BATCH_TOTAL: tf.constant(2, tf.int32),
+        constants.DATA_REFERENCE_ENERGY: _const([[0.0], [0.0]], tf.float64),
+        constants.DATA_ENERGY_WEIGHTS: _const([[1.0], [1.0]], tf.float64),
+        constants.ATOMS_TO_STRUCTURE_MAP: _const([0, 0, 1, 1, 1, 1], tf.int32),
+        constants.N_STRUCTURES_BATCH_TOTAL: _const(2, tf.int32),
     }
-    predictions = {
-        constants.PREDICT_TOTAL_ENERGY: tf.constant([[1.0], [2.0]], tf.float64)
-    }
+    predictions = {constants.PREDICT_TOTAL_ENERGY: _const([[1.0], [2.0]], tf.float64)}
     for cls, expected in (
         (WeightedSSEEnergyPerAtomLoss, 0.25),
         (
@@ -512,20 +523,21 @@ def test_the_energy_per_atom_losses_divide_by_the_atom_count_of_each_structure_b
         component = cls(loss_component_weight=1.0)
         component.build(tf.float64)
         _assert_close(
-            component.compute_loss_component(input_data, predictions).numpy(), expected
+            component.compute_loss_component(
+                input_data=input_data, predictions=predictions
+            ).numpy(),
+            expected,
         )
 
 
 def test_a_structure_without_atoms_counts_as_one_atom_instead_of_dividing_by_zero():
     input_data = {
-        constants.DATA_REFERENCE_ENERGY: tf.constant([[0.0], [0.0]], tf.float64),
-        constants.DATA_ENERGY_WEIGHTS: tf.constant([[1.0], [1.0]], tf.float64),
-        constants.ATOMS_TO_STRUCTURE_MAP: tf.constant([0, 0], tf.int32),
-        constants.N_STRUCTURES_BATCH_TOTAL: tf.constant(2, tf.int32),
+        constants.DATA_REFERENCE_ENERGY: _const([[0.0], [0.0]], tf.float64),
+        constants.DATA_ENERGY_WEIGHTS: _const([[1.0], [1.0]], tf.float64),
+        constants.ATOMS_TO_STRUCTURE_MAP: _const([0, 0], tf.int32),
+        constants.N_STRUCTURES_BATCH_TOTAL: _const(2, tf.int32),
     }
-    predictions = {
-        constants.PREDICT_TOTAL_ENERGY: tf.constant([[2.0], [3.0]], tf.float64)
-    }
+    predictions = {constants.PREDICT_TOTAL_ENERGY: _const([[2.0], [3.0]], tf.float64)}
     np.testing.assert_array_equal(
         compute_nat_per_structure(input_data).numpy(), [[2], [1]]
     )
@@ -541,7 +553,9 @@ def test_a_structure_without_atoms_counts_as_one_atom_instead_of_dividing_by_zer
         component = cls(loss_component_weight=1.0)
         component.build(tf.float64)
         assert np.isfinite(
-            component.compute_loss_component(input_data, predictions).numpy()
+            component.compute_loss_component(
+                input_data=input_data, predictions=predictions
+            ).numpy()
         )
 
 
@@ -551,7 +565,7 @@ def test_a_zero_weight_structure_does_not_contribute(batch, tensors):
     zero[1] = 0.0
     dropped = {
         **input_data,
-        constants.DATA_ENERGY_WEIGHTS: tf.constant(zero, tf.float64),
+        constants.DATA_ENERGY_WEIGHTS: _const(zero, tf.float64),
     }
     for name in (
         "sse_energy",
@@ -561,7 +575,9 @@ def test_a_zero_weight_structure_does_not_contribute(batch, tensors):
     ):
         case = CASES[name]
         component = _build(case)
-        found = component.compute_loss_component(dropped, predictions).numpy()
+        found = component.compute_loss_component(
+            input_data=dropped, predictions=predictions
+        ).numpy()
         # the remaining structures 0 and 2 alone, with their own atom counts
         keep = [0, 2]
         sub = _Batch(
@@ -596,7 +612,7 @@ def _offset_pairs_subset(b: _Batch) -> tuple[float, float]:
     return num, den
 
 
-def test_a_perfect_prediction_has_zero_loss_in_every_smooth_component(batch):
+def test_a_perfect_prediction_has_zero_loss_in_every_smooth_component():
     perfect = _make_batch()
     perfect = _Batch(**{
         **perfect.__dict__,
@@ -607,7 +623,9 @@ def test_a_perfect_prediction_has_zero_loss_in_every_smooth_component(batch):
     input_data, predictions = _tensors(perfect)
     for name, case in CASES.items():
         component = _build(case)
-        value = component.compute_loss_component(input_data, predictions).numpy()
+        value = component.compute_loss_component(
+            input_data=input_data, predictions=predictions
+        ).numpy()
         # a norm term is guarded by the epsilon, so it is the square root of 1e-10 apart at most
         assert abs(value) < 1e-8, name
 
@@ -616,9 +634,9 @@ def test_a_perfect_prediction_has_zero_loss_in_every_smooth_component(batch):
 
 
 def test_energy_offset_error_builds_all_pairwise_absolute_differences_by_hand():
-    e_true = tf.constant([[1.0], [4.0], [9.0]], tf.float64)
-    e_pred = tf.constant([[0.0], [2.0], [3.0]], tf.float64)
-    weight = tf.constant([[1.0], [0.0], [4.0]], tf.float64)
+    e_true = _const([[1.0], [4.0], [9.0]], tf.float64)
+    e_pred = _const([[0.0], [2.0], [3.0]], tf.float64)
+    weight = _const([[1.0], [0.0], [4.0]], tf.float64)
     true_off, pred_off, w_off = energy_offset_error(e_true, e_pred, weight)
     # rows are ordered by the first structure of the pair, columns by the second
     np.testing.assert_array_equal(
@@ -634,13 +652,13 @@ def test_energy_offset_error_builds_all_pairwise_absolute_differences_by_hand():
 
 
 def test_energy_offset_error_without_weights_returns_no_weights():
-    e = tf.constant([[1.0], [2.0]], tf.float64)
+    e = _const([[1.0], [2.0]], tf.float64)
     _, _, w_off = energy_offset_error(e, e)
     assert w_off is None
 
 
 def test_huber_is_quadratic_inside_delta_and_linear_outside_by_hand():
-    values = huber(tf.constant([0.0, 0.5, -0.5, 1.0, 3.0, -3.0], tf.float64), delta=1.0)
+    values = huber(_const([0.0, 0.5, -0.5, 1.0, 3.0, -3.0], tf.float64), delta=1.0)
     # 0.5 x^2 for |x| <= 1 (the boundary included), delta |x| - delta^2 / 2 beyond
     np.testing.assert_allclose(
         values.numpy(), [0.0, 0.125, 0.125, 0.5, 2.5, 2.5], rtol=1e-15
@@ -648,19 +666,21 @@ def test_huber_is_quadratic_inside_delta_and_linear_outside_by_hand():
 
 
 def test_huber_follows_the_dtype_of_its_error():
-    assert huber(tf.constant([2.0], tf.float32)).dtype == tf.float32
+    assert huber(_const([2.0], tf.float32)).dtype == tf.float32
 
 
 # --- derivatives ---
 
 
-def _loss_of(component, input_data, predictions, float_keys, shifts, scale):
+def _loss_of(component, input_data, predictions, shifts, scale):
     shifted_inputs = dict(input_data)
     shifted_predictions = dict(predictions)
     for key, direction in shifts.items():
         target = shifted_inputs if key in input_data else shifted_predictions
         target[key] = target[key] + scale * direction
-    return component.compute_loss_component(shifted_inputs, shifted_predictions)
+    return component.compute_loss_component(
+        input_data=shifted_inputs, predictions=shifted_predictions
+    )
 
 
 @pytest.mark.parametrize("case", CASES.values(), ids=CASES.keys())
@@ -676,7 +696,7 @@ def test_the_gradient_of_a_component_matches_a_finite_difference_of_its_value(
         if value.dtype == tf.float64
     }
     directions = {
-        key: tf.constant(rng.normal(size=value.shape), tf.float64)
+        key: _const(rng.normal(size=value.shape), tf.float64)
         for key, value in floats.items()
     }
 
@@ -688,7 +708,9 @@ def test_the_gradient_of_a_component_matches_a_finite_difference_of_its_value(
             tape.watch(
                 watched_inputs[key] if key in input_data else watched_predictions[key]
             )
-        value = component.compute_loss_component(watched_inputs, watched_predictions)
+        value = component.compute_loss_component(
+            input_data=watched_inputs, predictions=watched_predictions
+        )
     gradients = tape.gradient(
         value,
         [
@@ -698,12 +720,12 @@ def test_the_gradient_of_a_component_matches_a_finite_difference_of_its_value(
     )
     analytic = sum(
         float(tf.reduce_sum(g * directions[k]))
-        for k, g in zip(floats, gradients)
+        for k, g in zip(floats, gradients, strict=True)
         if g is not None
     )
 
-    plus = _loss_of(component, input_data, predictions, floats, directions, FD_STEP)
-    minus = _loss_of(component, input_data, predictions, floats, directions, -FD_STEP)
+    plus = _loss_of(component, input_data, predictions, directions, FD_STEP)
+    minus = _loss_of(component, input_data, predictions, directions, -FD_STEP)
     numeric = float(plus - minus) / (2 * FD_STEP)
     _assert_close(analytic, numeric, FD)
 
@@ -730,7 +752,7 @@ def test_the_norm_threshold_of_the_huber_force_loss_becomes_a_variable_only_when
     scaled.build(tf.float64)
     assert isinstance(scaled.norm_threshold, tf.Variable)
     assert scaled.norm_threshold.dtype == tf.float64
-    assert float(scaled.norm_threshold) == 3.0
+    assert _value(scaled.norm_threshold) == 3.0
     assert not scaled.norm_threshold.trainable
 
 
@@ -742,7 +764,7 @@ def test_building_a_component_makes_a_fixed_weight_variable_and_the_epsilon(case
     assert isinstance(component.loss_component_weight, tf.Variable)
     assert component.loss_component_weight.dtype == tf.float32
     assert not component.loss_component_weight.trainable
-    assert float(component.loss_component_weight) == 0.75
+    assert _value(component.loss_component_weight) == 0.75
     assert component.epsilon.dtype == tf.float32
     np.testing.assert_allclose(float(component.epsilon), EPSILON, rtol=1e-6)
 
@@ -785,7 +807,7 @@ def test_the_component_weight_is_set_and_read_back_through_the_variable():
     component.build(tf.float64)
     component.set_loss_component_weight(4.0)
     assert component.get_loss_component_weight() == 4.0
-    assert float(component.loss_component_weight) == 4.0
+    assert _value(component.loss_component_weight) == 4.0
 
 
 def test_set_loss_component_params_reads_the_keys_it_knows_and_ignores_the_rest():
@@ -803,15 +825,15 @@ def test_a_huber_component_also_takes_the_delta_parameter():
     component = WeightedHuberVirialLoss(loss_component_weight=2.0, delta=0.5)
     component.build(tf.float64)
     component.set_loss_component_params({"delta": 3.0})
-    assert float(component.delta) == 3.0
+    assert _value(component.delta) == 3.0
     assert component.get_loss_component_weight() == 2.0
     component.set_loss_component_params({"weight": 5.0, "delta": 0.25})
-    assert (component.get_loss_component_weight(), float(component.delta)) == (
+    assert (component.get_loss_component_weight(), _value(component.delta)) == (
         5.0,
         0.25,
     )
     component.set_loss_component_params({"weight": 6.0})
-    assert float(component.delta) == 0.25
+    assert _value(component.delta) == 0.25
 
 
 def test_a_new_delta_changes_the_value_of_a_built_huber_component(batch, tensors):
@@ -824,7 +846,10 @@ def test_a_new_delta_changes_the_value_of_a_built_huber_component(batch, tensors
         np.sum(batch.v_weight) * 6
     )
     _assert_close(
-        component.compute_loss_component(input_data, predictions).numpy(), expected
+        component.compute_loss_component(
+            input_data=input_data, predictions=predictions
+        ).numpy(),
+        expected,
     )
 
 
@@ -848,9 +873,9 @@ def test_huber_repr_adds_the_delta_as_a_float_before_the_build_and_as_a_value_af
 
 def test_the_abstract_bases_cannot_be_instantiated():
     with pytest.raises(TypeError, match="abstract"):
-        LossComponent(loss_component_weight=1.0, name="x")
+        LossComponent(loss_component_weight=1.0, name="x")  # ty: ignore[call-non-callable]
     with pytest.raises(TypeError, match="abstract"):
-        HuberLoss(loss_component_weight=1.0)
+        HuberLoss(loss_component_weight=1.0)  # ty: ignore[call-non-callable]
 
 
 def test_the_abstract_compute_methods_raise_not_implemented_error():
@@ -936,8 +961,11 @@ def test_the_loss_function_sets_component_parameters_by_name():
     })
     loss.build(tf.float64)
     loss.set_loss_component_params({"virial": {"weight": 2.0, "delta": 0.1}})
-    component = loss.loss_components["virial"]
-    assert (component.get_loss_component_weight(), float(component.delta)) == (2.0, 0.1)
+    component = cast(HuberLoss, loss.loss_components["virial"])
+    assert (component.get_loss_component_weight(), _value(component.delta)) == (
+        2.0,
+        0.1,
+    )
 
 
 def test_an_unknown_component_name_is_refused_with_the_known_names():
@@ -953,7 +981,7 @@ def test_an_unknown_component_name_is_refused_with_the_known_names():
 
 
 def test_a_component_of_an_unknown_type_is_refused_when_the_loss_is_computed():
-    loss = LossFunction({"odd": object()})
+    loss = LossFunction({"odd": object()})  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="Unknown loss type"):
         loss(input_data={}, predictions={})
 
@@ -982,7 +1010,7 @@ def _regularised_model():
     instructions = preset(element_map={"Be": 0, "Li": 1}, lmax=0).get_instructions()
     model = TensorPotential(instructions, param_dtype=tf.float64).model
     for variable in model.variables_to_train:
-        variable.assign(tf.fill(variable.shape, tf.constant(0.5, variable.dtype)))
+        variable.assign(tf.fill(variable.shape, _const(0.5, variable.dtype)))
     # each instruction that reports an L2 loss counts every trainable variable it owns, the variables of
     # the instructions it refers to included: with every weight 0.5 the sum is 0.25 per element
     elements = sum(
