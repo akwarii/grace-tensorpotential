@@ -6,7 +6,7 @@ What the workflows do, why they are shaped this way, and the commands behind the
 
 | File | Jobs |
 |---|---|
-| `lint.yaml` | ruff and ty on the new packages, the lint ratchet, the import contract, registry completeness, the tests of the packaging tools, the clone ratchet, the divergence ledger |
+| `lint.yaml` | ruff and ty on the new packages, the lint ratchet, the import contract, `deptry`, the dead-code ratchet, registry completeness, the tests of the packaging and dead-code tools, the clone ratchet, the divergence ledger |
 | `tests.yaml` | `test-core` (no TensorFlow), `test-torch` (pandas 2.3 and 3.0), `test-tf` (four shards, each uploads its coverage data), `quality-gates` (combines the coverage); also nightly |
 | `wheel.yaml` | `wheel`, `wheel-smoke`, `extras-resolve` |
 | `nightly.yml` | both stacks in one environment, torch-sim main |
@@ -20,7 +20,7 @@ The job names a pull request must pass; the owner sets them as required checks i
 
 | Workflow | Jobs | Covers |
 |---|---|---|
-| Lint | `lint` | strict ruff and ty on the new packages, lint ratchet, import contract, registry completeness, packaging-tool tests, clone ratchet (`tools/check_clones.py`), divergence ledger (`tools/divergence.py`, against a read-only fetch of the public upstream master: no secret, no push permission) |
+| Lint | `lint` | strict ruff and ty on the new packages, lint ratchet, import contract, `deptry`, dead-code ratchet (`tools/dead_code.py`), registry completeness, packaging- and dead-code-tool tests, clone ratchet (`tools/check_clones.py`), divergence ledger (`tools/divergence.py`, against a read-only fetch of the public upstream master: no secret, no push permission) |
 | Tests | `test-core`, `test-torch (2.3.3)`, `test-torch (3.0.3)`, `test-tf (group 1 of 4)` to `test-tf (group 4 of 4)` | the suites |
 | Tests | `quality-gates` | combines the coverage data of the four shards, runs `tools/coverage_ratchet.py check` and, on a pull request, `tools/check_touched_coverage.py --base origin/<base branch>` (touched units at 90%) |
 | Wheel | `wheel`, `wheel-smoke`, `extras-resolve` | packaging |
@@ -28,6 +28,10 @@ The job names a pull request must pass; the owner sets them as required checks i
 `quality-gates` needs the four shards to pass, so a failing shard hides its verdict. Each shard writes `.coverage.group-N` (`COVERAGE_FILE`) and uploads it as the artifact `coverage-group-N`; the combine step needs the checkout path of the shards, which is the same on every hosted job.
 
 CI does **not** run: `python tools/board.py lint` and every other project-board query (a token with project scope; it stays in the agent procedure), the real-weight and foundation-model tests (HPC only), any GPU test, the comparisons with `baselines/` (`tools/junit_outcomes.py`, `tools/ast_manifest.py`; run them locally for a gate), and the scheduled `Nightly` and `Upstream completeness` jobs on a pull request.
+
+## Python versions (DEPS4)
+
+`requires-python` is `>=3.12` (floor raised on 2026-10-12, CI3). Every job runs 3.12, so the floor is covered by `test-core`, `test-torch`, `test-tf`, `lint` and the nightly jobs; `wheel-smoke` and `extras-resolve` also run 3.13, the newest version the project claims. Nothing runs the TensorFlow suite or `test-core` on 3.13, and nothing on 3.14. `upstream-completeness.yml` uses 3.11 because it only runs `tools/instruction_ast.py` on upstream master (no dependencies), which still supports older versions. A matrix on `test-core` would rename the required check `test-core` (to `test-core (3.12)`), which is the owner's to change in the repository settings, so the job stays as it is.
 
 ## The hosted runner has 16 GB and a TensorFlow worker's memory only grows (CI2)
 

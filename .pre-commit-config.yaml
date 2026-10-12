@@ -28,3 +28,15 @@ repos:
         language: system
         pass_filenames: false
         files: ^(tensorpotential/.*\.py|pyproject\.toml)$
+      - id: deptry
+        name: deptry (declared against imported dependencies)
+        entry: uv run --frozen --no-sync deptry tensorpotential
+        language: system
+        pass_filenames: false
+        files: ^(tensorpotential/.*\.py|pyproject\.toml)$
+      - id: dead-code-ratchet
+        name: dead code ratchet (vulture findings may not rise)
+        entry: uv run --frozen --no-sync python tools/dead_code.py check
+        language: system
+        pass_filenames: false
+        files: ^(tensorpotential/.*\.py|tools/dead_code(_whitelist\.txt|\.py)|baselines/dead_code\.json)$

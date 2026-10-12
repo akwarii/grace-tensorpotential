@@ -51,13 +51,17 @@ jobs:
         run: uv run --frozen --no-sync python tools/lint_ratchet.py check
       - name: Import contract (TensorFlow-free modules)
         run: uv run --frozen --no-sync lint-imports
+      - name: Dependencies (declared against imported, whitelist in pyproject.toml)
+        run: uv run --frozen --no-sync deptry tensorpotential
+      - name: Dead code ratchet (vulture findings per file may not rise)
+        run: uv run --frozen --no-sync python tools/dead_code.py check
       - name: Registry completeness (instruction classes and pinned defaults)
         run: uv run --frozen --no-sync python tools/instruction_ast.py check
-      - name: Tests of the packaging tools (the environment has the tf extra and tensorpotential installed)
+      - name: Tests of the packaging and dead-code tools (the environment has the tf extra and tensorpotential installed)
         uses: ./.github/actions/run-pytest
         with:
           python: .venv/bin/python
-          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py
+          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py tools/tests/test_dead_code.py
       - name: Clone ratchet (duplicated functions may not rise)
         run: uv run --frozen --no-sync python tools/check_clones.py check
       - name: Fetch upstream master (read-only, public, no credential)
