@@ -1188,6 +1188,9 @@ def test_enabling_twice_keeps_the_tensors_of_an_instruction_that_is_already_acti
 # tensor sum_a x_a (x) F_a of an open cluster (Voigt order xx, yy, zz, xy, xz, yz).
 
 SPRING_K = 0.8
+ISOTROPIC = np.eye(3)
+# an anisotropic spring has pair forces that are not along the bond: its virial is not symmetric
+ANISOTROPIC = np.array([[1.0, 0.3, 0.1], [0.3, 2.0, 0.4], [0.1, 0.4, 3.0]])
 CLUSTERS = [  # the atoms of two structures of one batch
     np.array([[0.0, 0.0, 0.0], [1.0, 0.5, -0.3], [-0.4, 1.2, 0.7]]),
     np.array([[0.2, 0.1, 0.0], [1.1, -0.7, 0.4]]),
@@ -1197,14 +1200,15 @@ CLUSTERS = [  # the atoms of two structures of one batch
 class _Spring:
     """The spring pair potential as an instruction; it records the flags it was called with."""
 
-    def __init__(self, k=SPRING_K):
+    def __init__(self, k=SPRING_K, metric=ISOTROPIC):
         self.k = k
+        self.metric = tf.constant(metric, tf.float64)
         self.calls = []
 
     def __call__(self, input_data, training=False, local=False):
         self.calls.append({"training": training, "local": local})
         r = input_data[constants.BOND_VECTOR]
-        pair_energy = 0.5 * self.k * tf.reduce_sum(r**2, axis=1)
+        pair_energy = 0.5 * self.k * tf.einsum("bi,ij,bj->b", r, self.metric, r)
         n_atoms = tf.shape(input_data[constants.ATOMIC_MU_I])[0]
         input_data[constants.PREDICT_ATOMIC_ENERGY] = tf.math.unsorted_segment_sum(
             pair_energy, input_data[constants.BOND_IND_I], num_segments=n_atoms
@@ -1238,16 +1242,17 @@ def _cluster_batch(structures: list[int]) -> dict[str, tf.Tensor]:
     }
 
 
-def _spring_energy(x: np.ndarray) -> float:
-    return SPRING_K * sum(np.sum((x[i] - x[j]) ** 2) for i in range(len(x)) for j in range(i))
+def _spring_energy(x: np.ndarray, m: np.ndarray = ISOTROPIC) -> float:
+    return SPRING_K * sum((x[i] - x[j]) @ m @ (x[i] - x[j]) for i in range(len(x)) for j in range(i))
 
 
-def _spring_forces(x: np.ndarray) -> np.ndarray:
-    return np.array([2 * SPRING_K * sum(x[j] - x[a] for j in range(len(x)) if j != a) for a in range(len(x))])
+def _spring_forces(x: np.ndarray, m: np.ndarray = ISOTROPIC) -> np.ndarray:
+    return np.array([2 * SPRING_K * m @ sum(x[j] - x[a] for j in range(len(x)) if j != a) for a in range(len(x))])
 
 
-def _cluster_virial(x: np.ndarray) -> np.ndarray:
-    tensor = sum(np.outer(x[a], f) for a, f in enumerate(_spring_forces(x)))  # sum_a x_a (x) F_a, symmetric here
+def _cluster_virial(x: np.ndarray, m: np.ndarray = ISOTROPIC) -> np.ndarray:
+    # sum_a x_a (x) F_a: entry [b, a] is x_b F_a, and the Voigt entry xy is the force along y times the position along x
+    tensor = sum(np.outer(x[a], f) for a, f in enumerate(_spring_forces(x, m)))
     return np.array([tensor[0, 0], tensor[1, 1], tensor[2, 2], tensor[0, 1], tensor[0, 2], tensor[1, 2]])
 
 
@@ -1282,6 +1287,25 @@ def test_a_structure_compute_function_returns_energy_forces_virial_and_pair_forc
     _close(result["z_" + constants.PREDICT_PAIR_FORCES], -SPRING_K * batch[constants.BOND_VECTOR].numpy())
     assert result[constants.PREDICT_TOTAL_ENERGY].shape == (1, 1)
     assert list(result)[-1] == "z_" + constants.PREDICT_PAIR_FORCES  # the key sorts last on purpose
+
+
+@pytest.mark.parametrize("metric", [ISOTROPIC, ANISOTROPIC], ids=["isotropic", "anisotropic"])
+def test_the_virial_of_a_structure_is_the_sum_of_position_times_force_also_for_forces_off_the_bond(metric):
+    x = CLUSTERS[0]
+    result = ComputeStructureEnergyAndForcesAndVirial()([_Spring(metric=metric)], _cluster_batch([0]))
+    _close(result[constants.PREDICT_TOTAL_ENERGY], [[_spring_energy(x, metric)]])
+    _close(result[constants.PREDICT_FORCES], _spring_forces(x, metric))
+    _close(result[constants.PREDICT_VIRIAL], _cluster_virial(x, metric))
+
+
+def test_the_anisotropic_virial_is_not_symmetric_so_the_oracle_tells_the_off_diagonal_entries_apart():
+    tensor = _cluster_virial(CLUSTERS[0], ANISOTROPIC)
+    assert abs(tensor[3] - _cluster_virial(CLUSTERS[0], ISOTROPIC)[3]) > 1e-3
+
+
+def test_the_batch_virial_of_forces_off_the_bond_has_one_row_per_structure():
+    result = ComputeBatchEnergyForcesVirials()([_Spring(metric=ANISOTROPIC)], _cluster_batch([0, 1]))
+    _close(result[constants.PREDICT_VIRIAL], np.vstack([_cluster_virial(c, ANISOTROPIC) for c in CLUSTERS]))
 
 
 def test_the_net_force_and_the_net_torque_of_an_isolated_cluster_vanish():
