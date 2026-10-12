@@ -45,6 +45,10 @@ inputs:
     description: Extra pytest arguments appended verbatim
     required: false
     default: ""
+  log-file:
+    description: Also write the pytest output to this file (CI4, the ids of a --collect-only -q run); empty = the job log only
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -62,6 +66,7 @@ runs:
         IN_GROUP: ${{ inputs.group }}
         IN_DURATIONS: ${{ inputs.durations-path }}
         IN_EXTRA: ${{ inputs.extra-args }}
+        IN_LOG: ${{ inputs.log-file }}
       run: |
         if [ -n "$IN_PATH" ]; then
           export PATH="$IN_PATH:$PATH"
@@ -80,4 +85,9 @@ runs:
         # shellcheck disable=SC2206
         args+=( $IN_EXTRA )
         echo "+ $IN_PYTHON -m pytest ${args[*]}"
-        "$IN_PYTHON" -m pytest "${args[@]}"
+        if [ -n "$IN_LOG" ]; then
+          # `shell: bash` runs with pipefail, so a failing pytest still fails the step
+          "$IN_PYTHON" -m pytest "${args[@]}" | tee "$IN_LOG"
+        else
+          "$IN_PYTHON" -m pytest "${args[@]}"
+        fi

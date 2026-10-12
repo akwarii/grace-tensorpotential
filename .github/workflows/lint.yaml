@@ -53,11 +53,11 @@ jobs:
         run: uv run --frozen --no-sync lint-imports
       - name: Registry completeness (instruction classes and pinned defaults)
         run: uv run --frozen --no-sync python tools/instruction_ast.py check
-      - name: Tests of the packaging tools (the environment has the tf extra and tensorpotential installed)
+      - name: Tests of the packaging and CI tools (the environment has the tf extra and tensorpotential installed)
         uses: ./.github/actions/run-pytest
         with:
           python: .venv/bin/python
-          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py
+          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py tools/tests/test_merge_durations.py
       - name: Clone ratchet (duplicated functions may not rise)
         run: uv run --frozen --no-sync python tools/check_clones.py check
       - name: Fetch upstream master (read-only, public, no credential)
