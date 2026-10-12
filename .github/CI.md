@@ -9,7 +9,7 @@ What the workflows do, why they are shaped this way, and the commands behind the
 | `lint.yaml` | ruff and ty on the new packages, the lint ratchet, the import contract, registry completeness, the tests of the packaging tools, the clone ratchet, the divergence ledger |
 | `tests.yaml` | `test-core` (no TensorFlow), `test-torch` (pandas 2.3 and 3.0), `test-tf` (four shards, each uploads its coverage data), `quality-gates` (combines the coverage); also nightly |
 | `wheel.yaml` | `wheel`, `wheel-smoke`, `extras-resolve` |
-| `nightly.yml` | both stacks in one environment, torch-sim main |
+| `nightly.yml` | both stacks in one environment, torch-sim main, `quality-report` (`tools/quality_report.py check` on the coverage and junit files of the Tests run of the same commit; the table goes to the job summary, a worse metric fails the job) |
 | `upstream-completeness.yml` | `tools/instruction_ast.py check` against upstream master; scheduled, so it runs only when Actions is on and the file is on the default branch |
 
 Every pytest in CI goes through `.github/actions/run-pytest` (per-test `--timeout=900` from `pytest-timeout`, workers, markers, shard). Every job has `timeout-minutes`; `cancel-in-progress` is for pull requests only. A new job that runs pytest uses the action; a new heavy test file needs no edit.
@@ -25,7 +25,7 @@ The job names a pull request must pass; the owner sets them as required checks i
 | Tests | `quality-gates` | combines the coverage data of the four shards, runs `tools/coverage_ratchet.py check` and, on a pull request, `tools/check_touched_coverage.py --base origin/<base branch>` (touched units at 90%) |
 | Wheel | `wheel`, `wheel-smoke`, `extras-resolve` | packaging |
 
-`quality-gates` needs the four shards to pass, so a failing shard hides its verdict. Each shard writes `.coverage.group-N` (`COVERAGE_FILE`) and uploads it as the artifact `coverage-group-N`; the combine step needs the checkout path of the shards, which is the same on every hosted job.
+`quality-gates` needs the four shards to pass, so a failing shard hides its verdict. Each shard writes `.coverage.group-N` (`COVERAGE_FILE`) and uploads it, with `junit.group-N.xml`, as the artifact `coverage-group-N`; the combine step needs the checkout path of the shards, which is the same on every hosted job.
 
 CI does **not** run: `python tools/board.py lint` and every other project-board query (a token with project scope; it stays in the agent procedure), the real-weight and foundation-model tests (HPC only), any GPU test, the comparisons with `baselines/` (`tools/junit_outcomes.py`, `tools/ast_manifest.py`; run them locally for a gate), and the scheduled `Nightly` and `Upstream completeness` jobs on a pull request.
 

@@ -1,0 +1,517 @@
+{
+ "metrics": {
+  "api.docstrings": {
+   "kind": "ratio",
+   "have": 252,
+   "total": 772
+  },
+  "api.return_annotations": {
+   "kind": "ratio",
+   "have": 224,
+   "total": 772
+  },
+  "clones.library.functions": {
+   "kind": "count",
+   "value": 17.0
+  },
+  "clones.library.groups": {
+   "kind": "count",
+   "value": 6.0
+  },
+  "clones.library.redundant_lines": {
+   "kind": "count",
+   "value": 140.0
+  },
+  "clones.tests.functions": {
+   "kind": "count",
+   "value": 0.0
+  },
+  "clones.tests.groups": {
+   "kind": "count",
+   "value": 0.0
+  },
+  "clones.tests.redundant_lines": {
+   "kind": "count",
+   "value": 0.0
+  },
+  "coverage.calculator": {
+   "kind": "ratio",
+   "have": 1094,
+   "total": 1218
+  },
+  "coverage.cli": {
+   "kind": "ratio",
+   "have": 2859,
+   "total": 3651
+  },
+  "coverage.compat": {
+   "kind": "ratio",
+   "have": 0,
+   "total": 0
+  },
+  "coverage.core": {
+   "kind": "ratio",
+   "have": 135,
+   "total": 137
+  },
+  "coverage.data": {
+   "kind": "ratio",
+   "have": 1759,
+   "total": 1995
+  },
+  "coverage.extra": {
+   "kind": "ratio",
+   "have": 1008,
+   "total": 1180
+  },
+  "coverage.functions": {
+   "kind": "ratio",
+   "have": 970,
+   "total": 1250
+  },
+  "coverage.instructions": {
+   "kind": "ratio",
+   "have": 4211,
+   "total": 4544
+  },
+  "coverage.potentials": {
+   "kind": "ratio",
+   "have": 434,
+   "total": 488
+  },
+  "coverage.resources": {
+   "kind": "ratio",
+   "have": 0,
+   "total": 0
+  },
+  "coverage.scripts": {
+   "kind": "ratio",
+   "have": 2659,
+   "total": 3699
+  },
+  "coverage.toplevel": {
+   "kind": "ratio",
+   "have": 2918,
+   "total": 3013
+  },
+  "coverage.torch_backend": {
+   "kind": "ratio",
+   "have": 431,
+   "total": 432
+  },
+  "coverage.total": {
+   "kind": "ratio",
+   "have": 22713,
+   "total": 26684
+  },
+  "coverage.uq": {
+   "kind": "ratio",
+   "have": 4235,
+   "total": 5077
+  },
+  "divergence.upstream_files": {
+   "kind": "count",
+   "value": 116.0
+  },
+  "lint.ruff.B006": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.B007": {
+   "kind": "count",
+   "value": 49.0
+  },
+  "lint.ruff.B009": {
+   "kind": "count",
+   "value": 7.0
+  },
+  "lint.ruff.B010": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.B023": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.B024": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.B027": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.B028": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.B904": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.B905": {
+   "kind": "count",
+   "value": 103.0
+  },
+  "lint.ruff.BLE001": {
+   "kind": "count",
+   "value": 14.0
+  },
+  "lint.ruff.C901": {
+   "kind": "count",
+   "value": 80.0
+  },
+  "lint.ruff.E402": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.E702": {
+   "kind": "count",
+   "value": 4.0
+  },
+  "lint.ruff.E722": {
+   "kind": "count",
+   "value": 8.0
+  },
+  "lint.ruff.ERA001": {
+   "kind": "count",
+   "value": 93.0
+  },
+  "lint.ruff.F401": {
+   "kind": "count",
+   "value": 9.0
+  },
+  "lint.ruff.F403": {
+   "kind": "count",
+   "value": 4.0
+  },
+  "lint.ruff.F405": {
+   "kind": "count",
+   "value": 68.0
+  },
+  "lint.ruff.F821": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.F841": {
+   "kind": "count",
+   "value": 4.0
+  },
+  "lint.ruff.NPY002": {
+   "kind": "count",
+   "value": 138.0
+  },
+  "lint.ruff.PLR0912": {
+   "kind": "count",
+   "value": 51.0
+  },
+  "lint.ruff.PLR0913": {
+   "kind": "count",
+   "value": 108.0
+  },
+  "lint.ruff.PLR0915": {
+   "kind": "count",
+   "value": 56.0
+  },
+  "lint.ruff.PLW0108": {
+   "kind": "count",
+   "value": 8.0
+  },
+  "lint.ruff.PLW0127": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.PLW0133": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PLW0602": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PLW0603": {
+   "kind": "count",
+   "value": 5.0
+  },
+  "lint.ruff.PLW1510": {
+   "kind": "count",
+   "value": 8.0
+  },
+  "lint.ruff.PLW1641": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.PLW2901": {
+   "kind": "count",
+   "value": 23.0
+  },
+  "lint.ruff.PLW3301": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PTH100": {
+   "kind": "count",
+   "value": 36.0
+  },
+  "lint.ruff.PTH103": {
+   "kind": "count",
+   "value": 14.0
+  },
+  "lint.ruff.PTH104": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.PTH105": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.PTH107": {
+   "kind": "count",
+   "value": 6.0
+  },
+  "lint.ruff.PTH109": {
+   "kind": "count",
+   "value": 4.0
+  },
+  "lint.ruff.PTH110": {
+   "kind": "count",
+   "value": 42.0
+  },
+  "lint.ruff.PTH111": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PTH112": {
+   "kind": "count",
+   "value": 30.0
+  },
+  "lint.ruff.PTH113": {
+   "kind": "count",
+   "value": 34.0
+  },
+  "lint.ruff.PTH114": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PTH117": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PTH118": {
+   "kind": "count",
+   "value": 155.0
+  },
+  "lint.ruff.PTH119": {
+   "kind": "count",
+   "value": 13.0
+  },
+  "lint.ruff.PTH120": {
+   "kind": "count",
+   "value": 34.0
+  },
+  "lint.ruff.PTH122": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PTH123": {
+   "kind": "count",
+   "value": 50.0
+  },
+  "lint.ruff.PTH201": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.PTH202": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.PTH204": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.PTH206": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.PTH207": {
+   "kind": "count",
+   "value": 7.0
+  },
+  "lint.ruff.PTH208": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.RET503": {
+   "kind": "count",
+   "value": 11.0
+  },
+  "lint.ruff.RET504": {
+   "kind": "count",
+   "value": 75.0
+  },
+  "lint.ruff.RET505": {
+   "kind": "count",
+   "value": 39.0
+  },
+  "lint.ruff.RET506": {
+   "kind": "count",
+   "value": 6.0
+  },
+  "lint.ruff.RET507": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.RUF012": {
+   "kind": "count",
+   "value": 83.0
+  },
+  "lint.ruff.S104": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.S108": {
+   "kind": "count",
+   "value": 8.0
+  },
+  "lint.ruff.S110": {
+   "kind": "count",
+   "value": 5.0
+  },
+  "lint.ruff.S301": {
+   "kind": "count",
+   "value": 49.0
+  },
+  "lint.ruff.S311": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.S602": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.ruff.S603": {
+   "kind": "count",
+   "value": 22.0
+  },
+  "lint.ruff.S607": {
+   "kind": "count",
+   "value": 16.0
+  },
+  "lint.ruff.S608": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.SIM101": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.SIM102": {
+   "kind": "count",
+   "value": 13.0
+  },
+  "lint.ruff.SIM103": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.SIM105": {
+   "kind": "count",
+   "value": 14.0
+  },
+  "lint.ruff.SIM108": {
+   "kind": "count",
+   "value": 13.0
+  },
+  "lint.ruff.SIM113": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.SIM114": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.SIM115": {
+   "kind": "count",
+   "value": 5.0
+  },
+  "lint.ruff.SIM117": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ruff.SIM118": {
+   "kind": "count",
+   "value": 11.0
+  },
+  "lint.ruff.SIM300": {
+   "kind": "count",
+   "value": 13.0
+  },
+  "lint.ruff.SIM401": {
+   "kind": "count",
+   "value": 7.0
+  },
+  "lint.ruff.SIM905": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ruff.SIM910": {
+   "kind": "count",
+   "value": 2.0
+  },
+  "lint.strict": {
+   "kind": "count",
+   "value": 0.0
+  },
+  "lint.ty.call-non-callable": {
+   "kind": "count",
+   "value": 3.0
+  },
+  "lint.ty.invalid-assignment": {
+   "kind": "count",
+   "value": 22.0
+  },
+  "lint.ty.invalid-method-override": {
+   "kind": "count",
+   "value": 23.0
+  },
+  "lint.ty.invalid-return-type": {
+   "kind": "count",
+   "value": 5.0
+  },
+  "lint.ty.invalid-type-arguments": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ty.invalid-type-form": {
+   "kind": "count",
+   "value": 9.0
+  },
+  "lint.ty.missing-argument": {
+   "kind": "count",
+   "value": 4.0
+  },
+  "lint.ty.no-matching-overload": {
+   "kind": "count",
+   "value": 20.0
+  },
+  "lint.ty.not-iterable": {
+   "kind": "count",
+   "value": 18.0
+  },
+  "lint.ty.not-subscriptable": {
+   "kind": "count",
+   "value": 30.0
+  },
+  "lint.ty.unknown-argument": {
+   "kind": "count",
+   "value": 1.0
+  },
+  "lint.ty.unresolved-reference": {
+   "kind": "count",
+   "value": 5.0
+  },
+  "todo.markers": {
+   "kind": "count",
+   "value": 46.0
+  }
+ }
+}
