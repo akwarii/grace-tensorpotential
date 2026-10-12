@@ -8,7 +8,7 @@ fails when
 
 Nothing is installed or downloaded beyond the package metadata that resolution reads::
 
-    python tools/resolve_extras.py [--python-version 3.11] [--python-platform linux] [EXTRA ...]
+    python tools/resolve_extras.py [--python-version 3.12] [--python-platform linux] [EXTRA ...]
 
 The extras to check default to all of them. The names are the project names after normalisation
 (``torch_sim`` and ``torch-sim`` are one name); ``tensorpotential[tf]`` style references to the project itself are
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     """Check the extras named on the command line (default: all); return the exit status."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("extras", nargs="*", help="extras to check (default: all)")
-    parser.add_argument("--python-version", default="3.11")
+    parser.add_argument("--python-version", default="3.12")
     parser.add_argument("--python-platform", default="linux")
     parser.add_argument("--pyproject", type=Path, default=ROOT / "pyproject.toml")
     args = parser.parse_args(argv)

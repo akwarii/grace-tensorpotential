@@ -105,7 +105,7 @@ A test writes only into `tmp_path` or a scratch directory; `git status` is clean
 
 ## Code style
 
-- Python 3.11+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
+- Python 3.12+, `from __future__ import annotations` in new modules, type hints on everything new (checked by `ty`).
 - **Legacy code stays as it is**: no repo-wide reformat, no file splitting (`instructions/compute.py` is about 4,900 lines and upstream merges depend on its shape), no renames; improve a unit only
   while you are already changing it. An issue whose job is to change legacy code (clean-up, quality, deduplication, packaging, performance) says what may change; the coverage and comparison rules govern it and it is not widened.
 - New packages get the strict ruff set from the **single ruff configuration in `pyproject.toml`** (no `ruff.toml`; `per-file-ignores` switch the strict families off outside the new packages, listed there and in `tools/lint_ratchet.py`, so a plain `ruff check` stays quiet on legacy code). **Strict by default (TOOL3):** `tools/lint_ratchet.py` ignores that switch and decides by `baselines/legacy_files.txt` (every file that existed outside the new packages; it only shrinks, a hand-added entry fails `check`): a file in neither that list nor a new package, so any **new file in `cli/`, `data/`, `tests/`, `tools/`, ...**, must have no ruff finding (docstrings and plain `assert` are allowed in test files) and no ty finding without the `[[tool.ty.overrides]]`; a legacy file may not raise its count of E, F, ERA001, C901, PLR0912/0913/0915, BLE001, B, RUF012, NPY002, SIM, RET, PLW, PTH and S (without S101).
