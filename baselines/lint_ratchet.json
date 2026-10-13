@@ -1,7 +1,7 @@
 {
  "legacy": {
-  "count": 272,
-  "sha256": "6afef72ef049e2453a2e353274e9eb69272d35a6a58f42b665cbb2db2271c7a0"
+  "count": 274,
+  "sha256": "96b2126b9c6b6457f7b458e67fafe228603a16707cae504541a3eb45b1c3dc2c"
  },
  "ruff": {
   "examples/grace/visualize_metrics.ipynb": {
@@ -40,24 +40,6 @@
    "PTH120": 1,
    "PTH123": 4,
    "RET504": 1
-  },
-  "tensorpotential/cli/data.py": {
-   "B905": 2,
-   "C901": 2,
-   "NPY002": 1,
-   "PLR0912": 2,
-   "PLR0915": 2,
-   "PTH103": 2,
-   "PTH118": 7,
-   "PTH120": 3,
-   "PTH122": 1,
-   "PTH123": 1,
-   "PTH202": 1,
-   "PTH207": 2,
-   "RET504": 5,
-   "RET506": 2,
-   "S301": 1,
-   "SIM102": 1
   },
   "tensorpotential/cli/gracemaker.py": {
    "C901": 1,
@@ -232,10 +214,39 @@
    "PLR0913": 2,
    "RET505": 2
   },
+  "tensorpotential/data/datasets.py": {
+   "B905": 2,
+   "C901": 2,
+   "NPY002": 1,
+   "PLR0912": 2,
+   "PLR0915": 2,
+   "PTH103": 2,
+   "PTH118": 7,
+   "PTH120": 3,
+   "PTH122": 1,
+   "PTH123": 1,
+   "PTH202": 1,
+   "PTH207": 2,
+   "RET504": 5,
+   "RET506": 2,
+   "S301": 1,
+   "SIM102": 1
+  },
   "tensorpotential/data/dense_nbr.py": {
    "C901": 1,
    "PLR0913": 2,
    "PLW2901": 2
+  },
+  "tensorpotential/data/preprocess.py": {
+   "PTH103": 2,
+   "PTH113": 2,
+   "PTH118": 3,
+   "PTH120": 1,
+   "PTH123": 2,
+   "RET503": 1,
+   "RET504": 5,
+   "RET505": 1,
+   "S301": 2
   },
   "tensorpotential/data/process_df.py": {
    "B007": 1,
@@ -278,6 +289,22 @@
    "PLW0127": 1,
    "PTH123": 1,
    "RET505": 1
+  },
+  "tensorpotential/export_kokkos.py": {
+   "B007": 1,
+   "C901": 7,
+   "ERA001": 1,
+   "PLR0912": 4,
+   "PLR0913": 1,
+   "PLR0915": 2,
+   "PTH110": 1,
+   "PTH118": 2,
+   "PTH120": 1,
+   "PTH123": 1,
+   "RET504": 1,
+   "SIM102": 1,
+   "SIM118": 1,
+   "SIM300": 1
   },
   "tensorpotential/extra/gen_tensor/databuilder.py": {
    "SIM102": 1
@@ -405,6 +432,11 @@
    "B024": 1,
    "RUF012": 5
   },
+  "tensorpotential/model_ops.py": {
+   "B007": 3,
+   "C901": 1,
+   "SIM101": 1
+  },
   "tensorpotential/poly.py": {
    "B905": 2,
    "PLW1641": 2,
@@ -421,22 +453,6 @@
    "PLR0912": 3,
    "PLR0913": 7,
    "PLR0915": 3
-  },
-  "tensorpotential/scripts/_kokkos_export.py": {
-   "B007": 1,
-   "C901": 7,
-   "ERA001": 1,
-   "PLR0912": 4,
-   "PLR0913": 1,
-   "PLR0915": 2,
-   "PTH110": 1,
-   "PTH118": 2,
-   "PTH120": 1,
-   "PTH123": 1,
-   "RET504": 1,
-   "SIM102": 1,
-   "SIM118": 1,
-   "SIM300": 1
   },
   "tensorpotential/scripts/df2extxyz.py": {
    "S301": 1,
@@ -495,26 +511,18 @@
    "S301": 1
   },
   "tensorpotential/scripts/grace_preprocess.py": {
-   "PTH103": 3,
+   "PTH103": 1,
    "PTH112": 3,
-   "PTH113": 3,
-   "PTH118": 10,
-   "PTH120": 1,
-   "PTH123": 4,
-   "PTH207": 1,
-   "RET503": 1,
-   "RET504": 5,
-   "RET505": 1,
-   "S301": 2
+   "PTH113": 1,
+   "PTH118": 7,
+   "PTH123": 2,
+   "PTH207": 1
   },
   "tensorpotential/scripts/grace_uq.py": {
    "S608": 1
   },
   "tensorpotential/scripts/grace_utils.py": {
-   "B007": 3,
-   "C901": 1,
-   "PLW0108": 8,
-   "SIM101": 1
+   "PLW0108": 8
   },
   "tensorpotential/scripts/gracemaker.py": {
    "PTH123": 1
@@ -750,11 +758,6 @@
    "B007": 2,
    "B905": 6
   },
-  "tests/test_data.py": {
-   "B905": 1,
-   "PLR0913": 1,
-   "S301": 2
-  },
   "tests/test_databuilder.py": {
    "B905": 6,
    "NPY002": 1,
@@ -765,6 +768,11 @@
   },
   "tests/test_dataset_plotter.py": {
    "RET504": 1,
+   "S301": 2
+  },
+  "tests/test_datasets.py": {
+   "B905": 1,
+   "PLR0913": 1,
    "S301": 2
   },
   "tests/test_detect_multigpu_intent.py": {
@@ -837,9 +845,6 @@
   },
   "tests/test_grace_utils.py": {
    "SIM117": 1
-  },
-  "tests/test_grace_utils_export.py": {
-   "PTH110": 1
   },
   "tests/test_gracemaker.py": {
    "PTH201": 1,
@@ -1067,10 +1072,6 @@
   "tensorpotential/calculator/foundation_models.py": {
    "no-matching-overload": 1
   },
-  "tensorpotential/cli/data.py": {
-   "invalid-assignment": 2,
-   "invalid-return-type": 1
-  },
   "tensorpotential/cli/train.py": {
    "not-iterable": 1
   },
@@ -1097,6 +1098,10 @@
    "invalid-return-type": 1,
    "no-matching-overload": 1,
    "not-iterable": 1
+  },
+  "tensorpotential/data/datasets.py": {
+   "invalid-assignment": 2,
+   "invalid-return-type": 1
   },
   "tensorpotential/data/dense_nbr.py": {
    "not-subscriptable": 1

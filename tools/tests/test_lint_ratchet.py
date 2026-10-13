@@ -35,8 +35,9 @@ def f(a: int = None) -> int:
 """
 CLEAN = "def f(a: int) -> int:\n    return a\n"
 LEGACY = ["legacy/mod.py"]
-# The legacy list of TOOL3 had this many files; it shrinks, so a longer one is a hand edit.
-LEGACY_CEILING = 272
+# The legacy list of TOOL3 had 272 files; it shrinks, so a longer one is a hand edit. CLI2 split two files off
+# legacy ones (data/preprocess.py, model_ops.py) with --split, which is why it has two more now.
+LEGACY_CEILING = 274
 ERA = "# x = compute(1)\nVALUE = 1\n"
 
 
