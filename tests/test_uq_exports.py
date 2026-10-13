@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
+import json
 
 from tests.fresh_python import run_fresh_python
 
@@ -28,18 +28,21 @@ def test_all_lists_exactly_the_public_names(tmp_path):
     assert result.stdout.splitlines()[-1] == str(sorted(EXPORTS))
 
 
-@pytest.mark.parametrize("name", sorted(EXPORTS))
-def test_a_public_name_is_the_object_of_its_defining_module(name, tmp_path):
+def test_every_public_name_is_the_object_of_its_defining_module(tmp_path):
     code = (
-        "import importlib, tensorpotential.uq as uq\n"
-        f"owner = importlib.import_module({EXPORTS[name]!r})\n"
-        f"assert getattr(uq, {name!r}) is getattr(owner, {name!r})\n"
-        f"from tensorpotential.uq import {name}\n"
-        f"assert {name} is getattr(owner, {name!r})\n"
-        f"assert {name!r} in dir(uq)\n"
-    )
+        "import importlib, json, tensorpotential.uq as uq\n"
+        "bad = []\n"
+        "for name, module in json.loads(__EXPORTS__).items():\n"
+        "    owner = importlib.import_module(module)\n"
+        "    namespace = {}\n"
+        "    exec(f'from tensorpotential.uq import {name}', namespace)\n"
+        "    if not (getattr(uq, name) is getattr(owner, name) is namespace[name] and name in dir(uq)):\n"
+        "        bad.append(name)\n"
+        "print(json.dumps(bad))\n"
+    ).replace("__EXPORTS__", repr(json.dumps(EXPORTS)))
     result = run_fresh_python(code, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines()[-1] == "[]"
 
 
 def test_a_submodule_still_imports_from_the_package(tmp_path):

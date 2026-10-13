@@ -139,8 +139,9 @@ def test_main_returns_zero_with_and_without_a_command_and_does_not_read_sys_argv
     assert "usage: grace_models" in capsys.readouterr().out
 
 
+@pytest.mark.usefixtures("restore_messages")
 def test_the_command_shows_the_messages_of_the_library_as_bare_text(monkeypatch):
-    from tensorpotential.core.messages import get_messages_logger, hide_messages
+    from tensorpotential.core.messages import get_messages_logger
 
     def fake_download(name):
         get_messages_logger().info(f"Using cached GRACE model from /cache/{name}")
@@ -148,10 +149,7 @@ def test_the_command_shows_the_messages_of_the_library_as_bare_text(monkeypatch)
         return f"/cache/{name}"
 
     monkeypatch.setattr(foundation_models, "get_or_download_model", fake_download)
-    try:
-        code, out, err = run_models("download", KNOWN)
-    finally:
-        hide_messages()
+    code, out, err = run_models("download", KNOWN)
     assert code == 0
     assert f"Using cached GRACE model from /cache/{KNOWN}\n" in out
     assert err == "may be outdated\n"

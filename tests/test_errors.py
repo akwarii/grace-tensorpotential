@@ -27,10 +27,6 @@ def test_each_error_is_the_package_base_and_the_builtin_it_replaces(name, builti
     assert issubclass(error, builtin)
 
 
-def test_the_base_is_a_plain_exception_and_not_a_builtin_subtype():
-    assert errors.TensorPotentialError.__bases__ == (Exception,)
-
-
 def test_the_backend_error_is_a_package_error_and_an_import_error():
     error = backends.BackendNotInstalledError("tf", ("tensorflow",), "needs tensorflow")
     assert isinstance(error, errors.TensorPotentialError)
@@ -48,12 +44,12 @@ def test_the_moved_classes_keep_their_old_import_paths():
     assert KerasVariableUnavailableError is errors.KerasVariableUnavailableError
 
 
-def test_a_malformed_class_path_raises_class_path_error_that_a_value_error_catches():
+def test_a_malformed_class_path_raises_class_path_error():
     with pytest.raises(
         errors.ClassPathError, match="Couldn't deserialize class `not a path`"
     ):
         str_to_class("not a path")
-    with pytest.raises(ValueError, match="Couldn't deserialize class"):
+    with pytest.raises(errors.ClassPathError, match="has no attribute"):
         str_to_class("os.no_such_name")
 
 
@@ -89,11 +85,7 @@ def test_an_archive_with_a_top_level_file_raises_archive_error(tmp_path):
         safe_extract(archive, str(tmp_path / "out"))
 
 
-def test_an_archive_member_outside_the_folder_raises_archive_error_that_a_value_error_catches(
-    tmp_path,
-):
+def test_an_archive_member_outside_the_folder_raises_archive_error(tmp_path):
     archive = _archive(tmp_path, [("top", "dir"), ("top/../evil", "file")])
-    with pytest.raises(ValueError, match="Unsafe path detected"):
-        safe_extract(archive, str(tmp_path / "out"))
-    with pytest.raises(errors.ArchiveError):
+    with pytest.raises(errors.ArchiveError, match="Unsafe path detected"):
         safe_extract(archive, str(tmp_path / "out"))

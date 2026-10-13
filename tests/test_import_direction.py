@@ -6,10 +6,10 @@ it names every library module of the package, and that it fails on a library mod
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import tomllib
 from pathlib import Path
+
+from tests.fresh_python import run_fresh_python
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "tensorpotential"
@@ -18,10 +18,9 @@ CONTRACT_NAME = "Library code does not import the command layers (cli, scripts)"
 NOT_SOURCES = {"cli", "scripts", "compat", "resources", "__init__", "_tf_options", "__pycache__"}
 
 
-def _contract() -> dict:
+def _contract(name: str = CONTRACT_NAME) -> dict:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    contracts = config["tool"]["importlinter"]["contracts"]
-    return next(c for c in contracts if c["name"] == CONTRACT_NAME)
+    return next(c for c in config["tool"]["importlinter"]["contracts"] if c["name"] == name)
 
 
 def test_the_contract_names_every_library_module_of_the_package():
@@ -34,11 +33,9 @@ def test_the_contract_forbids_both_command_layers():
     assert set(_contract()["forbidden_modules"]) == {"tensorpotential.cli", "tensorpotential.scripts"}
 
 
-def _lint(project: Path) -> subprocess.CompletedProcess:
+def _lint(project: Path):
     code = "import sys; from importlinter.cli import lint_imports_command; sys.exit(lint_imports_command())"
-    return subprocess.run(  # noqa: S603
-        [sys.executable, "-c", code], cwd=project, capture_output=True, text=True, check=False
-    )
+    return run_fresh_python(code, project)
 
 
 def _scratch_project(tmp_path: Path, library_source: str) -> Path:
@@ -82,60 +79,51 @@ LOWER_LAYERS_CONTRACT = "Instructions and data do not import the model layers"
 FOUNDATIONS_CONTRACT = "Foundation modules import nothing above them"
 
 
-def _named_contract(name: str) -> dict:
-    config = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    return next(c for c in config["tool"]["importlinter"]["contracts"] if c["name"] == name)
-
-
 def _module_exists(dotted: str) -> bool:
     relative = Path(*dotted.split(".")[1:])
     return (PACKAGE / relative).is_dir() or (PACKAGE / relative).with_suffix(".py").is_file()
 
 
-def _layer_scratch_project(tmp_path: Path, contract_name: str, source: str, importer: str, target: str) -> Path:
-    """A package ``pkg`` with the modules the contract names; ``importer`` imports ``target`` (both dotted below ``pkg``)."""
-    contract = _named_contract(contract_name)
+def _layer_scratch_project(tmp_path: Path, contract_name: str, importer: str, target: str) -> Path:
+    """A package ``pkg`` with the modules the contract names; ``importer`` imports ``target`` (both modules directly below ``pkg``)."""
+    contract = _contract(contract_name)
+    sources = [m.replace("tensorpotential", "pkg") for m in contract["source_modules"]]
+    forbidden = [m.replace("tensorpotential", "pkg") for m in contract["forbidden_modules"]]
     package = tmp_path / "pkg"
-    names = {m.removeprefix("tensorpotential.") for m in contract["source_modules"] + contract["forbidden_modules"]}
-    names.add(target)
-    for name in names:
-        module = package / f"{name}.py"
-        module.parent.mkdir(parents=True, exist_ok=True)
-        module.write_text("VALUE = 1\n")
+    package.mkdir()
     (package / "__init__.py").write_text("")
-    (package / f"{importer}.py").write_text(f"from pkg import {target}\n" if source == "from" else f"import pkg.{target}\n")
-    config = (
+    for name in {m.removeprefix("pkg.") for m in sources + forbidden} | {target}:
+        (package / f"{name}.py").write_text("VALUE = 1\n")
+    (package / f"{importer}.py").write_text(f"from pkg import {target}\n")
+    indirect = str(contract.get("allow_indirect_imports", False)).lower()
+    (tmp_path / ".importlinter").write_text(
         f"[importlinter]\nroot_package = pkg\n\n[importlinter:contract:layers]\nname = {contract_name}\n"
-        f"type = forbidden\nallow_indirect_imports = {str(contract.get('allow_indirect_imports', False)).lower()}\n"
-        "source_modules =\n"
-        + "".join(f"    {m.replace('tensorpotential', 'pkg')}\n" for m in contract["source_modules"])
-        + "forbidden_modules =\n"
-        + "".join(f"    {m.replace('tensorpotential', 'pkg')}\n" for m in contract["forbidden_modules"])
+        f"type = forbidden\nallow_indirect_imports = {indirect}\n"
+        "source_modules =\n" + "".join(f"    {m}\n" for m in sources) + "forbidden_modules =\n" + "".join(f"    {m}\n" for m in forbidden)
     )
-    (tmp_path / ".importlinter").write_text(config)
     return tmp_path
 
 
 def test_the_layer_contracts_name_only_modules_that_exist():
     for name in (LOWER_LAYERS_CONTRACT, FOUNDATIONS_CONTRACT):
-        contract = _named_contract(name)
+        contract = _contract(name)
         missing = [m for m in contract["source_modules"] + contract["forbidden_modules"] if not _module_exists(m)]
         assert not missing, f"{name}: {missing}"
 
 
 def test_data_importing_calculator_breaks_the_lower_layers_contract(tmp_path):
-    project = _layer_scratch_project(tmp_path, LOWER_LAYERS_CONTRACT, "from", "data", "calculator")
+    project = _layer_scratch_project(tmp_path, LOWER_LAYERS_CONTRACT, "data", "calculator")
     result = _lint(project)
     assert result.returncode != 0, result.stdout
     assert "BROKEN" in result.stdout
 
 
 def test_core_importing_instructions_breaks_the_foundations_contract(tmp_path):
-    project = _layer_scratch_project(tmp_path, FOUNDATIONS_CONTRACT, "import", "core", "instructions")
+    project = _layer_scratch_project(tmp_path, FOUNDATIONS_CONTRACT, "core", "instructions")
     assert _lint(project).returncode != 0
 
 
 def test_data_importing_a_foundation_keeps_the_lower_layers_contract(tmp_path):
-    project = _layer_scratch_project(tmp_path, LOWER_LAYERS_CONTRACT, "from", "data", "constants")
+    project = _layer_scratch_project(tmp_path, LOWER_LAYERS_CONTRACT, "data", "constants")
     result = _lint(project)
     assert result.returncode == 0, result.stdout

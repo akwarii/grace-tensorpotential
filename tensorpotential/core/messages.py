@@ -14,23 +14,16 @@ import logging
 import sys
 
 MESSAGES_LOGGER = "tensorpotential.messages"
-_HANDLER_ATTRIBUTE = "_tensorpotential_message_handler"
 
 
-class _BelowWarning(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return record.levelno < logging.WARNING
+class _MessageHandler(logging.Handler):
+    """Write the bare message to ``sys.stderr`` from ``WARNING`` up and to ``sys.stdout`` below.
 
-
-class _CurrentStream(logging.Handler):
-    """Write the message to ``sys.stdout`` or ``sys.stderr``, looked up at each record so that a redirection is followed."""
-
-    def __init__(self, stream_name: str) -> None:
-        super().__init__()
-        self._stream_name = stream_name
+    The stream is looked up at each record, so that a redirection of the standard streams is followed.
+    """
 
     def emit(self, record: logging.LogRecord) -> None:
-        stream = getattr(sys, self._stream_name)
+        stream = sys.stderr if record.levelno >= logging.WARNING else sys.stdout
         stream.write(self.format(record) + "\n")
         stream.flush()
 
@@ -43,7 +36,7 @@ def get_messages_logger() -> logging.Logger:
 def show_messages() -> logging.Logger:
     """Show the messages of the library as bare text: ``INFO`` on the standard output, ``WARNING`` and above on the standard error.
 
-    The handlers are installed once; a second call changes nothing. The messages do not reach the handlers of the root
+    The handler is installed once; a second call changes nothing. The messages do not reach the handlers of the root
     logger, so a program that configures logging with a timestamp does not print them twice, and nothing else of the
     root logger is touched.
 
@@ -53,27 +46,10 @@ def show_messages() -> logging.Logger:
         The logger of the messages.
     """
     logger = get_messages_logger()
-    if getattr(logger, _HANDLER_ATTRIBUTE, False):
-        return logger
-    out = _CurrentStream("stdout")
-    out.addFilter(_BelowWarning())
-    err = _CurrentStream("stderr")
-    err.setLevel(logging.WARNING)
-    for handler in (out, err):
+    if not any(isinstance(handler, _MessageHandler) for handler in logger.handlers):
+        handler = _MessageHandler()
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    setattr(logger, _HANDLER_ATTRIBUTE, True)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
     return logger
-
-
-def hide_messages() -> None:
-    """Undo :func:`show_messages`: remove its handlers and let the messages reach the root logger again."""
-    logger = get_messages_logger()
-    for handler in [h for h in logger.handlers if isinstance(h, _CurrentStream)]:
-        logger.removeHandler(handler)
-    logger.setLevel(logging.NOTSET)
-    logger.propagate = True
-    if hasattr(logger, _HANDLER_ATTRIBUTE):
-        delattr(logger, _HANDLER_ATTRIBUTE)

@@ -9,16 +9,11 @@ import pytest
 from tensorpotential.core.messages import (
     MESSAGES_LOGGER,
     get_messages_logger,
-    hide_messages,
     show_messages,
 )
 from tests.fresh_python import run_fresh_python
 
-
-@pytest.fixture(autouse=True)
-def _restore_messages():
-    yield
-    hide_messages()
+pytestmark = pytest.mark.usefixtures("restore_messages")
 
 
 def test_the_logger_has_the_documented_name():
@@ -73,16 +68,11 @@ def test_a_redirection_of_stdout_is_followed(capsys):
     assert capsys.readouterr().out == "after the redirection\n"
 
 
-def test_hide_messages_restores_the_default(caplog, capsys):
-    show_messages()
-    hide_messages()
+def test_without_show_messages_the_messages_reach_the_root_logger(caplog, capsys):
     with caplog.at_level(logging.INFO, logger=MESSAGES_LOGGER):
         get_messages_logger().info("to the root")
     assert [r.getMessage() for r in caplog.records] == ["to the root"]
     assert capsys.readouterr().out == ""
-    show_messages()  # installs again after a hide
-    get_messages_logger().info("again")
-    assert capsys.readouterr().out == "again\n"
 
 
 def test_without_show_messages_info_is_silent_and_warning_reaches_stderr(tmp_path):
