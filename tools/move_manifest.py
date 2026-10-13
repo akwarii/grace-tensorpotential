@@ -46,6 +46,8 @@ MOVES: tuple[Move, ...] = (
             "EQUI_STRUCTURE_STRATEGY",
             "EQUI_ATOMS_STRATEGY",
             "EQUI_NEIGH_STRATEGY",
+            "orders",
+            "remap_type_to_tf_dtype",
             "get_elements",
             "get_batch_dtypes",
             "databuilder_generator",
