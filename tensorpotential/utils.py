@@ -12,6 +12,7 @@ import logging
 from contextlib import contextmanager
 
 from tensorpotential.core.cutoffs import CUTOFF_PRESETS, process_cutoff_dict  # noqa: F401  (re-exported; the code moved to core)
+from tensorpotential.errors import ModelFormatError
 from tensorpotential.instructions.base import ElementsReduceInstructionMixin
 from yaml import YAMLError, safe_load
 
@@ -493,10 +494,6 @@ def select_elements_in_model(
             ins.upd_init_args_new_elements(new_element_map)
 
     return tp
-
-
-class ModelFormatError(ValueError):
-    """The model file is in a format the operation does not accept (the old list of instructions)."""
 
 
 def convert_model_reduce_elements(

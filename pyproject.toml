@@ -163,6 +163,7 @@ source_modules = [
     "tensorpotential.core",
     "tensorpotential.torch_backend",
     "tensorpotential.constants",
+    "tensorpotential.errors",
     "tensorpotential.poly",
     "tensorpotential.functions.couplings",
     "tensorpotential.calculator.foundation_models",
@@ -192,6 +193,7 @@ source_modules = [
     "tensorpotential.constants",
     "tensorpotential.core",
     "tensorpotential.data",
+    "tensorpotential.errors",
     "tensorpotential.export",
     "tensorpotential.export_kokkos",
     "tensorpotential.extra",
@@ -228,6 +230,7 @@ allow_indirect_imports = true
 source_modules = [
     "tensorpotential.constants",
     "tensorpotential.core",
+    "tensorpotential.errors",
     "tensorpotential.formatting",
     "tensorpotential.functions",
     "tensorpotential.keras_adapter",

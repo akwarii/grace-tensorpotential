@@ -14,6 +14,7 @@ import yaml
 from tqdm import tqdm
 
 from tensorpotential.core.messages import get_messages_logger
+from tensorpotential.errors import ArchiveError
 
 messages = get_messages_logger()
 
@@ -329,7 +330,7 @@ def to_valid_variable_name(name: str) -> str:
 def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
     """Safely extract a ``.tar.gz`` archive that holds a single top-level directory.
 
-    Raises ``ValueError`` for several top-level items, a top-level file, or unsafe
+    Raises :class:`~tensorpotential.errors.ArchiveError` (a ``ValueError``) for several top-level items, a top-level file, or unsafe
     member paths. Returns the name of the top-level directory.
     """
     with tarfile.open(tar_filename, "r:gz") as tar:
@@ -343,20 +344,20 @@ def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
         if len(top_level_items) == 1:
             top_folder_name, member = next(iter(top_level_items.items()))
             if not member.isdir():  # Ensure it's a directory
-                raise ValueError(
+                raise ArchiveError(
                     f"Expected a directory, but found a file: {top_folder_name}"
                 )
         else:
-            raise ValueError(
+            raise ArchiveError(
                 f"Expected one top-level folder, found: {list(top_level_items.keys())}"
             )
 
         has_data_filter = hasattr(tarfile, "data_filter")  # Python 3.11.4 and later
         for member in tar.getmembers():
             if member.name.startswith("/") or ".." in member.name:
-                raise ValueError(f"Unsafe path detected: {member.name}")
+                raise ArchiveError(f"Unsafe path detected: {member.name}")
             if not has_data_filter and not (member.isreg() or member.isdir()):
-                raise ValueError(
+                raise ArchiveError(
                     f"Unsafe archive member (link or special file): {member.name}"
                 )
         try:
@@ -366,7 +367,7 @@ def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
             else:
                 tar.extractall(path, members)  # noqa: S202  (members checked above)
         except tarfile.FilterError as err:
-            raise ValueError(f"Unsafe archive member: {err}") from err
+            raise ArchiveError(f"Unsafe archive member: {err}") from err
 
         return top_folder_name
 

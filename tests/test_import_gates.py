@@ -472,6 +472,8 @@ TF_FREE_MODULES = (
     "tensorpotential.core",
     "tensorpotential.core.cutoffs",
     "tensorpotential.core.lazy",
+    "tensorpotential.core.messages",
+    "tensorpotential.errors",
     "tensorpotential.torch_backend",
     "tensorpotential.torch_backend.spec",
     "tensorpotential.torch_backend.spec.errors",
