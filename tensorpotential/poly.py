@@ -185,24 +185,23 @@ def get_symbol(instruction_name, coupling_index, instructions_dict):
 
     if cur_symbol is not None:
         return cur_symbol
-    else:
-        left_instruction_name, right_instruction_name = (
-            coupling_instruction.left.name,
-            coupling_instruction.right.name,
+    left_instruction_name, right_instruction_name = (
+        coupling_instruction.left.name,
+        coupling_instruction.right.name,
+    )
+
+    row = coupling_meta_df.loc[coupling_index]
+
+    cur_symbol = Polynomial([Monomial(0)])
+    for lind, rind, cg in zip(row["left_inds"], row["right_inds"], row["cg_list"]):
+        cur_symbol += (
+            get_symbol(left_instruction_name, lind, instructions_dict)
+            * get_symbol(right_instruction_name, rind, instructions_dict)
+            * cg
         )
+    coupling_meta_df.loc[coupling_index, "symbol"] = cur_symbol
 
-        row = coupling_meta_df.loc[coupling_index]
-
-        cur_symbol = Polynomial([Monomial(0)])
-        for lind, rind, cg in zip(row["left_inds"], row["right_inds"], row["cg_list"]):
-            cur_symbol += (
-                get_symbol(left_instruction_name, lind, instructions_dict)
-                * get_symbol(right_instruction_name, rind, instructions_dict)
-                * cg
-            )
-        coupling_meta_df.loc[coupling_index, "symbol"] = cur_symbol
-
-        return cur_symbol
+    return cur_symbol
 
 
 def expand_monomial(mon: Monomial):

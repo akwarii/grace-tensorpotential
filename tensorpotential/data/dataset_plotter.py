@@ -159,8 +159,7 @@ class DatasetHistPlotter(IDatasetPlotter):
     def _stack_v(v: np.ndarray) -> np.ndarray:
         if v.dtype == object:
             return np.vstack(v).flatten()
-        else:
-            return v.flatten()
+        return v.flatten()
 
     @staticmethod
     def _decrease_alpha(alpha: float, factor: float = 0.66):

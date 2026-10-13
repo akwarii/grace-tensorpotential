@@ -57,8 +57,7 @@ def extract_const_shift_scale(fs_ins_dict):
             )
 
         return scale, constant_shift, atomic_shift_map
-    else:
-        return None
+    return None
 
 
 def export_to_yaml(

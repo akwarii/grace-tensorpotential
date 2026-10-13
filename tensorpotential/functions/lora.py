@@ -43,7 +43,7 @@ def initialize_lora_tensors(w, lora_config, name=None):
         # Set original Variable/tensor to non-trainable
         w._trainable = False
         return [additive_tensor]
-    elif mode == MODE_LORA:
+    if mode == MODE_LORA:
         symbols = "ABCDEFG"
 
         rank = lora_config["rank"]
@@ -83,10 +83,9 @@ def initialize_lora_tensors(w, lora_config, name=None):
         w._trainable = False
 
         return lora_tensors
-    else:
-        raise ValueError(
-            f"Unknown mode: {mode}. Supported modes are 'lora' and 'additive'."
-        )
+    raise ValueError(
+        f"Unknown mode: {mode}. Supported modes are 'lora' and 'additive'."
+    )
 
 
 def lora_reconstruction(*inputs, lora_config=None):

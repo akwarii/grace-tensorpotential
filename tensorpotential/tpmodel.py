@@ -717,12 +717,11 @@ class ComputeBlockOutputGradient(ComputeFunction):
 def to_instructions_list(instructions):
     if isinstance(instructions, dict):
         return list(instructions.values())
-    elif isinstance(instructions, list):
+    if isinstance(instructions, list):
         return instructions
-    else:
-        raise ValueError(
-            f"`instructions` must be list or dict, but {type(instructions)} given"
-        )
+    raise ValueError(
+        f"`instructions` must be list or dict, but {type(instructions)} given"
+    )
 
 
 class TPModel(tf.Module):

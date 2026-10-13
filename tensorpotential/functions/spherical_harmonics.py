@@ -266,7 +266,6 @@ class SphericalHarmonics(tf.Module):
 
         if self.type == "real":
             return self._compute_rsh(rhat)
-        elif self.type == "complex":
+        if self.type == "complex":
             return self._compute_ylm(rhat)
-        else:
-            raise ValueError(f"Unknown type {self.type}")
+        raise ValueError(f"Unknown type {self.type}")

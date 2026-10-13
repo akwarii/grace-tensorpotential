@@ -2633,8 +2633,7 @@ def lmax_from_hist(s):
     tags = [d for d in s.replace("(", ",").replace(")", ",").split(sep=",") if d]
     if tags:
         return max([int(d) for d in tags])
-    else:
-        return 0
+    return 0
 
 
 # old function, historical heritage

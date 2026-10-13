@@ -767,8 +767,7 @@ class ConstantScaleShiftTarget(TPOutputInstruction, ElementsReduceInstructionMix
                 total_shift += tf.cast(real_shift, total_shift.dtype)
 
             return target * tf.cast(self.scale, target.dtype) + total_shift
-        else:
-            return target * tf.cast(self.scale, target.dtype)
+        return target * tf.cast(self.scale, target.dtype)
 
     def prepare_variables_for_selected_elements(self, index_to_select):
         result = {}

@@ -1068,10 +1068,9 @@ class ScalarChemicalEmbedding(
     def frwrd(self, input_data: dict, training=False, local=False):
         if not self.lora:
             return self.w
-        else:
-            return self.w + lora_reconstruction(
-                *self.lora_tensors, lora_config=self.lora_config
-            )
+        return self.w + lora_reconstruction(
+            *self.lora_tensors, lora_config=self.lora_config
+        )
 
     def get_index_to_select(self, elements_to_select):
         # 1. Create a dictionary mapping {symbol: index} for fast O(1) lookup.
@@ -1906,8 +1905,7 @@ class SPBF(TPEquivariantInstruction):
 
         if self.scalar_mode:
             return self._frwrd_scalar(input_data, a_nl, envelope, local=local)
-        else:
-            return self._frwrd_equivariant(input_data, a_nl, envelope, local=local)
+        return self._frwrd_equivariant(input_data, a_nl, envelope, local=local)
 
     def _frwrd_scalar(self, input_data, a_nl, envelope, local=False):
         # R * Y * Z when indicator is ScalarChemicalEmbedding
@@ -2740,12 +2738,11 @@ class GeneralProductFunction(TPEquivariantInstruction):
             return tf.math.unsorted_segment_sum(
                 prod, self.m_sum_ind, num_segments=self.nfunc
             )
-        else:
-            prod = tf.transpose(prod, [2, 0, 1])
-            prod = tf.math.unsorted_segment_sum(
-                prod, self.m_sum_ind, num_segments=self.nfunc
-            )
-            return tf.transpose(prod, [1, 2, 0])
+        prod = tf.transpose(prod, [2, 0, 1])
+        prod = tf.math.unsorted_segment_sum(
+            prod, self.m_sum_ind, num_segments=self.nfunc
+        )
+        return tf.transpose(prod, [1, 2, 0])
 
     def _gather_axis(self):
         """Return the axis for angular gathers: 0 for lm_first, 2 for standard."""
@@ -2829,11 +2826,11 @@ class GeneralProductFunction(TPEquivariantInstruction):
 
         if self.mode == "elementwise":
             return self._frwrd_elementwise(left, right)
-        elif self.mode == "cp":
+        if self.mode == "cp":
             return self._frwrd_cp(left, right)
-        elif self.mode == "cp_l":
+        if self.mode == "cp_l":
             return self._frwrd_cp_l(left, right)
-        elif self.mode == "cp_lL":
+        if self.mode == "cp_lL":
             return self._frwrd_cp_lL(left, right)
 
     def __repr__(self):
@@ -3854,7 +3851,7 @@ class InvariantLayerRMSNorm(TPInstruction):
             rms = tf.math.rsqrt(tf.reduce_mean(x**2, axis=1, keepdims=True) + epsilon)
             rms = tf.where(r_map < n_at_b_real, rms, tf.zeros_like(rms))
             return x * rms * tf.cast(self.scale, x.dtype)
-        elif self.type == "only_nonlin":
+        if self.type == "only_nonlin":
             lin = x[:, 0, :]
         elif self.type == "sep_lin_gate":
             lin = x[:, 0, :] * tf.cast(self.lin_scale, x.dtype)

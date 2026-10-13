@@ -124,15 +124,14 @@ def compute_batches_df(dataset, batch_size, strategy=EQUI_STRUCTURE_STRATEGY):
 def get_batch_list(iterator, batch_size, strategy=EQUI_STRUCTURE_STRATEGY, **kwargs):
     if strategy == EQUI_STRUCTURE_STRATEGY:
         return get_equi_structures_batch_list(iterator, batch_size, **kwargs)
-    elif strategy == EQUI_ATOMS_STRATEGY:
+    if strategy == EQUI_ATOMS_STRATEGY:
         return get_equi_batch_list(
             iterator, batch_size, key="batch_tot_nat_real", **kwargs
         )
-    elif strategy == EQUI_NEIGH_STRATEGY:
+    if strategy == EQUI_NEIGH_STRATEGY:
         return get_equi_batch_list(iterator, batch_size, key="n_neigh_real", **kwargs)
-    else:
-        # TODO: balance batch size by number of atoms/neighbours
-        raise NotImplementedError(f"Strategy {strategy} not implemented")
+    # TODO: balance batch size by number of atoms/neighbours
+    raise NotImplementedError(f"Strategy {strategy} not implemented")
 
 
 def get_equi_structures_batch_list(iterator, batch_size, **kwargs):

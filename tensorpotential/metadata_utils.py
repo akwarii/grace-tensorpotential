@@ -29,8 +29,7 @@ def get_dtype_by_name(dtype_name: str) -> DType:
     }.get(dtype_name, None)
     if param_dtype:
         return param_dtype
-    else:
-        raise KeyError(f"Unknown dtype name {dtype_name}")
+    raise KeyError(f"Unknown dtype name {dtype_name}")
 
 
 def resolve_param_dtype(model_yaml: str, param_dtype: DType | None = None) -> DType:
@@ -45,12 +44,10 @@ def resolve_param_dtype(model_yaml: str, param_dtype: DType | None = None) -> DT
                     f"Inferred param_dtype: {dtype_name} ({dtype}) from {model_yaml}"
                 )
                 return dtype
-            else:
-                logging.info(
-                    "No param_dtype in model.yaml (old model) — using float64 for backward compatibility"
-                )
-                return float64
-        else:
-            logging.info(f"model.yaml {model_yaml} not found — using default float64")
+            logging.info(
+                "No param_dtype in model.yaml (old model) — using float64 for backward compatibility"
+            )
             return float64
+        logging.info(f"model.yaml {model_yaml} not found — using default float64")
+        return float64
     return param_dtype
