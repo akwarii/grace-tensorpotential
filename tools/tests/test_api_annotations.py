@@ -109,7 +109,7 @@ def test_an_empty_set_counts_as_complete() -> None:
 
 
 def test_a_file_of_the_scope_that_does_not_exist_is_an_error(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="pkg/nope.py"):
+    with pytest.raises(FileNotFoundError, match=r"pkg/nope\.py"):
         aa.measure(tmp_path, ("pkg/nope.py",))
 
 

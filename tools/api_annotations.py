@@ -45,6 +45,7 @@ class Counts:
     both: int = 0
 
     def __add__(self, other: Counts) -> Counts:
+        """Add the counts field by field."""
         return Counts(
             self.total + other.total,
             self.returns + other.returns,
@@ -154,12 +155,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     per_file = measure(args.root, SCOPE)
     if args.command == "missing":
-        print("\n".join(incomplete(args.root, SCOPE)))
+        sys.stdout.write("\n".join(incomplete(args.root, SCOPE)) + "\n")
         return 0
-    print(render(per_file))
+    sys.stdout.write(render(per_file) + "\n")
     problems = shortfalls(per_file, args.minimum) if args.command == "check" else []
     for problem in problems:
-        print(problem, file=sys.stderr)
+        sys.stderr.write(problem + "\n")
     return 1 if problems else 0
 
 
