@@ -242,16 +242,6 @@ class HuberLoss(LossComponent, ABC):
             self.delta, dtype=float_dtype, trainable=False, name=self.name + "_delta"
         )
 
-    @abstractmethod
-    def compute_loss_component(
-        self,
-        input_data: dict[str, tf.Tensor],
-        predictions: dict[str, tf.Tensor],
-        **kwargs: Any,
-    ) -> tf.Tensor:
-        """Return the unweighted loss value of the component for a batch."""
-        raise NotImplementedError()
-
     def set_loss_component_params(self, params: dict) -> None:
         """Update the component from ``params`` (keys ``weight`` and ``delta``)."""
         super().set_loss_component_params(params)
@@ -1342,9 +1332,7 @@ class LossFunction:
 
         return self.input_signatures
 
-    def set_loss_component_weights(
-        self, loss_component_weights: dict[str, float]
-    ) -> None:
+    def set_loss_component_weights(self, loss_component_weights: dict[str, float]) -> None:
         """Set the weight of each named component."""
         for k, loss_component_weight in loss_component_weights.items():
             assert (
@@ -1359,9 +1347,7 @@ class LossFunction:
             for k, loss_component in self.loss_components.items()
         }
 
-    def set_loss_component_params(
-        self, loss_component_params: dict[str, dict]
-    ) -> None:
+    def set_loss_component_params(self, loss_component_params: dict[str, dict]) -> None:
         """Update each named component from its parameter dict."""
         for k, kwarg in loss_component_params.items():
             assert (
