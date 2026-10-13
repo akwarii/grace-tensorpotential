@@ -105,7 +105,7 @@ class DatasetHistPlotter(IDatasetPlotter):
             bins_ = cls._bins(plot_data, bins) if isinstance(bins, int) else bins
 
             alpha = 1.0
-            for i, (ds_lbl, ds) in enumerate(
+            for i, (ds_lbl, _ds) in enumerate(
                 DatasetHistPlotter._iter_datasets(datasets)
             ):
                 try:

@@ -2530,7 +2530,7 @@ class GeneralProductFunction(TPEquivariantInstruction):
         left_groups = left_cmd.groupby(["l", "hist", "parity"]).indices
         left_group_keys = list(left_groups.keys())
         left_group_map = {}  # channel_index -> group_id
-        for gid, (key, indices) in enumerate(left_groups.items()):
+        for gid, indices in enumerate(left_groups.values()):
             for idx in indices:
                 left_group_map[idx] = gid
 
@@ -2538,7 +2538,7 @@ class GeneralProductFunction(TPEquivariantInstruction):
         right_groups = right_cmd.groupby(["l", "hist", "parity"]).indices
         right_group_keys = list(right_groups.keys())
         right_group_map = {}
-        for gid, (key, indices) in enumerate(right_groups.items()):
+        for gid, indices in enumerate(right_groups.values()):
             for idx in indices:
                 right_group_map[idx] = gid
 
@@ -3513,8 +3513,8 @@ class FCRight2Left(
         w_tile_right = []
         count = 0
         norms = np.ones((len(d_l.items())))
-        for ind, ((l_left, p_left, h_left), index_left) in enumerate(d_l.items()):
-            for (l_right, p_right, h_right), index_right in d_r.items():
+        for ind, ((l_left, p_left, _h_left), index_left) in enumerate(d_l.items()):
+            for (l_right, p_right, _h_right), index_right in d_r.items():
                 if l_right == l_left and p_right == p_left:
                     collect_to += [index_left]
                     collect_from += [index_right]
@@ -3948,7 +3948,7 @@ class EquivariantRMSNorm(TPEquivariantInstruction):
         lph_keys = list(lph_groups.keys())
         self.n_lph_groups = len(lph_keys)
         expand_idx = np.zeros(n_angular, dtype=np.int32)
-        for gid, (key, indices) in enumerate(lph_groups.items()):
+        for gid, indices in enumerate(lph_groups.values()):
             for idx in indices:
                 expand_idx[idx] = gid
         self._expand_index_np = expand_idx
@@ -4221,7 +4221,7 @@ class EquivariantGate(TPEquivariantInstruction):
 
         n_angular = len(l_values)
         expand_idx = np.zeros(n_angular, dtype=np.int32)
-        for gid, (key, indices) in enumerate(lph_groups.items()):
+        for gid, indices in enumerate(lph_groups.values()):
             for idx in indices:
                 expand_idx[idx] = gid
         self._expand_index_np = expand_idx

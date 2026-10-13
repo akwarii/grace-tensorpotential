@@ -261,7 +261,7 @@ def execute_instructions(input_data, instructions, training=False, local=False):
         for ins in instructions:
             ins(input_data, training=training, local=local)
     elif isinstance(instructions, dict):
-        for name, ins in instructions.items():
+        for ins in instructions.values():
             ins(input_data, training=training, local=local)
     else:
         raise ValueError(f"Invalid instructions container type {type(instructions)}")
@@ -843,7 +843,7 @@ class TPModel(tf.Module):
         self.count_coefs = 0
         self.slices = [0]
         flat_val = []
-        for i, var in enumerate(self.variables_to_train):
+        for var in self.variables_to_train:
             v = tf.reshape(var, [-1])
             self.count_coefs += tf.shape(v)[0]
             self.slices.append(self.count_coefs)
@@ -1163,7 +1163,7 @@ class TPModel(tf.Module):
                 ins.finalize_lora_update()
 
     def is_lora_enabled(self):
-        for ins_name, ins in self.instructions.items():
+        for ins in self.instructions.values():
             if isinstance(ins, LORAInstructionMixin) and ins.lora:
                 return True
         return False

@@ -289,7 +289,7 @@ def cast_model_param(
                             item, from_dtype, to_dtype, max_depth, next_depth
                         )
                 elif isinstance(attr_value, dict):
-                    for key, value in attr_value.items():
+                    for value in attr_value.values():
                         recursive_cast_instruction_vars(
                             value, from_dtype, to_dtype, max_depth, next_depth
                         )
@@ -314,7 +314,7 @@ def cast_model_param(
     assert isinstance(
         tp.model.instructions, dict
     ), "Model is not dict format, cannot cast it. Use `update_model` option to convert it to dict format."
-    for iname, ins in tp.model.instructions.items():
+    for ins in tp.model.instructions.values():
         recursive_cast_instruction_vars(ins, d_from, d_to, max_depth=5)
     logger.info(f"Successfully casted model at {checkpoint_path} to {to_dtype} dtype")
 
@@ -507,7 +507,7 @@ def aux_model(
     extra_aux_computes = {"compute_energy": ComputeEnergy()}
 
     has_spbfei = False
-    for ins_name, ins in instr.items():
+    for ins in instr.values():
         if isinstance(ins, SingleParticleBasisFunctionEquivariantInd):
             has_spbfei = True
             logger.info(

@@ -647,7 +647,7 @@ class TensorPotential:
         metrics = self.compute_metrics(input_data, model_prediction)
 
         flat_grad = []
-        for i, gvar in enumerate(gradients):
+        for gvar in gradients:
             gv = tf.reshape(gvar, [-1])
             flat_grad += [gv]
         flat_grad = tf.concat(flat_grad, axis=0)
