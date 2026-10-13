@@ -758,3 +758,89 @@ def test_pyproject_ty_overrides_cover_legacy_and_exclude_the_new_packages() -> N
     for package in lr.NEW_PACKAGES:
         if package.startswith("tensorpotential/"):
             assert f"{package}/**" in cfg["exclude"]
+
+
+# --- CLI2: part of a legacy file moved into a new file -------------------------------------------
+
+ERA_TWICE = "# x = compute(1)\nA = 1\n# y = compute(2)\nB = 2\n"
+
+
+def _split_project(project: Path) -> Path:
+    """Record ``legacy/mod.py`` with two commented-out lines, then move one of them to ``legacy/part.py``."""
+    (project / "legacy" / "mod.py").write_text(ERA_TWICE)
+    _recorded(project)
+    (project / "legacy" / "mod.py").write_text(ERA)
+    (project / "legacy" / "part.py").write_text("# y = compute(2)\nB = 2\n")
+    return project
+
+
+def test_a_split_file_with_the_same_counts_in_total_passes_with_split(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _split_project(project)
+    assert _check(project, capsys)[0] == 1  # without --split the new file is strict
+    status, out = _check(project, capsys, "--split", "legacy/mod.py", "legacy/part.py")
+    assert status == 0
+    assert "dropped" not in out
+
+
+def test_a_rise_of_the_two_files_together_is_refused_with_split(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _split_project(project)
+    (project / "legacy" / "part.py").write_text("# y = compute(2)\n# z = compute(3)\nB = 2\n")
+    status, out = _check(project, capsys, "--split", "legacy/mod.py", "legacy/part.py")
+    assert status == 1
+    assert "rose: ruff legacy/mod.py ERA001: 2 -> 3" in out
+
+
+def test_record_with_split_lists_the_new_file_and_stores_the_counts_per_file(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _split_project(project)
+    assert _run(project, "record", "--split", "legacy/mod.py", "legacy/part.py") == 0
+    assert _listed(project) == ["legacy/mod.py", "legacy/part.py"]
+    recorded = json.loads(_baseline(project).read_text())["ruff"]
+    assert recorded["legacy/mod.py"]["ERA001"] == 1
+    assert recorded["legacy/part.py"]["ERA001"] == 1
+    assert _check(project, capsys)[0] == 0
+
+
+def test_record_with_split_refuses_a_rise_of_the_two_files_together(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _split_project(project)
+    (project / "legacy" / "part.py").write_text("# y = compute(2)\n# z = compute(3)\nB = 2\n")
+    capsys.readouterr()
+    assert _run(project, "record", "--split", "legacy/mod.py", "legacy/part.py") == 1
+    assert "legacy/mod.py ERA001: 2 -> 3" in capsys.readouterr().out
+
+
+def test_a_split_of_a_file_that_is_not_legacy_is_refused(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _split_project(project)
+    for command in ("check", "record"):
+        capsys.readouterr()
+        assert _run(project, command, "--split", "legacy/none.py", "legacy/part.py") in (1, 2)
+        assert "legacy/none.py is not a legacy file" in capsys.readouterr().out
+
+
+def test_a_split_into_a_file_that_is_legacy_already_is_refused(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (project / "legacy" / "other.py").write_text(CLEAN)
+    _recorded(project)
+    status, out = _check(project, capsys, "--split", "legacy/mod.py", "legacy/other.py")
+    assert status == 1
+    assert "legacy/other.py is a legacy file already" in out
+
+
+@pytest.mark.parametrize("command", ["check", "record"])
+def test_a_split_onto_itself_is_an_error(
+    project: Path, capsys: pytest.CaptureFixture[str], command: str
+) -> None:
+    _recorded(project)
+    capsys.readouterr()
+    assert _run(project, command, "--split", "legacy/mod.py", "legacy/mod.py") == 2
+    assert "the same" in capsys.readouterr().err

@@ -3,6 +3,9 @@
 A refactor that moves a file must not reset what the ratchets know about it. ``lint_ratchet.py`` and
 ``coverage_ratchet.py`` re-key their baseline from ``OLD`` to ``NEW`` before they compare, so the counts
 (and the legacy status) follow the file and a rise is still refused at the new path.
+
+``--split OLD NEW`` is for a refactor that moves part of ``OLD`` into the new file ``NEW`` and leaves the rest:
+both files are legacy afterwards and the counts of the two together may not exceed what ``OLD`` had.
 """
 
 from __future__ import annotations
@@ -32,3 +35,29 @@ def rekey[T](table: dict[str, T], moves: dict[str, str]) -> dict[str, T]:
             raise ValueError(msg)
         out[new] = value
     return out
+
+
+def parse_splits(pairs: list[list[str]] | None) -> dict[str, str]:
+    """Return ``{new: old}`` from the ``--split OLD NEW`` pairs; a pair that cannot be a split is an error."""
+    splits: dict[str, str] = {}
+    for old, new in pairs or []:
+        if old == new:
+            msg = f"--split {old} {new}: the old and the new path are the same"
+            raise ValueError(msg)
+        if new in splits:
+            msg = f"--split: {new} is split off twice"
+            raise ValueError(msg)
+        splits[new] = old
+    return splits
+
+
+def fold_splits(
+    counts: dict[str, dict[str, int]], splits: dict[str, str]
+) -> dict[str, dict[str, int]]:
+    """Return ``counts`` with the rule counts of every split-off file added to those of the file it came from."""
+    folded = {path: dict(rules) for path, rules in counts.items()}
+    for new, old in splits.items():
+        for rule, n in folded.pop(new, {}).items():
+            target = folded.setdefault(old, {})
+            target[rule] = target.get(rule, 0) + n
+    return folded
