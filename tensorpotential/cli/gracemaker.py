@@ -34,6 +34,7 @@ from tensorpotential.instructions.base import (
 from tensorpotential.tpmodel import TPModel
 from tensorpotential.tensorpot import TensorPotential, get_output_dir
 from tensorpotential.utils import (
+    ModelFormatError,
     convert_model_reduce_elements,
     get_dtype_by_name,
     get_param_dtype_from_config,
@@ -637,14 +638,18 @@ def _reduce_elements_if_requested(run: _Run) -> None:
         f"Selecting elements from model {run.potential_file_name} with checkpoint at {run.checkpoint_name}"
         + f" and saving to {new_potential_file_name} with checkpoint at {new_checkpoint_name}"
     )
-    convert_model_reduce_elements(
-        element_map=run.element_map,
-        potential_file_name=run.potential_file_name,
-        checkpoint_name=run.checkpoint_name,
-        new_potential_file_name=new_potential_file_name,
-        new_checkpoint_name=new_checkpoint_name,
-        param_dtype=run.param_dtype,
-    )
+    try:
+        convert_model_reduce_elements(
+            element_map=run.element_map,
+            potential_file_name=run.potential_file_name,
+            checkpoint_name=run.checkpoint_name,
+            new_potential_file_name=new_potential_file_name,
+            new_checkpoint_name=new_checkpoint_name,
+            param_dtype=run.param_dtype,
+        )
+    except ModelFormatError as err:
+        log.info(str(err))
+        sys.exit(0)  # as before: not an error status, although nothing was converted
     run.potential_file_name = new_potential_file_name
     run.checkpoint_name = new_checkpoint_name
 

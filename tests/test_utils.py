@@ -29,6 +29,7 @@ from tensorpotential.potentials import get_preset
 from tensorpotential.tensorpot import TensorPotential
 from tensorpotential.utils import (
     NumpyEncoder,
+    ModelFormatError,
     convert_model_reduce_elements,
     discovery_fit_folders,
     enforce_pbc,
@@ -701,7 +702,7 @@ def test_converting_with_an_unknown_parameter_dtype_is_refused(tmp_path):
         )
 
 
-def test_converting_a_model_in_the_old_list_format_exits_with_a_hint(tmp_path, caplog):
+def test_converting_a_model_in_the_old_list_format_is_refused_with_a_hint(tmp_path):
     instructions = get_preset("LINEAR")(
         element_map={"Mo": 0}, lmax=1, n_rad_max=4, n_rad_base=4, embedding_size=4, rcut=5.0
     ).get_instructions()
@@ -711,7 +712,18 @@ def test_converting_a_model_in_the_old_list_format_exits_with_a_hint(tmp_path, c
     records = list(yaml.safe_load(new_format.read_text())["instructions"].values())
     old = tmp_path / "old.yaml"
     old.write_text(yaml.safe_dump(records))
-    with caplog.at_level(logging.INFO), pytest.raises(SystemExit) as stop:
+    with pytest.raises(ModelFormatError, match="is NOT in new format") as refused:
         convert_model_reduce_elements({"Mo": 0}, str(old), str(tmp_path / "ckpt"), str(tmp_path / "b.yaml"), str(tmp_path / "ckpt2"), param_dtype=tf.float64)
-    assert stop.value.code == 0  # pinned: not an error status although nothing was converted
-    assert "is NOT in new format" in caplog.text
+    assert "update_model" in str(refused.value)
+    assert isinstance(refused.value, ValueError)
+
+
+def test_an_unexpected_error_while_loading_a_fit_is_not_hidden(tmp_path, monkeypatch):
+    a = _write_fit(tmp_path / "a", [0.5])
+
+    def broken(folder):
+        raise RuntimeError("not a read error")
+
+    monkeypatch.setattr("tensorpotential.utils.load_fit", broken)
+    with pytest.raises(RuntimeError, match="not a read error"):
+        update_fit_metrics({}, [a])

@@ -613,6 +613,31 @@ class TestReduceElements:
         )
 
 
+def test_a_model_in_the_old_format_ends_the_command_with_status_0_and_a_hint(monkeypatch, caplog):
+    from types import SimpleNamespace
+
+    from tensorpotential.utils import ModelFormatError
+
+    def refuse(**kwargs):
+        raise ModelFormatError("Model in old.yaml is NOT in new format (dict-like).")
+
+    # what is replaced: the conversion, which would need a model file; its refusal is what the command handles
+    monkeypatch.setattr(gracemaker, "convert_model_reduce_elements", refuse)
+    run = SimpleNamespace(
+        args=SimpleNamespace(restart_best_test=False, restart_latest=False),
+        args_yaml={"potential": {"reduce_elements": True}},
+        output_dir="out",
+        potential_file_name="old.yaml",
+        checkpoint_name="ckpt",
+        element_map={"Mo": 0},
+        param_dtype=tf.float64,
+    )
+    with caplog.at_level(logging.INFO), pytest.raises(SystemExit) as stop:
+        gracemaker._reduce_elements_if_requested(run)
+    assert stop.value.code == 0
+    assert "is NOT in new format" in caplog.text
+
+
 @pytest.fixture(scope="module")
 def trained_fs(tmp_path_factory, data_dir):
     """A finished two-epoch FS run (float64) that also exported ``FS_model.yaml``; read-only."""

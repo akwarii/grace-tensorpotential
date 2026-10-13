@@ -808,7 +808,7 @@ def generate_template_input():
 
         if s.fit_type == "Generic Tensors (L<=2)":
             run_gen_tensor_wizard()
-            return  # run_gen_tensor_wizard calls sys.exit itself
+            sys.exit(0)  # the tensor wizard writes its own input.yaml; nothing is left to do
 
         # Run remaining sections once
         for _, fn in sections[1:]:

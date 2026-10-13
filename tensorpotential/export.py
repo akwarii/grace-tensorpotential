@@ -39,7 +39,7 @@ def extract_const_shift_scale(fs_ins_dict):
         scale = const_shift_scale.scale
         try:
             scale = scale.numpy()
-        except Exception as err:
+        except AttributeError as err:
             log.debug("scale is not a TensorFlow value, returned as is: %r", err)
 
         constant_shift = const_shift_scale.constant_shift
@@ -51,7 +51,7 @@ def extract_const_shift_scale(fs_ins_dict):
         try:
             if atomic_shift_map is not None:
                 atomic_shift_map = atomic_shift_map.numpy().flatten()
-        except Exception as err:
+        except AttributeError as err:
             log.debug(
                 "atomic_shift_map is not a TensorFlow value, returned as is: %r", err
             )

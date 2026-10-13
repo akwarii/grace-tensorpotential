@@ -757,6 +757,8 @@ def test_generic_tensor_choice_hands_over_to_the_tensor_wizard(monkeypatch, tmp_
     monkeypatch.setattr(wizard, "_print_header", lambda: None)
     monkeypatch.setattr(wizard, "_section", lambda title: None)
     monkeypatch.chdir(tmp_path)
-    wizard.generate_template_input()
+    with pytest.raises(SystemExit) as stop:
+        wizard.generate_template_input()
+    assert stop.value.code == 0  # the tensor wizard has written its own file, so the command ends here
     assert called == [True]
     assert not (tmp_path / "input.yaml").exists()

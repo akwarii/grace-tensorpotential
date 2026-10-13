@@ -411,3 +411,40 @@ class TestStreamingVsInMemory:
         )
 
         assert total_inmem_structures == total_streaming_structures == len(train_df)
+
+
+class TestFailuresOfTheStreamingWrapper:
+    """What the wrapper does with a frame it cannot count and with a builder that fails in the prefetch thread."""
+
+    def test_the_atom_count_estimate_is_none_without_an_atoms_column(self, data_builders):
+        frame = pd.DataFrame({"energy": [0.0, 1.0]})
+        wrapper = StreamingDatasetWrapper(frame, data_builders, StreamingConfig(), shuffle=False)
+        assert wrapper._total_atoms is None
+
+    def test_the_atom_count_estimate_is_none_when_an_entry_has_no_length(self, data_builders):
+        frame = pd.DataFrame({"ase_atoms": [None, None]})
+        wrapper = StreamingDatasetWrapper(frame, data_builders, StreamingConfig(), shuffle=False)
+        assert wrapper._total_atoms is None
+
+    def test_the_atom_count_estimate_is_the_sum_of_the_structure_sizes(self, train_df, data_builders):
+        wrapper = StreamingDatasetWrapper(train_df, data_builders, StreamingConfig(), shuffle=False)
+        assert wrapper._total_atoms == sum(len(a) for a in train_df["ase_atoms"])
+
+    def test_an_error_of_a_builder_reaches_the_consumer_through_the_prefetch_queue(self, train_df, data_builders):
+        class Broken:
+            def extract_from_row(self, row, **kwargs):
+                raise ValueError("builder failed")
+
+        config = StreamingConfig(target_metric=2000, num_bins=3, prefetch_queue_size=2)
+        wrapper = StreamingDatasetWrapper(train_df, [Broken()], config, shuffle=False)
+        with pytest.raises(ValueError, match="builder failed"):
+            list(wrapper)
+
+    def test_an_unexpected_error_while_counting_atoms_is_not_hidden(self, data_builders):
+        class Odd:
+            def __len__(self):
+                raise RuntimeError("not a length error")
+
+        frame = pd.DataFrame({"ase_atoms": [Odd()]})
+        with pytest.raises(RuntimeError, match="not a length"):
+            StreamingDatasetWrapper(frame, data_builders, StreamingConfig(), shuffle=False)

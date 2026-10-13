@@ -116,9 +116,9 @@ class DatasetHistPlotter(IDatasetPlotter):
                     ax.set_ylabel("Count")
                     ax.set_xscale(xscale)
                     ax.set_yscale(yscale)
-                except Exception:
+                except Exception as exc:  # noqa: BLE001 - a plotting helper must not stop the others; the failure is logged
                     log.warning(
-                        f'DatasetHistPlotter: Failed to plot distribution for target "{target}" for dataset "{ds_lbl}", skipping'
+                        f'DatasetHistPlotter: Failed to plot distribution for target "{target}" for dataset "{ds_lbl}", skipping: {exc!r}'
                     )
                 alpha = cls._decrease_alpha(alpha, alpha_decay)
 

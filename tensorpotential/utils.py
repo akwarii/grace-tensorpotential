@@ -4,7 +4,6 @@ import json
 import os
 
 import os.path as p
-import sys
 import time
 
 import numpy as np
@@ -14,7 +13,7 @@ from contextlib import contextmanager
 
 from tensorpotential.core.cutoffs import CUTOFF_PRESETS, process_cutoff_dict  # noqa: F401  (re-exported; the code moved to core)
 from tensorpotential.instructions.base import ElementsReduceInstructionMixin
-from yaml import safe_load
+from yaml import YAMLError, safe_load
 
 from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.dtypes import float32, float64, DType
@@ -238,7 +237,7 @@ def update_fit_metrics(fit_dict, folders, wait_time_seconds=3600, rerun=False):
             fd = load_fit(f)
             print(f"{f}: {len(fd['test'])} epochs")
             fit_dict[f] = fd
-        except Exception as e:
+        except (OSError, YAMLError, ValueError) as e:
             print("Error:", e)
 
 
@@ -493,6 +492,10 @@ def select_elements_in_model(
     return tp
 
 
+class ModelFormatError(ValueError):
+    """The model file is in a format the operation does not accept (the old list of instructions)."""
+
+
 def convert_model_reduce_elements(
     element_map: dict,
     potential_file_name: str,
@@ -516,11 +519,10 @@ def convert_model_reduce_elements(
 
     instructions_dict = load_instructions(potential_file_name)
     if not isinstance(instructions_dict, dict):
-        logging.info(
+        raise ModelFormatError(
             f"Model in {potential_file_name} is NOT in new format (dict-like)."
             + " Convert it using `grace_utils update_model`"
         )
-        sys.exit(0)
     tp = TensorPotential(potential=instructions_dict, param_dtype=param_dtype)
     logging.info(f"Loading checkpoint from {checkpoint_name}")
     tp.load_checkpoint(

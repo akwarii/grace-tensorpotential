@@ -46,3 +46,17 @@ def test_plot_creation(load_datasets, output_dir):
     for target in targets:
         plot_file = output_dir / f"{target}.png"
         assert plot_file.exists(), f"Plot file {plot_file} was not created"
+
+
+def test_a_dataset_that_cannot_be_drawn_is_skipped_with_a_warning(load_datasets, output_dir, monkeypatch, caplog):
+    import matplotlib.axes
+
+    def refuse(self, *args, **kwargs):
+        raise ValueError("cannot draw")
+
+    # what is replaced: the matplotlib histogram, to make every dataset fail the same way
+    monkeypatch.setattr(matplotlib.axes.Axes, "hist", refuse)
+    DatasetHistPlotter.plot(datasets=load_datasets, output_dir=output_dir, plot_targets=("forces",))
+    assert (output_dir / "forces.png").exists()
+    skipped = [r for r in caplog.records if "Failed to plot distribution" in r.getMessage()]
+    assert len(skipped) == 2  # one per dataset

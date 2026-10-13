@@ -1,7 +1,6 @@
 """gen_tensor wizard — called from gracemaker -t when user picks 'Generic Tensors (L<=2)'."""
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 
 
@@ -286,7 +285,7 @@ def _check_tensor_shapes(df, s, max_rows=50):
         n_expected = 1 if s.per_structure else len(atoms)
         try:
             arr = np.asarray(row["tensor_property"], dtype=float)
-        except Exception as exc:
+        except (TypeError, ValueError) as exc:
             issues.append(f"  row {idx}: cannot convert to array — {exc}")
             continue
 
@@ -360,7 +359,7 @@ def _detect_source_shape(df, col):
 
     try:
         return np.asarray(df[col].iloc[0]).shape
-    except Exception:
+    except (KeyError, IndexError, ValueError):
         return None
 
 
@@ -493,7 +492,7 @@ def _generate_tensor_property_interactive(df, s):
         _success(
             f"Generated tensor_property  (example shape: {np.asarray(ex).shape})"
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - interactive prompt: the conversion is the user's own expression, report and ask again
         _info(f"Conversion error: {exc}")
         return None
 
@@ -552,7 +551,7 @@ def _verify_one_df(df, filename, s, *, label="dataset"):
                     filename = out_path
                     _info(f"Updated {label} filename in input.yaml.")
                     all_ok = True
-                except Exception as exc:
+                except OSError as exc:
                     _error(f"Could not save: {exc}")
     else:
         _success(f"[{label}] 'tensor_property': present")
@@ -627,7 +626,7 @@ def _section_verify_dataset(s: _WizardStateTensor) -> _WizardStateTensor:
         s.train_filename = new_train
         if not ok_train:
             all_ok = False
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - interactive prompt: an unreadable or malformed dataset is reported, not fatal
         _error(f"Could not load train dataset: {exc}")
         all_ok = False
 
@@ -643,7 +642,7 @@ def _section_verify_dataset(s: _WizardStateTensor) -> _WizardStateTensor:
             s.test_filename = new_test
             if not ok_test:
                 all_ok = False
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - interactive prompt: an unreadable or malformed dataset is reported, not fatal
             _error(f"Could not load test dataset: {exc}")
             all_ok = False
 
@@ -753,7 +752,7 @@ fit:
 
 
 def run_gen_tensor_wizard():
-    """Entry point called from the main wizard when user picks 'Generic Tensors (L<=2)'."""
+    """Entry point called from the main wizard when user picks 'Generic Tensors (L<=2)'; writes ``input.yaml``; returns early on an interrupt."""
     import questionary
     from rich import box as rich_box
     from rich.panel import Panel
@@ -816,7 +815,7 @@ def run_gen_tensor_wizard():
 
     except KeyboardInterrupt:
         _rich_console.print("\n[bold red]Interrupted.[/bold red] Exiting.")
-        sys.exit(0)
+        return
 
     _rich_console.print()
     _rich_console.print(
@@ -828,4 +827,3 @@ def run_gen_tensor_wizard():
         )
     )
     _rich_console.print()
-    sys.exit(0)
