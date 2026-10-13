@@ -740,9 +740,12 @@ class TensorPotential:
                 else:
                     pass  # raise ValueError(f"Unknown key: {k}")
 
-    # @tf.function
-    def distributed_train_step(self, input_data: Any) -> dict:  # on root node
-        """Run ``train_step`` on all replicas and reduce the results (list of per-replica batches or distributed values)."""
+    def _run_on_replicas(self, step: Any, input_data: Any) -> dict:
+        """Run ``step`` on all replicas and reduce the results.
+
+        ``input_data`` is a list of per-replica batches or already distributed values.
+        """
+
         def value_fn(ctx):
             return input_data[ctx.replica_id_in_sync_group]
 
@@ -751,11 +754,16 @@ class TensorPotential:
                 self.strategy.experimental_distribute_values_from_function(value_fn)
             )
         else:  # already dict of PerReplica or of tensors
-            distributed_values = input_data  #
+            distributed_values = input_data
 
-        results = self.strategy.run(self.train_step, args=(distributed_values,))
+        results = self.strategy.run(step, args=(distributed_values,))
         self.reduce_dict(results)
         return results
+
+    # @tf.function
+    def distributed_train_step(self, input_data: Any) -> dict:  # on root node
+        """Run ``train_step`` on all replicas and reduce the results (list of per-replica batches or distributed values)."""
+        return self._run_on_replicas(self.train_step, input_data)
 
     # @tf.function
     def distributed_bfgs_train_step(self, input_data: Any) -> dict:
@@ -802,19 +810,7 @@ class TensorPotential:
     # @tf.function
     def distributed_test_step(self, input_data: Any) -> dict:
         """Run ``test_step`` on all replicas and reduce the results (list of per-replica batches or distributed values)."""
-        def value_fn(ctx):
-            return input_data[ctx.replica_id_in_sync_group]
-
-        if isinstance(input_data, list):  # manual list/tuple of batches
-            distributed_values = (
-                self.strategy.experimental_distribute_values_from_function(value_fn)
-            )
-        else:  # already dict of PerReplica or of tensors
-            distributed_values = input_data
-
-        results = self.strategy.run(self.test_step, args=(distributed_values,))
-        self.reduce_dict(results)
-        return results
+        return self._run_on_replicas(self.test_step, input_data)
 
     def _build_optimizer(self):
         """Create the optimizer variables now, under the strategy scope.
