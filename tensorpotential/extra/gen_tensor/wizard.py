@@ -752,7 +752,7 @@ fit:
 
 
 def run_gen_tensor_wizard():
-    """Entry point called from the main wizard when user picks 'Generic Tensors (L<=2)'; writes ``input.yaml`` or returns on an interrupt."""
+    """Entry point called from the main wizard when user picks 'Generic Tensors (L<=2)'; writes ``input.yaml``; returns early on an interrupt."""
     import questionary
     from rich import box as rich_box
     from rich.panel import Panel

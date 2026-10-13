@@ -421,9 +421,9 @@ def _stream_download(url, dest_path, desc=None):
 
 
 def _tp_version() -> str:
-    try:
-        from importlib.metadata import PackageNotFoundError, version
+    from importlib.metadata import PackageNotFoundError, version
 
+    try:
         return version("tensorpotential")
     except PackageNotFoundError:
         return "unknown"
