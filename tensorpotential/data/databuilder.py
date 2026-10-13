@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import gc
 import itertools
 import logging
@@ -150,10 +151,8 @@ def bucketing_split(
 
     structures_df = pd.DataFrame({"n_atoms": n_atoms, "n_neighbours": nneighbors})
     structures_df["n_structures"] = 1
-    try:
+    with contextlib.suppress(TypeError):
         structures_df["n_neighbours"] = structures_df["n_neighbours"].map(sum)
-    except TypeError:
-        pass
     # index: bid,   "n_atoms", "n_neighbours", "n_structures", "structure_ind"
     batches_df = generate_batches_df(structures_df, batch_size)
     batches_df = batches_df.sort_values(
