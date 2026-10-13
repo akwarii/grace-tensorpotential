@@ -1297,3 +1297,40 @@ def test_a_conversion_that_fails_is_reported_and_gives_nothing(typed, monkeypatc
     monkeypatch.setattr(pd.DataFrame, "apply", lambda self, *a, **k: (_ for _ in ()).throw(ValueError("boom")))
     assert gen_wizard._generate_tensor_property_interactive(frame, _make_state([2])) is None
     assert "Conversion error: boom" in capsys.readouterr().out
+
+
+# --- the failures the wizard reports instead of raising (pinned before the handlers were narrowed) -----------------------------
+
+
+def test_a_row_that_cannot_become_an_array_is_listed_as_an_issue():
+    frame = pd.DataFrame([{"ase_atoms": _atoms(4), "tensor_property": "not a number"}])
+    ok, issues = _check_tensor_shapes(frame, _make_state([2]))
+    assert not ok
+    assert issues[0].startswith("  row 0: cannot convert to array")
+
+
+def test_the_shape_of_a_missing_or_empty_source_column_is_none():
+    frame = pd.DataFrame({"src": [np.zeros((4, 9))]})
+    assert gen_wizard._detect_source_shape(frame, "src") == (4, 9)
+    assert gen_wizard._detect_source_shape(frame, "absent") is None
+    assert gen_wizard._detect_source_shape(frame.iloc[0:0], "src") is None
+
+
+def test_a_train_file_that_cannot_be_loaded_is_reported(typed, tmp_path, capsys):
+    typed("yes")
+    state = _make_state([2])
+    state.train_filename = str(tmp_path / "absent.pckl.gz")
+    gen_wizard._section_verify_dataset(state)
+    out = capsys.readouterr().out
+    assert "Could not load train dataset" in out
+    assert "WARNING" in out
+
+
+def test_a_generated_dataset_that_cannot_be_saved_is_reported(monkeypatch, tmp_path, capsys):
+    frame = pd.DataFrame([{"ase_atoms": _atoms(4), "energy": 0.0, "forces": np.zeros((4, 3))}])
+    generated = _df_with_tensor(_symmetric_traceless)
+    monkeypatch.setattr("tensorpotential.cli.prompts._ask_confirm", lambda *a, **k: True)
+    monkeypatch.setattr("tensorpotential.cli.prompts._ask_text", lambda *a, **k: str(tmp_path / "no_such_dir" / "out.pckl.gz"))
+    monkeypatch.setattr(gen_wizard, "_generate_tensor_property_interactive", lambda df, s: generated)
+    _verify_one_df(frame, str(tmp_path / "train.pckl.gz"), _make_state([2]), label="train")
+    assert "Could not save:" in capsys.readouterr().out
