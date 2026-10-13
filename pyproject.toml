@@ -182,6 +182,41 @@ ignore_imports = [
     "tensorpotential -> tensorflow",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Library code does not import the command layers (cli, scripts)"
+type = "forbidden"
+source_modules = [
+    "tensorpotential.calculator",
+    "tensorpotential.constants",
+    "tensorpotential.core",
+    "tensorpotential.data",
+    "tensorpotential.export",
+    "tensorpotential.export_kokkos",
+    "tensorpotential.extra",
+    "tensorpotential.formatting",
+    "tensorpotential.functions",
+    "tensorpotential.instructions",
+    "tensorpotential.keras_adapter",
+    "tensorpotential.loss",
+    "tensorpotential.metadata_utils",
+    "tensorpotential.metrics",
+    "tensorpotential.model_ops",
+    "tensorpotential.optimizer_layout",
+    "tensorpotential.poly",
+    "tensorpotential.potentials",
+    "tensorpotential.tensorpot",
+    "tensorpotential.torch_backend",
+    "tensorpotential.tpmodel",
+    "tensorpotential.uq",
+    "tensorpotential.utils",
+]
+forbidden_modules = ["tensorpotential.cli", "tensorpotential.scripts"]
+# The input wizard of the gen_tensor model generator is interactive command code that sits in extra/; it imports the
+# prompt helpers of cli/ inside its functions.
+ignore_imports = [
+    "tensorpotential.extra.gen_tensor.wizard -> tensorpotential.cli.prompts",
+]
+
 # Declared against imported dependencies (DEPS4): `deptry tensorpotential` must exit 0. Every entry says why it is not a finding.
 [tool.deptry.per_rule_ignores]
 # pyace is the optional ACE package that compat/pace imports (legacy, out of scope for every issue)
