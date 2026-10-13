@@ -6,6 +6,8 @@ import os
 import shutil
 import tempfile
 import warnings
+from collections.abc import Iterator
+from typing import Any
 
 from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
@@ -46,14 +48,13 @@ def _chief_or_discardable_path(path, strategy):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def get_output_dir(seed=42):
+def get_output_dir(seed: int = 42) -> str:
     """
     generate name and make folder
     :param seed:
     :return:  folder name
     """
-    path = os.path.join("seed", f"{seed}")
-    return path
+    return os.path.join("seed", f"{seed}")
 
 
 class TensorPotential:
@@ -176,7 +177,14 @@ class TensorPotential:
 
         self.optimizer.exclude_from_weight_decay(var_names=exclude_names)
 
-    def setup_checkpoint(self, with_optimizer=True):
+    def setup_checkpoint(self, with_optimizer: bool = True) -> None:
+        """Create ``self.checkpoint`` tracking the model, step, epoch and mid-epoch flag.
+
+        Parameters
+        ----------
+        with_optimizer : bool
+            Also track the optimizer, when there is one.
+        """
         trackable_objs = {
             "model": self.model,
             "step": tf.Variable(0, dtype=tf.int32, trainable=False),
@@ -191,42 +199,52 @@ class TensorPotential:
         self.checkpoint = tf.train.Checkpoint(**trackable_objs)
 
     @property
-    def step(self):
+    def step(self) -> int:
+        """Current training step, read from the checkpoint variable."""
         return int(self.checkpoint.step.numpy())
 
     @step.setter
-    def step(self, value):
+    def step(self, value: int) -> None:
+        """Set the step counter."""
         self.checkpoint.step.assign(value)
 
-    def increment_step(self):
+    def increment_step(self) -> None:
+        """Add one to the step counter."""
         self.checkpoint.step.assign_add(1)
 
     @property
-    def epoch(self):
+    def epoch(self) -> int:
+        """Current epoch, read from the checkpoint variable."""
         return int(self.checkpoint.epoch.numpy())
 
     @epoch.setter
-    def epoch(self, value):
+    def epoch(self, value: int) -> None:
+        """Set the epoch counter."""
         self.checkpoint.epoch.assign(value)
 
-    def increment_epoch(self):
+    def increment_epoch(self) -> None:
+        """Add one to the epoch counter."""
         self.checkpoint.epoch.assign_add(1)
 
     @property
-    def intra_epoch_save(self):
+    def intra_epoch_save(self) -> bool:
+        """Whether the last checkpoint was written in the middle of an epoch."""
         return bool(self.checkpoint.intra_epoch_save.numpy())
 
     @intra_epoch_save.setter
-    def intra_epoch_save(self, value):
+    def intra_epoch_save(self, value: bool) -> None:
+        """Set the mid-epoch flag."""
         self.checkpoint.intra_epoch_save.assign(bool(value))
 
-    def reset_epoch_and_step(self):
+    def reset_epoch_and_step(self) -> None:
+        """Set epoch and step to zero and clear the mid-epoch flag."""
         self.checkpoint.epoch.assign(0)
         self.checkpoint.step.assign(0)
         # No mid-epoch position remains once epoch/step are zeroed.
         self.checkpoint.intra_epoch_save.assign(False)
 
-    def reset_optimizer(self):
+    def reset_optimizer(self) -> None:
+        """Replace the optimizer by a fresh one of the same configuration and clear the mid-epoch flag."""
         with self.strategy.scope():
             if self.optimizer:
                 self.optimizer = self.optimizer.__class__(**self.optimizer.get_config())
@@ -235,7 +253,8 @@ class TensorPotential:
         # into optimizer moments. With moments gone, rewind has no purpose.
         self.checkpoint.intra_epoch_save.assign(False)
 
-    def get_model_grad_signatures(self):
+    def get_model_grad_signatures(self) -> dict[str, tf.TensorSpec]:
+        """Input signature of the training step: model, loss and metric inputs, by name."""
         dtypes = {"int": tf.int32, "float": self.float_dtype}
         input_signature = {}
         for k, v in self.model.train_specs.items():
@@ -254,7 +273,8 @@ class TensorPotential:
                 )
         return input_signature
 
-    def get_model_predict_signatures(self):
+    def get_model_predict_signatures(self) -> dict[str, tf.TensorSpec]:
+        """Input signature of the prediction: model and metric inputs, by name."""
         dtypes = {"int": tf.int32, "float": self.float_dtype}
         input_signature = {}
         for k, v in self.model.train_specs.items():
@@ -267,7 +287,14 @@ class TensorPotential:
             )
         return input_signature
 
-    def decorate_tf_function(self, jit_compile=False):
+    def decorate_tf_function(self, jit_compile: bool = False) -> None:
+        """Wrap ``model_grad``, ``predict`` and the distributed steps in ``tf.function``.
+
+        Parameters
+        ----------
+        jit_compile : bool
+            Compile ``model_grad`` and ``predict`` with XLA.
+        """
         self.model_grad = tf.function(
             self.model_grad,
             jit_compile=jit_compile,
@@ -295,15 +322,15 @@ class TensorPotential:
 
     def load_checkpoint(
         self,
-        checkpoint_name=None,
-        suffix="",
+        checkpoint_name: str | None = None,
+        suffix: str = "",
         expect_partial: bool = False,
-        verbose=False,
-        raise_errors=True,
-        assert_consumed=False,
-        assert_existing_objects_matched=False,
+        verbose: bool = False,
+        raise_errors: bool = True,
+        assert_consumed: bool = False,
+        assert_existing_objects_matched: bool = False,
         model_only: bool = False,
-    ):
+    ) -> None:
         """load checkpoint from checkpoint_dir if exists.
 
         ``model_only=True`` reads only the ``model`` (weights) subtree, ignoring
@@ -395,8 +422,12 @@ class TensorPotential:
         )
 
     def save_checkpoint(
-        self, suffix="", checkpoint_name=None, verbose=False, is_mid_epoch=False
-    ):
+        self,
+        suffix: str = "",
+        checkpoint_name: str | None = None,
+        verbose: bool = False,
+        is_mid_epoch: bool = False,
+    ) -> None:
         """save checkpoint to checkpoint_dir, overwrite if exists.
 
         Sets the on-disk `intra_epoch_save` flag to `is_mid_epoch` so the
@@ -413,9 +444,14 @@ class TensorPotential:
                 os.makedirs(os.path.dirname(write_name), exist_ok=True)
             self.checkpoint.write(write_name)
 
-    def save_model(self, model_name=None, jit_compile=True, exact_path=None):
+    def save_model(
+        self,
+        model_name: str | None = None,
+        jit_compile: bool = True,
+        exact_path: str | None = None,
+    ) -> None:
         """Saves model for serving"""
-        exact_path = exact_path or os.path.join(self.output_dir, model_name)
+        exact_path = exact_path or os.path.join(self.output_dir, model_name)  # ty: ignore[no-matching-overload]  # model_name=None is accepted only together with exact_path
         with _chief_or_discardable_path(exact_path, self.strategy) as write_path:
             if os.path.dirname(write_path):
                 os.makedirs(os.path.dirname(write_path), exist_ok=True)
@@ -427,14 +463,14 @@ class TensorPotential:
 
     def save_model_with_aux_computes(
         self,
-        model_name=None,
-        jit_compile=True,
-        exact_path=None,
-        communicated_keys=None,
-        gmm_uq_model=None,
-    ):
+        model_name: str | None = None,
+        jit_compile: bool = True,
+        exact_path: str | None = None,
+        communicated_keys: Any = None,
+        gmm_uq_model: Any = None,
+    ) -> None:
         """Saves model with all auxiliary compute functions"""
-        exact_path = exact_path or os.path.join(self.output_dir, model_name)
+        exact_path = exact_path or os.path.join(self.output_dir, model_name)  # ty: ignore[no-matching-overload]  # model_name=None is accepted only together with exact_path
         with _chief_or_discardable_path(exact_path, self.strategy) as exact_path:
             self._save_model_with_aux_computes_impl(
                 exact_path=exact_path,
@@ -571,22 +607,33 @@ class TensorPotential:
                 exact_path=exact_path,
             )
 
-    def export_to_yaml(self, model_name=None, exact_filename=None):
+    def export_to_yaml(
+        self, model_name: str | None = None, exact_filename: str | None = None
+    ) -> None:
         """Export FS-model to YAML file"""
-        exact_filename = exact_filename or os.path.join(self.output_dir, model_name)
+        exact_filename = exact_filename or os.path.join(self.output_dir, model_name)  # ty: ignore[no-matching-overload]  # model_name=None is accepted only together with exact_filename
         if os.path.dirname(exact_filename):
             os.makedirs(os.path.dirname(exact_filename), exist_ok=True)
         self.model.export_to_yaml(exact_filename)
 
     @staticmethod
-    def load_model(path: str) -> tf.saved_model:
+    def load_model(path: str) -> Any:
+        """Load a SavedModel from ``path`` (a restored trackable object, not a ``TPModel``)."""
         return tf.saved_model.load(path)
 
     def compute_loss(
         self,
         input_data: dict,
         model_predictions: dict,
-    ):
+    ) -> tuple[tf.Tensor, dict[str, tf.Tensor]]:
+        """Reduce the loss components to scalars.
+
+        Returns
+        -------
+        tuple
+            The total loss (the component named after the loss function) and the
+            dictionary of the other components.
+        """
         loss = self.loss_function(
             input_data=input_data,
             predictions=model_predictions,
@@ -597,7 +644,15 @@ class TensorPotential:
         return total_loss, loss
 
     # @tf.function(jit_compile=True)
-    def model_grad(self, input_data):
+    def model_grad(self, input_data: dict) -> tuple[Any, Any, list, dict]:
+        """Loss and its gradient with respect to the trainable variables.
+
+        Returns
+        -------
+        tuple
+            Total loss, model prediction, gradients and the per-component losses
+            (divided by the global batch size).
+        """
         with tf.GradientTape() as tape:
             model_prediction = self.model(input_data, training=True)
             total_loss, losses_dict = self.compute_loss(
@@ -622,10 +677,11 @@ class TensorPotential:
 
         return total_loss, model_prediction, gradients, losses_dict
 
-    def train_step(self, input_data):  # on each node, get mini_batch
+    def train_step(self, input_data: dict) -> dict:  # on each node, get mini_batch
+        """One optimizer step on a mini-batch; returns the loss, metrics and loss components."""
         result = {}
         # TODO: Possibly filter data here?
-        total_loss, model_prediction, gradients, losses_dict = self.model_grad(
+        total_loss, model_prediction, gradients, losses_dict = self.model_grad(  # ty: ignore[missing-argument]  # model_grad/predict are rebound to tf.function(input_signature=...) in decorate_tf_function
             input_data
         )  # under XLA
         metrics = self.compute_metrics(input_data, model_prediction)
@@ -640,15 +696,16 @@ class TensorPotential:
             result[f"loss_component/{k}/train"] = v
         return result
 
-    def train_bfgs_step(self, input_data):
+    def train_bfgs_step(self, input_data: dict) -> dict:
+        """Loss, metrics and the flattened gradient (``total_jac``) of a batch, without an optimizer step."""
         result = {}
-        total_loss, model_prediction, gradients, losses_dict = self.model_grad(
+        total_loss, model_prediction, gradients, losses_dict = self.model_grad(  # ty: ignore[missing-argument]  # model_grad/predict are rebound to tf.function(input_signature=...) in decorate_tf_function
             input_data
         )
         metrics = self.compute_metrics(input_data, model_prediction)
 
         flat_grad = []
-        for i, gvar in enumerate(gradients):
+        for gvar in gradients:
             gv = tf.reshape(gvar, [-1])
             flat_grad += [gv]
         flat_grad = tf.concat(flat_grad, axis=0)
@@ -663,11 +720,10 @@ class TensorPotential:
         return result
 
     # @tf.function
-    def predict(self, input_data, training: bool = False):
-        model_prediction = self.model(input_data, training=training)
-        return model_prediction
+    def predict(self, input_data: dict, training: bool = False) -> Any:
+        return self.model(input_data, training=training)
 
-    def reduce_dict(self, d: dict):  # on root node
+    def reduce_dict(self, d: dict) -> None:  # on root node
         """reduce items in dictionary d"""
         # TODO:  cleaner solution ?
         if self.strategy.num_replicas_in_sync > 1:
@@ -685,7 +741,8 @@ class TensorPotential:
                     pass  # raise ValueError(f"Unknown key: {k}")
 
     # @tf.function
-    def distributed_train_step(self, input_data):  # on root node
+    def distributed_train_step(self, input_data: Any) -> dict:  # on root node
+        """Run ``train_step`` on all replicas and reduce the results (list of per-replica batches or distributed values)."""
         def value_fn(ctx):
             return input_data[ctx.replica_id_in_sync_group]
 
@@ -701,7 +758,8 @@ class TensorPotential:
         return results
 
     # @tf.function
-    def distributed_bfgs_train_step(self, input_data):
+    def distributed_bfgs_train_step(self, input_data: Any) -> dict:
+        """Run ``train_bfgs_step`` on all replicas (list of per-replica batches) and reduce the results."""
         def value_fn(ctx):
             return input_data[ctx.replica_id_in_sync_group]
 
@@ -713,9 +771,10 @@ class TensorPotential:
         self.reduce_dict(results)
         return results
 
-    def test_step(self, input_data):
+    def test_step(self, input_data: dict) -> dict:
+        """Loss, metrics and loss components of a batch in inference mode."""
         result = {}
-        model_prediction = self.predict(input_data, training=False)
+        model_prediction = self.predict(input_data, training=False)  # ty: ignore[missing-argument]  # model_grad/predict are rebound to tf.function(input_signature=...) in decorate_tf_function
         metrics = self.compute_metrics(input_data, model_prediction)
 
         total_loss, losses_dict = self.compute_loss(
@@ -741,7 +800,8 @@ class TensorPotential:
         return result
 
     # @tf.function
-    def distributed_test_step(self, input_data):
+    def distributed_test_step(self, input_data: Any) -> dict:
+        """Run ``test_step`` on all replicas and reduce the results (list of per-replica batches or distributed values)."""
         def value_fn(ctx):
             return input_data[ctx.replica_id_in_sync_group]
 
@@ -820,7 +880,14 @@ class TensorPotential:
 
             strategy.extended.update(var, swap_fn, args=(average_var,))
 
-    def swap_variables(self):
+    def swap_variables(self) -> None:
+        """Exchange the model weights with their EMA averages.
+
+        Raises
+        ------
+        ValueError
+            If the optimizer has no EMA or has not taken a step yet.
+        """
         optimizer = self._get_ema_optimizer()
         if not self._ema_ready(optimizer):
             raise ValueError(
@@ -830,7 +897,7 @@ class TensorPotential:
         self._swap_variables(optimizer)
 
     @contextlib.contextmanager
-    def ema_scope(self):
+    def ema_scope(self) -> Iterator[None]:
         """Swap EMA weights into model on enter, swap back on exit.
 
         No-op when use_ema=False or optimizer not yet built.
@@ -852,7 +919,7 @@ class TensorPotential:
                 self._swap_variables(optimizer)
                 self._ema_weights_in_model = False
 
-    def prepare_for_training(self):
+    def prepare_for_training(self) -> None:
         """After loading a checkpoint (which stores model=EMA), swap back to training state.
 
         No-op when use_ema=False or optimizer not built.
@@ -867,7 +934,7 @@ class TensorPotential:
         self._swap_variables(optimizer)
         self._ema_weights_in_model = False
 
-    def enable_lora_adaptation(self, lora_config=None):
+    def enable_lora_adaptation(self, lora_config: dict | None = None) -> None:
         """Create the LoRA update tensors of the selected instructions.
 
         The original weights become non-trainable. The checkpoint tracks the model object, so
@@ -876,7 +943,7 @@ class TensorPotential:
         with self.strategy.scope():
             self.model.enable_lora_adaptation(lora_config=lora_config)
 
-    def finalize_lora_update(self):
+    def finalize_lora_update(self) -> None:
         """Merge the LoRA updates into the original weights and drop the update tensors.
 
         The optimizer is reset (its moments belong to variables that no longer exist); the step
@@ -888,11 +955,15 @@ class TensorPotential:
         self.reset_optimizer()
         self.step, self.epoch = step, epoch
 
-    def set_trainable_variables(self, only_trainable_names, verbose=False):
+    def set_trainable_variables(
+        self, only_trainable_names: list[str], verbose: bool = False
+    ) -> None:
+        """Train only the variables whose name contains one of ``only_trainable_names``."""
         with self.strategy.scope():
             self.model.set_trainable_variables(
                 only_trainable_names=only_trainable_names, verbose=verbose
             )
 
-    def is_lora_enabled(self):
+    def is_lora_enabled(self) -> bool:
+        """Whether any instruction of the model carries LoRA updates."""
         return self.model.is_lora_enabled()

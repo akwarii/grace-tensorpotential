@@ -48,10 +48,7 @@ class WeightedTensorLoss(LossComponent):
 
         tensor_pred = predictions[tensor_constants.PREDICT_TENSOR]
         error = tensor_true - tensor_pred
-        if self.type == "huber":
-            error = huber(error, self.delta)
-        else:
-            error = error**2
+        error = huber(error, self.delta) if self.type == "huber" else error**2
 
         loss = reduce_sum(tensor_weight * reduce_mean(error, axis=[-1], keepdims=True))
         if self.normalize_by_samples:

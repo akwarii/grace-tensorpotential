@@ -2377,8 +2377,8 @@ def real_coupling_metainformation(
     coupled_dat = []
     visited_hist = set()
     # for all possible outer-product of A_l1(l1hist) and  B_l2(l2hist)
-    for l1, l1hist, p1, sum_l1 in A_g.keys():
-        for l2, l2hist, p2, sum_l2 in B_g.keys():
+    for l1, l1hist, p1, sum_l1 in A_g:
+        for l2, l2hist, p2, sum_l2 in B_g:
             parity = p1 * p2
 
             # Apply different filtering criteria
@@ -2453,10 +2453,7 @@ def real_coupling_metainformation(
 
                 # normalization by pre-computed factors
                 if normalize:
-                    if l1 < l2:
-                        key = (l2, l1, L)
-                    else:
-                        key = (l1, l2, L)
+                    key = (l2, l1, L) if l1 < l2 else (l1, l2, L)
                     RCG *= CG_normalization_dict.get(key, 1.0)
 
                 # for all M = -L ... L
@@ -2557,9 +2554,7 @@ def real_coupling_metainformation(
     )
 
     # TODO: check if sorting influences on  perf
-    cdf = cdf.sort_values(["l", "parity", "hist", "m"]).reset_index(drop=True)
-
-    return cdf
+    return cdf.sort_values(["l", "parity", "hist", "m"]).reset_index(drop=True)
 
 
 def c2r_harm_matrix(l):  # noqa: E741
@@ -2572,10 +2567,7 @@ def c2r_harm_matrix(l):  # noqa: E741
     for m in range(1, l + 1):
         C[m + l, l + abs(m)] = (-1) ** m / sq2
         C[m + l, l - abs(m)] = 1.0j * (-1) ** m / sq2
-    C = (-1.0j) ** l * C
-    return C
-
-
+    return (-1.0j) ** l * C
 
 
 @lru_cache(maxsize=None)
@@ -2633,8 +2625,7 @@ def lmax_from_hist(s):
     tags = [d for d in s.replace("(", ",").replace(")", ",").split(sep=",") if d]
     if tags:
         return max([int(d) for d in tags])
-    else:
-        return 0
+    return 0
 
 
 # old function, historical heritage

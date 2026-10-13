@@ -39,7 +39,6 @@ first baseline was recorded, without a full-suite run), or ``--no-coverage``; a 
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import re
 import sys
@@ -49,6 +48,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import api_annotations
 import check_clones
 import coverage_ratchet
 import divergence
@@ -174,31 +174,17 @@ def clone_metrics(root: Path) -> Metrics:
     return out
 
 
-_Function = ast.FunctionDef | ast.AsyncFunctionDef
-
-
-def _public_functions(tree: ast.Module | ast.ClassDef) -> list[_Function]:
-    """Functions and methods reachable through public names only (nested functions are not API)."""
-    found: list[_Function] = []
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
-            found += _public_functions(node)
-        elif isinstance(node, _Function) and not node.name.startswith("_"):
-            found.append(node)
-    return found
-
-
 def api_metrics(root: Path) -> Metrics:
     """Share of the public functions of the library with a return annotation and with a docstring."""
     funcs = []
     for path in library_files(root):
-        funcs += _public_functions(ast.parse(path.read_text(encoding="utf-8")))
+        funcs += api_annotations.parse_public(path)
     return {
         "api.return_annotations": ratio(
-            sum(f.returns is not None for f in funcs), len(funcs)
+            sum(map(api_annotations.has_return, funcs)), len(funcs)
         ),
         "api.docstrings": ratio(
-            sum(ast.get_docstring(f) is not None for f in funcs), len(funcs)
+            sum(map(api_annotations.has_docstring, funcs)), len(funcs)
         ),
     }
 

@@ -35,14 +35,6 @@ SKIP_DIR_NAMES = {".git", ".venv", "venv", "__pycache__", "node_modules", "site"
 # or in a test that is skipped (``tests/test_structured_grid.py``).  Submodules count too.
 KNOWN_ABSENT_PACKAGES = ("tensorpotential.experimental",)
 
-# Files whose ``tensorpotential`` imports are stale on the untouched tree: the model files of
-# the "skip custom model" integration test import ``tensorpotential.layers``,
-# ``tensorpotential.tpinstruction`` and names that moved out of ``instructions.base``.
-KNOWN_STALE_SOURCES = frozenset({
-    "tests/MoNbTaW-CUSTOM/model.py",
-    "tests/MoNbTaW-CUSTOM/model_mlp_emb.py",
-})
-
 # Modules that do not import on the untouched tree, mapped to the third-party module that is
 # missing.  ``grace_dashboard`` needs ``flask``, which ``pyproject.toml`` does not declare.
 # The gate accepts exactly this ``ModuleNotFoundError`` and nothing else for these modules.
@@ -172,16 +164,11 @@ def collected_imports() -> dict[tuple[str, str], list[str]]:
 
 
 def checked_imports() -> dict[tuple[str, str], list[str]]:
-    """``collected_imports`` without the absent package, the baselined modules and stale files."""
+    """``collected_imports`` without the absent package, and the baselined modules."""
     checked = {}
     for (module_name, name), sources in collected_imports().items():
-        live = [s for s in sources if s not in KNOWN_STALE_SOURCES]
-        if (
-            live
-            and not _is_absent(module_name)
-            and module_name not in BASELINED_IMPORT_FAILURES
-        ):
-            checked[module_name, name] = live
+        if not _is_absent(module_name) and module_name not in BASELINED_IMPORT_FAILURES:
+            checked[module_name, name] = sources
     return checked
 
 

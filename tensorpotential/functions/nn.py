@@ -414,9 +414,10 @@ class FullyConnectedMLP(tf.Module):
     @tf.Module.with_name_scope
     def build(self, float_dtype):
         for sm in self.submodules:
-            if hasattr(sm, "build"):
-                if not hasattr(sm, "is_built") or not sm.is_built:
-                    sm.build(float_dtype)
+            if hasattr(sm, "build") and (
+                not hasattr(sm, "is_built") or not sm.is_built
+            ):
+                sm.build(float_dtype)
         self.is_built = True
 
     def __call__(

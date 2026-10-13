@@ -105,7 +105,7 @@ class DatasetHistPlotter(IDatasetPlotter):
             bins_ = cls._bins(plot_data, bins) if isinstance(bins, int) else bins
 
             alpha = 1.0
-            for i, (ds_lbl, ds) in enumerate(
+            for i, (ds_lbl, _ds) in enumerate(
                 DatasetHistPlotter._iter_datasets(datasets)
             ):
                 try:
@@ -159,8 +159,7 @@ class DatasetHistPlotter(IDatasetPlotter):
     def _stack_v(v: np.ndarray) -> np.ndarray:
         if v.dtype == object:
             return np.vstack(v).flatten()
-        else:
-            return v.flatten()
+        return v.flatten()
 
     @staticmethod
     def _decrease_alpha(alpha: float, factor: float = 0.66):

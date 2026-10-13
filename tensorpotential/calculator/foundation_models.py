@@ -8,11 +8,14 @@ import tarfile
 from datetime import datetime, timezone
 
 import keyword
-from typing import Final
+from typing import TYPE_CHECKING, Any, Final
 
 import requests
 import yaml
 from tqdm import tqdm
+
+if TYPE_CHECKING:
+    from tensorpotential.calculator.asecalculator import TPCalculator
 
 # environment variable for GRACE cache. Default will be "~/.cache/grace"
 GRACE_CACHE: Final[str] = "GRACE_CACHE"
@@ -130,7 +133,7 @@ def _uqv6_entry(
     return entry
 
 
-MODELS_METADATA = {
+MODELS_METADATA: dict[str, dict[str, Any]] = {
     ########################################################
     ### Pre-fitted on OMat24, fine tuned on sAlex+MPTraj  ##
     ########################################################
@@ -297,7 +300,13 @@ if os.path.isfile(user_model_registry_yaml_fname):
                 MODELS_METADATA[name] = info
 
 
-def to_valid_variable_name(name):
+def to_valid_variable_name(name: str) -> str:
+    """Turn ``name`` into a valid Python identifier.
+
+    Invalid characters become underscores, a leading underscore is added when the
+    first character is not a letter or underscore, and a trailing underscore when
+    the result is a keyword.
+    """
     # Replace invalid characters with underscores
     valid_name = "".join(
         char if char.isalnum() or char == "_" else "_" for char in name
@@ -314,7 +323,12 @@ def to_valid_variable_name(name):
     return valid_name
 
 
-def safe_extract(tar_filename, path=".", members=None):
+def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
+    """Safely extract a ``.tar.gz`` archive that holds a single top-level directory.
+
+    Raises ``ValueError`` for several top-level items, a top-level file, or unsafe
+    member paths. Returns the name of the top-level directory.
+    """
     with tarfile.open(tar_filename, "r:gz") as tar:
         # Get top-level items (first level of paths)
         top_level_items = {
@@ -478,6 +492,7 @@ def write_origin_sidecar(path: str, model: str, payload: str, url: str, **extra)
 
 
 def read_origin_sidecar(path: str) -> dict | None:
+    """Return the origin sidecar JSON stored in ``path``, or None if missing or unreadable."""
     try:
         with open(os.path.join(path, ORIGIN_SIDECAR)) as f:
             return json.load(f)
@@ -522,7 +537,8 @@ def check_origin(path: str, model: str, payload: str, expected_url: str | None) 
     return False
 
 
-def download_extract_rename(url, model_path):
+def download_extract_rename(url: str, model_path: str) -> None:
+    """Download the archive at ``url``, unpack it and rename its folder to ``model_path``."""
     model_path = model_path[:-1] if model_path.endswith("/") else model_path
     # sciebo/Nextcloud public-share links require a trailing "/download";
     # direct hosts (e.g. Hugging Face "resolve" URLs) are used as-is.
@@ -549,7 +565,8 @@ def download_extract_rename(url, model_path):
     assert os.path.isdir(model_path), f"Path {model_path} does not exist"
 
 
-def get_or_download_model(model):
+def get_or_download_model(model: str) -> str:
+    """Return the cached path of foundation model ``model``, downloading it if absent."""
     # remap old names into new for backward compat
     model = MODELS_ALIASES_DICT.get(model) or model
 
@@ -577,7 +594,8 @@ def get_or_download_model(model):
     return model_path
 
 
-def get_or_download_checkpoint(model):
+def get_or_download_checkpoint(model: str) -> str:
+    """Return the cached checkpoint path of ``model``, downloading it if absent."""
     # remap old names into new for backward compat -- same as get_or_download_model;
     # without it an aliased name (e.g. from input.yaml::finetune_foundation_model)
     # raises KeyError here.
@@ -607,7 +625,7 @@ def get_or_download_checkpoint(model):
     return checkpoint_path
 
 
-def get_or_download_kokkos(model):
+def get_or_download_kokkos(model: str) -> str:
     """Download the LAMMPS-Kokkos export ``kokkos.npz`` for ``model`` into its cached
     model dir, returning the local path. On-demand: ASE users never need it, so it is
     NOT pulled with the SavedModel (and the SavedModel is not required here either).
@@ -642,16 +660,17 @@ def grace_fm(
     pad_neighbors_fraction: float | None = 0.05,
     pad_atoms_number: int | None = 10,
     max_number_reduction_recompilation: int | None = 2,
-    min_dist=None,
+    min_dist: float | None = None,
     **kwargs,
-):
+) -> TPCalculator:
+    """Build a ``TPCalculator`` for foundation model ``model`` (downloaded if needed)."""
     from tensorpotential.calculator.asecalculator import TPCalculator
 
     assert model in MODELS_NAME_LIST, f"model must be in {MODELS_NAME_LIST}"
 
     model_path = get_or_download_model(model)
 
-    calc = TPCalculator(
+    return TPCalculator(
         model=model_path,
         pad_neighbors_fraction=pad_neighbors_fraction,
         pad_atoms_number=pad_atoms_number,
@@ -659,7 +678,6 @@ def grace_fm(
         min_dist=min_dist,
         **kwargs,
     )
-    return calc
 
 
 grace_fm.__doc__ = f"""

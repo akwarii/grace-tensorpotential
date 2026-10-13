@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.data import Dataset
 
-from typing import Any, Dict, Tuple, Optional, List, NamedTuple
+from typing import Any, NamedTuple
 from itertools import combinations_with_replacement
 from ase.calculators.calculator import Calculator, all_changes
 
@@ -69,14 +69,14 @@ class PaddingManager:
     if possible and to potentially reduce padding if it becomes excessive.
 
     Args:
-        data_builders (List[DataBuilderProtocol]): A list of DataBuilder objects that handle
+        data_builders (list[DataBuilderProtocol]): A list of DataBuilder objects that handle
             data extraction, batching, and padding for different aspects of the atomic structures.
-        pad_neighbors_fraction (Optional[float]):  Fraction of real neighbors to add as padding.
+        pad_neighbors_fraction (float | None):  Fraction of real neighbors to add as padding.
             Must be between 0 and 1 inclusive if provided. Defaults to 0.10. If None, neighbor padding
             is not based on a fraction.
-        pad_atoms_number (Optional[int]): Number of atoms to add as padding. Must be a positive integer
+        pad_atoms_number (int | None): Number of atoms to add as padding. Must be a positive integer
             if provided. Defaults to 10. If None, atom padding is not based on a fixed number.
-        max_number_reduction_recompilation (Optional[int]): Maximum number of times padding can be
+        max_number_reduction_recompilation (int | None): Maximum number of times padding can be
             reduced and recompilation triggered. If None, padding reduction is disabled. Defaults to 3.
         debug_padding_verbose (int): Verbosity level for padding debug output. Defaults to 0.
             0 — silent, 1 — adaptive padding events only (margin growth),
@@ -86,15 +86,15 @@ class PaddingManager:
 
     def __init__(
         self,
-        data_builders: List[AbstractDataBuilder],
-        pad_neighbors_fraction: Optional[float] = 0.10,
-        pad_atoms_number: Optional[int] = 10,
-        max_number_reduction_recompilation: Optional[int] = 3,
+        data_builders: list[AbstractDataBuilder],
+        pad_neighbors_fraction: float | None = 0.10,
+        pad_atoms_number: int | None = 10,
+        max_number_reduction_recompilation: int | None = 3,
         debug_padding_verbose: int = 0,
         adaptive_padding: bool = True,
-        adaptive_padding_config: Optional[AdaptivePaddingConfig] = None,
+        adaptive_padding_config: AdaptivePaddingConfig | None = None,
         # deprecated — use debug_padding_verbose instead
-        debug_padding: Optional[bool] = None,
+        debug_padding: bool | None = None,
     ):
         if pad_neighbors_fraction is not None and not 0 < pad_neighbors_fraction <= 1:
             raise ValueError(
@@ -117,10 +117,10 @@ class PaddingManager:
         if adaptive_padding_config is None:
             adaptive_padding_config = AdaptivePaddingConfig()
 
-        self.data_builders: List[AbstractDataBuilder] = data_builders
-        self.pad_neighbors_fraction: Optional[float] = pad_neighbors_fraction
-        self.pad_atoms_number: Optional[int] = pad_atoms_number
-        self.max_number_reduction_recompilation: Optional[int] = (
+        self.data_builders: list[AbstractDataBuilder] = data_builders
+        self.pad_neighbors_fraction: float | None = pad_neighbors_fraction
+        self.pad_atoms_number: int | None = pad_atoms_number
+        self.max_number_reduction_recompilation: int | None = (
             max_number_reduction_recompilation
         )
         self.number_reduction_recompilation: int = 0
@@ -128,20 +128,20 @@ class PaddingManager:
         self.padding_fraction_history = deque(maxlen=10_000)
 
         # List of tuples (max_atoms, max_neighbors), kept sorted via bisect.insort
-        self.padding_bounds: List[Tuple[int, int]] = []
+        self.padding_bounds: list[tuple[int, int]] = []
 
         # Adaptive padding state
         self.adaptive_padding: bool = adaptive_padding
         self.adaptive_padding_config: AdaptivePaddingConfig = adaptive_padding_config
 
         self._call_history: deque = deque(maxlen=adaptive_padding_config.miss_rate_window)
-        self._current_pad_atoms_number: Optional[int] = pad_atoms_number
-        self._current_pad_neighbors_fraction: Optional[float] = pad_neighbors_fraction
+        self._current_pad_atoms_number: int | None = pad_atoms_number
+        self._current_pad_neighbors_fraction: float | None = pad_neighbors_fraction
         self._n_adaptations: int = 0
 
     def find_upper_padding_bound(
         self, max_nat: int, max_nneigh: int
-    ) -> Optional[Tuple[int, int]]:
+    ) -> tuple[int, int] | None:
         """
         Finds the smallest existing padding bound in history that is greater than or equal to
         the current required bounds (max_nat, max_nneigh).
@@ -162,7 +162,7 @@ class PaddingManager:
             max_nneigh (int): The maximum number of neighbors in the current batch.
 
         Returns:
-            Optional[Tuple[int, int]]: An existing upper padding bound (max_atoms, max_neighbors)
+            tuple[int, int] | None: An existing upper padding bound (max_atoms, max_neighbors)
                                         from history if found, otherwise None.
         """
         # O(log n): skip all entries with atoms < max_nat
@@ -173,7 +173,7 @@ class PaddingManager:
                 return self.padding_bounds[i]
         return None
 
-    def get_padded_bound(self, nreal_atoms: int, nreal_neigh: int) -> Tuple[int, int]:
+    def get_padded_bound(self, nreal_atoms: int, nreal_neigh: int) -> tuple[int, int]:
         """
         Calculates the padded bounds for atoms and neighbors based on the configured padding parameters.
 
@@ -185,7 +185,7 @@ class PaddingManager:
             nreal_neigh (int): The number of real neighbors in the current structure.
 
         Returns:
-            Tuple[int, int]: The calculated padded bounds as a tuple (max_atoms, max_neighbors).
+            tuple[int, int]: The calculated padded bounds as a tuple (max_atoms, max_neighbors).
         """
         pad_neigh_frac = self._current_pad_neighbors_fraction
         pad_atoms_num = self._current_pad_atoms_number
@@ -263,7 +263,7 @@ class PaddingManager:
                 f"(adaptation #{self._n_adaptations})"
             )
 
-    def get_data(self, atoms) -> Dict[str, Any]:
+    def get_data(self, atoms) -> dict[str, Any]:
         """
         Processes the input atomic structure (atoms) to extract data, batch it, and apply padding.
 
@@ -277,18 +277,18 @@ class PaddingManager:
             atoms: An atomic structure object (e.g., ASE Atoms object).
 
         Returns:
-            Dict[str, Any]: The processed and padded batch of data.
+            dict[str, Any]: The processed and padded batch of data.
         """
         # Stage 1: Data Extraction
-        data_dict: Dict[str, Any] = {}
+        data_dict: dict[str, Any] = {}
         for data_builder in self.data_builders:
             data_dict.update(data_builder.extract_from_ase_atoms(atoms))
 
         # Stage 2: Batching
-        batch_group: List[Dict[str, Any]] = [
+        batch_group: list[dict[str, Any]] = [
             data_dict
         ]  # Consider if batch_group is always of size 1
-        batch: Dict[str, Any] = {}
+        batch: dict[str, Any] = {}
         for data_builder in self.data_builders:
             batch.update(data_builder.join_to_batch(batch_group))
 
@@ -311,7 +311,7 @@ class PaddingManager:
                 self._record_and_maybe_adapt(is_miss=True)
             else:
                 # extract padding bounds from self.padding_bounds
-                upper_bound: Optional[Tuple[int, int]] = self.find_upper_padding_bound(
+                upper_bound: tuple[int, int] | None = self.find_upper_padding_bound(
                     nreal_atoms, nreal_neigh
                 )
                 if self.debug_padding_verbose >= 3:
@@ -352,7 +352,7 @@ class PaddingManager:
 
             pad_max_n_atoms, pad_max_n_neighbors = upper_bound
 
-            batch_max_pad_dict: Dict[str, int] = {
+            batch_max_pad_dict: dict[str, int] = {
                 constants.PAD_MAX_N_STRUCTURES: 1,
                 constants.PAD_MAX_N_ATOMS: pad_max_n_atoms,
                 constants.PAD_MAX_N_NEIGHBORS: pad_max_n_neighbors,
@@ -370,7 +370,24 @@ class PaddingManager:
 
         return batch
 
-    def is_large_padding(self, nreal_atoms, nreal_neigh, upper_bound):
+    def is_large_padding(
+        self, nreal_atoms: int, nreal_neigh: int, upper_bound: tuple[int, int]
+    ) -> bool:
+        """Tell whether padding up to ``upper_bound`` is excessive.
+
+        Parameters
+        ----------
+        nreal_atoms, nreal_neigh : int
+            Numbers of real atoms and real neighbours of the structure.
+        upper_bound : tuple of int
+            Padded (atoms, neighbours) sizes.
+
+        Returns
+        -------
+        bool
+            True when more than 1000 entries are added and the padding fraction
+            exceeds ``pad_neighbors_fraction``.
+        """
         npad_atoms = upper_bound[0] - nreal_atoms
         npad_neigh = upper_bound[1] - nreal_neigh
         padding_fraction = (npad_atoms + npad_neigh) / (nreal_atoms + nreal_neigh)
@@ -380,7 +397,7 @@ class PaddingManager:
 
 
 def _snap_up_hybrid(x: int, step: int = 16, linear_max: int = 128,
-                    geom_factor: Optional[float] = 1.5) -> int:
+                    geom_factor: float | None = 1.5) -> int:
     """Round ``x`` UP onto a hybrid ladder: a fine linear grid (multiples of ``step``) up to
     ``linear_max``, then a geometric grid (×``geom_factor``) above. Keeps padding tight in the
     common low range while bounding the number of distinct rungs in the heavy tail (so a diverse
@@ -396,7 +413,7 @@ def _snap_up_hybrid(x: int, step: int = 16, linear_max: int = 128,
     return r
 
 
-def _ema(prev: Optional[float], x: float, alpha: float) -> float:
+def _ema(prev: float | None, x: float, alpha: float) -> float:
     """Exponential moving average update; seeds with ``x`` on the first sample (``prev is None``)."""
     return x if prev is None else (1.0 - alpha) * prev + alpha * x
 
@@ -432,11 +449,11 @@ class DensePaddingManager:
         width_floor: int = 64,
         width_step: int = 16,
         width_linear_max: int = 128,
-        width_geom_factor: Optional[float] = 1.5,
+        width_geom_factor: float | None = 1.5,
         atom_floor: int = 16,
         atom_step: int = 16,
         atom_linear_max: int = 128,
-        atom_geom_factor: Optional[float] = 1.5,
+        atom_geom_factor: float | None = 1.5,
         tight: bool = False,
         promote: bool = True,
         promote_safety: float = 2.0,
@@ -481,22 +498,22 @@ class DensePaddingManager:
         self.promote_min_gain = promote_min_gain
         self.ema_alpha = ema_alpha
         self.verbose = verbose
-        self.visited: List[Tuple[int, int]] = []   # (atoms, width), kept sorted
+        self.visited: list[tuple[int, int]] = []   # (atoms, width), kept sorted
         self._extra_mints: int = 0
         self.n_compiles: int = 0
         self.n_reuse: int = 0
         self.n_promote: int = 0
         # per visited shape: the (max nat, max true_max) envelope of the structures that reused it
-        self._env: Dict[Tuple[int, int], Tuple[int, int]] = {}
+        self._env: dict[tuple[int, int], tuple[int, int]] = {}
         # measured-cost state (calibrated by note_eval): shape of the last selection, EMA compile
         # time (s), per-shape + global EMA steady eval time (s), per-shape eval counter (1st ==
         # compile), and per coarse shape the accumulated estimated saving (s) vs its tight twin.
-        self._last_shape: Optional[Tuple[int, int]] = None
-        self.c_compile_s: Optional[float] = None
-        self._eval_s: Dict[Tuple[int, int], float] = {}
-        self._eval_s_global: Optional[float] = None
-        self._eval_seen: Dict[Tuple[int, int], int] = {}
-        self._saved_s: Dict[Tuple[int, int], float] = {}
+        self._last_shape: tuple[int, int] | None = None
+        self.c_compile_s: float | None = None
+        self._eval_s: dict[tuple[int, int], float] = {}
+        self._eval_s_global: float | None = None
+        self._eval_seen: dict[tuple[int, int], int] = {}
+        self._saved_s: dict[tuple[int, int], float] = {}
 
     def _snap_width(self, w: int) -> int:
         # width floor collapses all low-coordination structures onto one width (analogous to the
@@ -508,7 +525,7 @@ class DensePaddingManager:
         return max(self.atom_floor,
                    _snap_up_hybrid(n, self.atom_step, self.atom_linear_max, self.atom_geom_factor))
 
-    def _record(self, shape: Tuple[int, int]) -> None:
+    def _record(self, shape: tuple[int, int]) -> None:
         if shape not in self.visited:
             bisect.insort(self.visited, shape)
             self.n_compiles += 1
@@ -516,7 +533,7 @@ class DensePaddingManager:
                 log.info("dense calc: new shape %s -> compile #%d (visited=%d)",
                          shape, self.n_compiles, len(self.visited))
 
-    def _tight_promote(self, shape: Tuple[int, int]) -> Tuple[int, int]:
+    def _tight_promote(self, shape: tuple[int, int]) -> tuple[int, int]:
         """Tight replacement for a hot coarse ``shape``, sized to its observed envelope. Atoms are
         set to the max nat seen (exact for fixed-N MD/relaxation); width is tightened toward the
         envelope max (plus a small drift margin) but never above the coarse width (which already
@@ -529,7 +546,7 @@ class DensePaddingManager:
         w = max(self.promote_step, min(shape[1], w))
         return (max_nat, w)
 
-    def _maybe_promote(self, best: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+    def _maybe_promote(self, best: tuple[int, int]) -> tuple[int, int] | None:
         """Measured ski-rental: accumulate the per-step padding saving a tight twin of ``best``
         would yield, and promote (mint it) once that has paid back one measured compile. Returns
         the promoted shape, or None to keep reusing ``best``."""
@@ -561,7 +578,7 @@ class DensePaddingManager:
                      self.promote_safety, self.c_compile_s)
         return tight
 
-    def select_shape(self, nat: int, true_max: int) -> Tuple[int, int]:
+    def select_shape(self, nat: int, true_max: int) -> tuple[int, int]:
         """Pick the dense ``(atoms, width)`` shape for one structure (pure decision; updates the
         visited set / counters and records the selection for ``note_eval``)."""
         true_max = max(int(true_max), 1)
@@ -610,11 +627,12 @@ class DensePaddingManager:
             self._eval_s[sh] = _ema(self._eval_s.get(sh), elapsed_s, a)
             self._eval_s_global = _ema(self._eval_s_global, elapsed_s, a)
 
-    def get_data(self, atoms) -> Dict[str, Any]:
-        data_dict: Dict[str, Any] = {}
+    def get_data(self, atoms) -> dict[str, Any]:
+        """Build the padded dense-layout batch dictionary for one ``ase.Atoms``."""
+        data_dict: dict[str, Any] = {}
         for db in self.data_builders:
             data_dict.update(db.extract_from_ase_atoms(atoms))
-        batch: Dict[str, Any] = {}
+        batch: dict[str, Any] = {}
         for db in self.data_builders:
             batch.update(db.join_to_batch([data_dict]))
 
@@ -624,7 +642,7 @@ class DensePaddingManager:
         true_max = int(np.bincount(ind_i, minlength=nat).max()) if nat else 1
 
         max_atoms, width = self.select_shape(nat, true_max)
-        max_pad_dict: Dict[str, int] = {
+        max_pad_dict: dict[str, int] = {
             constants.PAD_MAX_N_STRUCTURES: 1,
             constants.PAD_MAX_N_ATOMS: max_atoms,
             constants.PAD_MAX_NEIGH: width,
@@ -637,9 +655,9 @@ class DensePaddingManager:
 
 class _LoadedModel(NamedTuple):
     model: Any
-    data_keys: List[str]
-    uq_sigs: Dict[str, Any]
-    path: Optional[str]
+    data_keys: list[str]
+    uq_sigs: dict[str, Any]
+    path: str | None
     can_seg: bool   # model can run the segment_sum engine (`compute`)
     can_dense: bool  # model can run the dense reshape engine (`compute_dense`)
 
@@ -775,9 +793,9 @@ class TPCalculator(Calculator):
         self.gmm_uq_model = None
         # Map of UQ mode → ConcreteFunction; empty when no UQ signatures
         # are available (in-memory TPModel, or SavedModel without UQ).
-        self._saved_model_uq_sigs: Dict[str, Any] = {}
+        self._saved_model_uq_sigs: dict[str, Any] = {}
         # Set to a snapshot dict when UQ is enabled; None when disabled.
-        self._uq_state: Optional[Dict[str, Any]] = None
+        self._uq_state: dict[str, Any] | None = None
 
         # Engine mode (see class docstring): "uniform" -> dense reshape aggregation;
         # "diverse" -> segment_sum. Resolved against each model's capabilities below.
@@ -982,7 +1000,7 @@ class TPCalculator(Calculator):
                 "Uncertainty quantification is enabled (mode='%s'). "
                 "Call calc.enable_uq(mode='gamma_only'/'full') to switch, "
                 "or calc.disable_uq() to use standard compute.",
-                self._uq_state["mode"],
+                self._uq_state["mode"],  # ty: ignore[not-subscriptable]  # set by enable_uq(); ty cannot narrow through the _uq_enabled property
             )
 
     @property
@@ -994,7 +1012,7 @@ class TPCalculator(Calculator):
         """List of UQ modes exposed by the loaded SavedModel."""
         return list(self._saved_model_uq_sigs.keys())
 
-    def enable_uq(self, mode: str | None = None):
+    def enable_uq(self, mode: str | None = None) -> None:
         """Switch to a compute_uq signature (UQ + standard outputs).
 
         Only works when the calculator was loaded from a SavedModel that
@@ -1022,7 +1040,7 @@ class TPCalculator(Calculator):
                 f"UQ mode {mode!r} not available; SavedModel exposes "
                 f"{list(self._saved_model_uq_sigs)}"
             )
-        if self._uq_enabled and self._uq_state["mode"] == mode:
+        if self._uq_enabled and self._uq_state["mode"] == mode:  # ty: ignore[not-subscriptable]  # guarded by the _uq_enabled property; ty cannot narrow through it
             return
         if self._uq_enabled:
             # Mode switch: restore baseline first so the snapshot is clean
@@ -1050,7 +1068,7 @@ class TPCalculator(Calculator):
         self.data_keys = list(sig_kwargs)
         self._configure_uq_properties_from_signature(sig)
 
-    def disable_uq(self):
+    def disable_uq(self) -> None:
         """Restore the standard compute signature, removing UQ outputs."""
         if self._uq_state is None:
             return
@@ -1093,7 +1111,7 @@ class TPCalculator(Calculator):
         checkpoint: str | None = None,
         param_dtype=None,
         compute_dsigma_dr: bool = True,
-    ):
+    ) -> None:
         """Load GMM-UQ artifacts and enable uncertainty quantification.
 
         For saved models (the common case), ``model_yaml`` and ``checkpoint``
@@ -1181,7 +1199,11 @@ class TPCalculator(Calculator):
         )
         self._set_uq_extra_properties(extra, truncate)
 
-    def get_data(self, atoms):
+    def get_data(self, atoms) -> None:
+        """Convert ``atoms`` to the padded model input and store it in ``self.data``.
+
+        Raises ``RuntimeError`` when the minimal bond distance is below ``min_dist``.
+        """
         current_symbs = atoms.symbols.species()
         assert all([x in self.element_map for x in current_symbs]), (
             f"This model is configured to process "
@@ -1211,7 +1233,12 @@ class TPCalculator(Calculator):
             )
         self.data = Dataset.from_tensors(data).get_single_element()
 
-    def find_upper_padding_bound(self, max_nat):
+    def find_upper_padding_bound(self, max_nat: int) -> tuple:
+        """Return the entry of ``padding_history`` that fits ``max_nat`` atoms.
+
+        It is the last entry whose atom bound equals that of the first entry with
+        a bound of at least ``max_nat``.
+        """
         # find first entry, when max_nat<=
         for ind, upper_bound_tuple in enumerate(self.padding_history):
             if upper_bound_tuple[0] >= max_nat:
@@ -1230,7 +1257,18 @@ class TPCalculator(Calculator):
         atoms=None,
         properties=("energy", "forces", "stress"),
         system_changes=all_changes,
-    ):
+    ) -> None:
+        """Compute the requested properties and store them in ``self.results``.
+
+        Parameters
+        ----------
+        atoms : ase.Atoms
+            Structure to evaluate.
+        properties : sequence of str
+            Requested properties.
+        system_changes : list of str
+            Changes since the last calculation (ASE convention).
+        """
         Calculator.calculate(self, atoms, properties, system_changes)
 
         self.forces = np.empty((len(atoms), 3))
@@ -1266,10 +1304,9 @@ class TPCalculator(Calculator):
 
             if "forces" in self.compute_properties:
                 forces = output.get(constants.PREDICT_FORCES, None)
-                if forces is None:
-                    forces = np.zeros((len(atoms), 3))
-                else:
-                    forces = forces.numpy()
+                forces = (
+                    np.zeros((len(atoms), 3)) if forces is None else forces.numpy()
+                )
                 forces_list.append(forces)
 
             if "stress" in self.compute_properties:

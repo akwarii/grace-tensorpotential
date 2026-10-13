@@ -187,8 +187,7 @@ class ChebSqrRadialBasisFunction(RadialBasisFunction):
         basis *= cutoff_func_p_order_poly(r / rc, self.pcut)
         if self.normalized:
             return basis * self.norm
-        else:
-            return basis
+        return basis
 
 
 class SinBesselRadialBasisFunction(RadialBasisFunction):

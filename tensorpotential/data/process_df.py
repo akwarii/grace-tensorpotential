@@ -273,8 +273,7 @@ def extract_elements(df: pd.DataFrame, composition_dict_column=COMP_DICT):
     elements_set = set()
     for cd in df[composition_dict_column]:
         elements_set.update(cd.keys())
-    elements = sorted(elements_set)
-    return elements
+    return sorted(elements_set)
 
 
 def compute_formation_energy(
