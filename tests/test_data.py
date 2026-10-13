@@ -25,8 +25,8 @@ from ase.build import bulk
 from ase.neighborlist import neighbor_list
 
 from tensorpotential import constants as tc
-from tensorpotential.cli import data as cli_data
-from tensorpotential.cli.data import load_and_prepare_datasets
+from tensorpotential.data import datasets as cli_data
+from tensorpotential.data.datasets import load_and_prepare_datasets
 from tensorpotential.data.streaming import StreamingDatasetWrapper
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 from tests.tolerances import LEAST_SQUARES_F64 as LSTSQ

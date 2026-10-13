@@ -16,7 +16,7 @@ from ase.data import chemical_symbols
 import tensorpotential
 from tensorpotential import constants as tc
 from tensorpotential.calculator.foundation_models import get_or_download_checkpoint
-from tensorpotential.cli.data import (
+from tensorpotential.data.datasets import (
     load_and_prepare_datasets,
     inject_or_update_atomic_shift_in_model,
 )

@@ -47,7 +47,7 @@ def load_dataset_any(path: str) -> pd.DataFrame:
     Returns a DataFrame with at least an `ase_atoms` column.
     """
     if is_extxyz_path(path):
-        from tensorpotential.cli.data import load_extxyz
+        from tensorpotential.data.datasets import load_extxyz
         return load_extxyz(path)
     compression = "gzip" if path.endswith((".gz", ".gzip")) else "infer"
     return pd.read_pickle(path, compression=compression)

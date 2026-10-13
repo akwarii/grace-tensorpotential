@@ -11,7 +11,7 @@ from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
 
-from tensorpotential.cli.data import FutureDistributedDataset
+from tensorpotential.data.datasets import FutureDistributedDataset
 
 from dataclasses import dataclass
 from typing import Dict

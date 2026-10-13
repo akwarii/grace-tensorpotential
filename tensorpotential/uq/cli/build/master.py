@@ -15,7 +15,7 @@ from collections.abc import Sequence
 import numpy as np
 from sklearn.cluster import KMeans
 
-from tensorpotential.cli.data import read_saved_dataset_stats
+from tensorpotential.data.datasets import read_saved_dataset_stats
 from tensorpotential.data.shards import discover_shards, is_sharded_dataset
 from tensorpotential.instructions.base import load_instructions
 from tensorpotential.metadata_utils import resolve_param_dtype

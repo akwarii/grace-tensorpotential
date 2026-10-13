@@ -3,7 +3,7 @@
 import os
 import argparse
 from collections.abc import Sequence
-from tensorpotential.cli.data import load_extxyz
+from tensorpotential.data.datasets import load_extxyz
 from tensorpotential.formatting import sizeof_fmt
 
 import logging

@@ -16,7 +16,7 @@ from scipy.optimize import minimize
 from tqdm import tqdm
 
 from tensorpotential import TensorPotential
-from tensorpotential.cli.data import (
+from tensorpotential.data.datasets import (
     regroup_similar_batches,
     is_tf_distr_dataset,
     regroup_dataset_to_iterator,

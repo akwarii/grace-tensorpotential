@@ -27,7 +27,7 @@ from ase.calculators.emt import EMT
 from tensorpotential.calculator.asecalculator import TPCalculator
 from tensorpotential.tensorpot import TensorPotential
 from tensorpotential.instructions.base import load_instructions
-from tensorpotential.cli.data import (
+from tensorpotential.data.datasets import (
     build_composition_matrix,
     compute_fm_energy_shift_auto,
     inject_or_update_atomic_shift_in_model,
