@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import logging
 from collections.abc import Sequence
 
 from tensorpotential import _tf_options  # noqa: F401
@@ -7,7 +8,7 @@ from tensorpotential import model_ops
 from tensorpotential.model_ops import load_checkpoint  # noqa: F401  (the old import path)
 from tensorpotential.scripts._script_logging import configure_logging
 
-logger = configure_logging()
+logger = logging.getLogger()
 
 
 def resolve_param_dtype(args, model_path: str):
@@ -268,6 +269,7 @@ def build_parser(prog: str = 'grace_utils'):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = 'grace_utils') -> int:
+    configure_logging()
     # Parse arguments and execute the corresponding function
     args = build_parser(prog).parse_args(argv)
     args.func(args)

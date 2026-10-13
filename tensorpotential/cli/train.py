@@ -39,7 +39,6 @@ LEGACY_SCHEDULER_PARAMS = "learning_rate_reduction"
 SCHEDULER_PARAMS = "scheduler_params"
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
 log = logging.getLogger()
 
 MININTERVAL = 1  # min interval for progress bar, in seconds

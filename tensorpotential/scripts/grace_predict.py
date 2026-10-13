@@ -1,4 +1,5 @@
 import argparse
+import logging
 from collections.abc import Sequence
 import os
 import warnings
@@ -15,7 +16,7 @@ from tensorpotential.scripts._script_logging import configure_logging
 warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"ase(\.|$)")
 
 
-logger = configure_logging()
+logger = logging.getLogger()
 
 
 def set_magmom(at, magmoms):
@@ -92,6 +93,7 @@ def build_parser(prog: str | None = None):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    configure_logging()
     parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
 

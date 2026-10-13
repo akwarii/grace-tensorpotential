@@ -9,7 +9,7 @@ from tensorpotential.formatting import sizeof_fmt
 import logging
 from tensorpotential.scripts._script_logging import configure_logging
 
-logger = configure_logging()
+logger = logging.getLogger()
 
 
 
@@ -32,6 +32,7 @@ def build_parser(prog: str | None = None):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    configure_logging()
     ##############################################################################################
     parser = build_parser(prog)
     args_parse = parser.parse_args(argv)

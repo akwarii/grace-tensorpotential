@@ -9,7 +9,7 @@ from ase.io import write
 from tensorpotential.formatting import sizeof_fmt
 from tensorpotential.scripts._script_logging import configure_logging
 
-logger = configure_logging()
+logger = logging.getLogger()
 
 
 
@@ -48,6 +48,7 @@ def build_parser(prog: str = 'df2extxyz'):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = 'df2extxyz') -> int:
+    configure_logging()
     parser = build_parser(prog)
     args_parse = parser.parse_args(argv)
     input_fname = args_parse.input
