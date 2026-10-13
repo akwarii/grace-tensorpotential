@@ -35,7 +35,7 @@ def test_the_format_prints_time_a_one_letter_level_and_the_message():
     )  # 2026/10/11 12:00:00 W - message
 
 
-def test_every_script_that_used_to_repeat_the_set_up_uses_the_helper():
+def test_no_script_repeats_the_set_up_or_runs_it_at_import():
     root = Path(_script_logging.__file__).parent
     for name in (
         "grace_predict",
@@ -45,5 +45,6 @@ def test_every_script_that_used_to_repeat_the_set_up_uses_the_helper():
         "extxyz2df",
     ):
         source = (root / f"{name}.py").read_text()
-        assert "logger = configure_logging()" in source, name
+        assert "logger = configure_logging()" not in source, name
         assert "logging.basicConfig" not in source, name
+        assert "\n    configure_logging()\n" in source, name  # the first call of main

@@ -15,7 +15,7 @@ import pytest
 # Modules that import the formatter (grace_preprocess had a copy that nothing called; it was deleted); all of them must give the same strings.
 MODULES = (
     "tensorpotential.formatting",
-    "tensorpotential.cli.data",
+    "tensorpotential.data.datasets",
     "tensorpotential.scripts.df2extxyz",
     "tensorpotential.scripts.extxyz2df",
 )

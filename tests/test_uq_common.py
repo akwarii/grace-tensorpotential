@@ -223,3 +223,39 @@ def test_spawn_and_monitor_label_appears_in_output(capsys):
     )
     out = capsys.readouterr().out
     assert "[Step3Worker 7]" in out
+
+
+# ---------------------------------------------------------------------------
+# load_dataset_any
+# ---------------------------------------------------------------------------
+
+
+def test_load_dataset_any_reads_an_extxyz_file_with_its_energy_and_forces(tmp_path):
+    import numpy as np
+    from ase.build import bulk
+    from ase.calculators.singlepoint import SinglePointCalculator
+    from ase.io import write
+
+    structures = [bulk("Cu", "fcc", a=3.6, cubic=True), bulk("Al", "fcc", a=4.0)]
+    energies = [-14.2, -3.7]
+    forces = [np.arange(12.0).reshape(4, 3) / 10, np.zeros((1, 3))]
+    for atoms, energy, force in zip(structures, energies, forces, strict=True):
+        atoms.calc = SinglePointCalculator(atoms, energy=energy, forces=force)
+    path = tmp_path / "frames.extxyz"
+    write(path, structures)
+
+    df = common.load_dataset_any(str(path))
+
+    assert [a.get_chemical_formula() for a in df["ase_atoms"]] == ["Cu4", "Al"]
+    np.testing.assert_allclose(df["energy"], energies)
+    np.testing.assert_allclose(df["forces"][0], forces[0])
+
+
+def test_load_dataset_any_reads_a_gzipped_pickle_as_it_is(tmp_path):
+    import pandas as pd
+
+    frame = pd.DataFrame({"ase_atoms": [None], "energy": [1.5]})
+    path = tmp_path / "frame.pkl.gz"
+    frame.to_pickle(path, compression="gzip")
+
+    assert common.load_dataset_any(str(path)).equals(frame)

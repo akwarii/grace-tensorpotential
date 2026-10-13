@@ -5,7 +5,8 @@ paths:
   - "tensorpotential/cli/data.py"
   - "tests/test_databuilder.py"
   - "tests/test_utils.py"
-  - "tests/test_data.py"
+  - "tests/test_datasets.py"
+  - "tests/test_preprocess.py"
   - "tests/neighbour_oracle.py"
   - "pyproject.toml"
 ---

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import logging
 import numpy as np
 import pandas as pd
 import argparse
@@ -12,7 +13,7 @@ from ase.io import read
 from collections import defaultdict, Counter
 from tensorpotential.scripts._script_logging import configure_logging
 
-logger = configure_logging()
+logger = logging.getLogger()
 
 
 class InvalidArgumentError(ValueError):
@@ -190,6 +191,7 @@ def build_parser(prog: str | None = None):
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str | None = None) -> int:
+    configure_logging()
     ##############################################################################################
     parser = build_parser(prog)
     args_parse = parser.parse_args(argv)

@@ -17,7 +17,6 @@ from ase.build import bulk
 
 from tensorpotential import constants
 from tensorpotential.data.databuilder import (
-    GeometricalDataBuilder,
     ReferenceEnergyForcesStressesDataBuilder,
 )
 from tensorpotential.data.process_df import (
@@ -156,27 +155,6 @@ def test_parser_reads_every_option():
     assert (args.stage_3, args.remove_stage1, args.dense_nbr) == (True, True, True)
 
 
-def test_get_databuilders_builds_geometry_then_reference_builder():
-    args = grace_preprocess.build_parser().parse_args([
-        "data.pkl.gz",
-        "--is-fit-stress",
-        "--energy-col",
-        "E",
-        "--forces-col",
-        "F",
-        "--stress-col",
-        "S",
-    ])
-    geom_db, ref_db = grace_preprocess.get_databuilders(
-        {"Cu": 0}, 4.0, args, precision="float64", cutoff_dict=None
-    )
-    assert isinstance(geom_db, GeometricalDataBuilder)
-    assert isinstance(ref_db, ReferenceEnergyForcesStressesDataBuilder)
-    assert geom_db.is_fit_stress and ref_db.is_fit_stress
-    assert (ref_db.energy_col, ref_db.forces_col, ref_db.stress_col) == ("E", "F", "S")
-    assert ref_db.stress_conversion_factor == 1.0
-
-
 # ---------------------------------------------------------------------------------------------------
 # Physical values: the stress column that stage 1 stores, through the real entry point
 # ---------------------------------------------------------------------------------------------------
@@ -254,17 +232,6 @@ def test_stress_units_minus_kbar_needs_the_equals_form(capsys):
     assert exit_info.value.code == 2
     assert "expected one argument" in capsys.readouterr().err
     assert "--stress-units=-kbar" in grace_preprocess.build_parser().format_help()
-
-
-@pytest.mark.parametrize("units", sorted(STRESS_UNIT_FACTORS))
-def test_get_databuilders_passes_the_units_to_the_reference_builder(units):
-    args = parse("--is-fit-stress", f"--stress-units={units}")
-    _, ref_db = grace_preprocess.get_databuilders({"Cu": 0}, 4.0, args)
-    assert ref_db.stress_conversion_factor == pytest.approx(
-        STRESS_UNIT_FACTORS[units],
-        rel=FLOAT64_ARITHMETIC.rtol,
-        abs=FLOAT64_ARITHMETIC.atol,
-    )
 
 
 @pytest.mark.parametrize("units", ["GPa", "kbar", "-kbar"])
@@ -518,22 +485,6 @@ def test_stage_2_and_3_use_the_parameters_stored_by_stage_1(input_file, tmp_path
     assert batch[constants.DATA_REFERENCE_FORCES].dtype == np.float32
 
 
-def test_load_params_of_an_unparsable_file_logs_and_returns_nothing(tmp_path, caplog):
-    (tmp_path / "params.json").write_text("{not json")
-    with caplog.at_level(logging.ERROR):
-        assert grace_preprocess.load_params(str(tmp_path)) is None
-    assert "Can't parse" in caplog.text
-
-
-def test_load_params_without_a_file_returns_nothing(tmp_path):
-    assert grace_preprocess.load_params(str(tmp_path)) is None
-
-
-def test_load_params_round_trips_save_params(tmp_path):
-    grace_preprocess.save_params(str(tmp_path), {"Cu": 0, "Zn": 1}, 5.5, "float32", {"Cu": {"Zn": 4.0}})
-    assert grace_preprocess.load_params(str(tmp_path)) == ({"Cu": 0, "Zn": 1}, 5.5, {"Cu": {"Zn": 4.0}}, "float32")
-
-
 # --- several tasks -----------------------------------------------------------------------------------
 
 
@@ -604,15 +555,3 @@ def test_main_without_argv_reads_sys_argv(input_file, tmp_path, monkeypatch):
     assert (out / "stage1" / "shard_1-of-1").is_dir()
 
 
-@pytest.mark.parametrize(
-    "content",
-    ['{"cutoff": 4.0, "precision": "float64"}', "[1, 2, 3]", '{"elements_map": {}, "cutoff": 4.0}'],
-    ids=["no-elements-map", "not-a-mapping", "no-precision"],
-)
-def test_load_params_of_a_file_that_is_not_a_complete_mapping_logs_and_returns_nothing(
-    tmp_path, caplog, content
-):
-    (tmp_path / "params.json").write_text(content)
-    with caplog.at_level(logging.ERROR):
-        assert grace_preprocess.load_params(str(tmp_path)) is None
-    assert "Can't parse" in caplog.text

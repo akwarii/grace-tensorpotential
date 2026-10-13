@@ -23,12 +23,14 @@ added by hand fails ``check`` (a new file must pass the strict set instead).
 
 Usage::
 
-    python tools/lint_ratchet.py check [--baseline FILE] [--legacy FILE] [--fail-on-drop] [--moved OLD NEW]
-    python tools/lint_ratchet.py record [--baseline FILE] [--legacy FILE] [--allow-rise] [--moved OLD NEW]
+    python tools/lint_ratchet.py check [--baseline FILE] [--legacy FILE] [--fail-on-drop] [--moved OLD NEW] [--split OLD NEW]
+    python tools/lint_ratchet.py record [--baseline FILE] [--legacy FILE] [--allow-rise] [--moved OLD NEW] [--split OLD NEW]
     python tools/lint_ratchet.py versions
 
 ``--moved OLD NEW`` (repeatable) re-keys the counts and the legacy status of a moved file before the
-comparison; ``check`` exits 1 on a rise, a finding in a strict file, a legacy list that differs from the
+comparison. ``--split OLD NEW`` (repeatable) is for a file whose code was partly moved into the new file ``NEW``:
+``NEW`` becomes a legacy file too (``record`` adds it to the list) and the counts of ``OLD`` and ``NEW`` together may
+not exceed the recorded counts of ``OLD``; ``check`` exits 1 on a rise, a finding in a strict file, a legacy list that differs from the
 recorded one, or a version mismatch, and 2 when a tool stopped early (a run that cannot be read is an error,
 never zero findings).
 """
@@ -48,7 +50,7 @@ from collections import Counter
 from collections.abc import Callable, Collection
 from pathlib import Path
 
-from ratchet_moves import parse_moves, rekey
+from ratchet_moves import fold_splits, parse_moves, parse_splits, rekey
 
 NEW_PACKAGES = ("tensorpotential/torch_backend", "tensorpotential/core", "tests_torch")
 IGNORED_TY_RULES = ("unresolved-import",)
@@ -379,23 +381,28 @@ def check(
     baseline: Path,
     legacy_path: Path,
     moves: dict[str, str] | None = None,
+    splits: dict[str, str] | None = None,
     *,
     fail_on_drop: bool = False,
 ) -> int:
     """Print the findings that broke the ratchet and return the exit status."""
     moves = moves or {}
+    splits = splits or {}
     base = _load(baseline)
     raw = read_legacy(legacy_path)
     listed = [moves.get(path, path) for path in raw]
+    split_problems = _split_problems(listed, splits)
+    listed += list(splits)
     now = measure(root, listed)
     problems = [
         *version_problems(root, base["versions"]),
         *legacy_problems(root, raw, listed, base.get("legacy"), legacy_path),
+        *split_problems,
     ]
     rises: list[str] = []
     drops: list[str] = []
     for tool in ("ruff", "ty"):
-        up, down = compare(rekey(base[tool], moves), now[tool])
+        up, down = _compare_after_moves(base[tool], now[tool], moves, splits)
         rises += [f"{tool} {line}" for line in up]
         drops += [f"{tool} {line}" for line in down]
     report = [
@@ -416,7 +423,34 @@ def check(
     return 1 if failed else 0
 
 
-def _recorded_list(root: Path, legacy_path: Path, moves: dict[str, str]) -> list[str]:
+def _moved_legacy(legacy_path: Path, moves: dict[str, str]) -> list[str]:
+    """The legacy list with the moves applied; empty when there is no list yet."""
+    if not legacy_path.is_file():
+        return []
+    return [moves.get(path, path) for path in read_legacy(legacy_path)]
+
+
+def _compare_after_moves(
+    base: Counts, now: Counts, moves: dict[str, str], splits: dict[str, str]
+) -> tuple[list[str], list[str]]:
+    """``compare`` with the baseline re-keyed by the moves and the split-off files folded into their source."""
+    return compare(rekey(base, moves), fold_splits(now, splits))
+
+
+def _split_problems(listed: list[str], splits: dict[str, str]) -> list[str]:
+    """Why a ``--split`` cannot be taken: its source is not a legacy file, or its target already is one."""
+    problems = []
+    for new, old in sorted(splits.items()):
+        if old not in listed:
+            problems.append(f"--split {old} {new}: {old} is not a legacy file")
+        elif new in listed:
+            problems.append(f"--split {old} {new}: {new} is a legacy file already")
+    return problems
+
+
+def _recorded_list(
+    root: Path, legacy_path: Path, moves: dict[str, str], splits: dict[str, str]
+) -> list[str]:
     """List the legacy files to record: all files outside the new packages the first time.
 
     Later the old list minus the files that are gone, with the moves applied; never a file that
@@ -424,15 +458,15 @@ def _recorded_list(root: Path, legacy_path: Path, moves: dict[str, str]) -> list
     """
     if not legacy_path.is_file():
         return [f for f in lintable_files(root) if not in_new_package(f)]
-    moved = {moves.get(path, path) for path in read_legacy(legacy_path)}
+    moved = {*_moved_legacy(legacy_path, moves), *splits}
     return sorted(path for path in moved if (root / path).is_file())
 
 
-def _rises(old: dict, now: dict, moves: dict[str, str]) -> list[str]:
+def _rises(old: dict, now: dict, moves: dict[str, str], splits: dict[str, str]) -> list[str]:
     return [
         r
         for tool in ("ruff", "ty")
-        for r in compare(rekey(old[tool], moves), now[tool])[0]
+        for r in _compare_after_moves(old[tool], now[tool], moves, splits)[0]
     ]
 
 
@@ -441,16 +475,22 @@ def record(
     baseline: Path,
     legacy_path: Path,
     moves: dict[str, str] | None = None,
+    splits: dict[str, str] | None = None,
     *,
     allow_rise: bool = False,
 ) -> int:
     """Write the current counts and the legacy list; refuse to record a rise unless allowed."""
     moves = moves or {}
-    listed = _recorded_list(root, legacy_path, moves)
+    splits = splits or {}
+    problems = _split_problems(_moved_legacy(legacy_path, moves), splits)
+    if problems:
+        sys.stdout.write("\n".join(problems) + "\n")
+        return 1
+    listed = _recorded_list(root, legacy_path, moves, splits)
     now = measure(root, listed)
     versions = {tool: tool_version(tool, root) for tool in ("ruff", "ty")}
     if baseline.is_file() and not allow_rise:
-        rises = _rises(_load(baseline), now, moves)
+        rises = _rises(_load(baseline), now, moves, splits)
         if rises:
             sys.stdout.write(
                 "refusing to record a rise (use --allow-rise):\n"
@@ -492,13 +532,16 @@ def _dispatch(
     if args.command in ("check", "record"):
         try:
             moves = parse_moves(args.moved)
+            splits = parse_splits(args.split)
         except ValueError as exc:
             raise ToolError(str(exc)) from exc
         if args.command == "check":
             return check(
-                root, baseline, legacy_path, moves, fail_on_drop=args.fail_on_drop
+                root, baseline, legacy_path, moves, splits, fail_on_drop=args.fail_on_drop
             )
-        return record(root, baseline, legacy_path, moves, allow_rise=args.allow_rise)
+        return record(
+            root, baseline, legacy_path, moves, splits, allow_rise=args.allow_rise
+        )
     problems = version_problems(root)
     sys.stdout.write("\n".join(problems) + "\n" if problems else "versions: ok\n")
     return 1 if problems else 0
@@ -521,6 +564,10 @@ def main(argv: list[str] | None = None) -> int:
         sub.choices[name].add_argument(
             "--moved", nargs=2, action="append", default=[], metavar=("OLD", "NEW"),
             help="a file moved from OLD to NEW; its counts and legacy status follow it",
+        )  # fmt: skip
+        sub.choices[name].add_argument(
+            "--split", nargs=2, action="append", default=[], metavar=("OLD", "NEW"),
+            help="part of OLD moved into the new file NEW; both are legacy, their counts together may not rise",
         )  # fmt: skip
     sub.choices["check"].add_argument("--fail-on-drop", action="store_true")
     sub.choices["record"].add_argument("--allow-rise", action="store_true")

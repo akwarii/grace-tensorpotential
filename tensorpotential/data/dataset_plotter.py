@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 
 
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FMT, datefmt="%Y/%m/%d %H:%M:%S")
 log = logging.getLogger()
 
 DatasetContainer = Union[Mapping[str, pd.DataFrame], Iterable[pd.DataFrame]]

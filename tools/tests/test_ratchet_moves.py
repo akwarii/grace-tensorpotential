@@ -59,3 +59,26 @@ def test_a_swap_of_two_files_exchanges_their_entries() -> None:
         "b.py": 1,
         "a.py": 2,
     }
+
+
+def test_parse_splits_maps_the_new_file_to_its_source() -> None:
+    assert rm.parse_splits([["a.py", "b.py"], ["a.py", "c.py"]]) == {"b.py": "a.py", "c.py": "a.py"}
+    assert rm.parse_splits(None) == {}
+
+
+def test_parse_splits_refuses_a_split_onto_itself_and_a_file_split_off_twice() -> None:
+    with pytest.raises(ValueError, match="the same"):
+        rm.parse_splits([["a.py", "a.py"]])
+    with pytest.raises(ValueError, match="split off twice"):
+        rm.parse_splits([["a.py", "b.py"], ["c.py", "b.py"]])
+
+
+def test_fold_splits_adds_the_counts_of_the_new_file_to_its_source_and_leaves_the_input_alone() -> None:
+    counts = {"a.py": {"F401": 1}, "b.py": {"F401": 2, "E722": 1}, "z.py": {"E722": 4}}
+    folded = rm.fold_splits(counts, {"b.py": "a.py"})
+    assert folded == {"a.py": {"F401": 3, "E722": 1}, "z.py": {"E722": 4}}
+    assert "b.py" in counts
+
+
+def test_fold_splits_gives_a_source_without_counts_those_of_the_new_file() -> None:
+    assert rm.fold_splits({"b.py": {"E722": 1}}, {"b.py": "a.py"}) == {"a.py": {"E722": 1}}

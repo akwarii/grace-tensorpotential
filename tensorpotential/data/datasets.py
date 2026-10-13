@@ -1,0 +1,1433 @@
+"""Library: loading, weighting and batching of the training and test datasets (formerly ``cli/data.py``)."""
+
+from __future__ import annotations
+
+import glob
+import json
+import logging
+import os
+import random
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from itertools import cycle
+from ase.io import read
+from ase.calculators.calculator import PropertyNotImplementedError
+
+import numpy as np
+import pandas as pd
+from tensorpotential import _tf_options  # noqa: F401
+import tensorflow as tf
+from tensorpotential.utils import get_dtype_by_name
+from tensorpotential.formatting import sizeof_fmt
+from tqdm import tqdm
+
+
+from tensorpotential import constants as tc
+from tensorpotential.data.databuilder import (
+    GeometricalDataBuilder,
+    ReferenceEnergyForcesStressesDataBuilder,
+    construct_batches,
+    DEFAULT_STRESS_UNITS,
+)
+from tensorpotential.data.dataset_plotter import (
+    DatasetHistPlotter,
+    DEFAULT_PLOT_TARGETS,
+    DEFAULT_UNIT_TRANSFORM,
+)
+from tensorpotential.data.process_df import (
+    compute_corrected_energy,
+    compute_compositions,
+    compute_convexhull_dist,
+    E_CHULL_DIST_PER_ATOM,
+)
+from tensorpotential.data.weighting import EnergyBasedWeightingPolicy
+from tensorpotential.tensorpot import TensorPotential, get_output_dir
+from tensorpotential.calculator.asecalculator import TPCalculator
+from tensorpotential.instructions.base import load_instructions
+from tensorpotential.metadata_utils import read_model_metadata
+
+LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
+log = logging.getLogger()
+
+
+def _log_dense_padding_report(padding_stats, tag):
+    """Log dense (reshape) batching efficiency: % padded neighbors/atoms/structures of the
+    complete dataset, warning when neighbor padding exceeds the 15% target."""
+    from tensorpotential.data.dense_nbr import dense_padding_fractions
+
+    f = dense_padding_fractions(padding_stats)
+    log.info(
+        f"[{tag}] dense padding (of total): "
+        f"neighbors {f['neigh'] * 1e2:.1f}% | atoms {f['atoms'] * 1e2:.1f}% | "
+        f"structures {f['struct'] * 1e2:.1f}%"
+    )
+    if f["neigh"] > 0.15:
+        log.warning(
+            f"[{tag}] dense neighbor padding {f['neigh'] * 1e2:.1f}% exceeds the 15% target. "
+            f"Lower fit::auto_bucket_max_padding (the unified dense net-padding target), raise "
+            f"fit::dense_max_shapes (more XLA recompiles), or use a larger batch_size; "
+            f"intra-structure spread is the irreducible floor."
+        )
+
+
+TRAINING_SET_FNAME = "training_set.pkl.gz"
+TESTING_SET_FNAME = "test_set.pkl.gz"
+
+
+@dataclass
+class MyInputContext:
+    input_pipeline_id: int
+    num_input_pipelines: int
+
+
+def load_dataframe(filename: str, compression: str = "infer") -> pd.DataFrame:
+    filesize = os.path.getsize(filename)
+    log.info(
+        "Loading dataframe from pickle file {} ({})".format(
+            filename, sizeof_fmt(filesize)
+        )
+    )
+    if filename.endswith(".gzip"):
+        compression = "gzip"
+    df = pd.read_pickle(filename, compression=compression)
+    return df
+
+
+def load_extxyz(filename: str) -> pd.DataFrame:
+    logging.info(f"Reading extxyz file: {filename} ({sizeof_fmt(filename)})")
+    data = read(filename, format="extxyz", index=":")
+    logging.info(f"{len(data)} structures read from {filename}")
+    logging.info("Converting to dataframe")
+    df = pd.DataFrame({"ase_atoms": data})
+    logging.info("Extracting energy")
+
+    def get_potential_energy(at):
+        try:
+            return at.get_potential_energy(force_consistent=True)
+        except PropertyNotImplementedError:
+            return at.get_potential_energy()
+
+    df["energy"] = df["ase_atoms"].map(get_potential_energy)
+    logging.info("Extracting forces")
+    df["forces"] = df["ase_atoms"].map(lambda at: at.get_forces())
+
+    try:
+        logging.info("Trying to extract stresses")
+        df["stress"] = df["ase_atoms"].map(lambda at: at.get_stress())
+    except (PropertyNotImplementedError, RuntimeError) as e:
+        logging.error(f"Error while trying to extract stress: {e}, ignoring")
+
+    logging.info("Extracting info")
+    df["info"] = df["ase_atoms"].map(lambda at: at.info)
+    return df
+
+
+def load_dataset(filenames):
+    """Load multiple dataframes and concatenate it into one"""
+    if isinstance(filenames, str):
+        files_to_load = [filenames]
+    elif isinstance(filenames, list):
+        files_to_load = filenames
+    else:
+        raise ValueError(
+            f"Non-supported type of filename: `{filenames}` (type: {type(filenames)})"
+        )
+    log.info("Search for dataset file(s): " + str(files_to_load))
+    if files_to_load is not None:
+        dfs = []
+        for i, fname in enumerate(files_to_load):
+            log.info(f"#{i + 1}/{len(files_to_load)}: try to load {fname}")
+            if os.path.splitext(fname)[-1] in [".xyz", ".extxyz"]:
+                df = load_extxyz(fname)
+            else:
+                df = load_dataframe(fname)
+            log.info(f" {len(df)} structures found")
+            if "name" not in df.columns:
+                df["name"] = fname + ":" + df.index.map(str)
+            dfs.append(df)
+        tot_df = pd.concat(dfs, axis=0).reset_index(drop=True)
+    else:  # if ref_df is still not loaded, try to query from DB
+        raise RuntimeError("No files to load")
+    return tot_df
+
+
+def load_train_test_datasets(data_config, seed=None):
+    train_fname = data_config["filename"]
+    log.info(f"Loading training data from {train_fname}")
+    train_df = load_dataset(train_fname)
+    log.info(f"Loaded dataset size: {train_df.shape}")
+    if "train_size" in data_config:
+        train_size = data_config["train_size"]
+        if train_size < 1:
+            train_df = train_df.sample(frac=train_size, random_state=seed)
+        else:
+            train_df = train_df.sample(n=int(train_size), random_state=seed)
+        log.info(f"Reducing training size to {len(train_df)} (train_size={train_size})")
+
+    # run train data builder
+
+    test_df = None
+    test_filename = data_config.get("test_filename")
+    test_size = data_config.get("test_size")
+    if test_filename is not None or test_size is not None:
+        if test_filename:
+            log.info(f"Loading test data: {test_filename}")
+            test_df = load_dataset(test_filename)
+            if test_size is not None:
+                if test_size > 1:
+                    test_df = test_df.sample(n=test_size, random_state=seed)
+            # run train data builder
+        elif test_size is not None:
+            log.info(f"Split test data from train dataset (fraction = {test_size})")
+            tmp_df = train_df.reset_index(drop=True)
+            test_df = tmp_df.sample(frac=test_size, random_state=seed)
+            train_df = tmp_df.drop(test_df.index)
+
+    return train_df, test_df
+
+
+def extract_elements(df):
+    els = set()
+    for at in df["ase_atoms"]:
+        els.update(at.get_chemical_symbols())
+
+    return els
+
+
+def apply_weighting(fit_config, train_df, test_df):
+    weighting_kwargs = fit_config["weighting"].copy()
+    weighting_type = weighting_kwargs["type"]
+    if weighting_type == "energy_based":
+        log.info("Applying energy based weighting")
+        weighting_kwargs.pop("type")
+        weighting = EnergyBasedWeightingPolicy(**weighting_kwargs)
+        train_df = weighting.generate_weights(train_df)
+        if test_df is not None:
+            test_df = weighting.generate_weights(test_df)
+    else:
+        raise ValueError(f"Unsupported weighting type {weighting_type}")
+
+    return train_df, test_df
+
+
+def check_weighting(train_df, test_df):
+    # Check, if DATA_ENERGY_WEIGHTS and/or DATA_FORCE_WEIGHTS are in dataframe columns
+    log.info(
+        f"TRAIN WEIGHTS: energy - {tc.DATA_ENERGY_WEIGHTS in train_df.columns}, forces - {tc.DATA_FORCE_WEIGHTS in train_df.columns} "
+    )
+    if test_df is not None:
+        log.info(
+            f"TEST WEIGHTS: energy - {tc.DATA_ENERGY_WEIGHTS in test_df.columns}, forces - {tc.DATA_FORCE_WEIGHTS in test_df.columns} "
+        )
+
+
+def read_saved_dataset_stats(dataset_path):
+    with open(os.path.join(dataset_path, "stats.json"), "r") as f:
+        stats = json.load(f)
+    return stats
+
+
+def compute_saved_dataset_num_of_batches(dataset_paths):
+    n_batches = sum([len(tf.data.Dataset.load(fname)) for fname in dataset_paths])
+    return n_batches
+
+
+def compute_number_of_batches(dds, key):
+    n_batch = 0
+    for b in dds:
+        tensor = b[key]
+        if hasattr(tensor, "values"):
+            if all((v.shape.rank > 0 and v.shape[0] > 0) for v in tensor.values):
+                n_batch += 1
+        else:
+            n_batch += 1
+    return n_batch
+
+
+def limit_dataset_size(current_size, limit_size):
+    # further limit train size to train_size
+    if limit_size is not None:
+        return min(current_size, limit_size)
+    return current_size
+
+
+class FutureDistributedDataset:
+    def __init__(self, data_config, stats=None):
+        self.data_config = data_config
+        self.stats = stats
+        self.dataset_path = data_config["path"]  # point to stage3 folder
+        self.train_size = data_config.get("train_size")
+        self.test_dataset_path = data_config.get("test_path")
+        self.test_size = data_config.get("test_size")
+        self.test_shards = data_config.get("test_shards")
+
+        if "*" not in self.dataset_path:
+            self.dataset_path = os.path.join(self.dataset_path, "shard_*-of-*")
+
+        log.info(f"Initial TRAIN dataset path: {self.dataset_path}")
+        self.datasets_filenames = glob.glob(self.dataset_path)
+        log.info(f"Initial TRAIN dataset: {len(self.datasets_filenames)} shards found")
+
+        if self.test_dataset_path is not None:
+            if "*" not in self.test_dataset_path:
+                self.test_dataset_path = os.path.join(
+                    self.test_dataset_path, "shard_*-of-*"
+                )
+            log.info(f"Initial TEST dataset path: {self.test_dataset_path}")
+            self.test_datasets_filenames = glob.glob(self.test_dataset_path)
+        else:
+            self.test_datasets_filenames = None
+
+        # option to have single-stream dataset
+        self.distribute_values = self.data_config.get("distribute_values", False)
+
+        # When True, hand tf.data.AUTOTUNE to dataset.prefetch() so the runtime
+        # picks the buffer size based on observed throughput. Default False
+        # preserves the legacy fixed buffer of 16.
+        self.prefetch_autotune = self.data_config.get("prefetch_autotune", False)
+
+    def __len__(self):
+        if self.stats is not None:
+            return self.stats.get("total_num_of_batches", 0)
+        return 0
+
+    def generate_dataset(self, strategy, signatures=None):
+        def filter_batch_by_signature(batch):
+            return {k: v for k, v in batch.items() if k in signatures}
+
+        # imitation of single-GPU context for distribute-values fit
+        single_context = MyInputContext(input_pipeline_id=0, num_input_pipelines=1)
+
+        prefetch_buffer = tf.data.AUTOTUNE if self.prefetch_autotune else 16
+        if self.prefetch_autotune:
+            log.info("Data prefetch buffer: tf.data.AUTOTUNE")
+
+        def dataset_fn(
+            context, shard_filenames, n_take=None, n_skip=None, n_take2=None
+        ):
+            """Distributed loading of certain shards only"""
+            total = context.num_input_pipelines
+            ind = context.input_pipeline_id
+            original_datasets = [
+                tf.data.Dataset.load(filepath, compression="GZIP")
+                for filepath in shard_filenames[ind::total]
+            ]
+            dataset = tf.data.Dataset.from_tensor_slices(original_datasets).interleave(
+                lambda x: x,
+                cycle_length=min(4, len(original_datasets)),
+                num_parallel_calls=1,
+            )
+            if signatures:
+                dataset = dataset.map(filter_batch_by_signature)
+            if n_take:
+                dataset = dataset.take(n_take)
+            if n_skip:
+                dataset = dataset.skip(n_skip)
+            if n_take2:
+                dataset = dataset.take(n_take2)
+            # Add repeat BEFORE prefetch for training datasets
+            # For training, you almost always want to repeat indefinitely, then limit with steps_per_epoch
+            dataset = dataset.repeat()  # Repeat indefinitely for training
+            dataset = dataset.prefetch(prefetch_buffer)
+            return dataset
+
+        test_ds = None
+        train_ds = None
+
+        # CASE 1: exact test dataset (options train_size and test_size are possible)
+        if self.test_dataset_path is not None:
+            log.info("Case 1")
+
+            train_n_batch = limit_dataset_size(
+                compute_saved_dataset_num_of_batches(self.datasets_filenames),
+                self.train_size,
+            )
+
+            test_n_batch = limit_dataset_size(
+                compute_saved_dataset_num_of_batches(self.test_datasets_filenames),
+                self.test_size,
+            )
+
+            if self.distribute_values:
+                log.info(
+                    f"DISTRIBUTED VALUES dataset: {len(self.datasets_filenames)} shards found in {self.dataset_path}"
+                )
+                train_ds = dataset_fn(
+                    single_context, self.datasets_filenames, n_take=self.train_size
+                )
+                log.info(
+                    f"DISTRIBUTED VALUES TEST dataset: {len(self.test_datasets_filenames)} shards found in {self.test_dataset_path}"
+                )
+                test_ds = dataset_fn(
+                    single_context, self.test_datasets_filenames, n_take=self.test_size
+                )
+            else:
+                log.info(
+                    f"DISTRIBUTED TRAIN dataset: {len(self.datasets_filenames)} shards found in {self.dataset_path}"
+                )
+                train_ds = strategy.distribute_datasets_from_function(
+                    lambda context: dataset_fn(
+                        context, self.datasets_filenames, n_take=self.train_size
+                    ),
+                )
+
+                log.info(
+                    f"DISTRIBUTED TEST dataset: {len(self.test_datasets_filenames)} shards found in {self.test_dataset_path}"
+                )
+                test_ds = strategy.distribute_datasets_from_function(
+                    lambda context: dataset_fn(
+                        context, self.test_datasets_filenames, n_take=self.test_size
+                    ),
+                )
+
+        # CASE 2/3: no test_path, but test_shards or test_size provided - split test from train
+        elif self.test_shards or self.test_size:
+            # CASE 2: split test from train using test_shards
+            if self.test_shards:
+                log.info("Case 2")  # num of shards is provided
+                log.info(
+                    f"TEST set: request to split {self.test_shards} shards from train set"
+                )
+                assert (
+                    self.test_shards > 0
+                ), "test_shards must be integer or float, greater than zero (number of shards)"
+                if self.test_shards < 1:
+                    self.test_shards = max(
+                        int(np.floor(self.test_shards * len(self.datasets_filenames))),
+                        1,
+                    )
+                assert self.test_shards < len(
+                    self.datasets_filenames
+                ), f"`test_shards`={self.test_shards} must be less than num of shards ({len(self.datasets_filenames)})"
+
+                self.datasets_filenames, self.test_datasets_filenames = (
+                    self.datasets_filenames[: -self.test_shards],
+                    self.datasets_filenames[-self.test_shards :],
+                )
+
+                train_n_batch = limit_dataset_size(
+                    compute_saved_dataset_num_of_batches(self.datasets_filenames),
+                    self.train_size,
+                )
+
+                test_n_batch = limit_dataset_size(
+                    compute_saved_dataset_num_of_batches(self.test_datasets_filenames),
+                    self.test_size,
+                )
+                logging.info(
+                    f"Number of train shards: {len(self.datasets_filenames)}, test shards: {len(self.test_datasets_filenames)}"
+                )
+                if self.distribute_values:
+                    raise NotImplementedError()
+                else:
+                    train_ds = strategy.distribute_datasets_from_function(
+                        lambda context: dataset_fn(
+                            context, self.datasets_filenames, n_take=self.train_size
+                        ),
+                    )
+                    test_ds = strategy.distribute_datasets_from_function(
+                        lambda context: dataset_fn(
+                            context, self.test_datasets_filenames, n_take=self.test_size
+                        ),
+                    )
+
+            # CASE 3: split test from train using test_size (num of test batches)
+            elif self.test_size:
+                log.info("Case 3")
+                assert isinstance(
+                    self.test_size, int
+                ), "test_size must be integer (number of batches)"
+
+                train_n_batch = compute_saved_dataset_num_of_batches(
+                    self.datasets_filenames
+                )
+                assert self.test_size < train_n_batch, (
+                    f"Requested number of test batches ({self.test_size}) is greater or equal than total number of "
+                    f"provided train batches ({train_n_batch})"
+                )
+
+                if self.distribute_values:
+                    log.info("Case 3: distributed values")
+                    test_ds = dataset_fn(
+                        single_context, self.datasets_filenames, n_take=self.test_size
+                    )
+
+                    train_ds = dataset_fn(
+                        single_context,
+                        self.datasets_filenames,
+                        n_skip=self.test_size,
+                        n_take2=self.train_size,  # could be None
+                    )
+                else:
+                    test_ds = strategy.distribute_datasets_from_function(
+                        lambda context: dataset_fn(
+                            context, self.datasets_filenames, n_take=self.test_size
+                        ),
+                    )
+                    train_ds = strategy.distribute_datasets_from_function(
+                        lambda context: dataset_fn(
+                            context,
+                            self.datasets_filenames,
+                            n_skip=self.test_size,
+                            n_take2=self.train_size,  # could be None
+                        ),
+                    )
+
+                test_n_batch = self.test_size
+                train_n_batch -= test_n_batch  # reduce num of available batches
+                train_n_batch = limit_dataset_size(train_n_batch, self.train_size)
+        # CASE 4: No test set
+        else:
+            log.info("Case 4")
+            if self.distribute_values:
+                raise NotImplementedError()
+            else:
+                train_n_batch = limit_dataset_size(
+                    compute_saved_dataset_num_of_batches(self.datasets_filenames),
+                    self.train_size,
+                )
+
+                train_ds = strategy.distribute_datasets_from_function(
+                    lambda context: dataset_fn(
+                        context, self.datasets_filenames, n_take=self.train_size
+                    ),
+                )
+
+        # count only batches, complete over all replicas
+        train_n_batch = (
+            train_n_batch
+            // strategy.num_replicas_in_sync
+            * strategy.num_replicas_in_sync
+        )
+        logging.info(
+            f"TRAIN number of batches (aligned): total - {train_n_batch}, per-replica - {train_n_batch//strategy.num_replicas_in_sync}"
+        )
+        train_ds.n_batch = train_n_batch  # TODO: fix "monkey patching"
+        train_ds.distribute_values = self.distribute_values
+
+        if test_ds is not None:
+            test_n_batch = (
+                test_n_batch
+                // strategy.num_replicas_in_sync
+                * strategy.num_replicas_in_sync
+            )
+            logging.info(
+                f"TEST number of batches (aligned): total - {test_n_batch}, per-replica - {test_n_batch//strategy.num_replicas_in_sync}"
+            )
+            test_ds.n_batch = test_n_batch
+            test_ds.distribute_values = self.distribute_values
+
+        return train_ds, test_ds
+
+
+def load_and_prepare_distributed_datasets(args_yaml, seed=1234, strategy=None):
+    data_config = args_yaml[tc.INPUT_DATA_SECTION]
+    potential_config = args_yaml[tc.INPUT_POTENTIAL_SECTION]
+    dataset_path = data_config["path"]  # point to stage3 folder
+    test_dataset_path = data_config.get("test_path")
+    test_size = data_config.get("test_size")
+    test_shards = data_config.get("test_shards")
+
+    shift = 0
+    scale = 1.0
+    stats = read_saved_dataset_stats(dataset_path)
+    element_map = stats["element_map"]
+    scale_value = stats["scale"]
+    avg_n_neigh = stats["avg_n_neigh"]
+
+    if potential_config.get("scale", False):
+        scale_opt = potential_config["scale"]
+        if isinstance(scale_opt, float):
+            scale = scale_opt
+            log.info(f"Data scale: {scale}")
+        else:
+            scale = scale_value
+            scale = max(1e-1, scale)  # prevent too small values
+            if scale < 0.8:
+                log.warning(
+                    f"Constant potential::{scale=} is possibly too small. Consider setting it manually unless you know "
+                    f"what you are doing"
+                )
+            log.info(f"Data (auto) scale: {scale}")
+
+    data_stats = {
+        "avg_n_neigh": avg_n_neigh,
+        "constant_out_shift": shift,
+        "constant_out_scale": scale,
+        "atomic_shift_map": None,
+    }
+
+    return (
+        FutureDistributedDataset(data_config, stats=stats),
+        test_dataset_path or test_size or test_shards,  # mocking test dataset
+        element_map,
+        data_stats,
+        None,  # train_grouping_df
+        None,  # test_grouping_df
+    )
+
+
+def select_representative_structures(
+    train_df: pd.DataFrame,
+    max_structures: int = 50,
+    seed: int = 42,
+) -> tuple[list, np.ndarray]:
+    """Select diverse structures from train_df covering all element combinations.
+
+    Stratified sampling by composition signature. If more structures than
+    max_structures are selected, a warning is issued but all are kept.
+    """
+    np.random.seed(seed)
+
+    def get_comp_sig(at):
+        return tuple(sorted(set(at.get_chemical_symbols())))
+
+    df = train_df.copy()
+    df["_comp_sig"] = df[tc.COLUMN_ASE_ATOMS].map(get_comp_sig)
+    df["_n_atoms"] = df[tc.COLUMN_ASE_ATOMS].map(len)
+
+    groups = df.groupby("_comp_sig")
+    samples_per_group = max(1, max_structures // len(groups))
+
+    selected_idx = []
+    for _comp_sig, group_df in groups:
+        # prefer moderate-sized structures (10-100 atoms)
+        subset = group_df[(group_df["_n_atoms"] >= 10) & (group_df["_n_atoms"] <= 100)]
+        if len(subset) == 0:
+            subset = group_df
+        n_sample = min(samples_per_group, len(subset))
+        sampled = subset.sample(n=n_sample, random_state=seed)
+        selected_idx.extend(sampled.index.tolist())
+
+    if len(selected_idx) > max_structures:
+        log.warning(
+            f"select_representative_structures: selected {len(selected_idx)} structures "
+            f"(requested max: {max_structures}). Using all for better element coverage."
+        )
+
+    selected_idx = np.array(selected_idx)
+    selected_atoms = [train_df.loc[i, tc.COLUMN_ASE_ATOMS] for i in selected_idx]
+    return selected_atoms, selected_idx
+
+
+def build_composition_matrix(atoms_list: list, elements: list) -> np.ndarray:
+    """Build composition matrix: rows=structures, cols=elements (alphabetical order)."""
+    n_structures = len(atoms_list)
+    n_elements = len(elements)
+    composition_matrix = np.zeros((n_structures, n_elements))
+    for i, at in enumerate(atoms_list):
+        syms = at.get_chemical_symbols()
+        for j, el in enumerate(elements):
+            composition_matrix[i, j] = syms.count(el)
+    return composition_matrix
+
+
+def compute_fm_energy_shift_auto(
+    train_df: pd.DataFrame,
+    checkpoint_folder: str,
+    max_structures: int = 50,
+    seed: int = 42,
+) -> dict:
+    """Compute per-element energy shifts between FM predictions and DFT reference.
+
+    Solves: A @ x = (E_DFT - E_FM), where A is composition matrix.
+    Returns {element_symbol: shift_eV}.
+    """
+
+    log.info(
+        f"Foundation model energy alignment: selecting up to {max_structures} representative structures"
+    )
+    selected_atoms, selected_idx = select_representative_structures(
+        train_df, max_structures=max_structures, seed=seed
+    )
+    log.info(
+        f"Foundation model energy alignment: selected {len(selected_atoms)} structures"
+    )
+
+    model_path = os.path.join(checkpoint_folder, "model.yaml")
+    ckpt_prefix = os.path.join(checkpoint_folder, "checkpoint")
+    log.info(
+        f"Foundation model energy alignment: loading foundation model from {model_path}"
+    )
+
+    instructions = load_instructions(model_path)
+    _meta = read_model_metadata(model_path)
+    _param_dtype = (
+        get_dtype_by_name(_meta["param_dtype"])
+        if "param_dtype" in _meta
+        else tf.float64
+    )
+    tp = TensorPotential(potential=instructions, param_dtype=_param_dtype)
+    tp.load_checkpoint(checkpoint_name=ckpt_prefix, expect_partial=True, verbose=False)
+    tp.model.decorate_compute_function()
+    calc = TPCalculator(tp.model)
+    e_fm_list = []
+    pbar = tqdm(selected_atoms, desc="Computing FM energies")
+    for at in pbar:
+        pbar.set_description(
+            f"Computing FM energies (N_atoms={len(at)}, comp={at.get_chemical_formula()})"
+        )
+        e_fm_list.append(calc.get_potential_energy(at.copy()))
+    e_fm = np.array(e_fm_list)
+
+    e_dft = train_df.loc[selected_idx, "energy_corrected"].values
+
+    # Extract elements from selected structures (sorted, consistent ordering)
+    all_syms = set()
+    for at in selected_atoms:
+        all_syms.update(at.get_chemical_symbols())
+    elements = sorted(all_syms)
+
+    composition_matrix = build_composition_matrix(selected_atoms, elements)
+    energy_diff = e_dft - e_fm
+
+    log.info(
+        f"Foundation model energy alignment: solving least-squares for {len(elements)} elements"
+    )
+    shifts, residuals, rank, _ = np.linalg.lstsq(
+        composition_matrix, energy_diff, rcond=None
+    )
+
+    shift_dict = {el: float(shifts[i]) for i, el in enumerate(elements)}
+    log.info(
+        f"Foundation model energy alignment: per-element shifts (eV): {shift_dict}"
+    )
+    if len(residuals) > 0:
+        log.info(
+            f"Foundation model energy alignment: residual norm = {np.sqrt(residuals[0]):.3e} eV"
+        )
+
+    return shift_dict
+
+
+def inject_or_update_atomic_shift_in_model(
+    instructions_dict: dict,
+    fm_shift_dict: dict,
+    element_map: dict,
+) -> None:
+    """Model surgery: add FM-based per-element energy shifts to the model.
+
+    Finds the existing ConstantScaleShiftTarget and ADDS the FM shifts to any
+    existing atomic_shift_map. Creates a new instruction if none exists.
+    Modifies instructions_dict in-place.
+    """
+    from tensorpotential.instructions.output import (
+        ConstantScaleShiftTarget,
+        CreateOutputTarget,
+    )
+    import tensorpotential.constants as _tc
+
+    # {element: shift} -> {mu_index: shift}
+    mu_shift_map = {
+        element_map[el]: shift
+        for el, shift in fm_shift_dict.items()
+        if el in element_map
+    }
+    log.info(
+        f"Injecting foundation model energy shifts: per-element (mu-index) map = {mu_shift_map}"
+    )
+
+    # Find existing ConstantScaleShiftTarget
+    const_shift_inst = None
+    for name, ins in instructions_dict.items():
+        if isinstance(ins, ConstantScaleShiftTarget):
+            const_shift_inst = ins
+            log.info(
+                f"Injecting foundation model energy shifts: found existing ConstantScaleShiftTarget '{name}'"
+            )
+            break
+
+    if const_shift_inst is not None:
+        # Merge: add FM shifts to existing atomic_shift_map
+        existing_map = const_shift_inst._init_args.get("atomic_shift_map") or {}
+        merged = dict(existing_map)
+        for mu, fm_shift in mu_shift_map.items():
+            old_val = merged.get(mu, 0.0)
+            merged[mu] = old_val + fm_shift
+            log.info(f"  mu={mu}: {old_val:.6f} + {fm_shift:.6f} = {merged[mu]:.6f}")
+
+        # Update _init_args (used by save_instructions_dict)
+        const_shift_inst._init_args["atomic_shift_map"] = merged
+        # Update numpy array (used by TensorPotential.build())
+        n_elements = len(element_map)
+        new_array = np.zeros(n_elements)
+        for mu, val in merged.items():
+            new_array[mu] = val
+        const_shift_inst.atomic_shift_map = new_array
+        const_shift_inst.apply_shift = True
+        log.info(
+            "Injecting foundation model energy shifts: updated existing ConstantScaleShiftTarget"
+        )
+
+    else:
+        # Create new ConstantScaleShiftTarget wrapping CreateOutputTarget for atomic energy
+        log.info(
+            "Injecting foundation model energy shifts: no existing ConstantScaleShiftTarget, creating new one"
+        )
+        output_target = None
+        for name, ins in instructions_dict.items():
+            if (
+                isinstance(ins, CreateOutputTarget)
+                and ins.name == _tc.PREDICT_ATOMIC_ENERGY
+            ):
+                output_target = ins
+                log.info(
+                    f"Injecting foundation model energy shifts: wrapping CreateOutputTarget '{name}'"
+                )
+                break
+
+        if output_target is None:
+            raise ValueError(
+                f"Injecting foundation model energy shifts: could not find CreateOutputTarget for '{_tc.PREDICT_ATOMIC_ENERGY}'"
+            )
+
+        new_inst = ConstantScaleShiftTarget(
+            target=output_target,
+            scale=1.0,
+            shift=0.0,
+            atomic_shift_map=mu_shift_map,
+            name="ConstantScaleShiftTarget_FM_auto",
+        )
+        instructions_dict[new_inst.name] = new_inst
+        log.info(
+            f"Injecting foundation model energy shifts: created new ConstantScaleShiftTarget '{new_inst.name}'"
+        )
+
+
+def load_and_prepare_datasets(
+    args_yaml,
+    batch_size,
+    test_batch_size=None,
+    seed=1234,
+    strategy=None,
+    data_float_dtype: str = "float64",
+):
+    # TODO: Need to use constants module.
+    #  Too many strings are in here....
+    data_config = args_yaml[tc.INPUT_DATA_SECTION]
+    potential_config = args_yaml[tc.INPUT_POTENTIAL_SECTION]
+    fit_config = args_yaml[tc.INPUT_FIT_SECTION]
+    rcut = args_yaml[tc.INPUT_CUTOFF]
+    if data_config.get("distributed", False):
+        log.info("Precomputed and/or distributed dataset(s) will be used")
+        return load_and_prepare_distributed_datasets(
+            args_yaml, seed=seed, strategy=strategy
+        )
+
+    # check if fit stress
+    is_fit_stress = tc.INPUT_FIT_LOSS in fit_config and (
+        tc.INPUT_FIT_LOSS_STRESS in fit_config[tc.INPUT_FIT_LOSS]
+        or tc.INPUT_FIT_LOSS_VIRIAL in fit_config[tc.INPUT_FIT_LOSS]
+    )
+
+    # load data (no yet preprocessing)
+    train_df, test_df = load_train_test_datasets(data_config, seed=seed)
+    train_df["NUMBER_OF_ATOMS"] = train_df[tc.COLUMN_ASE_ATOMS].map(len)
+    if test_df is not None:
+        test_df["NUMBER_OF_ATOMS"] = test_df[tc.COLUMN_ASE_ATOMS].map(len)
+
+    if tc.INPUT_FIT_LOSS_ENERGY in fit_config[tc.INPUT_FIT_LOSS]:
+        if tc.INPUT_REFERENCE_ENERGY in data_config:
+            reference_energy = data_config.get(tc.INPUT_REFERENCE_ENERGY)
+            if reference_energy == 0:
+                log.info(
+                    "Set 'energy_corrected' to 'energy', because reference_energy=0"
+                )
+                train_df["energy_corrected"] = train_df["energy"]
+                if test_df is not None:
+                    test_df["energy_corrected"] = test_df["energy"]
+            elif reference_energy == "auto":
+                log.info(
+                    "reference_energy=auto: computing per-element E0 offsets by least-squares on train set"
+                )
+                elements = compute_compositions(train_df)
+                n_elements_cols = ["n_" + e for e in elements]
+                n_elements_mat = train_df[n_elements_cols].values
+                total_energy = train_df["energy"].values
+                e0_list, _, _, _ = np.linalg.lstsq(
+                    n_elements_mat, total_energy, rcond=None
+                )
+                auto_esa_dict = {e: float(e0) for e, e0 in zip(elements, e0_list)}
+                log.info(
+                    f"reference_energy=auto: computed single-atom energies (eV): {auto_esa_dict}"
+                )
+                compute_corrected_energy(train_df, esa_dict=auto_esa_dict)
+                if test_df is not None:
+                    compute_corrected_energy(test_df, esa_dict=auto_esa_dict)
+            elif isinstance(reference_energy, dict):
+                log.info(
+                    f"Construct 'energy_corrected' from 'energy', using single-atom reference {reference_energy=}"
+                )
+                compute_corrected_energy(train_df, esa_dict=reference_energy)
+                if test_df is not None:
+                    compute_corrected_energy(test_df, esa_dict=reference_energy)
+            else:
+                raise RuntimeError(
+                    f"'input::data::reference_energy'={reference_energy} is not supported. "
+                    "Only 0, 'auto', or a dict are supported."
+                )
+        if "energy_corrected" not in train_df.columns or (
+            test_df is not None and "energy_corrected" not in test_df.columns
+        ):
+            raise RuntimeError(
+                "'energy_corrected' column is not in dataset, either provide input::data::reference_energy: 0, 'auto', or dict "
+                "or generate column externally"
+            )
+
+        train_df["energy_corrected_per_atom"] = (
+            train_df["energy_corrected"] / train_df["NUMBER_OF_ATOMS"]
+        )
+        if test_df is not None:
+            test_df["energy_corrected_per_atom"] = (
+                test_df["energy_corrected"] / test_df["NUMBER_OF_ATOMS"]
+            )
+
+    stress_units = data_config.get("stress_units", DEFAULT_STRESS_UNITS)
+    if is_fit_stress:
+
+        def extract_stress(df):
+            """Extract stress from 'results' dict"""
+            if "stress" not in df.columns:
+                if "results" in df.columns:
+                    df["stress"] = df["results"].map(
+                        lambda d: d.get("stress") if d is not None else None
+                    )
+                else:
+                    raise ValueError(
+                        "Neither 'stress' nor 'results' column is present in dataframe"
+                    )
+
+        extract_stress(train_df)
+
+        if test_df is not None:
+            extract_stress(test_df)
+        log.info(f"Stress units: {stress_units}")
+
+    shift = 0
+    scale = 1.0
+    esa_dict = None
+    shift_option = potential_config.get("shift", False)
+    if shift_option:
+        is_finetuning = potential_config.get(
+            tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL
+        )
+        if shift_option == "auto" and is_finetuning:
+            # FM-based shift: computed after element_map is available (deferred below)
+            pass
+        else:
+            # Standard path: lstsq on energy_corrected
+            elements = compute_compositions(train_df)
+            n_elements_cols = ["n_" + e for e in elements]
+            n_elements = train_df[n_elements_cols]
+            total_energy = train_df["energy_corrected"]
+            res = np.linalg.lstsq(n_elements, total_energy, rcond=None)
+            e0_list = res[0]
+            esa_dict = {e: e0 for e, e0 in zip(elements, e0_list)}
+            log.info(f"Single-atom energy shift (computed on train set): {esa_dict}")
+
+    if potential_config.get("scale", False):
+        scale_opt = potential_config["scale"]
+        if isinstance(scale_opt, float):
+            scale = scale_opt
+            log.info(f"Data scale: {scale}")
+        else:
+            rms_f = np.vstack(train_df["forces"].to_numpy())
+            # TODO: currently per-component, need to be per-vector or per-component
+            scale = np.sqrt(np.mean(rms_f**2))
+            scale = max(1e-1, scale)  # prevent too small values
+            if scale < 0.8:
+                log.warning(
+                    f"Constant potential::{scale=} is possibly too small. Consider setting it manually unless you know "
+                    f"what you are doing"
+                )
+            log.info(f"Data (auto) scale: {scale}")
+
+    if fit_config.get("compute_convex_hull", False):
+        # compute energy up to convex hull
+        if test_df is None:
+            # compute only for train set
+            log.info("Computing convex hull for train dataset")
+            compute_convexhull_dist(
+                train_df,
+                energy_per_atom_column="energy_corrected_per_atom",
+                verbose=True,
+            )
+        else:
+            # compute only for train set
+            train_df["is_train"] = 1
+            test_df["is_train"] = 0
+            tot_df = pd.concat([train_df, test_df], axis=0)
+            log.info("Computing convex hull for joint train+test dataset")
+            compute_convexhull_dist(
+                tot_df, energy_per_atom_column="energy_corrected_per_atom", verbose=True
+            )
+            train_df = tot_df.query("is_train==1").drop(columns=["is_train"])
+            test_df = tot_df.query("is_train==0").drop(columns=["is_train"])
+    else:
+        log.info(
+            "input::fit::compute_convex_hull is False, convex hull and 'low energy' group will not be computed "
+        )
+    log.info(f"Train Dataset size: {len(train_df)}")
+
+    if train_df.index.duplicated().any():
+        log.warning("Duplicate indices in TRAIN dataframe found, resetting")
+        train_df.reset_index(drop=True, inplace=True)
+
+    has_test_set = test_df is not None
+    if has_test_set:
+        if test_df.index.duplicated().any():
+            log.warning("Duplicate indices in TEST dataframe found, resetting")
+            test_df.reset_index(drop=True, inplace=True)
+
+        log.info(f"Test Dataset size: {len(test_df)}")
+
+    # extract elements mapping from input or from dataset
+    elements = potential_config.get("elements")
+    if elements is None:
+        elements = extract_elements(train_df)
+        if has_test_set:
+            elements.update(extract_elements(test_df))
+        elements = list(sorted(elements))
+        element_map = {e: i for i, e in enumerate(elements)}
+        log.info("Extract elements from train and test datasets")
+    elif isinstance(elements, list):
+        log.info("Elements are provided as list")
+        elements = list(elements)
+        element_map = {e: i for i, e in enumerate(elements)}
+    elif isinstance(elements, dict):
+        log.info("Elements are provided as dict")
+        element_map = elements
+    log.info(f"Elements mapping: {element_map}")
+
+    # Deferred FM-based shift computation (needs element_map)
+    if shift_option == "auto" and potential_config.get(
+        tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL
+    ):
+        checkpoint_name = potential_config.get(tc.INPUT_POTENTIAL_CHECKPOINT_NAME, "")
+        checkpoint_folder = os.path.dirname(checkpoint_name) if checkpoint_name else ""
+        if not checkpoint_folder:
+            raise ValueError(
+                "potential::shift=auto requires a foundation model checkpoint to be set, "
+                "but INPUT_POTENTIAL_CHECKPOINT_NAME is not available"
+            )
+        esa_dict = compute_fm_energy_shift_auto(
+            train_df=train_df,
+            checkpoint_folder=checkpoint_folder,
+            seed=seed,
+        )
+        log.info(
+            f"Foundation model energy alignment: per-element shifts to inject = {esa_dict}"
+        )
+
+    # apply E,F weights (i.e. energy-based weights)
+    if fit_config.get("weighting") is not None:
+        train_df, test_df = apply_weighting(fit_config, train_df, test_df)
+    check_weighting(train_df, test_df)
+
+    if data_config.get("save_dataset", True):
+        training_set_full_fname = os.path.join(get_output_dir(seed), TRAINING_SET_FNAME)
+        os.makedirs(os.path.dirname(training_set_full_fname), exist_ok=True)
+        log.info(f"Saving current training set to {training_set_full_fname}")
+        train_df.to_pickle(training_set_full_fname)
+        if has_test_set:
+            testing_set_full_fname = os.path.join(
+                get_output_dir(seed), TESTING_SET_FNAME
+            )
+            os.makedirs(os.path.dirname(testing_set_full_fname), exist_ok=True)
+            log.info(f"Saving current test set to {testing_set_full_fname}")
+            test_df.to_pickle(testing_set_full_fname)
+
+    user_cutoff_dict = args_yaml.get(tc.INPUT_CUTOFF_DICT)
+
+    # instantiate DataBuilders class (with optional parameters); HARDCODED, but rarely changes
+    # dense_nbr mirrors the model knob (input.yaml::potential::dense_nbr): when set,
+    # emit the padded neighbor->bond index the dense-aggregation SPBF consumes. Must
+    # match the model — sourced from the same potential_config key.
+    dense_nbr = potential_config.get(tc.INPUT_POTENTIAL_DENSE_NBR, False)
+    dense_slot_budget = fit_config.get("dense_slot_budget", "auto")
+    dense_n_neigh_buckets = fit_config.get("dense_n_neigh_buckets", "auto")
+    # In dense mode auto_bucket_max_padding is the UNIFIED net neighbor-padding target (atom and
+    # neighbor axes are bound), defaulting to 0.15; the seg path keeps its own 0.3 default above.
+    dense_net_padding = fit_config.get("auto_bucket_max_padding", 0.15)
+    dense_max_shapes = fit_config.get("dense_max_shapes", 64)
+    dense_max_neigh_cap = fit_config.get("dense_max_neigh_cap", None)
+    data_builders: list = [
+        GeometricalDataBuilder(
+            element_map,
+            cutoff=rcut,
+            cutoff_dict=user_cutoff_dict,
+            is_fit_stress=is_fit_stress,
+            float_dtype=data_float_dtype,
+            dense_nbr=dense_nbr,
+            dense_slot_budget=dense_slot_budget,
+            dense_n_neigh_buckets=dense_n_neigh_buckets,
+            dense_net_padding=dense_net_padding,
+            dense_max_shapes=dense_max_shapes,
+            dense_max_neigh_cap=dense_max_neigh_cap,
+        ),
+    ]
+    if (
+        tc.INPUT_FIT_LOSS_ENERGY in fit_config[tc.INPUT_FIT_LOSS]
+        or tc.INPUT_FIT_LOSS_FORCES in fit_config[tc.INPUT_FIT_LOSS]
+    ):
+        data_builders.append(
+            ReferenceEnergyForcesStressesDataBuilder(
+                normalize_weights=fit_config.get("normalize_weights", False),
+                normalize_force_per_structure=fit_config.get(
+                    "normalize_force_per_structure", False
+                ),
+                is_fit_stress=is_fit_stress,
+                stress_units=stress_units,
+                float_dtype=data_float_dtype,
+            ),
+        )
+    extras = data_config.get("extra_components", None)
+    if extras is not None:
+        import importlib
+
+        try:
+            mod_exp = importlib.import_module(
+                "tensorpotential.experimental.extra_data_builders"
+            )
+        except ImportError:
+            mod_exp = None
+
+        try:
+            mod_extra = importlib.import_module(
+                "tensorpotential.extra.extra_data_builders"
+            )
+        except ImportError:
+            mod_extra = None
+
+        for db_name, db_config in extras.items():
+            db = getattr(mod_exp, db_name, None) or getattr(mod_extra, db_name, None)
+            if db is None:
+                raise NameError(f"Could not find data builder {db_name}")
+            data_builders.append(db(**db_config, float_dtype=data_float_dtype))
+
+    # ---- streaming pipeline branch ----
+    pipeline_mode = data_config.get("pipeline", "in_memory")
+    if pipeline_mode == "streaming":
+        from tensorpotential.data.streaming import (
+            StreamingConfig,
+            StreamingDatasetWrapper,
+        )
+
+        streaming_params = data_config.get("streaming", {})
+        streaming_config = StreamingConfig(**streaming_params)
+
+        log.info(
+            f"Streaming pipeline: target_metric={streaming_config.target_metric}, "
+            f"metric_strategy={streaming_config.metric_strategy}, "
+            f"num_bins={streaming_config.num_bins}"
+        )
+
+        train_shuffle = fit_config.get("train_shuffle", True)
+        train_batches = StreamingDatasetWrapper(
+            train_df,
+            data_builders,
+            streaming_config,
+            shuffle=train_shuffle,
+            name="train",
+            seed=seed,
+        )
+
+        # avg_n_neigh: use provided value or estimate from density
+        avg_n_neigh = potential_config.get("avg_n_neigh")
+        if avg_n_neigh is None:
+            log.info("Streaming mode: estimating avg_n_neigh from density...")
+            total_neigh, total_atoms = 0, 0
+            for row_idx in range(len(train_df)):
+                atoms = train_df.iloc[row_idx][tc.COLUMN_ASE_ATOMS]
+                n_at = len(atoms)
+                total_atoms += n_at
+                if atoms.pbc.any() and atoms.get_volume() > 0:
+                    vol = atoms.get_volume()
+                    density = n_at / vol
+                else:
+                    density = 1.0  # fallback for non-periodic
+                sphere_vol = 4.0 / 3.0 * np.pi * rcut**3
+                total_neigh += int(n_at * density * sphere_vol)
+            avg_n_neigh = total_neigh / total_atoms if total_atoms > 0 else 40
+            log.info(f"Estimated avg_n_neigh: {avg_n_neigh:.1f}")
+        else:
+            log.info(f"Average number of neighbors (provided): {avg_n_neigh}")
+
+        if has_test_set:
+            test_shuffle = fit_config.get("test_shuffle", False)
+            test_batches = StreamingDatasetWrapper(
+                test_df,
+                data_builders,
+                streaming_config,
+                shuffle=test_shuffle,
+                name="test",
+                seed=seed,
+            )
+        else:
+            test_batches = None
+
+        # Build data_stats and grouping info, then return early
+        _is_fm_auto_shift = (
+            shift_option == "auto"
+            and potential_config.get(tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL)
+            and esa_dict is not None
+        )
+        if _is_fm_auto_shift:
+            fm_shift_dict = esa_dict
+            atomic_shift_map = None
+        else:
+            fm_shift_dict = None
+            atomic_shift_map = (
+                {element_map[el]: e0 for el, e0 in esa_dict.items()}
+                if esa_dict is not None
+                else None
+            )
+        data_stats = {
+            "avg_n_neigh": avg_n_neigh,
+            "constant_out_shift": shift,
+            "constant_out_scale": scale,
+            "atomic_shift_map": atomic_shift_map,
+            "fm_shift_dict": fm_shift_dict,
+        }
+        test_grouping_df = None
+        train_grouping_df = None
+        if E_CHULL_DIST_PER_ATOM in train_df.columns:
+            train_df["group__low"] = train_df[E_CHULL_DIST_PER_ATOM] <= 1.0
+            train_grouping_df = get_group_mapping_df(train_df)
+            if test_df is not None:
+                test_df["group__low"] = test_df[E_CHULL_DIST_PER_ATOM] <= 1.0
+                test_grouping_df = get_group_mapping_df(test_df)
+
+        return (
+            train_batches,
+            test_batches,
+            element_map,
+            data_stats,
+            train_grouping_df,
+            test_grouping_df,
+        )
+
+    # ---- in-memory pipeline (default) ----
+    # preprocess data
+    log.info("Train set processing")
+    max_padding_fraction = fit_config.get("auto_bucket_max_padding", 0.3)
+    max_n_buckets = fit_config.get("train_max_n_buckets", "auto")
+    log.info(f"Train buckets: {max_n_buckets}")
+    train_batches, padding_stats = construct_batches(
+        train_df,
+        data_builders=data_builders,
+        batch_size=batch_size,
+        max_n_buckets=max_n_buckets,  # 1
+        max_padding_fraction=max_padding_fraction,
+        return_padding_stats=True,
+        verbose=True,
+        max_workers=data_config.get("max_workers"),
+    )
+
+    if padding_stats:
+        logging.info(
+            f"[TRAIN] dataset stats: "
+            f"num. batches: {len(train_batches)} | "
+            f"num. real structures: {padding_stats['nreal_struc']} (+{padding_stats['pad_nstruct'] / padding_stats['nreal_struc'] * 1e2:.2f}%) | "
+            f"num. real atoms: {padding_stats['nreal_atoms']} (+{padding_stats['pad_nat'] / padding_stats['nreal_atoms'] * 1e2:.2f}%) | "
+            f"num. real neighbours: {padding_stats['nreal_neigh']} (+{padding_stats['pad_nneigh'] / padding_stats['nreal_neigh'] * 1e2:.2f}%) "
+        )
+    else:
+        logging.info(f"[TRAIN] dataset stats:  num. batches: {len(train_batches)}")
+    if dense_nbr and padding_stats:
+        _log_dense_padding_report(padding_stats, "TRAIN")
+    # compute average number of neighbours over TRAIN set
+    avg_n_neigh = potential_config.get("avg_n_neigh")
+    if avg_n_neigh is None:
+        total_number_neigh = sum((int(b[tc.N_NEIGHBORS_REAL]) for b in train_batches))
+        total_number_atoms = sum((int(b[tc.N_ATOMS_BATCH_REAL]) for b in train_batches))
+        avg_n_neigh = total_number_neigh / total_number_atoms
+        logging.info(f"Average number of neighbors (computed): {avg_n_neigh}")
+    else:
+        logging.info(f"Average number of neighbors (provided): {avg_n_neigh}")
+
+    if has_test_set:
+        log.info("Test set processing")
+        test_max_n_buckets = fit_config.get("test_max_n_buckets", "auto")
+        log.info(f"Test buckets: {test_max_n_buckets}")
+        test_batches, test_padding_stats = construct_batches(
+            test_df,
+            data_builders=data_builders,
+            batch_size=test_batch_size if test_batch_size else batch_size,
+            max_n_buckets=test_max_n_buckets,  # 1
+            max_padding_fraction=max_padding_fraction,
+            return_padding_stats=True,
+            verbose=True,
+            max_workers=data_config.get("max_workers"),
+        )
+        if test_padding_stats:
+            logging.info(
+                f"[TEST] dataset stats: "
+                f"num. batches: {len(test_batches)} | "
+                f"num. real structures: {test_padding_stats['nreal_struc']} (+{test_padding_stats['pad_nstruct'] / test_padding_stats['nreal_struc'] * 1e2:.2f}%) | "
+                f"num. real atoms: {test_padding_stats['nreal_atoms']} (+{test_padding_stats['pad_nat'] / test_padding_stats['nreal_atoms'] * 1e2:.2f}%) | "
+                f"num. real neighbours: {test_padding_stats['nreal_neigh']} (+{test_padding_stats['pad_nneigh'] / test_padding_stats['nreal_neigh'] * 1e2:.2f}%) "
+            )
+        else:
+            logging.info(f"[TEST] dataset stats:  num. batches: {len(test_batches)}")
+        if dense_nbr and test_padding_stats:
+            _log_dense_padding_report(test_padding_stats, "TEST")
+
+    else:
+        test_batches = None
+    # esa_dict: el -> e0
+    # element_map: el -> mu
+    # atomic_shift_map :  mu -> e0
+    # convert atomic_shift_map from esa_dict
+    # For shift=auto + finetuning: esa_dict holds FM-based shifts to be applied via model surgery
+    # (not via construct_model), so we keep them separate from the normal atomic_shift_map path
+    _is_fm_auto_shift = (
+        shift_option == "auto"
+        and potential_config.get(tc.INPUT_POTENTIAL_FINETUNE_FOUNDATION_MODEL)
+        and esa_dict is not None
+    )
+    if _is_fm_auto_shift:
+        # FM shifts stored by element symbol for model surgery in gracemaker.py
+        # Don't pass to construct_model (model is loaded, not built during finetuning)
+        fm_shift_dict = esa_dict
+        atomic_shift_map = None
+    else:
+        fm_shift_dict = None
+        atomic_shift_map = (
+            {element_map[el]: e0 for el, e0 in esa_dict.items()}
+            if esa_dict is not None
+            else None
+        )
+    data_stats = {
+        "avg_n_neigh": (
+            avg_n_neigh  # if not use_per_specie_n_nei else avg_n_neigh_per_specie
+        ),
+        "constant_out_shift": shift,
+        "constant_out_scale": scale,
+        "atomic_shift_map": atomic_shift_map,
+        "fm_shift_dict": fm_shift_dict,
+    }
+    # label train and test dataframes with low-energy(<=1 eV/atom above conv.hull) and rest
+    test_grouping_df = None
+    train_grouping_df = None
+    if E_CHULL_DIST_PER_ATOM in train_df.columns:
+        train_df["group__low"] = train_df[E_CHULL_DIST_PER_ATOM] <= 1.0
+        train_grouping_df = get_group_mapping_df(train_df)
+
+        if test_df is not None:
+            test_df["group__low"] = test_df[E_CHULL_DIST_PER_ATOM] <= 1.0
+            test_grouping_df = get_group_mapping_df(test_df)
+
+    # plotting histograms in ./seed/{current_seed}/plots
+    try:
+        plot_out_dir = f"{get_output_dir(seed)}/plots"
+        DatasetHistPlotter.plot(
+            {"train": train_df, "test": test_df},
+            plot_out_dir,
+            plot_targets=DEFAULT_PLOT_TARGETS,
+            units_transform=DEFAULT_UNIT_TRANSFORM,
+        )
+        log.info(
+            f"Train/test data distributions are plotted and saved to {plot_out_dir}"
+        )
+    except Exception as e:  # noqa: BLE001  (a plot is optional: whatever matplotlib or the data raise, the run goes on)
+        log.warning(f"Failed to make histograms plot for datasets ({e}), skipping")
+
+    return (
+        train_batches,
+        test_batches,
+        element_map,
+        data_stats,
+        train_grouping_df,
+        test_grouping_df,
+    )
+
+
+def get_group_mapping_df(df):
+    gdf = df[
+        [col for col in df.columns if col.startswith("group__")] + ["NUMBER_OF_ATOMS"]
+    ]
+    return gdf
+
+
+def key_for_batch_dict(batch_dict):
+    return (
+        batch_dict[tc.BOND_VECTOR].shape[0],
+        batch_dict[tc.N_ATOMS_BATCH_TOTAL].numpy(),
+        batch_dict[tc.N_STRUCTURES_BATCH_TOTAL].numpy(),
+    )
+
+
+def regroup_dataset_to_iterator(ds, n_group=1, regroup_window_factor=32):
+    if n_group == 1:
+        return ds
+
+    def sorting_generator(batched_dataset, window_size, sort_key_fn=key_for_batch_dict):
+        """Sorts batches within a window and returns a new generator with partially sorted batches."""
+
+        buffer = []
+        for batch in batched_dataset:
+            buffer.append(batch)
+            if len(buffer) == window_size:
+                # Sort the current chunk of batches
+                buffer.sort(key=sort_key_fn)
+                for sorted_batch in buffer:
+                    yield sorted_batch
+                buffer = []
+
+        # Yield any remaining batches
+        if buffer:
+            buffer.sort(key=sort_key_fn)
+            for sorted_batch in buffer:
+                yield sorted_batch
+
+    # deferred generator
+    return sorting_generator(ds, window_size=n_group * regroup_window_factor)
+
+
+def regroup_similar_batches(ds, n_group=1):
+    if n_group == 1:
+        return ds
+
+    if is_tf_distr_dataset(ds):
+        return ds
+
+    # this is actually a sorting algorithm:
+    # Step 1: Create buckets_dict
+    buckets_dict = defaultdict(deque)
+    for batch_dict in ds:
+        key = key_for_batch_dict(batch_dict)
+        buckets_dict[key].append(batch_dict)
+
+    # Step 2: Shuffle the keys and the contents of each bucket
+    keys = list(buckets_dict.keys())
+    random.shuffle(keys)
+
+    # Step 3: Create interleaved chunks
+    grouped_ds = []
+    buckets_iter = cycle(keys)  # Cycle through keys repeatedly
+    non_empty_keys = set(keys)  # Track keys with remaining elements
+
+    while non_empty_keys:
+        key = next(buckets_iter)  # Get the next key in a round-robin manner
+        if key in non_empty_keys:
+            bucket = buckets_dict[key]
+            # Extract a chunk of size n_group
+            if len(bucket) >= n_group:
+                chunk = [bucket.popleft() for _ in range(n_group)]
+                grouped_ds.extend(chunk)
+            else:
+                non_empty_keys.remove(key)
+    # add "leftovers"
+    for key in keys:
+        if buckets_dict[key]:
+            grouped_ds.extend(buckets_dict[key])
+
+    assert len(grouped_ds) == len(ds)
+    return grouped_ds
+
+
+def is_tf_distr_dataset(dataset):
+    from tensorflow.python.distribute.input_lib import DistributedDatasetsFromFunction
+
+    return isinstance(dataset, (tf.data.Dataset, DistributedDatasetsFromFunction))

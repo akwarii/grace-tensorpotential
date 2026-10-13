@@ -12,7 +12,6 @@ tensorpotential/calculator/bulk.py
 tensorpotential/calculator/foundation_models.py
 tensorpotential/cli/__init__.py
 tensorpotential/cli/console.py
-tensorpotential/cli/data.py
 tensorpotential/cli/distribute.py
 tensorpotential/cli/gracemaker.py
 tensorpotential/cli/metrics.py
@@ -42,13 +41,16 @@ tensorpotential/constants.py
 tensorpotential/data/__init__.py
 tensorpotential/data/databuilder.py
 tensorpotential/data/dataset_plotter.py
+tensorpotential/data/datasets.py
 tensorpotential/data/dense_nbr.py
+tensorpotential/data/preprocess.py
 tensorpotential/data/process_df.py
 tensorpotential/data/shards.py
 tensorpotential/data/streaming.py
 tensorpotential/data/tpatoms.py
 tensorpotential/data/weighting.py
 tensorpotential/export.py
+tensorpotential/export_kokkos.py
 tensorpotential/extra/__init__.py
 tensorpotential/extra/extra_data_builders.py
 tensorpotential/extra/extra_losses.py
@@ -78,6 +80,7 @@ tensorpotential/keras_adapter.py
 tensorpotential/loss.py
 tensorpotential/metadata_utils.py
 tensorpotential/metrics.py
+tensorpotential/model_ops.py
 tensorpotential/optimizer_layout.py
 tensorpotential/poly.py
 tensorpotential/potentials/__init__.py
@@ -85,7 +88,6 @@ tensorpotential/potentials/presets.py
 tensorpotential/potentials/registry.py
 tensorpotential/resources/__init__.py
 tensorpotential/scripts/__init__.py
-tensorpotential/scripts/_kokkos_export.py
 tensorpotential/scripts/_script_logging.py
 tensorpotential/scripts/df2extxyz.py
 tensorpotential/scripts/extxyz2df.py
@@ -155,15 +157,16 @@ tests/test_cli_help.py
 tests/test_compute.py
 tests/test_console.py
 tests/test_coupling_parity_bug.py
-tests/test_data.py
 tests/test_databuilder.py
 tests/test_dataset_plotter.py
+tests/test_datasets.py
 tests/test_dense_nbr.py
 tests/test_detect_multigpu_intent.py
 tests/test_df2extxyz.py
 tests/test_distrib.py
 tests/test_estimate_n_buckets.py
 tests/test_export.py
+tests/test_export_kokkos.py
 tests/test_extract_const_shift_scale.py
 tests/test_extxyz2df.py
 tests/test_fm_shift_auto.py
@@ -181,7 +184,6 @@ tests/test_grace_predict.py
 tests/test_grace_preprocess.py
 tests/test_grace_uq.py
 tests/test_grace_utils.py
-tests/test_grace_utils_export.py
 tests/test_gracemaker.py
 tests/test_graph_split.py
 tests/test_import_gates.py
