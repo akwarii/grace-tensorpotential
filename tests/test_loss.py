@@ -621,6 +621,7 @@ def test_energy_offset_error_builds_all_pairwise_absolute_differences_by_hand():
     np.testing.assert_array_equal(
         pred_off.numpy().reshape(3, 3), [[0, 2, 3], [2, 0, 1], [3, 1, 0]]
     )
+    assert w_off is not None
     # sqrt(w_i w_j + 1e-16), and exactly zero when the product is zero
     expected = np.array([[1, 0, 2], [0, 0, 0], [2, 0, 4]], dtype=float)
     _assert_close(w_off.numpy().reshape(3, 3), expected, ARITH)
@@ -851,16 +852,16 @@ def test_the_abstract_bases_cannot_be_instantiated():
 
 def test_the_abstract_compute_methods_raise_not_implemented_error():
     class _Plain(LossComponent):
-        def compute_loss_component(self, **kwargs):
-            return super().compute_loss_component(**kwargs)
+        def compute_loss_component(self, input_data, predictions, **kwargs):
+            return super().compute_loss_component(input_data, predictions, **kwargs)
 
     class _Huber(HuberLoss):
-        def compute_loss_component(self, **kwargs):
-            return super().compute_loss_component(**kwargs)
+        def compute_loss_component(self, input_data, predictions, **kwargs):
+            return super().compute_loss_component(input_data, predictions, **kwargs)
 
     for component in (_Plain(1.0, name="plain"), _Huber(1.0)):
         with pytest.raises(NotImplementedError):
-            component.compute_loss_component()
+            component.compute_loss_component(input_data={}, predictions={})
         with pytest.raises(NotImplementedError):
             component(input_data={}, predictions={})
 

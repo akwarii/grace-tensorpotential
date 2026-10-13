@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
@@ -11,7 +12,23 @@ from tensorpotential.tpmodel import TPModel
 
 
 
-def energy_offset_error(e_true, e_pred, e_weight=None):
+def energy_offset_error(
+    e_true: tf.Tensor, e_pred: tf.Tensor, e_weight: tf.Tensor | None = None
+) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor | None]:
+    """Return pairwise energy differences of reference, prediction and the pair weights.
+
+    Parameters
+    ----------
+    e_true, e_pred : tf.Tensor
+        Column tensors of shape ``[n, 1]``.
+    e_weight : tf.Tensor, optional
+        Column tensor of per-structure weights; ``None`` gives no pair weights.
+
+    Returns
+    -------
+    tuple
+        ``(etr_off, epr_off, w_off)`` with ``n * n`` rows; ``w_off`` is ``None`` without weights.
+    """
     n_vals = tf.shape(e_true)[0]
     # true energy composition
     etr_1 = tf.reshape(tf.tile(e_true, [1, n_vals]), [-1, 1])
@@ -46,7 +63,7 @@ def energy_offset_error(e_true, e_pred, e_weight=None):
     return etr_off, epr_off, w_off
 
 
-def huber(error: tf.Tensor, delta=1.0):
+def huber(error: tf.Tensor, delta: float | tf.Tensor = 1.0) -> tf.Tensor:
     """Computes Huber loss value.
 
     Args:
@@ -70,12 +87,12 @@ def huber(error: tf.Tensor, delta=1.0):
 
 def piecewise_linear(
     abs_x: tf.Tensor,
-    delta_1,
-    delta_2,
-    beta_1,
-    beta_2,
-    beta_3,
-):
+    delta_1: float | tf.Tensor,
+    delta_2: float | tf.Tensor,
+    beta_1: float | tf.Tensor,
+    beta_2: float | tf.Tensor,
+    beta_3: float | tf.Tensor,
+) -> tf.Tensor:
     """Three-region piecewise-linear loss with progressively damped slope.
 
     L(x) = beta_1 * x                                 if x <= delta_1
@@ -105,7 +122,8 @@ def piecewise_linear(
     )
 
 
-def compute_nat_per_structure(input_data):
+def compute_nat_per_structure(input_data: dict[str, tf.Tensor]) -> tf.Tensor:
+    """Return the atom count of each structure as a ``[n_structures, 1]`` tensor (zeros replaced by ones)."""
     nat_per_struc = tf.math.unsorted_segment_sum(
         tf.ones_like(input_data[constants.ATOMS_TO_STRUCTURE_MAP]),
         input_data[constants.ATOMS_TO_STRUCTURE_MAP],
@@ -119,7 +137,10 @@ def compute_nat_per_structure(input_data):
     return nat_per_struc
 
 
-def compute_energy_per_atom_error(input_data, predictions):
+def compute_energy_per_atom_error(
+    input_data: dict[str, tf.Tensor], predictions: dict[str, tf.Tensor]
+) -> tf.Tensor:
+    """Return predicted minus reference energy per atom."""
     e_true = input_data[constants.DATA_REFERENCE_ENERGY]
     e_pred = predictions[constants.PREDICT_TOTAL_ENERGY]
 
@@ -145,7 +166,8 @@ class LossComponent(tf.Module, ABC):
         self.normalize_by_samples = normalize_by_samples
         self.corresponding_metrics = None
 
-    def build(self, float_dtype):
+    def build(self, float_dtype: tf.DType | str) -> None:
+        """Create the weight variable and the epsilon constant in ``float_dtype``."""
         self.loss_component_weight = tf.Variable(
             self._loss_component_weight,
             dtype=float_dtype,
@@ -155,13 +177,16 @@ class LossComponent(tf.Module, ABC):
         self.epsilon = tf.constant(1e-10, dtype=float_dtype)
 
 
-    def set_loss_component_weight(self, loss_component_weight: float):
+    def set_loss_component_weight(self, loss_component_weight: float) -> None:
+        """Assign a new weight of the component."""
         self.loss_component_weight.assign(loss_component_weight)
 
-    def get_loss_component_weight(self):
+    def get_loss_component_weight(self) -> Any:
+        """Return the current weight of the component as a numpy value."""
         return self.loss_component_weight.numpy()
 
-    def set_loss_component_params(self, params: dict):
+    def set_loss_component_params(self, params: dict) -> None:
+        """Update the component from ``params`` (key ``weight``)."""
         if "weight" in params:
             self.loss_component_weight.assign(params["weight"])
 
@@ -173,7 +198,13 @@ class LossComponent(tf.Module, ABC):
         return f"{weight}*{self.__class__.__name__}"
 
     @abstractmethod
-    def compute_loss_component(self, **kwargs):
+    def compute_loss_component(
+        self,
+        input_data: dict[str, tf.Tensor],
+        predictions: dict[str, tf.Tensor],
+        **kwargs: Any,
+    ) -> tf.Tensor:
+        """Return the unweighted loss value of the component for a batch."""
         raise NotImplementedError()
 
     def __call__(
@@ -204,17 +235,25 @@ class HuberLoss(LossComponent, ABC):
         )
         self.delta = delta
 
-    def build(self, float_dtype):
+    def build(self, float_dtype: tf.DType | str) -> None:
+        """Create the weight and the ``delta`` variables in ``float_dtype``."""
         super().build(float_dtype)
         self.delta = tf.Variable(
             self.delta, dtype=float_dtype, trainable=False, name=self.name + "_delta"
         )
 
     @abstractmethod
-    def compute_loss_component(self, **kwargs):
+    def compute_loss_component(
+        self,
+        input_data: dict[str, tf.Tensor],
+        predictions: dict[str, tf.Tensor],
+        **kwargs: Any,
+    ) -> tf.Tensor:
+        """Return the unweighted loss value of the component for a batch."""
         raise NotImplementedError()
 
-    def set_loss_component_params(self, params: dict):
+    def set_loss_component_params(self, params: dict) -> None:
+        """Update the component from ``params`` (keys ``weight`` and ``delta``)."""
         super().set_loss_component_params(params)
         if "delta" in params:
             self.delta.assign(params["delta"])
@@ -252,8 +291,9 @@ class WeightedOffsetEnergyLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedOffsetEnergyLoss value for a batch."""
         e_true = input_data[constants.DATA_REFERENCE_ENERGY]
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
         e_pred = predictions[constants.PREDICT_TOTAL_ENERGY]
@@ -300,8 +340,9 @@ class WeightedOffsetEnergyHuberLoss(HuberLoss):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedOffsetEnergyHuberLoss value for a batch."""
         e_true = input_data[constants.DATA_REFERENCE_ENERGY]
         e_pred = predictions[constants.PREDICT_TOTAL_ENERGY]
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
@@ -347,8 +388,9 @@ class WeightedSSEEnergyLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedSSEEnergyLoss value for a batch."""
         e_true = input_data[constants.DATA_REFERENCE_ENERGY]
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
         e_pred = predictions[constants.PREDICT_TOTAL_ENERGY]
@@ -386,8 +428,9 @@ class WeightedMAEEPALoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedMAEEPALoss value for a batch."""
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
 
         delta_epa = compute_energy_per_atom_error(input_data, predictions)
@@ -446,8 +489,9 @@ class WeightedPiecewiseLinearEnergyPerAtomLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedPiecewiseLinearEnergyPerAtomLoss value for a batch."""
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
         delta_epa = compute_energy_per_atom_error(input_data, predictions)
         per_struct = piecewise_linear(
@@ -488,8 +532,9 @@ class WeightedSSEEnergyPerAtomLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedSSEEnergyPerAtomLoss value for a batch."""
         e_true = input_data[constants.DATA_REFERENCE_ENERGY]
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
 
@@ -537,8 +582,9 @@ class WeightedSSEForceLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedSSEForceLoss value for a batch."""
         f_true = input_data[constants.DATA_REFERENCE_FORCES]
         f_weight = input_data[constants.DATA_FORCE_WEIGHTS]
         f_pred = predictions[constants.PREDICT_FORCES]
@@ -585,8 +631,9 @@ class WSMAEForceLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WSMAEForceLoss value for a batch."""
         f_true = input_data[constants.DATA_REFERENCE_FORCES]
         f_weight = input_data[constants.DATA_FORCE_WEIGHTS]
         f_pred = predictions[constants.PREDICT_FORCES]
@@ -631,8 +678,9 @@ class WeightedSSEVirialLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedSSEVirialLoss value for a batch."""
         v_true = input_data[constants.DATA_REFERENCE_VIRIAL]
         v_weight = input_data[constants.DATA_VIRIAL_WEIGHTS]
         v_pred = predictions[constants.PREDICT_VIRIAL]
@@ -668,8 +716,9 @@ class WeightedSSEStressLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedSSEStressLoss value for a batch."""
         volume = input_data[constants.DATA_VOLUME]
         v_true = input_data[constants.DATA_REFERENCE_VIRIAL]
         v_weight = input_data[constants.DATA_VIRIAL_WEIGHTS]
@@ -706,8 +755,9 @@ class WeightedMAEStressLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedMAEStressLoss value for a batch."""
         volume = input_data[constants.DATA_VOLUME]
         v_true = input_data[constants.DATA_REFERENCE_VIRIAL]
         v_weight = input_data[constants.DATA_VIRIAL_WEIGHTS]
@@ -773,8 +823,9 @@ class WeightedPiecewiseLinearStressLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedPiecewiseLinearStressLoss value for a batch."""
         volume = input_data[constants.DATA_VOLUME]
         v_true = input_data[constants.DATA_REFERENCE_VIRIAL]
         v_weight = input_data[constants.DATA_VIRIAL_WEIGHTS]
@@ -833,8 +884,9 @@ class WeightedHuberEnergyPerAtomLoss(HuberLoss):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedHuberEnergyPerAtomLoss value for a batch."""
         e_true = input_data[constants.DATA_REFERENCE_ENERGY]
         e_pred = predictions[constants.PREDICT_TOTAL_ENERGY]
         e_weight = input_data[constants.DATA_ENERGY_WEIGHTS]
@@ -891,7 +943,8 @@ class WeightedHuberForceLoss(HuberLoss):
                 "compute_norm=True is incompatible. Pick one."
             )
 
-    def build(self, float_dtype):
+    def build(self, float_dtype: tf.DType | str) -> None:
+        """Create the weight and, if needed, the norm-threshold variables in ``float_dtype``."""
         super().build(float_dtype)
         if self.scale_w_by_norm:
             self.norm_threshold = tf.Variable(
@@ -905,8 +958,9 @@ class WeightedHuberForceLoss(HuberLoss):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedHuberForceLoss value for a batch."""
         f_true = input_data[constants.DATA_REFERENCE_FORCES]
         f_pred = predictions[constants.PREDICT_FORCES]
         f_weight = input_data[constants.DATA_FORCE_WEIGHTS]
@@ -1006,8 +1060,9 @@ class WeightedPiecewiseLinearForceLoss(LossComponent):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedPiecewiseLinearForceLoss value for a batch."""
         f_true = input_data[constants.DATA_REFERENCE_FORCES]
         f_pred = predictions[constants.PREDICT_FORCES]
         f_weight = input_data[constants.DATA_FORCE_WEIGHTS]
@@ -1066,8 +1121,9 @@ class WHuberForceCompNormLoss(HuberLoss):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WHuberForceCompNormLoss value for a batch."""
         f_true = input_data[constants.DATA_REFERENCE_FORCES]
         f_pred = predictions[constants.PREDICT_FORCES]
         f_weight = input_data[constants.DATA_FORCE_WEIGHTS]
@@ -1116,8 +1172,9 @@ class WeightedHuberVirialLoss(HuberLoss):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedHuberVirialLoss value for a batch."""
         v_true = input_data[constants.DATA_REFERENCE_VIRIAL]
         v_pred = predictions[constants.PREDICT_VIRIAL]
         v_weight = input_data[constants.DATA_VIRIAL_WEIGHTS]
@@ -1160,8 +1217,9 @@ class WeightedHuberStressLoss(HuberLoss):
         self,
         input_data: dict[str, tf.Tensor],
         predictions: dict[str, tf.Tensor],
-        **kwargs,
+        **kwargs: Any,
     ) -> tf.Tensor:
+        """Return the unweighted WeightedHuberStressLoss value for a batch."""
         v_true = input_data[constants.DATA_REFERENCE_VIRIAL]
         # xx,yy,zz, xy,xz,yz
         v_pred = predictions[constants.PREDICT_VIRIAL]
@@ -1238,8 +1296,11 @@ class WeightedHuberStressLoss(HuberLoss):
 
 
 class RegularizationLossComponent(LossComponent):
-    def __call__(self, model: TPModel) -> tf.Tensor:
-        loss_component = self.compute_loss_component(model=model)
+    # The regularisation contract takes the model, not input data and predictions.
+    def __call__(self, model: TPModel) -> tf.Tensor:  # ty: ignore[invalid-method-override]
+        """Return the weighted regularisation loss of ``model``."""
+        # Regularisation components override compute_loss_component(model).
+        loss_component = self.compute_loss_component(model=model)  # ty: ignore[missing-argument]
 
         return loss_component * self.loss_component_weight
 
@@ -1250,7 +1311,9 @@ class L2Loss(RegularizationLossComponent):
             loss_component_weight=loss_component_weight, name=name
         )
 
-    def compute_loss_component(self, model: TPModel) -> tf.Tensor:
+    # The regularisation contract takes the model, not input data and predictions.
+    def compute_loss_component(self, model: TPModel) -> tf.Tensor:  # ty: ignore[invalid-method-override]
+        """Return the L2 regularisation loss of ``model``."""
         return model.compute_l2_regularization_loss()
 
     def __repr__(self):
@@ -1267,30 +1330,39 @@ class LossFunction:
         self.loss_components = loss_components
         self.input_signatures = {}
 
-    def build(self, float_dtype):
+    def build(self, float_dtype: tf.DType | str) -> None:
+        """Build every loss component in ``float_dtype``."""
         for _, loss_component in self.loss_components.items():
             loss_component.build(float_dtype)
 
-    def get_input_signatures(self):
+    def get_input_signatures(self) -> dict:
+        """Return the union of the input tensor specs of all components."""
         for _, loss_component in self.loss_components.items():
             self.input_signatures.update(loss_component.input_tensor_spec)
 
         return self.input_signatures
 
-    def set_loss_component_weights(self, loss_component_weights: dict[str, float]):
+    def set_loss_component_weights(
+        self, loss_component_weights: dict[str, float]
+    ) -> None:
+        """Set the weight of each named component."""
         for k, loss_component_weight in loss_component_weights.items():
             assert (
                 k in self.loss_components
             ), f"{k} not in loss_components ({self.loss_components.keys()})"
             self.loss_components[k].set_loss_component_weight(loss_component_weight)
 
-    def get_loss_component_weights(self):
+    def get_loss_component_weights(self) -> dict[str, Any]:
+        """Return the current weight of each named component."""
         return {
             k: self.loss_components[k].get_loss_component_weight()
             for k, loss_component in self.loss_components.items()
         }
 
-    def set_loss_component_params(self, loss_component_params: dict[str, dict]):
+    def set_loss_component_params(
+        self, loss_component_params: dict[str, dict]
+    ) -> None:
+        """Update each named component from its parameter dict."""
         for k, kwarg in loss_component_params.items():
             assert (
                 k in self.loss_components
