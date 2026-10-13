@@ -388,11 +388,41 @@ def test_tests_and_fork_only_paths_are_not_examined(repo, capsys, path):
     assert "0 unit(s) checked" in out
 
 
-def test_rename_counts_as_new_code(repo, capsys):
+def test_a_file_moved_unchanged_is_not_new_code(repo, capsys):
     run(["git", "mv", "pkg/mod.py", "pkg/moved.py"], repo.root)
     code, out = repo.check("import pkg.moved\n", capsys=capsys)
-    assert "pkg/moved.py::classify" in out
+    assert code == 0
+    assert "0 unit(s) checked" in out
+
+
+def test_a_function_moved_to_another_file_is_not_new_code(repo, capsys):
+    repo.write("pkg/mod.py", CLASSIFY)
+    repo.write("pkg/other.py", IDENT)
+    code, out = repo.check("import pkg.other\n", capsys=capsys)
+    assert code == 0
+    assert "0 unit(s) checked" in out
+
+
+def test_a_function_moved_and_edited_is_new_code(repo, capsys):
+    repo.write("pkg/mod.py", CLASSIFY)
+    repo.write("pkg/other.py", "def ident(x):\n    return x + 0\n")
+    code, out = repo.check("import pkg.other\n", capsys=capsys)
+    assert "pkg/other.py::ident" in out
+    assert "pkg/mod.py" not in out
+
+
+def test_a_copy_of_a_function_that_stays_is_new_code(repo, capsys):
+    repo.write("pkg/other.py", IDENT)
+    code, out = repo.check("import pkg.other\n", capsys=capsys)
+    assert "pkg/other.py::ident" in out
     assert code == 1
+
+
+def test_a_moved_function_that_is_also_renamed_is_new_code(repo, capsys):
+    repo.write("pkg/mod.py", CLASSIFY)
+    repo.write("pkg/other.py", "def same(x):\n    return x\n")
+    code, out = repo.check("import pkg.other\n", capsys=capsys)
+    assert "pkg/other.py::same" in out
 
 
 def test_format_line_shape():

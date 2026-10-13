@@ -21,6 +21,10 @@ statements are not units and are never gated.
 A unit counts as touched when it is new, or when the AST of its own code differs from the
 base, ignoring comments, docstrings and annotations (the normalised mode of
 ``ast_manifest.py``), so comment-only, docstring-only and annotation-only edits are exempt.
+A new unit that is a **move** is not touched: its fingerprint equals that of a unit which
+left a file of the same diff (the file is deleted, or no longer has that unit), so moving
+code between files without changing it does not ask for its coverage again. A moved unit
+that is edited, or a copy of a unit that stays where it was, is new code.
 Only ``.py`` files outside the fork-only prefixes and outside ``tests/`` are examined.
 ``--unit`` checks the named units whatever the diff says (used to gate a fixed list).
 
@@ -206,6 +210,27 @@ def _diff_files(root: Path, base: str) -> list[str]:
     return sorted(n for n in names if not n.startswith(EXCLUDED_PREFIXES))
 
 
+def vanished_fingerprints(root: Path, base: str) -> set[str]:
+    """Fingerprints of the units that left a file of the diff: the code a move carries elsewhere."""
+    out = _git(
+        ["diff", "--name-only", "--no-renames", "--diff-filter=MD", base, "--", "*.py"],
+        root,
+    )
+    gone: set[str] = set()
+    for path in sorted(n for n in out.splitlines() if not n.startswith(EXCLUDED_PREFIXES)):
+        old_source = _base_source(root, base, path)
+        if old_source is None:
+            continue
+        try:
+            now = units_of((root / path).read_text(encoding="utf-8"))
+        except OSError:
+            now = {}
+        except SyntaxError:
+            continue  # collect reports a file that does not parse
+        gone |= {u.fingerprint for name, u in units_of(old_source).items() if name not in now}
+    return gone
+
+
 def _base_source(root: Path, base: str, path: str) -> str | None:
     """Source of ``path`` at ``base``, or None when the file does not exist there."""
     try:
@@ -237,6 +262,7 @@ def collect(
         path, _, qualname = spec.partition("::")
         wanted.setdefault(path, []).append(qualname)
     paths = sorted(wanted) if units else _diff_files(root, base)
+    moved = set() if units else vanished_fingerprints(root, base)
     for path in paths:
         try:
             new = units_of((root / path).read_text(encoding="utf-8"))
@@ -251,7 +277,7 @@ def collect(
         else:
             old_source = _base_source(root, base, path)
             old = units_of(old_source) if old_source is not None else None
-            chosen = touched_units(old, new)
+            chosen = [u for u in touched_units(old, new) if u.fingerprint not in moved]
         cover = _lookup(files, root, path)
         results += [unit_coverage(path, u, cover) for u in chosen]
     return results, problems
