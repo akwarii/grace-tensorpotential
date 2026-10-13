@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod
-from typing import Any, Dict, Union, Protocol
+from typing import Any, Protocol
 
 import numpy as np
 from tensorpotential import _tf_options  # noqa: F401
@@ -45,7 +45,7 @@ class TPCallback(tf.keras.callbacks.Callback):
     def model(self):
         return self.model
 
-    def on_train_begin(self, logs: Dict | None = None) -> None:
+    def on_train_begin(self, logs: dict | None = None) -> None:
         if self.warmup_steps > self.model.step:
             lr_0 = self.initial_lr if self._is_warmup() else self.warmup_target
             self.model.optimizer.learning_rate.assign(lr_0)
@@ -140,7 +140,7 @@ class CustomReduceLROnPlateau(tf.keras.callbacks.ReduceLROnPlateau):
             return bool(current > best + self.min_delta)
         return bool(current < best - self.min_delta)
 
-    def on_epoch_end(self, epoch: int, logs: Dict | None = None):
+    def on_epoch_end(self, epoch: int, logs: dict | None = None):
         logs = logs or {}
         current = logs.get(self.monitor)
         current_lr = self.model.optimizer.learning_rate.numpy()
@@ -304,7 +304,7 @@ class LRSchedulerFactory:
     LINEAR_DECAY_FIELD: str = "linear_decay"
     REDUCE_ON_PLATEAU_FIELD: str = "reduce_on_plateau"
 
-    DEFAULT_VALUES: Dict[str, Any] = {
+    DEFAULT_VALUES: dict[str, Any] = {
         # shared by all shedulers
         "maxiter": 500,
         "minimum_learning_rate": 1e-4,
@@ -326,9 +326,9 @@ class LRSchedulerFactory:
     def create_lr_scheduler(
         model: TensorPotential,
         n_batches: int,
-        fit_config: Dict,
+        fit_config: dict,
         distr_strategy: tf.distribute.Strategy,
-    ) -> Union[OnEpochEndProtocol, OnBatchEndProtocol, None]:
+    ) -> OnEpochEndProtocol | OnBatchEndProtocol | None:
         num_replicas = distr_strategy.num_replicas_in_sync
         n_batches = n_batches // num_replicas
 
@@ -363,7 +363,7 @@ class LRSchedulerFactory:
         )
 
     @staticmethod
-    def if_lr_scheduler(fit_config: Dict) -> bool:
+    def if_lr_scheduler(fit_config: dict) -> bool:
         cls = LRSchedulerFactory
         if (
             cls.LR_SCHEDULER_FIELD in fit_config
@@ -378,7 +378,7 @@ class LRSchedulerFactory:
         )
 
     @staticmethod
-    def read_legacy_reduce_on_plateau_kwargs(fit_config: Dict) -> Dict[str, Any]:
+    def read_legacy_reduce_on_plateau_kwargs(fit_config: dict) -> dict[str, Any]:
         kwargs = dict()
         cls = LRSchedulerFactory
         lr_red_params = fit_config[cls.LEGACY_LR_REDUCER_FIELD]
@@ -405,7 +405,7 @@ class LRSchedulerFactory:
         return kwargs
 
     @staticmethod
-    def read_reduce_on_plateau_kwargs(fit_config: Dict) -> Dict[str, Any]:
+    def read_reduce_on_plateau_kwargs(fit_config: dict) -> dict[str, Any]:
         kwargs = dict()
         cls = LRSchedulerFactory
 
@@ -438,7 +438,7 @@ class LRSchedulerFactory:
         return kwargs
 
     @staticmethod
-    def read_decay_kwargs(fit_config: Dict, n_batches: int) -> Dict[str, Any]:
+    def read_decay_kwargs(fit_config: dict, n_batches: int) -> dict[str, Any]:
         kwargs = dict()
 
         cls = LRSchedulerFactory

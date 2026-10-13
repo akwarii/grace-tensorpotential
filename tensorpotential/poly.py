@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Union, Dict, Tuple, List
 
 import numpy as np
 
@@ -34,8 +33,8 @@ def _simplify_polynomial(monomials):
 class Monomial:
     def __init__(
         self,
-        coefficient: Union[int, float],
-        variables: Union[Dict[str, int], Tuple, str] | None = None,
+        coefficient: int | float,
+        variables: dict[str, int] | tuple | str | None = None,
     ):
         self.coefficient = coefficient
 
@@ -60,8 +59,8 @@ class Monomial:
         )
 
     def __add__(
-        self, other: Union["Monomial", "Polynomial"]
-    ) -> Union["Monomial", "Polynomial", float]:
+        self, other: "Monomial" | "Polynomial"
+    ) -> "Monomial" | "Polynomial" | float:
         if isinstance(other, Monomial):
             if self.variables_tuple == other.variables_tuple:
                 coefficient_sum = self.coefficient + other.coefficient
@@ -112,7 +111,7 @@ class Monomial:
 
 
 class Polynomial:
-    def __init__(self, monomials: List[Monomial]):
+    def __init__(self, monomials: list[Monomial]):
         # simplify list of monomials
         self.monomials = _simplify_polynomial(monomials)
 

@@ -8,7 +8,8 @@ with contextlib.suppress(ImportError):
 
 with contextlib.suppress(ImportError):
     import tensorpotential.extra.gen_tensor.model  # noqa: F401
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 
 def get_preset(name: str) -> Callable:
