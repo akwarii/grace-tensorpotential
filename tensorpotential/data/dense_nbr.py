@@ -63,8 +63,8 @@ def reorder_bonds_for_reshape(bond_arrays, perm, dummy_values):
     the bond-vector dummy beyond the cutoff so the envelope zeros its contribution.
     """
     out = {}
-    for k, arr in bond_arrays.items():
-        arr = np.asarray(arr)
+    for k, raw in bond_arrays.items():
+        arr = np.asarray(raw)
         dummy = np.full((1,) + arr.shape[1:], dummy_values[k], dtype=arr.dtype)
         out[k] = np.concatenate([arr, dummy], axis=0)[perm]
     return out
@@ -167,8 +167,8 @@ def pack_structures_elastic(nat, width_per_struct, batch_size, slot_budget):
     nat = np.asarray(nat)
     width_per_struct = np.asarray(width_per_struct)
     out = []
-    for w in np.unique(width_per_struct):
-        w = int(w)
+    for raw_width in np.unique(width_per_struct):
+        w = int(raw_width)
         sel = np.where(width_per_struct == w)[0]
         order = sel[np.argsort(nat[sel], kind="stable")]
         cur, cur_nat = [], 0

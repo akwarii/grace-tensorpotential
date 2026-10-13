@@ -157,13 +157,11 @@ def recursive_walk_and_modify(obj, callback):
     if isinstance(obj, list):
         for k, v in enumerate(obj):
             callback(k, v, obj)  # Pass the list for in-place modification
-            v = obj[k]
-            recursive_walk_and_modify(v, callback)
+            recursive_walk_and_modify(obj[k], callback)
     elif isinstance(obj, dict):
         for k, v in obj.items():  # Create a copy to avoid modification errors
             callback(k, v, obj)
-            v = obj[k]
-            recursive_walk_and_modify(v, callback)
+            recursive_walk_and_modify(obj[k], callback)
     else:
         pass  # No need to modify other data types
 

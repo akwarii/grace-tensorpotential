@@ -950,8 +950,8 @@ class MLPRadialFunction_v2(TPInstruction, LORAInstructionMixin):
 
     def frwrd(self, input_data, training=False, local=False):
         basis = input_data[self.basis_name]
-        for act, layer in zip(self.activation, self.layers):
-            act = ACTIVATION_DICT[act]
+        for act_name, layer in zip(self.activation, self.layers):
+            act = ACTIVATION_DICT[act_name]
             basis = act(layer(basis))
         y = self.layers[-1](basis)
 
