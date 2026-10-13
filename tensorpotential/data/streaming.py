@@ -576,7 +576,8 @@ class StreamingDatasetWrapper:
                 self._total_atoms: int | None = int(df["ase_atoms"].apply(len).sum())
             else:
                 self._total_atoms = None
-        except Exception:
+        except (TypeError, ValueError) as err:
+            log.debug("no atom count estimate, entries of ase_atoms have no length: %r", err)
             self._total_atoms = None
 
         # Estimated batch count; updated after first full epoch
@@ -648,7 +649,7 @@ class StreamingDatasetWrapper:
                 try:
                     for item in structure_generator():
                         q.put(item)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - any failure of the producer thread is handed to the consumer, which re-raises it
                     q.put(exc)
                 finally:
                     q.put(_SENTINEL)

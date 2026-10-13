@@ -503,7 +503,7 @@ class TensorPotential:
 
                     communicated_keys = infer_communicated_keys(self.model.instructions)
                     logging.info(f"Auto-detected communicated_keys={communicated_keys}")
-                except Exception as e:
+                except ValueError as e:
                     logging.warning(f"Could not auto-detect communicated_keys: {e}")
 
             if has_custom_compute:

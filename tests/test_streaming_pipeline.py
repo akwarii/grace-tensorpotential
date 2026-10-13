@@ -439,3 +439,12 @@ class TestFailuresOfTheStreamingWrapper:
         wrapper = StreamingDatasetWrapper(train_df, [Broken()], config, shuffle=False)
         with pytest.raises(ValueError, match="builder failed"):
             list(wrapper)
+
+    def test_an_unexpected_error_while_counting_atoms_is_not_hidden(self, data_builders):
+        class Odd:
+            def __len__(self):
+                raise RuntimeError("not a length error")
+
+        frame = pd.DataFrame({"ase_atoms": [Odd()]})
+        with pytest.raises(RuntimeError, match="not a length"):
+            StreamingDatasetWrapper(frame, data_builders, StreamingConfig(), shuffle=False)

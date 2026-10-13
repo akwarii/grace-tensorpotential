@@ -180,3 +180,19 @@ def test_atomic_shift_map_reaches_the_exported_yaml_as_E0(tmp_path):  # noqa: N8
     )
     close(pot["E0"], [-2.0, 3.25, 7.5])
     close(pot["scale"], 0.5)
+
+
+class Broken:
+    """A value whose ``numpy`` conversion fails for a reason other than being a plain number."""
+
+    def numpy(self):
+        raise RuntimeError("the tensor is gone")
+
+
+@pytest.mark.parametrize("field", ["scale", "atomic_shift_map"])
+def test_a_failing_tensor_conversion_is_not_taken_for_a_plain_value(field):
+    ins = shift_target(scale=2.5, atomic_shift_map={0: 1.0})
+    ins.constant_shift = 0.0
+    setattr(ins, field, Broken())
+    with pytest.raises(RuntimeError, match="gone"):
+        extract_const_shift_scale({NAME: ins})
