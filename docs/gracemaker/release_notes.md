@@ -1,5 +1,14 @@
 # Release notes
 
+## Importing the package no longer configures logging
+
+Importing a library module (`tensorpotential.data.datasets`, the weighting and plotting modules, the training modules of `tensorpotential.cli`) used to call `logging.basicConfig`, so a program that
+merely imported them had its root logger reconfigured. The console commands (`gracemaker`, `grace_utils`, `grace_collect`, `grace_predict`, `extxyz2df`, `df2extxyz`) now configure it themselves when they run, with the same format and level. A script
+that imports these modules and relied on that side effect should call `logging.basicConfig` itself; `grace_uq build` now logs in its own format (`LEVEL: message`) instead of the one the datasets module had set.
+
+The code that lived in `tensorpotential/cli/data.py`, `scripts/_kokkos_export.py` and in `scripts/grace_preprocess.py` and `scripts/grace_utils.py` is now in `tensorpotential/data/datasets.py`, `export_kokkos.py`,
+`data/preprocess.py` and `model_ops.py`; the old import paths keep working.
+
 ## Model files are checked on load
 
 A `model.yaml` and a downloaded model archive are untrusted input, and they are now treated so.
