@@ -17,8 +17,7 @@
    "PLR0913": 3,
    "PLR0915": 2,
    "RET504": 1,
-   "RUF012": 1,
-   "SIM108": 1
+   "RUF012": 1
   },
   "tensorpotential/calculator/bulk.py": {
    "C901": 1,
@@ -38,8 +37,7 @@
    "PTH118": 10,
    "PTH119": 2,
    "PTH120": 1,
-   "PTH123": 4,
-   "RET504": 1
+   "PTH123": 4
   },
   "tensorpotential/cli/gracemaker.py": {
    "C901": 1,
@@ -203,16 +201,13 @@
    "PLR0912": 1,
    "PLR0913": 4,
    "PLR0915": 1,
-   "RET504": 1,
    "RET505": 1,
-   "SIM105": 1,
    "SIM117": 1
   },
   "tensorpotential/data/dataset_plotter.py": {
-   "B007": 1,
    "BLE001": 1,
    "PLR0913": 2,
-   "RET505": 2
+   "RET505": 1
   },
   "tensorpotential/data/datasets.py": {
    "B905": 2,
@@ -227,15 +222,13 @@
    "PTH123": 1,
    "PTH202": 1,
    "PTH207": 2,
-   "RET504": 5,
+   "RET504": 3,
    "RET506": 2,
-   "S301": 1,
-   "SIM102": 1
+   "S301": 1
   },
   "tensorpotential/data/dense_nbr.py": {
    "C901": 1,
-   "PLR0913": 2,
-   "PLW2901": 2
+   "PLR0913": 2
   },
   "tensorpotential/data/preprocess.py": {
    "PTH103": 2,
@@ -244,14 +237,12 @@
    "PTH120": 1,
    "PTH123": 2,
    "RET503": 1,
-   "RET504": 5,
-   "RET505": 1,
+   "RET504": 1,
    "S301": 2
   },
   "tensorpotential/data/process_df.py": {
    "B007": 1,
-   "B905": 1,
-   "RET504": 1
+   "B905": 1
   },
   "tensorpotential/data/shards.py": {
    "PTH112": 1,
@@ -265,7 +256,7 @@
    "PLR0913": 1,
    "PLR0915": 2,
    "PLW2901": 2,
-   "RET505": 2,
+   "RET505": 1,
    "RET506": 1
   },
   "tensorpotential/data/tpatoms.py": {
@@ -276,19 +267,16 @@
    "NPY002": 6,
    "PLR0912": 1,
    "PLR0913": 1,
-   "PLR0915": 1,
-   "SIM108": 1
+   "PLR0915": 1
   },
   "tensorpotential/export.py": {
-   "B007": 3,
    "B905": 1,
    "BLE001": 2,
    "C901": 1,
    "PLR0912": 1,
    "PLR0915": 1,
    "PLW0127": 1,
-   "PTH123": 1,
-   "RET505": 1
+   "PTH123": 1
   },
   "tensorpotential/export_kokkos.py": {
    "B007": 1,
@@ -302,7 +290,6 @@
    "PTH120": 1,
    "PTH123": 1,
    "RET504": 1,
-   "SIM102": 1,
    "SIM118": 1,
    "SIM300": 1
   },
@@ -315,8 +302,7 @@
    "SIM108": 1
   },
   "tensorpotential/extra/gen_tensor/loss.py": {
-   "RUF012": 1,
-   "SIM108": 1
+   "RUF012": 1
   },
   "tensorpotential/extra/gen_tensor/metrics.py": {
    "RUF012": 1
@@ -336,7 +322,6 @@
    "PLR0912": 1,
    "PLR0915": 2,
    "PTH123": 1,
-   "RET505": 1,
    "S301": 2
   },
   "tensorpotential/extra/presets.py": {
@@ -349,83 +334,65 @@
    "PLR0912": 2,
    "PLR0913": 2,
    "PLR0915": 2,
-   "RET504": 3,
-   "RET505": 1,
+   "RET504": 1,
    "RET507": 3,
    "SIM102": 1,
-   "SIM108": 1,
-   "SIM118": 4,
+   "SIM118": 2,
    "SIM300": 2
   },
   "tensorpotential/functions/lora.py": {
    "RET503": 1,
-   "RET505": 2
+   "RET505": 1
   },
   "tensorpotential/functions/nn.py": {
    "B905": 1,
    "ERA001": 1,
    "PLR0913": 4,
-   "PLW0127": 1,
-   "SIM102": 1
+   "PLW0127": 1
   },
   "tensorpotential/functions/radial.py": {
    "PLR0913": 1,
-   "RET504": 1,
-   "RET505": 1
-  },
-  "tensorpotential/functions/spherical_harmonics.py": {
-   "RET504": 1,
-   "RET505": 1
+   "RET504": 1
   },
   "tensorpotential/instructions/base.py": {
    "B028": 1,
    "B905": 2,
    "PLW0602": 1,
    "PLW0603": 4,
-   "PLW2901": 2,
    "PTH123": 2,
    "RET503": 1,
-   "RET504": 2,
    "RET505": 1,
    "SIM102": 1
   },
   "tensorpotential/instructions/compute.py": {
-   "B007": 6,
    "B905": 11,
    "C901": 9,
    "ERA001": 8,
    "PLR0912": 8,
    "PLR0913": 17,
    "PLR0915": 5,
-   "PLW2901": 1,
    "RET503": 1,
-   "RET504": 9,
-   "RET505": 5,
    "RUF012": 22,
-   "SIM108": 2
+   "SIM108": 1
   },
   "tensorpotential/instructions/instruction_graph_utils.py": {
    "C901": 2,
    "RET504": 1,
-   "SIM118": 2
+   "SIM118": 1
   },
   "tensorpotential/instructions/output.py": {
    "B905": 2,
    "PLR0913": 5,
-   "RET504": 2,
-   "RET505": 1,
    "RUF012": 6
   },
   "tensorpotential/loss.py": {
    "ERA001": 9,
    "PLR0913": 4,
-   "RET504": 1,
    "RUF012": 19
   },
   "tensorpotential/metadata_utils.py": {
    "PTH110": 2,
    "PTH123": 1,
-   "RET505": 2,
    "SIM910": 1
   },
   "tensorpotential/metrics.py": {
@@ -433,7 +400,6 @@
    "RUF012": 5
   },
   "tensorpotential/model_ops.py": {
-   "B007": 3,
    "C901": 1,
    "SIM101": 1
   },
@@ -441,11 +407,7 @@
    "B905": 2,
    "PLW1641": 2,
    "RET503": 2,
-   "RET504": 1,
-   "RET505": 4
-  },
-  "tensorpotential/potentials/__init__.py": {
-   "SIM105": 2
+   "RET505": 3
   },
   "tensorpotential/potentials/presets.py": {
    "C901": 3,
@@ -528,7 +490,6 @@
    "PTH123": 1
   },
   "tensorpotential/tensorpot.py": {
-   "B007": 1,
    "B905": 3,
    "BLE001": 1,
    "C901": 3,
@@ -539,11 +500,9 @@
    "PTH118": 8,
    "PTH119": 1,
    "PTH120": 8,
-   "RET504": 2,
    "RUF012": 1
   },
   "tensorpotential/tpmodel.py": {
-   "B007": 3,
    "B027": 2,
    "B905": 4,
    "C901": 1,
@@ -554,17 +513,13 @@
    "PTH118": 3,
    "PTH123": 3,
    "RET503": 1,
-   "RET504": 7,
-   "RET505": 1,
-   "RUF012": 12,
-   "SIM102": 1,
-   "SIM118": 1
+   "RUF012": 12
   },
   "tensorpotential/uq/artifact_builder.py": {
    "B007": 1,
    "C901": 1,
    "PLR0915": 2,
-   "PLW2901": 9,
+   "PLW2901": 4,
    "PTH100": 1,
    "PTH105": 1,
    "PTH107": 1,
@@ -574,8 +529,7 @@
    "PTH120": 1,
    "PTH123": 1,
    "SIM102": 1,
-   "SIM105": 1,
-   "SIM401": 4
+   "SIM105": 1
   },
   "tensorpotential/uq/cli/_common.py": {
    "C901": 2,
@@ -682,7 +636,6 @@
    "PLR0913": 1
   },
   "tensorpotential/utils.py": {
-   "B007": 3,
    "BLE001": 1,
    "C901": 1,
    "PLR0913": 2,
@@ -690,9 +643,7 @@
    "PTH118": 4,
    "PTH123": 1,
    "PTH204": 1,
-   "RET504": 1,
-   "RUF012": 6,
-   "SIM102": 1
+   "RUF012": 6
   },
   "tests/MoNbTaW-CUSTOM/model.py": {
    "PLR0913": 1,
