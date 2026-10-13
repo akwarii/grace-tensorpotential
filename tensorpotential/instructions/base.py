@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 
 from enum import Enum
 from typing import (
+    Callable,
     Iterable,
     Literal,
     Set,
@@ -53,7 +54,14 @@ class InstructionManager:
         global _instruction_manager
         _instruction_manager = None
 
-    def register(self, instruction: TPInstruction):
+    def register(self, instruction: TPInstruction) -> None:
+        """Add ``instruction`` under its name.
+
+        Raises
+        ------
+        RuntimeError
+            An instruction with the same name is already registered.
+        """
         if instruction.name in self.instruction_dict:
             raise RuntimeError(
                 f"Instruction name {instruction.name} already used by {self.instruction_dict[instruction.name]}"
@@ -61,6 +69,7 @@ class InstructionManager:
         self.instruction_dict[instruction.name] = instruction
 
     def get_instructions(self) -> dict[str, TPInstruction]:
+        """Return the registered instructions as a ``{name: instruction}`` dict, in creation order."""
         return self.instruction_dict
 
 
@@ -89,14 +98,15 @@ def active_dense_nbr() -> bool:
     return bool(getattr(_instruction_manager, "dense_nbr", False))
 
 
-def class_to_str(cls):
+def class_to_str(cls: type) -> str:
+    """Return the dotted path ``module.QualName`` of a class."""
     return cls.__module__ + "." + cls.__qualname__
 
 
 _DOTTED_PATH = re.compile(r"[A-Za-z_]\w*(\.[A-Za-z_]\w*)+")
 
 
-def str_to_class(class_name, base=None):
+def str_to_class(class_name: str | None, base: type | None = None) -> Any:
     """Resolve a dotted path ``package.module.Name`` to the object it names.
 
     The path comes from a ``model.yaml`` (or an ``input.yaml``), which may be downloaded, so it is
@@ -142,7 +152,9 @@ def str_to_class(class_name, base=None):
     return resolved
 
 
-def recursive_walk_and_modify(obj, callback):
+def recursive_walk_and_modify(
+    obj: Any, callback: Callable[[Any, Any, Any], None]
+) -> None:
     """
     Recursively walks over lists and dictionaries, modifying elements in-place based on a callback function.
 
@@ -168,7 +180,13 @@ def recursive_walk_and_modify(obj, callback):
         pass  # No need to modify other data types
 
 
-def replace_TPInstruction_to_name(k, v, container):
+def replace_TPInstruction_to_name(k: Any, v: Any, container: Any) -> None:
+    """Callback of ``recursive_walk_and_modify`` that makes ``container[k]`` serializable.
+
+    A ``TPInstruction`` becomes ``{"_instruction_": True, "name": ...}``, dicts and sequences
+    become plain ``dict`` / ``list``, numpy scalars become ``float`` / ``int``; any other value that is
+    not a builtin scalar (or ``None``) is left as it is and a warning is issued.
+    """
     if isinstance(v, TPInstruction):
         container[k] = {"_instruction_": True, "name": v.name}
     elif isinstance(v, dict):
@@ -273,8 +291,8 @@ def _build_metadata(param_dtype=None) -> dict:
 def save_instructions_dict(
     filename: str,
     instructions_list_or_dict: list[TPInstruction] | dict[str, TPInstruction],
-    param_dtype=None,
-):
+    param_dtype: tf.DType | None = None,
+) -> None:
     """
     Save instructions to YAML with a top-level wrapper:
         metadata: {param_dtype, tensorpotential_version, saved_at}
@@ -321,8 +339,11 @@ def _extract_instructions_data(data) -> tuple[list | dict, bool]:
     return data, True
 
 
-def load_instructions(filename: str):
-    """Load serialized instructions from YAML (either as list or dict of instructions)"""
+def load_instructions(filename: str) -> Any:
+    """Load serialized instructions from YAML (either as list or dict of instructions).
+
+    Returns a ``list`` of instructions for the oldest list format, otherwise a ``{name: instruction}`` dict.
+    """
     with open(filename, "rt") as f:
         raw = yaml.safe_load(f)
 
@@ -372,14 +393,19 @@ class TPInstruction(tf.Module, ABC):
             _instruction_manager.register(self)
 
     @abstractmethod
-    def frwrd(self, input_data: dict, training: bool = False, local: bool = False):
+    def frwrd(
+        self, input_data: dict, training: bool = False, local: bool = False
+    ) -> Any:
+        """Compute the output of this instruction from ``input_data`` (outputs of the earlier instructions and inputs)."""
         pass
 
     @abstractmethod
-    def build(self, float_dtype):
+    def build(self, float_dtype: tf.DType) -> None:
+        """Create the variables and constant tables of the instruction in ``float_dtype``."""
         pass
 
     def get_variables_info(self) -> dict:
+        """Return ``{"instruction": name, <variable name>: <shape as a list>, ...}`` for the trainable variables."""
         info = {}
         info["instruction"] = self.name
         for var in self.trainable_variables:
@@ -400,6 +426,7 @@ class TPInstruction(tf.Module, ABC):
 
     @classmethod
     def get_instruction_type(cls) -> str:
+        """Return the instruction type tag of the class (``_INSTRUCTION_TYPE``)."""
         return cls._INSTRUCTION_TYPE
 
     @tf.Module.with_name_scope
@@ -416,6 +443,7 @@ class TPInstruction(tf.Module, ABC):
     def summary(
         self, verbose: summary_verbose_type, shown_vars: Set[str] | None = None
     ) -> str:
+        """Return a printable summary of the instruction (see ``InstructionPrinter.get_summary``)."""
         return InstructionPrinter.get_summary(self, verbose, shown_vars)
 
     def __repr__(self):
@@ -432,13 +460,15 @@ class LORAInstructionMixin(ABC):
             self.lora_config = lora_config
 
     @abstractmethod
-    def enable_lora_adaptation(self, lora_config: dict[str, Any]):
+    def enable_lora_adaptation(self, lora_config: dict[str, Any]) -> None:
+        """Switch LoRA adaptation on with ``lora_config`` and record it in the init arguments."""
         self.lora_config = lora_config
         self.lora = True
         self._init_args["lora_config"] = lora_config
 
     @abstractmethod
-    def finalize_lora_update(self):
+    def finalize_lora_update(self) -> None:
+        """Switch LoRA adaptation off and drop ``lora_config`` from the init arguments."""
         # common part
         self.lora = False
         self.lora_config = None
@@ -448,18 +478,25 @@ class LORAInstructionMixin(ABC):
 
 class ElementsReduceInstructionMixin(ABC):
     @abstractmethod
-    def prepare_variables_for_selected_elements(self, index_to_select):
+    def prepare_variables_for_selected_elements(
+        self, index_to_select: Any
+    ) -> dict[str, tf.Variable] | None:
+        """Return new variables restricted to the elements ``index_to_select`` (``None`` if nothing depends on the element)."""
         raise NotImplementedError()
 
     @abstractmethod
-    def upd_init_args_new_elements(self, new_element_map):
+    def upd_init_args_new_elements(self, new_element_map: Any) -> None:
+        """Update the recorded init arguments for the element map ``new_element_map``."""
         raise NotImplementedError()
 
 
 class PerElementReduceMixin(ElementsReduceInstructionMixin):
     """Element selection for the instructions that keep ``reducing_<name>`` weights per central atom type."""
 
-    def prepare_variables_for_selected_elements(self, index_to_select):
+    def prepare_variables_for_selected_elements(
+        self, index_to_select: Any
+    ) -> dict[str, tf.Variable] | None:
+        """Gather the ``reducing_*`` weights at ``index_to_select``; ``None`` unless central-atom-type dependent."""
         if self.is_central_atom_type_dependent:
             reducing_tensor_names = [s for s in dir(self) if s.startswith("reducing_")]
             new_tensors = {}
@@ -474,7 +511,8 @@ class SimplifyingReduceMixin(PerElementReduceMixin):
     """``simplify=True`` support of the reducers that collect from coupling instructions (``self.instructions``,
     ``self.ls_max``, ``self.allowed_l_p``)."""
 
-    def simplify_collected_tensors(self):
+    def simplify_collected_tensors(self) -> None:
+        """Walk the symbols of all collected functions (``get_symbol``) for the ``simplify=True`` option."""
         collector_dict = {}
 
         A_ins_dict = {ins.name: ins for ins in self.instructions}
@@ -487,7 +525,8 @@ class SimplifyingReduceMixin(PerElementReduceMixin):
             for ind in col_index:
                 get_symbol(instr.name, ind, A_ins_dict)
 
-    def drop_unused(self):
+    def drop_unused(self) -> None:
+        """Find duplicate or zero symbols in the coupling tables and re-initialize the couplings without their histories."""
         ZERO = Polynomial([Monomial(0)])
         incl_hist_list = []
         excl_hist_list = []
@@ -528,7 +567,7 @@ class TPEquivariantInstruction(TPInstruction):
         self,
         lmax,
         coupling_meta_data: pd.DataFrame = None,
-        coupling_origin: list[str, str] | None = None,
+        coupling_origin: list[str] | None = None,
         name="TPEquivariantInstruction",
     ):
         super().__init__(name=name)
@@ -537,14 +576,24 @@ class TPEquivariantInstruction(TPInstruction):
         self.coupling_origin = coupling_origin
 
     @abstractmethod
-    def build(self, float_dtype):
+    def build(self, float_dtype: tf.DType) -> None:
+        """Create the variables and constant tables of the instruction in ``float_dtype``."""
         pass
 
     @abstractmethod
-    def frwrd(self, input_data: dict, training: bool = False, local: bool = False):
+    def frwrd(
+        self, input_data: dict, training: bool = False, local: bool = False
+    ) -> Any:
+        """Compute the output of this instruction from ``input_data`` (outputs of the earlier instructions and inputs)."""
         pass
 
-    def init_uncoupled_meta_data(self, l_p_init_list: list[list] | None = None):
+    def init_uncoupled_meta_data(
+        self, l_p_init_list: list[list] | None = None
+    ) -> pd.DataFrame:
+        """Build the table of uncoupled functions: one row per ``(l, m)`` of each ``[l, parity]`` in ``l_p_init_list``.
+
+        Defaults to ``l = 0..lmax`` with parity ``(-1)**l``.
+        """
         if l_p_init_list is None:
             l_p_init_list = [
                 [l, 1 if l % 2 == 0 else -1]
@@ -562,6 +611,7 @@ class TPEquivariantInstruction(TPInstruction):
     def collect_functions_from_meta_data(
         coupling_meta_data: pd.DataFrame, max_l: int, l_p_list: list[list] | None = None
     ) -> dict:
+        """Static version of ``collect_functions`` that works on ``coupling_meta_data`` given as argument."""
         if l_p_list is None:
             plist = []
             for l in range(max_l + 1):  # noqa: E741
@@ -570,7 +620,9 @@ class TPEquivariantInstruction(TPInstruction):
         else:
             plist = l_p_list
 
-        ind_d = coupling_meta_data.groupby(["parity", "l", "hist"]).indices
+        ind_d: dict[Any, np.ndarray] = coupling_meta_data.groupby(
+            ["parity", "l", "hist"]
+        ).indices
 
         func_ids = [
             v
@@ -614,7 +666,9 @@ class TPEquivariantInstruction(TPInstruction):
         else:
             plist = l_p_list
 
-        ind_d = self.coupling_meta_data.groupby(["parity", "l", "hist"]).indices
+        ind_d: dict[Any, np.ndarray] = self.coupling_meta_data.groupby(
+            ["parity", "l", "hist"]
+        ).indices
 
         # TODO: this list is empty sometimes, for a given instruction and restricted [l, p].
         #  Need to treat it properly below, but more importantly in the full context of the collector.
@@ -643,7 +697,7 @@ class TPEquivariantInstruction(TPInstruction):
 
         return collect_d
 
-    def select_functions(self, selected_l: int, selected_p: -1 | 1) -> dict:
+    def select_functions(self, selected_l: int, selected_p: Literal[-1, 1]) -> dict:
         """
         Finds functions in the current tensor that have l == selected_l
         and p == selected_p
@@ -653,7 +707,9 @@ class TPEquivariantInstruction(TPInstruction):
         :return: selection maps
         """
 
-        ind_d = self.coupling_meta_data.groupby(["parity", "l", "hist"]).indices
+        ind_d: dict[Any, np.ndarray] = self.coupling_meta_data.groupby(
+            ["parity", "l", "hist"]
+        ).indices
 
         func_ids = [
             v
@@ -687,6 +743,8 @@ class InstructionPrinter:
         verbose: summary_verbose_type = 0,
         shown_vars: Set[str] | None = None,
     ) -> str:
+        """Return the instruction line plus the table of its new trainable variables and, for
+        ``verbose`` 1 and 2, the coupling tables."""
         res_str = InstructionPrinter.repr_instruction(instruction, verbose)
         res_str += InstructionPrinter.repr_var_info(instruction, shown_vars)
 
@@ -708,6 +766,7 @@ class InstructionPrinter:
 
     @staticmethod
     def is_instruction_list(obj: ListWrapper) -> bool:
+        """Return True for a non-empty TF ``ListWrapper`` whose first item is a ``TPInstruction``."""
         return (
             isinstance(obj, ListWrapper)
             and len(obj) > 0
@@ -716,13 +775,15 @@ class InstructionPrinter:
 
     @staticmethod
     def is_list_of_lists(obj: ListWrapper) -> bool:
+        """Return True for a non-empty TF ``ListWrapper`` whose first item is a ``list``."""
         # pycharm says lw-type should be Iterable instead of ListWrapper, but it's mistaken. Probably because it's tf type
         return (
             isinstance(obj, ListWrapper) and len(obj) > 0 and isinstance(obj[0], list)
         )
 
     @staticmethod
-    def repr_instruction(instruction: TPInstruction, verbose: int):
+    def repr_instruction(instruction: TPInstruction, verbose: int) -> str:
+        """Return ``name = ClassName`` and, for ``verbose`` > 0, the recorded init arguments."""
         res_str = f"{instruction.name} = {instruction.__class__.__name__}"
         if verbose == 0:
             return res_str
@@ -749,10 +810,12 @@ class InstructionPrinter:
 
     @staticmethod
     def repr_instruction_list(obj: Iterable[TPInstruction]) -> str:
+        """Return the list of ``name:ClassName`` strings of the instructions as a string."""
         return str([f"{ins.name}:{ins.__class__.__name__}" for ins in obj])
 
     @staticmethod
     def repr_coupling_df(df: pd.DataFrame, table_name: str) -> str:
+        """Return the table ``df`` indented under the heading ``table_name``."""
         table_str = f"\n\n\t{table_name}:\n\t"
         table_str += "-" * len(table_name) + "\n\t"
         table_str += "\n\t".join(df.to_string().split("\n"))
@@ -760,11 +823,13 @@ class InstructionPrinter:
         return table_str
 
     @staticmethod
-    def repr_list_of_lists(obj: ListWrapper[Iterable[int]]) -> str:
+    def repr_list_of_lists(obj: ListWrapper) -> str:
+        """Return a ``ListWrapper`` of integer sequences as a plain list of lists, as a string."""
         return str([list(inner) for inner in obj])
 
     @staticmethod
     def repr_list_wrapper(obj: ListWrapper) -> str:
+        """Return a ``ListWrapper`` of instructions, of lists, or of anything else, as a string."""
         if InstructionPrinter.is_instruction_list(obj):
             return f"{InstructionPrinter.repr_instruction_list(obj)}"
         if InstructionPrinter.is_list_of_lists(obj):
@@ -775,6 +840,12 @@ class InstructionPrinter:
     def repr_var_info(
         instruction: TPInstruction, vars_counter: Dict[str, int] | None = None
     ) -> str:
+        """Return the table of the trainable variables of ``instruction`` not yet in ``vars_counter``.
+
+        ``vars_counter`` maps ``name=shape`` to the parameter count and is updated in place; the
+        result is empty when no new parameter is listed.
+        """
+
         def hash_var_item(k: str, v: List[int]) -> str:
             return f"{k}={v}"
 
@@ -822,8 +893,9 @@ class InstructionPrinter:
 
     @staticmethod
     def _groupby_and_count_Aterms(df: pd.DataFrame) -> pd.DataFrame:
+        # groupby(...).size() is a Series (reset_index(name=...) is valid); ty types it as a DataFrame
         return (
-            df.query("m==0").groupby(["l", "parity"]).size().reset_index(name="count")
+            df.query("m==0").groupby(["l", "parity"]).size().reset_index(name="count")  # ty: ignore[no-matching-overload]
         )
 
 
@@ -834,6 +906,7 @@ class ParityType(Enum):
 
     @classmethod
     def get_parity_type(cls, parity: List[Tuple[int, int]]) -> "ParityType":
+        """Classify a list of ``(l, parity)`` pairs as real, pseudo or unknown parity."""
         parity_ar = np.array(parity)
 
         l_values = parity_ar[:, 0]
