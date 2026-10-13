@@ -109,7 +109,7 @@ def test_collapse_shifts_captures_non_unit_scale_and_pre_scales_upstream_shifts(
     contributions of `TrainableShiftTarget` instructions that sit upstream
     of the scaling instruction (since the live model would apply scale to
     them). Shifts downstream stay unscaled."""
-    from tensorpotential.scripts._kokkos_export import _collapse_shifts
+    from tensorpotential.export_kokkos import _collapse_shifts
 
     class CreateOutputTarget:
         def __init__(self, name):

@@ -393,7 +393,7 @@ def export_model(args):
 def export_kokkos(args):
     """Export GRACE-1L/2L weights to .npz for the LAMMPS Kokkos pair styles."""
     from tensorpotential.instructions.base import load_instructions
-    from tensorpotential.scripts._kokkos_export import (
+    from tensorpotential.export_kokkos import (
         export_1l_npz,
         export_2l_npz,
         export_3l_npz,
