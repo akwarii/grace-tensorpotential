@@ -2554,9 +2554,7 @@ def real_coupling_metainformation(
     )
 
     # TODO: check if sorting influences on  perf
-    cdf = cdf.sort_values(["l", "parity", "hist", "m"]).reset_index(drop=True)
-
-    return cdf
+    return cdf.sort_values(["l", "parity", "hist", "m"]).reset_index(drop=True)
 
 
 def c2r_harm_matrix(l):  # noqa: E741
@@ -2569,10 +2567,7 @@ def c2r_harm_matrix(l):  # noqa: E741
     for m in range(1, l + 1):
         C[m + l, l + abs(m)] = (-1) ** m / sq2
         C[m + l, l - abs(m)] = 1.0j * (-1) ** m / sq2
-    C = (-1.0j) ** l * C
-    return C
-
-
+    return (-1.0j) ** l * C
 
 
 @lru_cache(maxsize=None)

@@ -52,8 +52,7 @@ def get_output_dir(seed=42):
     :param seed:
     :return:  folder name
     """
-    path = os.path.join("seed", f"{seed}")
-    return path
+    return os.path.join("seed", f"{seed}")
 
 
 class TensorPotential:
@@ -664,8 +663,7 @@ class TensorPotential:
 
     # @tf.function
     def predict(self, input_data, training: bool = False):
-        model_prediction = self.model(input_data, training=training)
-        return model_prediction
+        return self.model(input_data, training=training)
 
     def reduce_dict(self, d: dict):  # on root node
         """reduce items in dictionary d"""

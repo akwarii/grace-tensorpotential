@@ -411,9 +411,7 @@ class RadialBasis(TPInstruction):
     @tf.Module.with_name_scope
     def frwrd(self, input_data: dict, training=False, local=False):
         r = input_data[self.input_name]
-        basis = self.basis_function(r)  # * self.norm
-
-        return basis
+        return self.basis_function(r)  # * self.norm
 
 
 @capture_init_args
@@ -666,9 +664,7 @@ class LinearRadialFunction(TPInstruction):
 
         crad = tf.cast(self.crad, dtype=basis.dtype)
         y = tf.einsum("nlk,ak->anl", crad, basis)
-        y_l = tf.gather(y, self.l_tile, axis=-1)
-
-        return y_l
+        return tf.gather(y, self.l_tile, axis=-1)
 
 
 @capture_init_args
@@ -820,8 +816,7 @@ class MLPRadialFunction(TPInstruction, LORAInstructionMixin):
             y = y * inv * gamma
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        y_l = tf.gather(y, self.l_tile, axis=-1)
-        return y_l
+        return tf.gather(y, self.l_tile, axis=-1)
 
 
 @capture_init_args
@@ -975,8 +970,7 @@ class MLPRadialFunction_v2(TPInstruction, LORAInstructionMixin):
             y *= embedding
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        y_l = tf.gather(y, self.l_tile, axis=-1)
-        return y_l
+        return tf.gather(y, self.l_tile, axis=-1)
 
 
 @capture_init_args
@@ -1848,16 +1842,14 @@ class SPBF(TPEquivariantInstruction):
         r_rescale = 2.0 * (1.0 - tf.abs(1.0 - r / rc)) - 1.0
         # Clamp to [-1, 1] so padded bonds (r >> rc) don't blow up Chebyshev
         r_rescale = tf.clip_by_value(r_rescale, -1.0, 1.0)
-        basis = chebvander(r_rescale, self.n_rad_basis + 1, kind=1)[:, 1:]
-        return basis
+        return chebvander(r_rescale, self.n_rad_basis + 1, kind=1)[:, 1:]
 
     def _compute_envelope(self, r):
         """Polynomial cutoff envelope, zeroed for r >= rc."""
         rc = tf.cast(self.rc, r.dtype)
         env = cutoff_func_p_order_poly(r / rc, self.p)
         # Hard zero for bonds beyond cutoff (padding safety)
-        env = tf.where(r < rc, env, tf.zeros_like(env))
-        return env
+        return tf.where(r < rc, env, tf.zeros_like(env))
 
     def _mlp_forward(self, basis, z_i, z_j):
         """MLP: [n_bonds, n_rad_basis + 2*emb] -> [n_bonds, n_rad_max, (lmax+1)^2]."""
@@ -1869,8 +1861,7 @@ class SPBF(TPEquivariantInstruction):
         # [n_bonds, n_rad_max * (lmax+1)] -> [n_bonds, n_rad_max, lmax+1]
         x = tf.reshape(x, [-1, self.n_rad_max, self._lmax + 1])
         # Gather by l: [n_bonds, n_rad_max, (lmax+1)^2]
-        x = tf.gather(x, self.l_tile, axis=-1)
-        return x
+        return tf.gather(x, self.l_tile, axis=-1)
 
     def frwrd(self, input_data: dict, training=False, local=False):
         # Bond distances
@@ -3424,10 +3415,7 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
             shp = tf.shape(A)
             A = tf.reshape(A, [-1, shp[1] * shp[2]])
             collection += [A]
-        basis = tf.concat(collection, axis=1)
-
-
-        return basis
+        return tf.concat(collection, axis=1)
 
     def prepare_variables_for_selected_elements(self, index_to_select):
         if self.is_central_atom_type_dependent:
@@ -4711,9 +4699,8 @@ class ZBLPotential(TPInstruction, ElementsReduceInstructionMixin):
             e_at, segment_ids=ind_i, num_segments=batch_tot_nat
         )
 
-        energy = tf.reshape(self.K / 2 * energy, [-1, 1, 1])
+        return tf.reshape(self.K / 2 * energy, [-1, 1, 1])
 
-        return energy
 
     def prepare_variables_for_selected_elements(self, index_to_select):
         raise NotImplementedError()

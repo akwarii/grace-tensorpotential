@@ -28,9 +28,7 @@ def _simplify_polynomial(monomials):
         if not np.allclose(coeff, 0)
     ]
 
-    simplified_monomials = sorted(simplified_monomials, key=lambda m: m.variables_tuple)
-
-    return simplified_monomials
+    return sorted(simplified_monomials, key=lambda m: m.variables_tuple)
 
 
 class Monomial:

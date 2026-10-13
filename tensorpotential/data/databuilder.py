@@ -215,8 +215,7 @@ def _split_rows(df, n):
 def split_batches_into_buckets(batches_df, max_n_buckets):
     # dynamic bucket splitting, where split boundary is determined based on increase of nneigh
     # Assumes batches_df is already sorted
-    buckets_list = _split_rows(batches_df, max_n_buckets)  # naive static splitting
-    return buckets_list
+    return _split_rows(batches_df, max_n_buckets)  # naive static splitting
 
 
 def _struct_max_neigh(data_dict):

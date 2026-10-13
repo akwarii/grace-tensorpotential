@@ -192,8 +192,7 @@ def compute_batch_virials_from_pair_forces(pair_f, input_data):
     )
 
     # order: xx,yy,zz, xy,xz,yz
-    virial = tf.concat([virial_012, virial_3, virial_4, virial_5], axis=1)
-    return virial
+    return tf.concat([virial_012, virial_3, virial_4, virial_5], axis=1)
 
 
 def compute_structure_virials_from_pair_forces(pair_f, input_data):
@@ -221,8 +220,7 @@ def compute_structure_virials_from_pair_forces(pair_f, input_data):
             1,
         ],
     )
-    virial = tf.concat([virial_012, virial_3, virial_4, virial_5], axis=0)
-    return virial
+    return tf.concat([virial_012, virial_3, virial_4, virial_5], axis=0)
 
 
 class TrainFunction(ABC):
@@ -512,9 +510,7 @@ def extract_basis_functions(
         )
         b = tf.reshape(b, (-1, b.shape[1] * b.shape[2]))
         basis.append(b)
-    basis = tf.concat(basis, axis=-1)
-
-    return basis
+    return tf.concat(basis, axis=-1)
 
 
 class ExtractBasisFunctions(ComputeFunction):
@@ -710,8 +706,7 @@ class ComputeBlockOutputGradient(ComputeFunction):
                 converted_grads.append(g)
         grads = converted_grads
 
-        res = {f"grad_{k}": g for k, g in zip(self.wrt_keys, grads)}
-        return res
+        return {f"grad_{k}": g for k, g in zip(self.wrt_keys, grads)}
 
 
 def to_instructions_list(instructions):
@@ -853,9 +848,7 @@ class TPModel(tf.Module):
             self.count_coefs += tf.shape(v)[0]
             self.slices.append(self.count_coefs)
             flat_val += [v]
-        flat_vars = tf.concat(flat_val, axis=0)
-
-        return flat_vars
+        return tf.concat(flat_val, axis=0)
 
     def set_flat_trainable_variables(self, flat_vars):
         for i, var in enumerate(self.variables_to_train):
@@ -1073,17 +1066,13 @@ class TPModel(tf.Module):
     def compute(self, input_data: dict) -> dict[str, tf.Tensor]:
         copy_data = input_data.copy()
 
-        output = self.compute_function(self.instructions, copy_data, training=False)
-
-        return output
+        return self.compute_function(self.instructions, copy_data, training=False)
 
     @tf.Module.with_name_scope
     def __call__(self, input_data, training: bool = False):
         copy_data = input_data.copy()
 
-        output = self.train_function(self.instructions, copy_data, training)
-
-        return output
+        return self.train_function(self.instructions, copy_data, training)
 
     def export_to_yaml(self, filename):
         export_to_yaml(self.instructions, filename)

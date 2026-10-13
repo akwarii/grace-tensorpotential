@@ -196,9 +196,7 @@ class FSOut2ScalarTarget(TPOutputInstruction):
         nx = 1.0 / mexp
         xoff = tf.pow(nx, (nx / (1.0 - nx))) * exprho
         yoff = tf.pow(nx, (1 / (1.0 - nx))) * exprho
-        func = tf.where(mask, rho, tf.sign(rho) * (tf.pow(xoff + arho, mexp) - yoff))
-
-        return func
+        return tf.where(mask, rho, tf.sign(rho) * (tf.pow(xoff + arho, mexp) - yoff))
 
     def frwrd(self, input_data, training=False, local=False):
         target = input_data[f"{self.target.name}"]
@@ -602,8 +600,7 @@ class LinMLPScalarReadOut(TPOutputInstruction):
             x = layer(x, at_mu_i) if self.element_dependent else layer(x)
             x = ACTIVATION_DICT[act_name](x)
         last = layers[-1]
-        x = last(x, at_mu_i) if self.element_dependent else last(x)
-        return x
+        return last(x, at_mu_i) if self.element_dependent else last(x)
 
     def frwrd(self, input_data, training=False, local=False):
         target = input_data[self.target.name]

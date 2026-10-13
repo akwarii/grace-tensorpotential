@@ -114,11 +114,9 @@ def compute_batches_df(dataset, batch_size, strategy=EQUI_STRUCTURE_STRATEGY):
         {"n_atoms": "sum", "n_neighbours": "sum", "n_structures": "sum"}
     )
 
-    batches_df = batches_df.sort_values(
+    return batches_df.sort_values(
         ["n_neighbours", "n_atoms", "n_structures"], ascending=False
     ).reset_index(drop=True)
-
-    return batches_df
 
 
 def get_batch_list(iterator, batch_size, strategy=EQUI_STRUCTURE_STRATEGY, **kwargs):
@@ -168,12 +166,11 @@ def get_equi_batch_list(iterator, batch_size, key="batch_tot_nat_real", **kwargs
 
 # @tf.function(jit_compile=False)
 def get_batch_stat_tf(batch):
-    stat_dict = {
+    return {
         "n_structures": batch["batch_total_num_structures"],
         "n_atoms": batch["batch_tot_nat_real"],
         "n_neighbours": batch["n_neigh"],
     }
-    return stat_dict
 
 
 # @tf.function  # (jit_compile=False)
@@ -183,8 +180,7 @@ def get_bound_for_batch(batch, padding_bounds):
     cond = np.all(padding_bounds >= tf_stats, axis=1)
     ind = np.where(cond)
     ind = ind[0][0]
-    bound = padding_bounds[ind]
-    return bound
+    return padding_bounds[ind]
 
 
 def dataframe_iterrows_generator(
@@ -376,5 +372,4 @@ def get_databuilders(
         float_dtype=precision,
         stress_units=args_parse.stress_units,
     )
-    databuilders_list = [geom_db, ref_db]
-    return databuilders_list
+    return [geom_db, ref_db]

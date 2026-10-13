@@ -222,8 +222,7 @@ def check_weighting(train_df, test_df):
 
 def read_saved_dataset_stats(dataset_path):
     with open(os.path.join(dataset_path, "stats.json"), "r") as f:
-        stats = json.load(f)
-    return stats
+        return json.load(f)
 
 
 def compute_saved_dataset_num_of_batches(dataset_paths):
@@ -1343,10 +1342,9 @@ def load_and_prepare_datasets(
 
 
 def get_group_mapping_df(df):
-    gdf = df[
+    return df[
         [col for col in df.columns if col.startswith("group__")] + ["NUMBER_OF_ATOMS"]
     ]
-    return gdf
 
 
 def key_for_batch_dict(batch_dict):

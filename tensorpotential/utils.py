@@ -56,8 +56,7 @@ def is_chief(strategy) -> bool:
 def load_metrics(fname):
     """Load metrics from YAML file, written by gracemaker"""
     with open(fname, "r") as f:
-        df = pd.json_normalize(safe_load(f))
-    return df
+        return pd.json_normalize(safe_load(f))
 
 
 def load_fit(folder):
