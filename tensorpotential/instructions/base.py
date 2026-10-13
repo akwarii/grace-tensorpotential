@@ -620,13 +620,11 @@ class TPEquivariantInstruction(TPInstruction):
         else:
             plist = l_p_list
 
-        ind_d: dict[Any, np.ndarray] = coupling_meta_data.groupby(
-            ["parity", "l", "hist"]
-        ).indices
+        ind_d = coupling_meta_data.groupby(["parity", "l", "hist"]).indices
 
         func_ids = [
             v
-            for (p, l, *_), v in ind_d.items()  # noqa: E741
+            for (p, l, *_), v in ind_d.items()  # noqa: E741  # ty: ignore[not-iterable] pandas types the keys of a multi-column groupby as Hashable, they are tuples
             if l <= max_l and [l, p] in plist
         ]
 
@@ -666,16 +664,14 @@ class TPEquivariantInstruction(TPInstruction):
         else:
             plist = l_p_list
 
-        ind_d: dict[Any, np.ndarray] = self.coupling_meta_data.groupby(
-            ["parity", "l", "hist"]
-        ).indices
+        ind_d = self.coupling_meta_data.groupby(["parity", "l", "hist"]).indices
 
         # TODO: this list is empty sometimes, for a given instruction and restricted [l, p].
         #  Need to treat it properly below, but more importantly in the full context of the collector.
         #  For now, make sure the [l, p] list is not too restrictive.
         func_ids = [
             v
-            for (p, l, *_), v in ind_d.items()  # noqa: E741
+            for (p, l, *_), v in ind_d.items()  # noqa: E741  # ty: ignore[not-iterable] pandas types the keys of a multi-column groupby as Hashable, they are tuples
             if l <= max_l and [l, p] in plist
         ]
 
@@ -707,13 +703,11 @@ class TPEquivariantInstruction(TPInstruction):
         :return: selection maps
         """
 
-        ind_d: dict[Any, np.ndarray] = self.coupling_meta_data.groupby(
-            ["parity", "l", "hist"]
-        ).indices
+        ind_d = self.coupling_meta_data.groupby(["parity", "l", "hist"]).indices
 
         func_ids = [
             v
-            for (p, l, *_), v in ind_d.items()  # noqa: E741
+            for (p, l, *_), v in ind_d.items()  # noqa: E741  # ty: ignore[not-iterable] pandas types the keys of a multi-column groupby as Hashable, they are tuples
             if l == selected_l and p == selected_p
         ]
 
