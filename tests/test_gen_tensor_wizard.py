@@ -1189,12 +1189,10 @@ DEFAULT_ANSWERS = (
 
 def run_wizard(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(SystemExit) as stop:
-        gen_wizard.run_gen_tensor_wizard()
-    assert stop.value.code == 0
+    assert gen_wizard.run_gen_tensor_wizard() is None  # returns; the caller ends the process
 
 
-def test_the_wizard_writes_input_yaml_from_the_answers_and_exits_0(typed, monkeypatch, tmp_path, capsys):
+def test_the_wizard_writes_input_yaml_from_the_answers_and_returns(typed, monkeypatch, tmp_path, capsys):
     typed(*DEFAULT_ANSWERS, "", "no")  # confirm the review, skip the verification
     run_wizard(monkeypatch, tmp_path)
     config = yaml.safe_load((tmp_path / "input.yaml").read_text())
@@ -1230,7 +1228,7 @@ def test_the_wizard_under_questionary_accepts_the_defaults_and_writes_the_file(a
     assert [c.value for c in looks_good[0][2]][0] == "ok"
 
 
-def test_an_interrupted_wizard_exits_0_without_writing_a_file(typed, monkeypatch, tmp_path, capsys):
+def test_an_interrupted_wizard_returns_without_writing_a_file(typed, monkeypatch, tmp_path, capsys):
     typed("train.pkl.gz", KeyboardInterrupt())
     run_wizard(monkeypatch, tmp_path)
     assert "Interrupted. Exiting." in capsys.readouterr().out
@@ -1334,3 +1332,28 @@ def test_a_generated_dataset_that_cannot_be_saved_is_reported(monkeypatch, tmp_p
     monkeypatch.setattr(gen_wizard, "_generate_tensor_property_interactive", lambda df, s: generated)
     _verify_one_df(frame, str(tmp_path / "train.pckl.gz"), _make_state([2]), label="train")
     assert "Could not save:" in capsys.readouterr().out
+
+
+def test_unexpected_errors_in_the_checks_are_not_reported_as_data_problems(monkeypatch, tmp_path):
+    class Odd:
+        def __array__(self, *args, **kwargs):
+            raise RuntimeError("not a data problem")
+
+    frame = pd.DataFrame([{"ase_atoms": _atoms(4), "tensor_property": Odd()}])
+    with pytest.raises(RuntimeError, match="data problem"):
+        _check_tensor_shapes(frame, _make_state([2]))
+    with pytest.raises(RuntimeError, match="data problem"):
+        gen_wizard._detect_source_shape(frame, "tensor_property")
+
+    complete = pd.DataFrame([{"ase_atoms": _atoms(4), "energy": 0.0, "forces": np.zeros((4, 3))}])
+    generated = _df_with_tensor(_symmetric_traceless)
+    monkeypatch.setattr("tensorpotential.cli.prompts._ask_confirm", lambda *a, **k: True)
+    monkeypatch.setattr("tensorpotential.cli.prompts._ask_text", lambda *a, **k: str(tmp_path / "out.pckl.gz"))
+    monkeypatch.setattr(gen_wizard, "_generate_tensor_property_interactive", lambda df, s: generated)
+
+    def broken(self, *args, **kwargs):
+        raise RuntimeError("not a write error")
+
+    monkeypatch.setattr(pd.DataFrame, "to_pickle", broken)
+    with pytest.raises(RuntimeError, match="write error"):
+        _verify_one_df(complete, str(tmp_path / "train.pckl.gz"), _make_state([2]), label="train")
