@@ -23,7 +23,8 @@ import logging
 import queue
 import threading
 from dataclasses import dataclass
-from typing import Any, Iterator, List, Optional
+from typing import Any
+from collections.abc import Iterator
 
 import numpy as np
 from tensorpotential import _tf_options  # noqa: F401
@@ -519,7 +520,7 @@ class StreamingConfig:
     outlier_strategy: str = "expand"
     """How to handle batches exceeding all buckets: ``"expand"``, ``"warn_skip"``, ``"error"``."""
 
-    initial_buckets: Optional[list[dict]] = None
+    initial_buckets: list[dict] | None = None
     """Pre-seed buckets from a previous run to avoid first-epoch recompilations."""
 
     verbose: bool = False
@@ -547,7 +548,7 @@ class StreamingDatasetWrapper:
     def __init__(
         self,
         df,
-        data_builders: List[AbstractDataBuilder],
+        data_builders: list[AbstractDataBuilder],
         config: StreamingConfig,
         shuffle: bool = True,
         seed: int = 42,

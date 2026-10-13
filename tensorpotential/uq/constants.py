@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Final, Tuple
+from typing import Final
 
 # Model outputs
 FEATURES: Final[str] = "features"
@@ -24,7 +24,7 @@ UQ_MODE_TO_SIGNATURE: Final[dict] = {
 
 # Standard UQ output keys exposed via TPCalculator.extra_properties.
 # ATOMIC_GAMMA is included only when GMM thresholds are available.
-UQ_EXTRA_KEYS: Final[Tuple[str, ...]] = (
+UQ_EXTRA_KEYS: Final[tuple[str, ...]] = (
     ATOMIC_SIGMA,
     TOTAL_SIGMA,
     DSIGMA_DR,
@@ -34,7 +34,7 @@ UQ_EXTRA_KEYS: Final[Tuple[str, ...]] = (
     GMM_CLUSTER,
 )
 # Subset that should be sliced down to nreal_atoms when truncating.
-UQ_TRUNCATE_KEYS: Final[Tuple[str, ...]] = (
+UQ_TRUNCATE_KEYS: Final[tuple[str, ...]] = (
     ATOMIC_SIGMA,
     DSIGMA_DR,
     FEATURES,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List, Tuple, Optional
+from typing import TYPE_CHECKING
 from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
 
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from tensorpotential.instructions.base import TPInstruction
 
 
-def get_dependencies(instruction: TPInstruction) -> List[str]:
+def get_dependencies(instruction: TPInstruction) -> list[str]:
     """
     Extract instruction names that a given instruction depends on by inspecting _init_args.
     """
@@ -38,8 +38,8 @@ def get_dependencies(instruction: TPInstruction) -> List[str]:
 
 
 def build_dependency_graph(
-    instructions: Dict[str, TPInstruction],
-) -> Dict[str, List[str]]:
+    instructions: dict[str, TPInstruction],
+) -> dict[str, list[str]]:
     """
     Build a complete dependency graph mapping each instruction name to its dependencies.
     """
@@ -47,8 +47,8 @@ def build_dependency_graph(
 
 
 def print_dependency_tree(
-    instructions: Dict[str, TPInstruction],
-    root: Optional[str] = None,
+    instructions: dict[str, TPInstruction],
+    root: str | None = None,
     max_depth: int = 10,
 ) -> str:
     """
@@ -94,10 +94,10 @@ def print_dependency_tree(
 
 
 def get_communication_keys(
-    layer1_instr: Dict[str, TPInstruction],
-    layer2_instr: Dict[str, TPInstruction],
-    recompute_instructions: Optional[List[str]] = None,
-) -> List[str]:
+    layer1_instr: dict[str, TPInstruction],
+    layer2_instr: dict[str, TPInstruction],
+    recompute_instructions: list[str] | None = None,
+) -> list[str]:
     """
     Identify which outputs from Layer 1 are used as inputs in Layer 2.
     Instructions that are present in both layers are considered recomputed and not communicated.
@@ -118,8 +118,8 @@ def get_communication_keys(
 
 
 def split_2layer_instructions(
-    instructions: Dict[str, TPInstruction], communicated_keys: List[str]
-) -> Tuple[Dict[str, TPInstruction], Dict[str, TPInstruction]]:
+    instructions: dict[str, TPInstruction], communicated_keys: list[str]
+) -> tuple[dict[str, TPInstruction], dict[str, TPInstruction]]:
     """
     Split instruction dict into layer 1 and layer 2 based on provided communicated keys.
     Returns:
@@ -172,8 +172,8 @@ def split_2layer_instructions(
 
 
 def find_non_local_keys(
-    instructions: Dict[str, TPInstruction],
-    communicated_keys: List[str],
+    instructions: dict[str, TPInstruction],
+    communicated_keys: list[str],
     non_local_instruction_marker: str = "Y",
 ):
     dep_graph = build_dependency_graph(instructions)
@@ -200,7 +200,7 @@ def find_non_local_keys(
     return non_local_keys
 
 
-def infer_communicated_keys(instructions: Dict[str, TPInstruction]) -> List[str]:
+def infer_communicated_keys(instructions: dict[str, TPInstruction]) -> list[str]:
     """Auto-detect communicated_keys for 2L models from the instruction graph."""
     from tensorpotential.instructions.compute import (
         SingleParticleBasisFunctionEquivariantInd,
@@ -281,8 +281,8 @@ def infer_communicated_keys(instructions: Dict[str, TPInstruction]) -> List[str]
 
 
 def build_split_tpmodel(
-    instructions: Dict[str, TPInstruction],
-    communicated_keys: List[str],
+    instructions: dict[str, TPInstruction],
+    communicated_keys: list[str],
     input_signature_float_dtype: tf.dtypes.DType = tf.float64,
     param_dtype: tf.dtypes.DType = tf.float32,
     jit_compile: bool = True,
