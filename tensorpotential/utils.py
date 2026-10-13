@@ -18,6 +18,9 @@ from yaml import YAMLError, safe_load
 from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.dtypes import float32, float64, DType
 from tensorpotential.metadata_utils import get_dtype_by_name
+from tensorpotential.core.messages import get_messages_logger
+
+messages = get_messages_logger()
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -190,7 +193,7 @@ def plot_many_fits(fits, k="rmse/f_comp", plot_test=True, plot_train=False):
         list_of_fits, key=lambda fd: fd["test"][k].min(), reverse=True
     )
     for f in list_of_fits:
-        print(f["name"])
+        messages.info(f["name"])
         plot_fit(f, k=k, plot_test=plot_test, plot_train=plot_train)
 
 
@@ -228,17 +231,17 @@ def update_fit_metrics(fit_dict, folders, wait_time_seconds=3600, rerun=False):
             current_time = time.time()
             pass_time = current_time - last_timestamp
             if pass_time > wait_time_seconds:
-                print(
+                messages.info(
                     f"{f} - no update for {int(pass_time//3600)}h:{int((pass_time % 3600)//60)}m:{int((pass_time % 3600) % 60)}s, mark as finished"
                 )
                 res["finished"] = True
                 continue
         try:
             fd = load_fit(f)
-            print(f"{f}: {len(fd['test'])} epochs")
+            messages.info(f"{f}: {len(fd['test'])} epochs")
             fit_dict[f] = fd
         except (OSError, YAMLError, ValueError) as e:
-            print("Error:", e)
+            messages.warning("Error: %s", e)
 
 
 def get_common_prefix(names, align_folder=True):

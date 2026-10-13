@@ -47,6 +47,8 @@ from tensorpotential.potentials.presets import (
 from tests.shared_models import weights_fingerprint
 from tests.tolerances import COVARIANCE_F64, FINITE_DIFFERENCE_F64
 
+pytestmark = pytest.mark.usefixtures("shown_messages")
+
 ELEMENTS = {"Al": 0, "Li": 1}
 RCUT = 4.0
 
@@ -250,13 +252,14 @@ def test_element_map_follows_the_model(default_one_layer):
 def test_cutoff_of_the_model_wins_over_the_keyword_and_says_so(capsys, default_one_layer):
     calc = TPCalculator(model=default_one_layer, cutoff=7.5)
     assert calc.cutoff == RCUT
-    assert "different from calculator's 7.5" in capsys.readouterr().out
+    assert "different from calculator's 7.5" in capsys.readouterr().err
 
 
 def test_matching_cutoff_keyword_is_silent(capsys, default_one_layer):
     calc = TPCalculator(model=default_one_layer, cutoff=RCUT)
     assert calc.cutoff == RCUT
-    assert capsys.readouterr().out == ""
+    captured = capsys.readouterr()
+    assert captured.out == captured.err == ""
 
 
 def test_dense_model_uses_the_dense_engine_and_a_dense_padding_manager():
@@ -426,7 +429,7 @@ def test_a_zero_cutoff_in_the_metadata_falls_back_to_the_keyword(tmp_path, capsy
     )
     calc = TPCalculator(model=str(copy), cutoff=5.5)
     assert calc.cutoff == 5.5
-    assert "Couldn't extract cutoff value from the model" in capsys.readouterr().out
+    assert "Couldn't extract cutoff value from the model" in capsys.readouterr().err
 
 
 def test_dual_engine_saved_model_switches_engine_with_the_mode(tmp_path):

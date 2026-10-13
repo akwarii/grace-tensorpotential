@@ -102,3 +102,13 @@ def cu_two_layer():
     shared = CuTwoLayerModels()
     yield shared.get
     assert not shared.changed(), "a test changed a shared Cu 2-layer model"
+
+
+@pytest.fixture
+def shown_messages():
+    """Show the messages of the library as the command-line tools do (bare text on stdout and stderr), then undo it."""
+    from tensorpotential.core.messages import hide_messages, show_messages
+
+    show_messages()
+    yield
+    hide_messages()

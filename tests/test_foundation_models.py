@@ -21,6 +21,8 @@ import requests
 
 from tensorpotential.calculator import foundation_models as fm
 
+pytestmark = pytest.mark.usefixtures("shown_messages")
+
 MODEL_NAME = "Toy-Model"
 URL = "https://example.org/resolve/model-v9/models/Toy-Model-model.tar.gz"
 CHECKPOINT_URL = (
@@ -421,7 +423,7 @@ def test_a_persistent_network_error_is_reported_after_every_retry(
     ):
         fm._stream_download("https://x/f", str(tmp_path / "f"))
     assert len(fake.calls) == fm.DOWNLOAD_RETRIES
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert (
         "download attempt 1/3 failed (reset); retrying" in out
         and "download attempt 2/3 failed" in out

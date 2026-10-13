@@ -48,6 +48,8 @@ from tensorpotential.utils import (
 from tests.tolerances import FLOAT64_ARITHMETIC
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
+pytestmark = pytest.mark.usefixtures("shown_messages")
+
 
 class RecordingLog:
     """The two methods of a logger that ``get_param_dtype_from_config`` calls, remembering the arguments."""
@@ -511,7 +513,7 @@ def test_a_folder_that_cannot_be_read_is_reported_and_leaves_the_dictionary_alon
     fits: dict = {}
     update_fit_metrics(fits, [str(tmp_path / "missing")])
     assert fits == {}
-    assert capsys.readouterr().out.startswith("Error:")
+    assert capsys.readouterr().err.startswith("Error:")
 
 
 def _fit_dict(tmp_path):

@@ -7,6 +7,7 @@ given, so that every branch of ``get_data`` and ``_record_and_maybe_adapt`` is r
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 import pytest
 
@@ -15,6 +16,8 @@ from tensorpotential.calculator.asecalculator import (
     AdaptivePaddingConfig,
     PaddingManager,
 )
+
+pytestmark = pytest.mark.usefixtures("shown_messages")
 
 
 class _StubBuilder:
@@ -33,14 +36,16 @@ class _StubBuilder:
             constants.N_NEIGHBORS_REAL: n_neighbors,
         }
 
-    def pad_batch(self, batch, max_dict):
+    def pad_batch(self, _batch, max_dict):
         self.padded_with.append(dict(max_dict))
 
 
 def _manager(verbose=0, **kwargs):
     builder = _StubBuilder()
     kwargs.setdefault("adaptive_padding", False)
-    return PaddingManager([builder], debug_padding_verbose=verbose, **kwargs), builder
+    return PaddingManager(
+        cast(Any, [builder]), debug_padding_verbose=verbose, **kwargs
+    ), builder
 
 
 def _bound(builder):
@@ -84,7 +89,7 @@ def test_without_padding_options_the_batch_is_not_padded():
 
 
 def test_an_excessive_bound_is_reduced_until_the_allowed_number_is_used_up():
-    manager, builder = _manager(
+    manager, _ = _manager(
         pad_atoms_number=10,
         pad_neighbors_fraction=0.5,
         max_number_reduction_recompilation=1,
@@ -154,7 +159,7 @@ def test_silent_by_default(capsys):
     assert captured.out == captured.err == ""
 
 
-def _adaptive(verbose=0, **config):
+def _adaptive(verbose: int = 0, **config: Any) -> PaddingManager:
     config = {"miss_rate_window": 2, "miss_rate_threshold": 0.5, **config}
     return _manager(
         verbose=verbose,

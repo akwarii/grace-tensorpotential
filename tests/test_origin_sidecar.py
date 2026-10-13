@@ -9,6 +9,8 @@ import pytest
 
 from tensorpotential.calculator import foundation_models as fm
 
+pytestmark = pytest.mark.usefixtures("shown_messages")
+
 V3 = "https://huggingface.co/x/y/resolve/model-v3-uq-v6/models/M-model.tar.gz"
 V5 = "https://huggingface.co/x/y/resolve/model-v5-uq-v6/models/M-model.tar.gz"
 
