@@ -2377,8 +2377,8 @@ def real_coupling_metainformation(
     coupled_dat = []
     visited_hist = set()
     # for all possible outer-product of A_l1(l1hist) and  B_l2(l2hist)
-    for l1, l1hist, p1, sum_l1 in A_g.keys():
-        for l2, l2hist, p2, sum_l2 in B_g.keys():
+    for l1, l1hist, p1, sum_l1 in A_g:
+        for l2, l2hist, p2, sum_l2 in B_g:
             parity = p1 * p2
 
             # Apply different filtering criteria

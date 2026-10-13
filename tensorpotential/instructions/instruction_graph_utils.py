@@ -148,7 +148,7 @@ def split_2layer_instructions(
     all_deps = set()
     for deps in graph.values():
         all_deps.update(deps)
-    possible_roots = [name for name in instructions.keys() if name not in all_deps]
+    possible_roots = [name for name in instructions if name not in all_deps]
 
     # We want everything that is NOT strictly needed ONLY for L1 and is needed for final output.
     # Actually, L2 should contain all instructions that use communicated_keys as input,

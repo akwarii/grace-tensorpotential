@@ -970,7 +970,7 @@ class TPModel(tf.Module):
         if self.aux_compute is not None:
             signatures.update(
                 # Use the underlying tf.functions, not the python wrappers
-                {name: self._aux_tf_funcs[name] for name in self.aux_compute.keys()}
+                {name: self._aux_tf_funcs[name] for name in self.aux_compute}
             )
 
         if gmm_uq_model is not None:
