@@ -54,8 +54,7 @@ def get_output_dir(seed: int = 42) -> str:
     :param seed:
     :return:  folder name
     """
-    path = os.path.join("seed", f"{seed}")
-    return path
+    return os.path.join("seed", f"{seed}")
 
 
 class TensorPotential:
@@ -706,7 +705,7 @@ class TensorPotential:
         metrics = self.compute_metrics(input_data, model_prediction)
 
         flat_grad = []
-        for i, gvar in enumerate(gradients):
+        for gvar in gradients:
             gv = tf.reshape(gvar, [-1])
             flat_grad += [gv]
         flat_grad = tf.concat(flat_grad, axis=0)
@@ -722,9 +721,7 @@ class TensorPotential:
 
     # @tf.function
     def predict(self, input_data: dict, training: bool = False) -> Any:
-        """Model prediction for a batch."""
-        model_prediction = self.model(input_data, training=training)
-        return model_prediction
+        return self.model(input_data, training=training)
 
     def reduce_dict(self, d: dict) -> None:  # on root node
         """reduce items in dictionary d"""

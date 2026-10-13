@@ -1,15 +1,13 @@
+import contextlib
+
 from .registry import REGISTERED_PRESETS
 from . import presets as presets
 
-try:
+with contextlib.suppress(ImportError):
     import tensorpotential.experimental.presets
-except ImportError:
-    pass
 
-try:
+with contextlib.suppress(ImportError):
     import tensorpotential.extra.gen_tensor.model  # noqa: F401
-except ImportError:
-    pass
 from typing import Any, Callable
 
 

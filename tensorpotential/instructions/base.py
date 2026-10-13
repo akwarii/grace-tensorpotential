@@ -163,13 +163,11 @@ def recursive_walk_and_modify(
     if isinstance(obj, list):
         for k, v in enumerate(obj):
             callback(k, v, obj)  # Pass the list for in-place modification
-            v = obj[k]
-            recursive_walk_and_modify(v, callback)
+            recursive_walk_and_modify(obj[k], callback)
     elif isinstance(obj, dict):
         for k, v in obj.items():  # Create a copy to avoid modification errors
             callback(k, v, obj)
-            v = obj[k]
-            recursive_walk_and_modify(v, callback)
+            recursive_walk_and_modify(obj[k], callback)
     else:
         pass  # No need to modify other data types
 
@@ -361,13 +359,11 @@ def load_instructions(filename: str) -> Any:
             raise e
 
     # convert to list
-    instructions = (
+    return (
         list(deserialized_instructions_dict.values())
         if is_list
         else deserialized_instructions_dict
     )
-
-    return instructions
 
 
 @capture_init_args
@@ -597,9 +593,7 @@ class TPEquivariantInstruction(TPInstruction):
         for l, p in l_p_init_list:  # noqa: E741
             for m in range(-l, l + 1):
                 meta.append([l, m, "", p, l])
-        meta_df = pd.DataFrame(meta, columns=["l", "m", "hist", "parity", "sum_of_ls"])
-
-        return meta_df
+        return pd.DataFrame(meta, columns=["l", "m", "hist", "parity", "sum_of_ls"])
 
     @staticmethod
     def collect_functions_from_meta_data(

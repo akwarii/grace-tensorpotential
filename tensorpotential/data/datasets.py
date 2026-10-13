@@ -173,9 +173,8 @@ def load_train_test_datasets(data_config, seed=None):
         if test_filename:
             log.info(f"Loading test data: {test_filename}")
             test_df = load_dataset(test_filename)
-            if test_size is not None:
-                if test_size > 1:
-                    test_df = test_df.sample(n=test_size, random_state=seed)
+            if test_size is not None and test_size > 1:
+                test_df = test_df.sample(n=test_size, random_state=seed)
             # run train data builder
         elif test_size is not None:
             log.info(f"Split test data from train dataset (fraction = {test_size})")
@@ -223,8 +222,7 @@ def check_weighting(train_df, test_df):
 
 def read_saved_dataset_stats(dataset_path):
     with open(os.path.join(dataset_path, "stats.json"), "r") as f:
-        stats = json.load(f)
-    return stats
+        return json.load(f)
 
 
 def compute_saved_dataset_num_of_batches(dataset_paths):
@@ -1344,10 +1342,9 @@ def load_and_prepare_datasets(
 
 
 def get_group_mapping_df(df):
-    gdf = df[
+    return df[
         [col for col in df.columns if col.startswith("group__")] + ["NUMBER_OF_ATOMS"]
     ]
-    return gdf
 
 
 def key_for_batch_dict(batch_dict):

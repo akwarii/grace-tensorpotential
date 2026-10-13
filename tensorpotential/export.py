@@ -57,8 +57,7 @@ def extract_const_shift_scale(fs_ins_dict):
             )
 
         return scale, constant_shift, atomic_shift_map
-    else:
-        return None
+    return None
 
 
 def export_to_yaml(
@@ -137,7 +136,7 @@ def export_to_yaml(
     mu0 = 0
 
     ls_b_funcs_list = []
-    for pol, name, ind in collected_polynomials:
+    for pol, _name, _ind in collected_polynomials:
 
         eml = [expand_monomial(mon) for mon in pol.monomials]
 
@@ -181,7 +180,7 @@ def export_to_yaml(
 
     functions_dict = {}
 
-    for el_ind, el in enumerate(elements):
+    for el_ind, _el in enumerate(elements):
         el_coeffs_list = [c[el_ind] for c in coeffs_list]
         functions_dict[el_ind] = []
 

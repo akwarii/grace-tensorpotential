@@ -889,10 +889,13 @@ def _promote_to_float64(all_weights):
             if v.dtype.kind == "f" and v.dtype != np.float64:
                 all_weights[k] = v.astype(np.float64)
                 promoted += 1
-        elif isinstance(v, np.generic):
-            if np.dtype(type(v)).kind == "f" and np.dtype(type(v)) != np.float64:
-                all_weights[k] = np.array(v, dtype=np.float64)
-                promoted += 1
+        elif (
+            isinstance(v, np.generic)
+            and np.dtype(type(v)).kind == "f"
+            and np.dtype(type(v)) != np.float64
+        ):
+            all_weights[k] = np.array(v, dtype=np.float64)
+            promoted += 1
     if promoted:
         logger.info(
             f"Promoted {promoted} float32 value(s) → float64 for Kokkos pair style"

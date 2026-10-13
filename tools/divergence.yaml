@@ -123,6 +123,11 @@
   milestone: [CLEAN2, QUAL1, DEPS1, CORE1]
   upstream: pending
 
+- path: tensorpotential/data/dense_nbr.py
+  reason: 'mechanical clean-up (loop variable no longer overwritten)'
+  milestone: [QUAL4]
+  upstream: pending
+
 - path: tensorpotential/data/process_df.py
   reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
   milestone: [CLEAN2, QUAL1]

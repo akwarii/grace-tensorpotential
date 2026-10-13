@@ -223,10 +223,10 @@ class GMMUQArtifactBuilder:
             else feature_iterator
         )
         _warned_missing: set[int] = set()
-        for features, element_indices, weights in it:
-            features = np.asarray(features, dtype=np.float64)
-            element_indices = np.asarray(element_indices, dtype=np.int32)
-            weights = np.asarray(weights, dtype=np.float64)
+        for raw_features, raw_indices, raw_weights in it:
+            features = np.asarray(raw_features, dtype=np.float64)
+            element_indices = np.asarray(raw_indices, dtype=np.int32)
+            weights = np.asarray(raw_weights, dtype=np.float64)
             # Unweighted-batch fast path: skip the per-cluster w·δ multiply
             # (saves a [n_k, D] temporary and one matmul per cluster). Safe to
             # mix with weighted batches because each batch's contribution to
@@ -236,8 +236,8 @@ class GMMUQArtifactBuilder:
                 self._weights_seen = True
             unique_elems = np.unique(element_indices)
 
-            for elem in unique_elems:
-                elem = int(elem)
+            for raw_elem in unique_elems:
+                elem = int(raw_elem)
                 mask = element_indices == elem
                 elem_feats = features[mask]
 
@@ -739,25 +739,23 @@ class GMMUQArtifactBuilder:
         GMMUQArtifactBuilder._validate_schema_version(data, path=path)
         elements = data["elements"]
         artifacts = {}
-        for elem in elements:
-            elem = int(elem)
+        for raw_elem in elements:
+            elem = int(raw_elem)
             counts = data[f"{uq_constants.COUNTS}_{elem}"]
             eff_key = f"{uq_constants.EFFECTIVE_COUNT}_{elem}"
-            eff = _default_eff_counts(counts, data[eff_key] if eff_key in data else None)
+            eff = _default_eff_counts(counts, data.get(eff_key))
             inv_cov_key = f"{uq_constants.INV_COV}_{elem}"
             entry = {
                 uq_constants.CENTROIDS: data[f"{uq_constants.CENTROIDS}_{elem}"],
-                uq_constants.INV_COV: data[inv_cov_key] if inv_cov_key in data else None,
+                uq_constants.INV_COV: data.get(inv_cov_key),
                 uq_constants.COUNTS: counts,
                 uq_constants.EFFECTIVE_COUNT: eff,
-                uq_constants.SCATTER: data[f"{uq_constants.SCATTER}_{elem}"]
-                if f"{uq_constants.SCATTER}_{elem}" in data
-                else None,
+                uq_constants.SCATTER: data.get(f"{uq_constants.SCATTER}_{elem}"),
             }
             # Covariance diagnostics (may be absent in older artifacts)
             for diag_key in (uq_constants.COND_NUMBER, uq_constants.EFFECTIVE_RANK, uq_constants.N_TRUNCATED):
                 key = f"{diag_key}_{elem}"
-                entry[diag_key] = data[key] if key in data else None
+                entry[diag_key] = data.get(key)
             artifacts[elem] = entry
         return artifacts
 

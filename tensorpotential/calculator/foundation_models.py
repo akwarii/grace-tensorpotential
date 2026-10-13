@@ -670,7 +670,7 @@ def grace_fm(
 
     model_path = get_or_download_model(model)
 
-    calc = TPCalculator(
+    return TPCalculator(
         model=model_path,
         pad_neighbors_fraction=pad_neighbors_fraction,
         pad_atoms_number=pad_atoms_number,
@@ -678,7 +678,6 @@ def grace_fm(
         min_dist=min_dist,
         **kwargs,
     )
-    return calc
 
 
 grace_fm.__doc__ = f"""

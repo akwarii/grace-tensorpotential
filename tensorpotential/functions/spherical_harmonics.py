@@ -111,9 +111,7 @@ class SphericalHarmonics(tf.Module):
                                 + self.blm[self.lm1d(l, m)] * plm[self.lm1d(l - 2, m)]
                             )
                         ]
-        plm = tf.stack(plm)
-
-        return plm
+        return tf.stack(plm)
 
     def compute_ylm_sqr(self, rhat):
         ylm_r, ylm_i = self._compute_sph_harm(rhat)
@@ -266,7 +264,6 @@ class SphericalHarmonics(tf.Module):
 
         if self.type == "real":
             return self._compute_rsh(rhat)
-        elif self.type == "complex":
+        if self.type == "complex":
             return self._compute_ylm(rhat)
-        else:
-            raise ValueError(f"Unknown type {self.type}")
+        raise ValueError(f"Unknown type {self.type}")

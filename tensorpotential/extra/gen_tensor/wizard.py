@@ -409,18 +409,18 @@ def _generate_tensor_property_interactive(df, s):
             if len(shape) == 2 and shape[1] == 3:
                 return "ok"
             return None
-        else:  # rank 2
-            if shape == (9,):
-                return "flat9_to_1x9" if per_structure else "flat9_to_Nx9"
-            if shape == (3, 3):
-                return "mat_to_1x9"
-            if len(shape) == 2 and shape[1] == 9:
-                return "ok"
-            if len(shape) == 3 and shape[1] == 3 and shape[2] == 3:
-                return "Nx3x3_to_Nx9"
-            if shape == (6,) or (len(shape) == 2 and shape[1] == 6):
-                return "voigt6"
-            return None
+        # rank 2
+        if shape == (9,):
+            return "flat9_to_1x9" if per_structure else "flat9_to_Nx9"
+        if shape == (3, 3):
+            return "mat_to_1x9"
+        if len(shape) == 2 and shape[1] == 9:
+            return "ok"
+        if len(shape) == 3 and shape[1] == 3 and shape[2] == 3:
+            return "Nx3x3_to_Nx9"
+        if shape == (6,) or (len(shape) == 2 and shape[1] == 6):
+            return "voigt6"
+        return None
 
     conv = _infer_conversion(shape, rank, s.per_structure)
 

@@ -58,8 +58,7 @@ def is_chief(strategy) -> bool:
 def load_metrics(fname):
     """Load metrics from YAML file, written by gracemaker"""
     with open(fname, "r") as f:
-        df = pd.json_normalize(safe_load(f))
-    return df
+        return pd.json_normalize(safe_load(f))
 
 
 def load_fit(folder):
@@ -298,7 +297,7 @@ def discovery_fit_folders(root):
         List of fit folders
     """
     folders = []
-    for dirpath, dirnames, filenames in os.walk(root):
+    for dirpath, _dirnames, filenames in os.walk(root):
         if "test_metrics.yaml" in filenames and "train_metrics.yaml" in filenames:
             folders.append(dirpath)
     return folders
@@ -447,11 +446,10 @@ def select_elements_in_model(
     new_element_map = {e: i for i, e in enumerate(elements_to_select)}
     # selection of ChemicalEmbedding
     Z = None
-    for name, ins in instructions_dict.items():
-        if isinstance(ins, ScalarChemicalEmbedding):
-            if Z is None:
-                Z = ins
-                break
+    for ins in instructions_dict.values():
+        if isinstance(ins, ScalarChemicalEmbedding) and Z is None:
+            Z = ins
+            break
     if Z is None:
         raise ValueError("No ScalarChemicalEmbedding found in instructions dict")
 
@@ -487,7 +485,7 @@ def select_elements_in_model(
             setattr(ins, var_name, var)
 
     logging.info("Patching model variables:")
-    for name, ins in instructions_dict.items():
+    for ins in instructions_dict.values():
         if isinstance(ins, ElementsReduceInstructionMixin):
             logging.info(f" - {ins.name}")
             ins.upd_init_args_new_elements(new_element_map)

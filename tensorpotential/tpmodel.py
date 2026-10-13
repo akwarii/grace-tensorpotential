@@ -213,8 +213,7 @@ def compute_batch_virials_from_pair_forces(
     )
 
     # order: xx,yy,zz, xy,xz,yz
-    virial = tf.concat([virial_012, virial_3, virial_4, virial_5], axis=1)
-    return virial
+    return tf.concat([virial_012, virial_3, virial_4, virial_5], axis=1)
 
 
 def compute_structure_virials_from_pair_forces(
@@ -251,8 +250,7 @@ def compute_structure_virials_from_pair_forces(
             1,
         ],
     )
-    virial = tf.concat([virial_012, virial_3, virial_4, virial_5], axis=0)
-    return virial
+    return tf.concat([virial_012, virial_3, virial_4, virial_5], axis=0)
 
 
 class TrainFunction(ABC):
@@ -298,7 +296,7 @@ def execute_instructions(
         for ins in instructions:
             ins(input_data, training=training, local=local)
     elif isinstance(instructions, dict):
-        for name, ins in instructions.items():
+        for ins in instructions.values():
             ins(input_data, training=training, local=local)
     else:
         raise ValueError(f"Invalid instructions container type {type(instructions)}")
@@ -547,9 +545,7 @@ def extract_basis_functions(
         )
         b = tf.reshape(b, (-1, b.shape[1] * b.shape[2]))
         basis.append(b)
-    basis = tf.concat(basis, axis=-1)
-
-    return basis
+    return tf.concat(basis, axis=-1)
 
 
 class ExtractBasisFunctions(ComputeFunction):
@@ -747,8 +743,7 @@ class ComputeBlockOutputGradient(ComputeFunction):
                 converted_grads.append(g)
         grads = converted_grads
 
-        res = {f"grad_{k}": g for k, g in zip(self.wrt_keys, grads)}
-        return res
+        return {f"grad_{k}": g for k, g in zip(self.wrt_keys, grads)}
 
 
 def to_instructions_list(instructions: list | dict) -> list:
@@ -761,12 +756,11 @@ def to_instructions_list(instructions: list | dict) -> list:
     """
     if isinstance(instructions, dict):
         return list(instructions.values())
-    elif isinstance(instructions, list):
+    if isinstance(instructions, list):
         return instructions
-    else:
-        raise ValueError(
-            f"`instructions` must be list or dict, but {type(instructions)} given"
-        )
+    raise ValueError(
+        f"`instructions` must be list or dict, but {type(instructions)} given"
+    )
 
 
 class TPModel(tf.Module):
@@ -892,9 +886,10 @@ class TPModel(tf.Module):
         """
         self.param_dtype = param_dtype
         for sm in self.submodules:
-            if hasattr(sm, "build"):
-                if not hasattr(sm, "is_built") or not sm.is_built:
-                    sm.build(param_dtype)
+            if hasattr(sm, "build") and (
+                not hasattr(sm, "is_built") or not sm.is_built
+            ):
+                sm.build(param_dtype)
             if hasattr(sm, "input_tensor_spec"):
                 self.instructions_specs.update(sm.input_tensor_spec.copy())
 
@@ -907,14 +902,12 @@ class TPModel(tf.Module):
         self.count_coefs = 0
         self.slices = [0]
         flat_val = []
-        for i, var in enumerate(self.variables_to_train):
+        for var in self.variables_to_train:
             v = tf.reshape(var, [-1])
             self.count_coefs += tf.shape(v)[0]
             self.slices.append(self.count_coefs)
             flat_val += [v]
-        flat_vars = tf.concat(flat_val, axis=0)
-
-        return flat_vars
+        return tf.concat(flat_val, axis=0)
 
     def set_flat_trainable_variables(self, flat_vars: Any) -> None:
         """Assign the trainable variables from a flat vector laid out as by ``get_flat_trainable_variables``."""
@@ -1055,7 +1048,7 @@ class TPModel(tf.Module):
         if self.aux_compute is not None:
             signatures.update(
                 # Use the underlying tf.functions, not the python wrappers
-                {name: self._aux_tf_funcs[name] for name in self.aux_compute.keys()}
+                {name: self._aux_tf_funcs[name] for name in self.aux_compute}
             )
 
         if gmm_uq_model is not None:
@@ -1161,17 +1154,13 @@ class TPModel(tf.Module):
         """Run the compute function on a copy of ``input_data`` in inference mode."""
         copy_data = input_data.copy()
 
-        output = self.compute_function(self.instructions, copy_data, training=False)
-
-        return output
+        return self.compute_function(self.instructions, copy_data, training=False)
 
     @tf.Module.with_name_scope
     def __call__(self, input_data, training: bool = False):
         copy_data = input_data.copy()
 
-        output = self.train_function(self.instructions, copy_data, training)
-
-        return output
+        return self.train_function(self.instructions, copy_data, training)
 
     def export_to_yaml(self, filename: str) -> None:
         """Write the instructions to a ``model.yaml`` file."""
@@ -1276,7 +1265,7 @@ class TPModel(tf.Module):
 
     def is_lora_enabled(self) -> bool:
         """Whether any instruction carries LoRA updates."""
-        for ins_name, ins in self.instructions.items():
+        for ins in self.instructions.values():
             if isinstance(ins, LORAInstructionMixin) and ins.lora:
                 return True
         return False

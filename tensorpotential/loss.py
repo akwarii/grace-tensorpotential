@@ -131,10 +131,9 @@ def compute_nat_per_structure(input_data: dict[str, tf.Tensor]) -> tf.Tensor:
     )
     nat_per_struc = tf.reshape(nat_per_struc, [-1, 1])
     # Replace zeros with ones
-    nat_per_struc = tf.where(
+    return tf.where(
         tf.equal(nat_per_struc, 0), tf.ones_like(nat_per_struc), nat_per_struc
     )
-    return nat_per_struc
 
 
 def compute_energy_per_atom_error(

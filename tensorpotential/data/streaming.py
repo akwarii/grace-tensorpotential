@@ -270,8 +270,7 @@ class ElasticBatchIterator:
 
                 if self._batch_buffer:
                     return self._batch_buffer.pop(0)
-                else:
-                    raise StopIteration from err
+                raise StopIteration from err
 
             found_batches = False
             for batch_structures in self._batcher.add_to_buffer(structure):

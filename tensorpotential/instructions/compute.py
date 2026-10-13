@@ -411,9 +411,7 @@ class RadialBasis(TPInstruction):
     @tf.Module.with_name_scope
     def frwrd(self, input_data: dict, training=False, local=False):
         r = input_data[self.input_name]
-        basis = self.basis_function(r)  # * self.norm
-
-        return basis
+        return self.basis_function(r)  # * self.norm
 
 
 @capture_init_args
@@ -666,9 +664,7 @@ class LinearRadialFunction(TPInstruction):
 
         crad = tf.cast(self.crad, dtype=basis.dtype)
         y = tf.einsum("nlk,ak->anl", crad, basis)
-        y_l = tf.gather(y, self.l_tile, axis=-1)
-
-        return y_l
+        return tf.gather(y, self.l_tile, axis=-1)
 
 
 @capture_init_args
@@ -820,8 +816,7 @@ class MLPRadialFunction(TPInstruction, LORAInstructionMixin):
             y = y * inv * gamma
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        y_l = tf.gather(y, self.l_tile, axis=-1)
-        return y_l
+        return tf.gather(y, self.l_tile, axis=-1)
 
 
 @capture_init_args
@@ -955,8 +950,8 @@ class MLPRadialFunction_v2(TPInstruction, LORAInstructionMixin):
 
     def frwrd(self, input_data, training=False, local=False):
         basis = input_data[self.basis_name]
-        for act, layer in zip(self.activation, self.layers):
-            act = ACTIVATION_DICT[act]
+        for act_name, layer in zip(self.activation, self.layers):
+            act = ACTIVATION_DICT[act_name]
             basis = act(layer(basis))
         y = self.layers[-1](basis)
 
@@ -975,8 +970,7 @@ class MLPRadialFunction_v2(TPInstruction, LORAInstructionMixin):
             y *= embedding
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        y_l = tf.gather(y, self.l_tile, axis=-1)
-        return y_l
+        return tf.gather(y, self.l_tile, axis=-1)
 
 
 @capture_init_args
@@ -1068,10 +1062,9 @@ class ScalarChemicalEmbedding(
     def frwrd(self, input_data: dict, training=False, local=False):
         if not self.lora:
             return self.w
-        else:
-            return self.w + lora_reconstruction(
-                *self.lora_tensors, lora_config=self.lora_config
-            )
+        return self.w + lora_reconstruction(
+            *self.lora_tensors, lora_config=self.lora_config
+        )
 
     def get_index_to_select(self, elements_to_select):
         # 1. Create a dictionary mapping {symbol: index} for fast O(1) lookup.
@@ -1849,16 +1842,14 @@ class SPBF(TPEquivariantInstruction):
         r_rescale = 2.0 * (1.0 - tf.abs(1.0 - r / rc)) - 1.0
         # Clamp to [-1, 1] so padded bonds (r >> rc) don't blow up Chebyshev
         r_rescale = tf.clip_by_value(r_rescale, -1.0, 1.0)
-        basis = chebvander(r_rescale, self.n_rad_basis + 1, kind=1)[:, 1:]
-        return basis
+        return chebvander(r_rescale, self.n_rad_basis + 1, kind=1)[:, 1:]
 
     def _compute_envelope(self, r):
         """Polynomial cutoff envelope, zeroed for r >= rc."""
         rc = tf.cast(self.rc, r.dtype)
         env = cutoff_func_p_order_poly(r / rc, self.p)
         # Hard zero for bonds beyond cutoff (padding safety)
-        env = tf.where(r < rc, env, tf.zeros_like(env))
-        return env
+        return tf.where(r < rc, env, tf.zeros_like(env))
 
     def _mlp_forward(self, basis, z_i, z_j):
         """MLP: [n_bonds, n_rad_basis + 2*emb] -> [n_bonds, n_rad_max, (lmax+1)^2]."""
@@ -1870,8 +1861,7 @@ class SPBF(TPEquivariantInstruction):
         # [n_bonds, n_rad_max * (lmax+1)] -> [n_bonds, n_rad_max, lmax+1]
         x = tf.reshape(x, [-1, self.n_rad_max, self._lmax + 1])
         # Gather by l: [n_bonds, n_rad_max, (lmax+1)^2]
-        x = tf.gather(x, self.l_tile, axis=-1)
-        return x
+        return tf.gather(x, self.l_tile, axis=-1)
 
     def frwrd(self, input_data: dict, training=False, local=False):
         # Bond distances
@@ -1906,8 +1896,7 @@ class SPBF(TPEquivariantInstruction):
 
         if self.scalar_mode:
             return self._frwrd_scalar(input_data, a_nl, envelope, local=local)
-        else:
-            return self._frwrd_equivariant(input_data, a_nl, envelope, local=local)
+        return self._frwrd_equivariant(input_data, a_nl, envelope, local=local)
 
     def _frwrd_scalar(self, input_data, a_nl, envelope, local=False):
         # R * Y * Z when indicator is ScalarChemicalEmbedding
@@ -2541,7 +2530,7 @@ class GeneralProductFunction(TPEquivariantInstruction):
         left_groups = left_cmd.groupby(["l", "hist", "parity"]).indices
         left_group_keys = list(left_groups.keys())
         left_group_map = {}  # channel_index -> group_id
-        for gid, (key, indices) in enumerate(left_groups.items()):
+        for gid, indices in enumerate(left_groups.values()):
             for idx in indices:
                 left_group_map[idx] = gid
 
@@ -2549,7 +2538,7 @@ class GeneralProductFunction(TPEquivariantInstruction):
         right_groups = right_cmd.groupby(["l", "hist", "parity"]).indices
         right_group_keys = list(right_groups.keys())
         right_group_map = {}
-        for gid, (key, indices) in enumerate(right_groups.items()):
+        for gid, indices in enumerate(right_groups.values()):
             for idx in indices:
                 right_group_map[idx] = gid
 
@@ -2740,12 +2729,11 @@ class GeneralProductFunction(TPEquivariantInstruction):
             return tf.math.unsorted_segment_sum(
                 prod, self.m_sum_ind, num_segments=self.nfunc
             )
-        else:
-            prod = tf.transpose(prod, [2, 0, 1])
-            prod = tf.math.unsorted_segment_sum(
-                prod, self.m_sum_ind, num_segments=self.nfunc
-            )
-            return tf.transpose(prod, [1, 2, 0])
+        prod = tf.transpose(prod, [2, 0, 1])
+        prod = tf.math.unsorted_segment_sum(
+            prod, self.m_sum_ind, num_segments=self.nfunc
+        )
+        return tf.transpose(prod, [1, 2, 0])
 
     def _gather_axis(self):
         """Return the axis for angular gathers: 0 for lm_first, 2 for standard."""
@@ -2829,11 +2817,11 @@ class GeneralProductFunction(TPEquivariantInstruction):
 
         if self.mode == "elementwise":
             return self._frwrd_elementwise(left, right)
-        elif self.mode == "cp":
+        if self.mode == "cp":
             return self._frwrd_cp(left, right)
-        elif self.mode == "cp_l":
+        if self.mode == "cp_l":
             return self._frwrd_cp_l(left, right)
-        elif self.mode == "cp_lL":
+        if self.mode == "cp_lL":
             return self._frwrd_cp_lL(left, right)
 
     def __repr__(self):
@@ -2989,10 +2977,7 @@ class FunctionReduce(TPEquivariantInstruction, SimplifyingReduceMixin):
         return total_l2_regularization
 
     def frwrd(self, input_data, training=False, local=False):
-        if self.init_collection == "zeros":
-            init_func = tf.zeros
-        else:
-            init_func = tf.ones
+        init_func = tf.zeros if self.init_collection == "zeros" else tf.ones
         # lm_first: equivariant inputs are [lm, atoms, n] (gather lm on axis 0,
         # einsum reads A_r as "wan"); standard: [atoms, n, lm] (axis 2, "anw").
         gather_ax = 0 if self.lm_first else 2
@@ -3430,10 +3415,7 @@ class CollectInvarBasis(TPEquivariantInstruction, ElementsReduceInstructionMixin
             shp = tf.shape(A)
             A = tf.reshape(A, [-1, shp[1] * shp[2]])
             collection += [A]
-        basis = tf.concat(collection, axis=1)
-
-
-        return basis
+        return tf.concat(collection, axis=1)
 
     def prepare_variables_for_selected_elements(self, index_to_select):
         if self.is_central_atom_type_dependent:
@@ -3531,8 +3513,8 @@ class FCRight2Left(
         w_tile_right = []
         count = 0
         norms = np.ones((len(d_l.items())))
-        for ind, ((l_left, p_left, h_left), index_left) in enumerate(d_l.items()):
-            for (l_right, p_right, h_right), index_right in d_r.items():
+        for ind, ((l_left, p_left, _h_left), index_left) in enumerate(d_l.items()):
+            for (l_right, p_right, _h_right), index_right in d_r.items():
                 if l_right == l_left and p_right == p_left:
                     collect_to += [index_left]
                     collect_from += [index_right]
@@ -3854,7 +3836,7 @@ class InvariantLayerRMSNorm(TPInstruction):
             rms = tf.math.rsqrt(tf.reduce_mean(x**2, axis=1, keepdims=True) + epsilon)
             rms = tf.where(r_map < n_at_b_real, rms, tf.zeros_like(rms))
             return x * rms * tf.cast(self.scale, x.dtype)
-        elif self.type == "only_nonlin":
+        if self.type == "only_nonlin":
             lin = x[:, 0, :]
         elif self.type == "sep_lin_gate":
             lin = x[:, 0, :] * tf.cast(self.lin_scale, x.dtype)
@@ -3966,7 +3948,7 @@ class EquivariantRMSNorm(TPEquivariantInstruction):
         lph_keys = list(lph_groups.keys())
         self.n_lph_groups = len(lph_keys)
         expand_idx = np.zeros(n_angular, dtype=np.int32)
-        for gid, (key, indices) in enumerate(lph_groups.items()):
+        for gid, indices in enumerate(lph_groups.values()):
             for idx in indices:
                 expand_idx[idx] = gid
         self._expand_index_np = expand_idx
@@ -4239,7 +4221,7 @@ class EquivariantGate(TPEquivariantInstruction):
 
         n_angular = len(l_values)
         expand_idx = np.zeros(n_angular, dtype=np.int32)
-        for gid, (key, indices) in enumerate(lph_groups.items()):
+        for gid, indices in enumerate(lph_groups.values()):
             for idx in indices:
                 expand_idx[idx] = gid
         self._expand_index_np = expand_idx
@@ -4717,9 +4699,8 @@ class ZBLPotential(TPInstruction, ElementsReduceInstructionMixin):
             e_at, segment_ids=ind_i, num_segments=batch_tot_nat
         )
 
-        energy = tf.reshape(self.K / 2 * energy, [-1, 1, 1])
+        return tf.reshape(self.K / 2 * energy, [-1, 1, 1])
 
-        return energy
 
     def prepare_variables_for_selected_elements(self, index_to_select):
         raise NotImplementedError()
