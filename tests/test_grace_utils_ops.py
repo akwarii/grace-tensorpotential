@@ -231,3 +231,11 @@ def test_export_writes_a_saved_model_with_the_compute_signatures(one_element, tm
     signatures = tf.saved_model.load(str(target)).signatures
     assert "compute" in signatures
     assert "compute_energy" in signatures
+
+
+def test_reduce_elements_keeps_every_requested_element(tmp_path):
+    model, checkpoint = save_seeded_model(tmp_path, {"H": 0, "He": 1, "Li": 2})
+    assert _run(model, checkpoint, "reduce_elements", "-e", "He", "Li") == 0
+    maps = _element_maps(tmp_path / "model-converted.yaml")
+    assert maps
+    assert all(list(m) == ["He", "Li"] for m in maps)

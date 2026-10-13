@@ -75,13 +75,24 @@ def test_load_params_without_a_file_returns_nothing(tmp_path):
 
 
 def test_load_params_round_trips_save_params(tmp_path):
-    preprocess.save_params(str(tmp_path), {"Cu": 0, "Zn": 1}, 5.5, "float32", {"Cu": {"Zn": 4.0}})
-    assert preprocess.load_params(str(tmp_path)) == ({"Cu": 0, "Zn": 1}, 5.5, {"Cu": {"Zn": 4.0}}, "float32")
+    preprocess.save_params(
+        str(tmp_path), {"Cu": 0, "Zn": 1}, 5.5, "float32", {"Cu": {"Zn": 4.0}}
+    )
+    assert preprocess.load_params(str(tmp_path)) == (
+        {"Cu": 0, "Zn": 1},
+        5.5,
+        {"Cu": {"Zn": 4.0}},
+        "float32",
+    )
 
 
 @pytest.mark.parametrize(
     "content",
-    ['{"cutoff": 4.0, "precision": "float64"}', "[1, 2, 3]", '{"elements_map": {}, "cutoff": 4.0}'],
+    [
+        '{"cutoff": 4.0, "precision": "float64"}',
+        "[1, 2, 3]",
+        '{"elements_map": {}, "cutoff": 4.0}',
+    ],
     ids=["no-elements-map", "not-a-mapping", "no-precision"],
 )
 def test_load_params_of_a_file_that_is_not_a_complete_mapping_logs_and_returns_nothing(
@@ -91,3 +102,13 @@ def test_load_params_of_a_file_that_is_not_a_complete_mapping_logs_and_returns_n
     with caplog.at_level(logging.ERROR):
         assert preprocess.load_params(str(tmp_path)) is None
     assert "Can't parse" in caplog.text
+
+
+def test_the_batching_strategies_are_the_values_the_command_line_documents():
+    assert (
+        preprocess.EQUI_STRUCTURE_STRATEGY,
+        preprocess.EQUI_ATOMS_STRATEGY,
+        preprocess.EQUI_NEIGH_STRATEGY,
+    ) == ("structures", "atoms", "neighbours")
+    help_text = grace_preprocess.build_parser().format_help()
+    assert "structures (default), atoms, neighbours" in help_text

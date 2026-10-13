@@ -461,3 +461,12 @@ def test_branch_leaving_the_function_counts(tmp_path, capsys, calls, expected):
     )
     assert percent_of(out, "g") == pytest.approx(expected)
     assert code == (0 if expected >= 90 else 1)
+
+
+def test_a_copy_is_new_code_even_when_its_source_file_is_edited_elsewhere(repo, capsys):
+    # mod.py is part of the diff (classify is edited) and still holds ident, which is copied to other.py
+    repo.write("pkg/mod.py", CLASSIFY.replace('"zero"', '"nil"') + "\n\n" + IDENT)
+    repo.write("pkg/other.py", IDENT)
+    code, out = repo.check("import pkg.other\nimport pkg.mod\n", capsys=capsys)
+    assert "pkg/other.py::ident" in out
+    assert code == 1
