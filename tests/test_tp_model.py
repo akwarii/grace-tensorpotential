@@ -852,6 +852,7 @@ def test_extract_cutoff_dict_fills_unnamed_pairs_with_the_default_cutoff():
 def test_extract_cutoff_dict_values_are_python_floats_and_keys_are_str_pairs():
     result = extract_cutoff_dict(_bond_cutoff_model().instructions)
 
+    assert result is not None
     assert all(type(k[0]) is str and type(k[1]) is str for k in result)
     assert all(type(v) is float for v in result.values())
 
