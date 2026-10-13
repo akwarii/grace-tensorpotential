@@ -2986,10 +2986,7 @@ class FunctionReduce(TPEquivariantInstruction, SimplifyingReduceMixin):
         return total_l2_regularization
 
     def frwrd(self, input_data, training=False, local=False):
-        if self.init_collection == "zeros":
-            init_func = tf.zeros
-        else:
-            init_func = tf.ones
+        init_func = tf.zeros if self.init_collection == "zeros" else tf.ones
         # lm_first: equivariant inputs are [lm, atoms, n] (gather lm on axis 0,
         # einsum reads A_r as "wan"); standard: [atoms, n, lm] (axis 2, "anw").
         gather_ax = 0 if self.lm_first else 2

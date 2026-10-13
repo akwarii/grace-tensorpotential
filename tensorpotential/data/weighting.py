@@ -324,10 +324,7 @@ class EnergyBasedWeightingPolicy:
                     )
                 )
                 flow = self.wlow / wlowcur
-                if wlowcur == 1:
-                    fup = 0
-                else:
-                    fup = (1 - self.wlow) / (1 - wlowcur)
+                fup = 0 if wlowcur == 1 else (1 - self.wlow) / (1 - wlowcur)
 
                 df.loc[elow_mask, DATA_ENERGY_WEIGHTS] = (
                     flow * df.loc[elow_mask, DATA_ENERGY_WEIGHTS]

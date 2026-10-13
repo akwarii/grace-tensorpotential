@@ -1266,10 +1266,9 @@ class TPCalculator(Calculator):
 
             if "forces" in self.compute_properties:
                 forces = output.get(constants.PREDICT_FORCES, None)
-                if forces is None:
-                    forces = np.zeros((len(atoms), 3))
-                else:
-                    forces = forces.numpy()
+                forces = (
+                    np.zeros((len(atoms), 3)) if forces is None else forces.numpy()
+                )
                 forces_list.append(forces)
 
             if "stress" in self.compute_properties:

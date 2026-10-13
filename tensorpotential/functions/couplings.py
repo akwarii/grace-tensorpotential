@@ -2453,10 +2453,7 @@ def real_coupling_metainformation(
 
                 # normalization by pre-computed factors
                 if normalize:
-                    if l1 < l2:
-                        key = (l2, l1, L)
-                    else:
-                        key = (l1, l2, L)
+                    key = (l2, l1, L) if l1 < l2 else (l1, l2, L)
                     RCG *= CG_normalization_dict.get(key, 1.0)
 
                 # for all M = -L ... L
