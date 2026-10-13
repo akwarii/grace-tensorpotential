@@ -1,7 +1,7 @@
 {
  "legacy": {
-  "count": 274,
-  "sha256": "96b2126b9c6b6457f7b458e67fafe228603a16707cae504541a3eb45b1c3dc2c"
+  "count": 272,
+  "sha256": "58649d9891b8db92ea5abd59fdc33b60e171d8157e90241a5c56f93815e00385"
  },
  "ruff": {
   "examples/grace/visualize_metrics.ipynb": {
@@ -645,14 +645,6 @@
    "PTH204": 1,
    "RUF012": 6
   },
-  "tests/MoNbTaW-CUSTOM/model.py": {
-   "PLR0913": 1,
-   "RET504": 1,
-   "RUF012": 1
-  },
-  "tests/MoNbTaW-CUSTOM/model_mlp_emb.py": {
-   "PLR0913": 1
-  },
   "tests/conftest.py": {
    "PTH118": 1,
    "PTH120": 1,
@@ -1017,12 +1009,6 @@
   "examples/grace/visualize_metrics.ipynb": {
    "unresolved-reference": 3
   },
-  "tensorpotential/calculator/asecalculator.py": {
-   "not-subscriptable": 2
-  },
-  "tensorpotential/calculator/foundation_models.py": {
-   "no-matching-overload": 1
-  },
   "tensorpotential/cli/train.py": {
    "not-iterable": 1
   },
@@ -1041,10 +1027,6 @@
    "unknown-argument": 1,
    "unresolved-reference": 1
   },
-  "tensorpotential/data/databuilder.py": {
-   "invalid-assignment": 2,
-   "no-matching-overload": 1
-  },
   "tensorpotential/data/dataset_plotter.py": {
    "invalid-return-type": 1,
    "no-matching-overload": 1,
@@ -1061,9 +1043,6 @@
    "invalid-assignment": 2,
    "not-iterable": 1
   },
-  "tensorpotential/extra/gen_tensor/loss.py": {
-   "invalid-method-override": 1
-  },
   "tensorpotential/extra/gen_tensor/metrics.py": {
    "not-subscriptable": 1
   },
@@ -1078,12 +1057,6 @@
    "invalid-return-type": 1,
    "invalid-type-form": 1
   },
-  "tensorpotential/instructions/base.py": {
-   "invalid-type-arguments": 1,
-   "invalid-type-form": 3,
-   "no-matching-overload": 1,
-   "not-iterable": 3
-  },
   "tensorpotential/instructions/compute.py": {
    "call-non-callable": 1,
    "invalid-type-form": 2,
@@ -1093,23 +1066,9 @@
   "tensorpotential/instructions/output.py": {
    "not-subscriptable": 2
   },
-  "tensorpotential/loss.py": {
-   "invalid-method-override": 20
-  },
   "tensorpotential/metrics.py": {
    "invalid-type-form": 1,
    "not-subscriptable": 3
-  },
-  "tensorpotential/scripts/grace_models.py": {
-   "no-matching-overload": 2
-  },
-  "tensorpotential/tensorpot.py": {
-   "invalid-type-form": 1,
-   "missing-argument": 3,
-   "no-matching-overload": 3
-  },
-  "tensorpotential/tpmodel.py": {
-   "invalid-type-form": 1
   },
   "tensorpotential/uq/artifact_builder.py": {
    "invalid-assignment": 1,
@@ -1129,12 +1088,6 @@
   },
   "tensorpotential/uq/cli/select.py": {
    "no-matching-overload": 1
-  },
-  "tensorpotential/utils.py": {
-   "invalid-method-override": 1
-  },
-  "tests/MoNbTaW-CUSTOM/model.py": {
-   "invalid-method-override": 1
   },
   "tests/test_instructions.py": {
    "not-iterable": 6,

@@ -18,6 +18,7 @@ import tensorflow as tf
 from tensorpotential.utils import convert_model_reduce_elements
 from tensorpotential.tensorpot import TensorPotential
 from tensorpotential import constants
+from tensorpotential import tpmodel as tpmodel_module
 from tensorpotential.tpmodel import (
     ComputeBatchEnergyAndForces,
     ComputeBatchEnergyForcesVirials,
@@ -852,6 +853,7 @@ def test_extract_cutoff_dict_fills_unnamed_pairs_with_the_default_cutoff():
 def test_extract_cutoff_dict_values_are_python_floats_and_keys_are_str_pairs():
     result = extract_cutoff_dict(_bond_cutoff_model().instructions)
 
+    assert result is not None
     assert all(type(k[0]) is str and type(k[1]) is str for k in result)
     assert all(type(v) is float for v in result.values())
 
@@ -946,6 +948,18 @@ def test_save_model_lists_the_symbols_in_element_index_order(tmp_path):
     assert metadata["chemical_symbols"] == ["Cu", "Zn"]
     assert metadata["cutoff_matrix"] == CU_ZN_MATRIX
     assert metadata["cutoff"] == 5.0
+
+
+def test_save_model_without_an_element_map_is_refused_before_anything_is_written(tmp_path, monkeypatch):
+    # FIXED: the model was saved first and the metadata then failed on ``None[...]``
+    model = _linear_model()
+    monkeypatch.setattr(tpmodel_module, "extract_cutoff_and_elements", lambda _: (0.0, None, None))
+    path = tmp_path / "model"
+
+    with pytest.raises(ValueError, match="element map"):
+        model.save_model(str(path))
+
+    assert not path.exists()
 
 
 def test_save_model_without_a_cutoff_matrix_uses_the_largest_instruction_cutoff(tmp_path):

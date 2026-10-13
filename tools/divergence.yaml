@@ -339,8 +339,28 @@
   upstream: pending
 
 - path: tests/MoNbTaW-CUSTOM/model.py
-  reason: 'commented-out code removed'
-  milestone: [CLEAN2]
+  reason: 'deleted with the two integration tests that were always skipped (a custom model written for an API that no longer exists: tensorpotential.layers and tensorpotential.tpinstruction are gone)'
+  milestone: [CLEAN2, QUAL6]
+  upstream: pending
+
+- path: tests/MoNbTaW-CUSTOM/input.yaml
+  reason: 'deleted with the two integration tests that were always skipped (a custom model written for an API that no longer exists: tensorpotential.layers and tensorpotential.tpinstruction are gone)'
+  milestone: [QUAL6]
+  upstream: pending
+
+- path: tests/MoNbTaW-CUSTOM/input_mlp_emb.yaml
+  reason: 'deleted with the two integration tests that were always skipped (a custom model written for an API that no longer exists: tensorpotential.layers and tensorpotential.tpinstruction are gone)'
+  milestone: [QUAL6]
+  upstream: pending
+
+- path: tests/MoNbTaW-CUSTOM/model_mlp_emb.py
+  reason: 'deleted with the two integration tests that were always skipped (a custom model written for an API that no longer exists: tensorpotential.layers and tensorpotential.tpinstruction are gone)'
+  milestone: [QUAL6]
+  upstream: pending
+
+- path: tests/MoNbTaW-LINEAR/input_lr_reduce_on_plateau.yaml
+  reason: 'deleted with the always-skipped test of the deprecated API; the new-API twin (input_lr_reduce_on_plateau_new_api.yaml) stays'
+  milestone: [QUAL6]
   upstream: pending
 
 - path: tests/MoNbTaW-LINEAR/input_lr_cosine_decay.yaml

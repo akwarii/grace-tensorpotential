@@ -11,8 +11,10 @@ import time
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
+from collections.abc import Callable, Iterable
 from concurrent.futures import ProcessPoolExecutor
 from itertools import combinations_with_replacement
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -48,7 +50,8 @@ MININTERVAL = 2  # min interval for progress bar
 
 
 ### from https://stackoverflow.com/questions/71300294/how-to-terminate-pythons-processpoolexecutor-when-parent-process-dies
-def start_thread_to_terminate_when_parent_process_dies(ppid):
+def start_thread_to_terminate_when_parent_process_dies(ppid: int) -> None:
+    """Start a daemon thread that sends SIGTERM to this process once the process ``ppid`` is gone."""
     pid = os.getpid()
 
     def f():
@@ -63,23 +66,32 @@ def start_thread_to_terminate_when_parent_process_dies(ppid):
     thread.start()
 
 
-def transparent_iterator(iterator, *arg, **kwarg):
+def transparent_iterator(iterator: Iterable, *arg: Any, **kwarg: Any) -> Iterable:
+    """Return ``iterator`` unchanged; drop-in for ``tqdm`` (whose extra arguments are ignored) when no progress bar is wanted."""
     return iterator
 
 
-def get_number_of_real_atoms(data_dict):
+def get_number_of_real_atoms(data_dict: dict) -> int:
+    """Return the number of real (not padding) atoms of a per-structure or batch data dict."""
     return int(data_dict[constants.N_ATOMS_BATCH_REAL])
 
 
-def get_number_of_real_neigh(data_dict):
+def get_number_of_real_neigh(data_dict: dict) -> int:
+    """Return the number of real (not padding) neighbours (bonds) of a per-structure or batch data dict."""
     return int(data_dict[constants.N_NEIGHBORS_REAL])
 
 
-def get_number_of_real_struc(data_dict):
+def get_number_of_real_struc(data_dict: dict) -> int:
+    """Return the number of real (not padding) structures of a per-structure or batch data dict."""
     return int(data_dict[constants.N_STRUCTURES_BATCH_REAL])
 
 
-def generate_batches_df(structures_df, batch_size):
+def generate_batches_df(structures_df: pd.DataFrame, batch_size: int) -> pd.DataFrame:
+    """Group consecutive structures into batches of ``batch_size``.
+
+    Adds the columns ``bid`` and ``structure_ind`` to ``structures_df`` in place and returns one row per batch
+    with the summed ``n_atoms``, ``n_neighbours``, ``n_structures`` and the list ``structure_ind``.
+    """
     structures_df["bid"] = np.arange(len(structures_df)) // batch_size
     structures_df["structure_ind"] = structures_df.index
     batch_df = structures_df.groupby("bid").agg(
@@ -94,7 +106,8 @@ def generate_batches_df(structures_df, batch_size):
     return batch_df
 
 
-def direct_split(data_dict_list, batch_size):
+def direct_split(data_dict_list: list[dict], batch_size: int) -> list[list[dict]]:
+    """Split the per-structure data dicts into ``len // batch_size`` groups of near-equal size, in order."""
     n_structs = len(data_dict_list)
 
     splits_groups = np.array_split(np.arange(n_structs), n_structs // batch_size)
@@ -106,7 +119,8 @@ def direct_split(data_dict_list, batch_size):
     return data_batches
 
 
-def get_padding_dims(batch, max_pad_dict):
+def get_padding_dims(batch: dict, max_pad_dict: dict) -> tuple[int, int, int]:
+    """Return the numbers ``(atoms, neighbours, structures)`` to pad ``batch`` with to reach ``max_pad_dict``."""
     nreal_struc = get_number_of_real_struc(batch)
     nreal_atoms = get_number_of_real_atoms(batch)
     nreal_neigh = get_number_of_real_neigh(batch)
@@ -116,7 +130,9 @@ def get_padding_dims(batch, max_pad_dict):
     return pad_nat, pad_nneigh, pad_nstruct
 
 
-def estimate_n_buckets(batches_df, max_padding_fraction=0.3):
+def estimate_n_buckets(
+    batches_df: pd.DataFrame, max_padding_fraction: float = 0.3
+) -> int:
     """Estimate optimal number of buckets based on padding overhead.
 
     Sweeps n_buckets from 1 to 32, returns the smallest fulfilling the threshold.
@@ -143,9 +159,17 @@ def estimate_n_buckets(batches_df, max_padding_fraction=0.3):
 
 
 def bucketing_split(
-    data_dict_list, batch_size, max_n_buckets, verbose=False, max_padding_fraction=0.3
-):
-    """Split data into buckets based on number of atoms and number of neighbors."""
+    data_dict_list: list[dict],
+    batch_size: int,
+    max_n_buckets: int | str,
+    verbose: bool = False,
+    max_padding_fraction: float = 0.3,
+) -> tuple[list[list[dict]], list[dict]]:
+    """Split data into buckets based on number of atoms and number of neighbors.
+
+    ``max_n_buckets`` is a number or ``"auto"`` (see ``estimate_n_buckets``). Returns ``(data_batches, max_pad_batches)``:
+    the per-structure data dicts of every batch and, for each batch, the padding targets of its bucket.
+    """
     n_atoms = [get_number_of_real_atoms(d) for d in data_dict_list]
     nneighbors = [get_number_of_real_neigh(d) for d in data_dict_list]
 
@@ -212,7 +236,10 @@ def _split_rows(df, n):
     return [df.iloc[ix] for ix in np.array_split(np.arange(len(df)), n)]
 
 
-def split_batches_into_buckets(batches_df, max_n_buckets):
+def split_batches_into_buckets(
+    batches_df: pd.DataFrame, max_n_buckets: int
+) -> list[pd.DataFrame]:
+    """Split the sorted ``batches_df`` into ``max_n_buckets`` consecutive buckets of near-equal row count."""
     # dynamic bucket splitting, where split boundary is determined based on increase of nneigh
     # Assumes batches_df is already sorted
     return _split_rows(batches_df, max_n_buckets)  # naive static splitting
@@ -230,16 +257,16 @@ def _struct_max_neigh(data_dict):
 
 
 def bucketing_split_dense(
-    data_dict_list,
-    batch_size,
-    max_n_buckets,
-    slot_budget="auto",
-    n_neigh_buckets="auto",
-    net_padding=0.15,
-    max_shapes=64,
-    max_neigh_cap=None,
-    verbose=False,
-):
+    data_dict_list: list[dict],
+    batch_size: int,
+    max_n_buckets: int | None,
+    slot_budget: int | str = "auto",
+    n_neigh_buckets: int | str = "auto",
+    net_padding: float = 0.15,
+    max_shapes: int = 64,
+    max_neigh_cap: int | None = None,
+    verbose: bool = False,
+) -> tuple[list[list[dict]], list[dict]]:
     """max_neigh-aware elastic bucketing for the dense (reshape) layout. Same return contract
     as ``bucketing_split`` — ``(data_batches, max_pad_batches)`` — but each ``max_pad`` dict
     also carries ``PAD_MAX_NEIGH`` (the per-batch reshape width) and sets
@@ -321,28 +348,32 @@ class AbstractDataBuilder(ABC):
                 f"DataBuiilder {self.__class__.__name__} wants to build a float32 data"
                 f"This is likely undesired."
             )
-        float_dtype = dtypes[float_dtype]
+        # the name is rebound from the str argument to the numpy type; ty sees the declared str
+        float_dtype = dtypes[float_dtype]  # ty: ignore[invalid-assignment]
         self.float_dtype = float_dtype
 
     @abstractmethod
-    def extract_from_ase_atoms(self, ase_atoms, **kwarg):
+    def extract_from_ase_atoms(self, ase_atoms: Atoms, **kwarg: Any) -> dict:
+        """Return the per-structure data dict of one ASE ``Atoms``."""
         raise NotImplementedError()
 
     @abstractmethod
-    def extract_from_row(self, row, **kwarg):
+    def extract_from_row(self, row: pd.Series, **kwarg: Any) -> dict:
+        """Return the per-structure data dict of one dataframe row."""
         raise NotImplementedError()
 
     @abstractmethod
-    def join_to_batch(self, pre_batch_list: list):
+    def join_to_batch(self, pre_batch_list: list[dict]) -> dict:
         """Implement logic of joining list of dicts(per-structure) into single batch"""
         raise NotImplementedError()
 
     @abstractmethod
-    def pad_batch(self, batch, max_pad_dict):
+    def pad_batch(self, batch: dict, max_pad_dict: dict) -> None:
         """Inplace pad of batch"""
         raise NotImplementedError()
 
-    def postprocess_dataset(self, batches):
+    def postprocess_dataset(self, batches: Iterable[dict]) -> None:
+        """Hook run on all the padded batches of a dataset (in place); does nothing by default."""
         pass
 
 
@@ -368,18 +399,18 @@ class GeometricalDataBuilder(AbstractDataBuilder):
 
     def __init__(
         self,
-        elements_map: dict,
+        elements_map: dict | list | tuple | set,
         cutoff: float,
         cutoff_dict: dict | None = None,
-        is_fit_stress=False,
+        is_fit_stress: bool = False,
         bond_type: str = "symmetric_bond",
         dense_nbr: bool = False,
-        dense_slot_budget="auto",
-        dense_n_neigh_buckets="auto",
-        dense_net_padding=0.15,
-        dense_max_shapes=64,
-        dense_max_neigh_cap=None,
-        **kwargs,
+        dense_slot_budget: int | str = "auto",
+        dense_n_neigh_buckets: int | str = "auto",
+        dense_net_padding: float = 0.15,
+        dense_max_shapes: int = 64,
+        dense_max_neigh_cap: int | None = None,
+        **kwargs: Any,
     ):
         super().__init__(**kwargs)
         """
@@ -434,7 +465,7 @@ class GeometricalDataBuilder(AbstractDataBuilder):
         self.dense_max_shapes = dense_max_shapes
         self.dense_max_neigh_cap = dense_max_neigh_cap
 
-    def extract_from_ase_atoms(self, ase_atoms, **kwarg):
+    def extract_from_ase_atoms(self, ase_atoms: Atoms, **kwarg: Any) -> dict:
         """
         Construction of per-structure data dictionary
         """
@@ -492,7 +523,8 @@ class GeometricalDataBuilder(AbstractDataBuilder):
             constants.N_NEIGHBORS_REAL: np.array(len(bond_vector)).astype(np.int32),
         }
 
-    def get_sample_dtypes(self):
+    def get_sample_dtypes(self) -> dict[str, Any]:
+        """Return the numpy dtype of every entry of a per-structure data dict."""
         return {
             constants.ATOMIC_MU_I: np.int32,
             constants.BOND_VECTOR: self.float_dtype,
@@ -505,10 +537,11 @@ class GeometricalDataBuilder(AbstractDataBuilder):
             constants.N_NEIGHBORS_REAL: np.int32,
         }
 
-    def extract_from_row(self, row, **kwarg):
+    def extract_from_row(self, row: pd.Series, **kwarg: Any) -> dict:
+        """Build the data dict from the ``ase_atoms`` entry of ``row``."""
         return self.extract_from_ase_atoms(row["ase_atoms"])
 
-    def join_to_batch(self, pre_batch_list: list):
+    def join_to_batch(self, pre_batch_list: list[dict]) -> dict:
         """Implement logic of joining list of dicts(per-structure) into single batch"""
 
         res_dict = {}
@@ -576,7 +609,8 @@ class GeometricalDataBuilder(AbstractDataBuilder):
 
         return res_dict
 
-    def get_batch_dtypes(self):
+    def get_batch_dtypes(self) -> dict[str, Any]:
+        """Return the numpy dtype of every entry of a joined (and padded) batch dict."""
         sample_dtypes = self.get_sample_dtypes()
         order = [
             constants.BOND_VECTOR,
@@ -601,7 +635,7 @@ class GeometricalDataBuilder(AbstractDataBuilder):
 
         return batch_dtypes_dict
 
-    def pad_batch(self, batch, max_pad_dict):
+    def pad_batch(self, batch: dict, max_pad_dict: dict) -> None:
         """Inplace pad of batch"""
         pad_nat, pad_nneigh, pad_nstruct = get_padding_dims(batch, max_pad_dict)
 
@@ -715,14 +749,14 @@ class GeometricalDataBuilder(AbstractDataBuilder):
 class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
     def __init__(
         self,
-        normalize_weights=True,
-        normalize_force_per_structure=True,
-        is_fit_stress=False,
-        stress_units=None,
-        energy_col=ENERGY_CORRECTED_COL,
-        forces_col=FORCES_COL,
-        stress_col=STRESS_COL,
-        **kwargs,
+        normalize_weights: bool = True,
+        normalize_force_per_structure: bool = True,
+        is_fit_stress: bool = False,
+        stress_units: str | None = None,
+        energy_col: str = ENERGY_CORRECTED_COL,
+        forces_col: str = FORCES_COL,
+        stress_col: str = STRESS_COL,
+        **kwargs: Any,
     ):
         super().__init__(**kwargs)
         self.energy_weight: str = constants.DATA_ENERGY_WEIGHTS
@@ -743,7 +777,8 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
             "-kbar": -1 / 160.2176621 / 10,  # kbar -> eV/A3
         }[stress_units]
 
-    def extract_from_ase_atoms(self, ase_atoms, **kwarg):
+    def extract_from_ase_atoms(self, ase_atoms: Atoms, **kwarg: Any) -> dict:
+        """Reference energy, forces, structure id, weights and (if fitted) virial of one ``Atoms``."""
         # ref E, F
         res = {
             constants.DATA_REFERENCE_ENERGY: np.array(
@@ -783,7 +818,11 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
 
         return res
 
-    def extract_from_row(self, row, **kwarg):
+    def extract_from_row(self, row: pd.Series, **kwarg: Any) -> dict:
+        """Reference energy, forces, weights and (if fitted) virial and volume of one dataframe row.
+
+        The structure id is taken from ``kwarg`` when it is given under ``constants.DATA_STRUCTURE_ID``.
+        """
         res = {
             constants.DATA_REFERENCE_ENERGY: np.array(row[self.energy_col]).reshape(
                 -1, 1
@@ -856,7 +895,8 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
             res[constants.DATA_REFERENCE_VIRIAL] *= self.stress_conversion_factor
         return res
 
-    def get_sample_dtypes(self):
+    def get_sample_dtypes(self) -> dict[str, Any]:
+        """Return the numpy dtype of every entry of a per-structure data dict."""
         sample_dtypes = {
             constants.DATA_REFERENCE_ENERGY: self.float_dtype,
             constants.DATA_REFERENCE_FORCES: self.float_dtype,
@@ -872,7 +912,8 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
 
         return sample_dtypes
 
-    def join_to_batch(self, pre_batch_list: list):
+    def join_to_batch(self, pre_batch_list: list[dict]) -> dict:
+        """Concatenate the per-structure reference data into batch arrays."""
         res_dict = {}
         for key in [constants.DATA_REFERENCE_ENERGY]:
             data_list = [np.float64(data_dict[key]) for data_dict in pre_batch_list]
@@ -922,10 +963,12 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
 
         return res_dict
 
-    def get_batch_dtypes(self):
+    def get_batch_dtypes(self) -> dict[str, Any]:
+        """Return the dtypes of a batch dict, the same as those of a sample."""
         return self.get_sample_dtypes()
 
-    def pad_batch(self, batch, max_pad_dict):
+    def pad_batch(self, batch: dict, max_pad_dict: dict) -> None:
+        """Pad the forces and weights (atoms) and energies, ids, virials, volumes (structures) of ``batch`` in place."""
         pad_nat, pad_nneigh, pad_nstruct = get_padding_dims(batch, max_pad_dict)
 
         if pad_nat > 0:
@@ -985,7 +1028,8 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
                     constant_values=max_val,
                 )
 
-    def postprocess_dataset(self, batches):
+    def postprocess_dataset(self, batches: Iterable[dict]) -> None:
+        """With ``normalize_weights``, divide the energy, force and virial weights by their sums over all ``batches`` in place."""
         if self.normalize_weights:
             energy_weight_sum = np.sum([np.sum(b[self.energy_weight]) for b in batches])
             forces_weight_sum = np.sum([np.sum(b[self.force_weight]) for b in batches])
@@ -995,7 +1039,8 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
                 b[self.force_weight] /= forces_weight_sum
 
             if self.is_fit_stress:
-                virial_weight_sum = np.sum(
+                # sum over a generator: the numpy stubs have no overload for it
+                virial_weight_sum = np.sum(  # ty: ignore[no-matching-overload]
                     np.sum(b[self.virial_weight]) for b in batches
                 )
                 for b in batches:
@@ -1012,11 +1057,11 @@ def construct_batches(
     external_max_nneigh: int | None = None,
     external_max_nat: int | None = None,
     max_padding_fraction: float = 0.3,
-    gc_collect=True,
-    max_workers=None,
-):
+    gc_collect: bool = True,
+    max_workers: int | None = None,
+) -> Any:
     """
-    Return:    batches, padding_stats (optional)
+    Return:    batches (a deque of dicts), or (batches, padding_stats) when ``return_padding_stats``
     """
     iterator_func = tqdm if verbose else transparent_iterator
     data_dict_list = []
@@ -1178,7 +1223,12 @@ def construct_batches(
         return batches
 
 
-def process_dataframe(df_or_ase_atoms_list, data_builders, iterator_func):
+def process_dataframe(
+    df_or_ase_atoms_list: pd.DataFrame,
+    data_builders: list[AbstractDataBuilder],
+    iterator_func: Callable[..., Iterable],
+) -> list[dict]:
+    """Serially build the per-structure data dict of every row of the dataframe."""
     data_dict_list = []
     for row_ind, row in iterator_func(
         df_or_ase_atoms_list.iterrows(),
@@ -1192,12 +1242,16 @@ def process_dataframe(df_or_ase_atoms_list, data_builders, iterator_func):
 
 
 def parallel_process_dataframe(
-    df_or_ase_atoms_list,
-    data_builders,
-    iterator_func,
-    max_workers,
-    chunksize=2500,
-):
+    df_or_ase_atoms_list: pd.DataFrame,
+    data_builders: list[AbstractDataBuilder],
+    iterator_func: Callable[..., Iterable],
+    max_workers: int,
+    chunksize: int = 2500,
+) -> list[dict]:
+    """Like ``process_dataframe`` but with a process pool of ``max_workers``, in chunks of ``chunksize`` rows.
+
+    ``iterator_func`` is accepted for symmetry and not used (a ``tqdm`` bar is always shown).
+    """
     logging.info(f"Parallel data processing: {max_workers=}, {chunksize=}")
     chunks = (
         df_or_ase_atoms_list.iloc[i * chunksize : (i + 1) * chunksize]
@@ -1240,7 +1294,10 @@ def parallel_process_dataframe(
     return data_dict_list
 
 
-def process_row(row_ind, row, data_builders):
+def process_row(
+    row_ind: Any, row: pd.Series, data_builders: list[AbstractDataBuilder]
+) -> dict:
+    """Merge the data dicts that every builder extracts from ``row``; ``row_ind`` is passed as the structure id."""
     data_dict = {}  # managed by reference
     for data_builder in data_builders:
         data_dict.update(
