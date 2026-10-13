@@ -107,3 +107,14 @@ def test_configure_logging_of_the_scripts_shows_the_messages_as_bare_text(tmp_pa
     assert result.stdout.splitlines()[-1] == "bare"
     assert "bare" not in result.stderr
     assert result.stderr.rstrip().endswith("I - prefixed")
+
+
+def test_info_is_shown_whatever_the_level_of_the_root_logger(tmp_path):
+    code = (
+        "from tensorpotential.core.messages import get_messages_logger, show_messages\n"
+        "show_messages()\n"
+        "get_messages_logger().info('shown')\n"
+    )
+    result = run_fresh_python(code, tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines()[-1] == "shown"
