@@ -16,12 +16,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ast_manifest import hash_source
+from ast_manifest import _git, hash_source
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = "tensorpotential"
@@ -109,14 +108,7 @@ def _bound_name(node: ast.stmt) -> str | None:
 def _read(path: str, rev: str | None, root: Path = ROOT) -> str:
     if rev is None:
         return (root / path).read_text()
-    out = subprocess.run(  # noqa: S603
-        ["git", "show", f"{rev}:{path}"],  # noqa: S607
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return out.stdout
+    return _git(["show", f"{rev}:{path}"], root)
 
 
 def record(rev: str | None, root: Path = ROOT) -> dict[str, dict]:

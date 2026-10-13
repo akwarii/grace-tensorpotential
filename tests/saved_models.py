@@ -17,6 +17,7 @@ from tensorpotential import TensorPotential
 from tensorpotential.calculator.asecalculator import TPCalculator
 from tensorpotential.instructions.base import load_instructions, save_instructions_dict
 from tensorpotential.potentials import get_preset
+from tensorpotential.scripts import grace_utils
 from tests.seeded_weights import seed_trainable_variables
 
 DEFAULT_CONFIG = {"rcut": 4.5, "n_rad_max": 4, "lmax": 2}
@@ -73,6 +74,16 @@ def save_seeded_model(
     checkpoint = directory / "checkpoint"
     tp.save_checkpoint(checkpoint_name=str(checkpoint))
     return model, checkpoint
+
+
+def run_grace_utils(
+    model: Path, checkpoint: Path | None, *words: str, options: tuple[str, ...] = ()
+) -> int:
+    """Run ``grace_utils -p MODEL [-c CHECKPOINT] OPTIONS WORDS`` in process and return its exit code."""
+    argv = ["-p", str(model)]
+    if checkpoint is not None:
+        argv += ["-c", str(checkpoint)]
+    return grace_utils.main([*argv, *options, *words])
 
 
 def dimer_energy(

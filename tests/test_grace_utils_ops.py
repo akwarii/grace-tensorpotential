@@ -19,16 +19,14 @@ import yaml
 
 from tensorpotential.instructions.base import load_instructions
 from tensorpotential.scripts import grace_utils
-from tests.saved_models import FS_CONFIG, dimer_energy, save_seeded_model
+from tests.saved_models import (
+    FS_CONFIG,
+    dimer_energy,
+    run_grace_utils,
+    save_seeded_model,
+)
 
-
-def _run(
-    model: Path, checkpoint: Path | None, *words: str, options: tuple[str, ...] = ()
-) -> int:
-    argv = ["-p", str(model)]
-    if checkpoint is not None:
-        argv += ["-c", str(checkpoint)]
-    return grace_utils.main([*argv, *options, *words])
+_run = run_grace_utils
 
 
 @pytest.fixture(scope="module")

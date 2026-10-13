@@ -17,8 +17,8 @@ import tensorflow as tf
 from ase.build import bulk
 
 from tensorpotential.data.process_df import ENERGY_CORRECTED_COL, FORCES_COL, STRESS_COL
-from tensorpotential.scripts import grace_preprocess, grace_utils
-from tests.saved_models import FS_CONFIG, save_seeded_model
+from tensorpotential.scripts import grace_preprocess
+from tests.saved_models import FS_CONFIG, run_grace_utils, save_seeded_model
 
 _UNSTABLE = {"fingerprint.pb", "saved_model.pb"}
 
@@ -99,15 +99,7 @@ def kokkos_output(directory: Path) -> Path:
     model, checkpoint = save_seeded_model(directory, {"H": 0})
     out = directory / "out" / "weights.npz"
     out.parent.mkdir()
-    grace_utils.main([
-        "-p",
-        str(model),
-        "-c",
-        str(checkpoint),
-        "export_kokkos",
-        "-o",
-        str(out),
-    ])
+    run_grace_utils(model, checkpoint, "export_kokkos", "-o", str(out))
     return out.parent
 
 
@@ -118,16 +110,7 @@ def fs_yaml_output(directory: Path) -> Path:
     )
     out = directory / "out"
     out.mkdir()
-    grace_utils.main([
-        "-p",
-        str(model),
-        "-c",
-        str(checkpoint),
-        "export",
-        "-sf",
-        "-n",
-        str(out / "fs_model"),
-    ])
+    run_grace_utils(model, checkpoint, "export", "-sf", "-n", str(out / "fs_model"))
     return out
 
 
@@ -136,15 +119,7 @@ def saved_model_output(directory: Path) -> Path:
     model, checkpoint = save_seeded_model(directory, {"H": 0})
     out = directory / "out"
     out.mkdir()
-    grace_utils.main([
-        "-p",
-        str(model),
-        "-c",
-        str(checkpoint),
-        "export",
-        "-n",
-        str(out / "saved_model"),
-    ])
+    run_grace_utils(model, checkpoint, "export", "-n", str(out / "saved_model"))
     return out
 
 

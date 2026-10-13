@@ -11,10 +11,15 @@ from tensorpotential.scripts._script_logging import configure_logging
 logger = logging.getLogger()
 
 
+def _param_dtype_name(args):
+    """The ``--param_dtype`` of the command line; a Namespace without it counts as unset."""
+    return getattr(args, "param_dtype", None)
+
+
 def resolve_param_dtype(args, model_path: str):
     """Determine param_dtype: use explicit --param_dtype if given, else read from
     model.yaml metadata, else fall back to float64 for backward compatibility."""
-    return model_ops.resolve_param_dtype(getattr(args, "param_dtype", None), model_path)
+    return model_ops.resolve_param_dtype(_param_dtype_name(args), model_path)
 
 
 def preprocess_args(args):
@@ -31,7 +36,7 @@ def _converting_kwargs(args):
         "potential": args.potential,
         "checkpoint_path": args.checkpoint_path,
         "output_suffix": args.output_suffix,
-        "param_dtype_name": getattr(args, "param_dtype", None),
+        "param_dtype_name": _param_dtype_name(args),
     }
 
 
@@ -69,7 +74,7 @@ def export_model(args):
         saved_model_name=args.saved_model_name,
         sf=args.sf,
         communicated_keys=getattr(args, "communicated_keys", None),
-        param_dtype_name=getattr(args, "param_dtype", None),
+        param_dtype_name=_param_dtype_name(args),
     )
 
 
@@ -81,7 +86,7 @@ def export_kokkos(args):
         output=args.output,
         arch=args.arch,
         uq_artifacts_path=args.uq_artifacts_path,
-        param_dtype_name=getattr(args, "param_dtype", None),
+        param_dtype_name=_param_dtype_name(args),
     )
 
 
@@ -90,7 +95,7 @@ def model_summary(args):
     model_ops.model_summary(
         potential=args.potential,
         verbose=args.verbose,
-        param_dtype_name=getattr(args, "param_dtype", None),
+        param_dtype_name=_param_dtype_name(args),
     )
 
 
@@ -100,7 +105,7 @@ def aux_model(args):
         checkpoint_path=args.checkpoint_path,
         output_path=args.output_path,
         communicated_keys=args.communicated_keys,
-        param_dtype_name=getattr(args, "param_dtype", None),
+        param_dtype_name=_param_dtype_name(args),
     )
 
 

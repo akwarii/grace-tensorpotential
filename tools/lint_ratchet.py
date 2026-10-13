@@ -402,7 +402,7 @@ def check(
     rises: list[str] = []
     drops: list[str] = []
     for tool in ("ruff", "ty"):
-        up, down = compare(rekey(base[tool], moves), fold_splits(now[tool], splits))
+        up, down = _compare_after_moves(base[tool], now[tool], moves, splits)
         rises += [f"{tool} {line}" for line in up]
         drops += [f"{tool} {line}" for line in down]
     report = [
@@ -428,6 +428,13 @@ def _moved_legacy(legacy_path: Path, moves: dict[str, str]) -> list[str]:
     if not legacy_path.is_file():
         return []
     return [moves.get(path, path) for path in read_legacy(legacy_path)]
+
+
+def _compare_after_moves(
+    base: Counts, now: Counts, moves: dict[str, str], splits: dict[str, str]
+) -> tuple[list[str], list[str]]:
+    """``compare`` with the baseline re-keyed by the moves and the split-off files folded into their source."""
+    return compare(rekey(base, moves), fold_splits(now, splits))
 
 
 def _split_problems(listed: list[str], splits: dict[str, str]) -> list[str]:
@@ -459,7 +466,7 @@ def _rises(old: dict, now: dict, moves: dict[str, str], splits: dict[str, str]) 
     return [
         r
         for tool in ("ruff", "ty")
-        for r in compare(rekey(old[tool], moves), fold_splits(now[tool], splits))[0]
+        for r in _compare_after_moves(old[tool], now[tool], moves, splits)[0]
     ]
 
 
