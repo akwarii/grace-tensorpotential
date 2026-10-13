@@ -336,7 +336,7 @@ def test_snapshot_specs_rejects_an_unknown_group():
 def test_model_spec_is_immutable():
     spec = osn.ModelSpec("a", "b.yaml")
     with pytest.raises(AttributeError):
-        spec.label = "c"  # ty: ignore[invalid-assignment]  (the test checks that it is read-only)
+        spec.label = "c"
 
 
 def test_precision_rows_are_named_and_select_by_label():
