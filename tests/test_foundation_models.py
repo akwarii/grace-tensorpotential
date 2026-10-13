@@ -779,3 +779,17 @@ def test_the_module_registers_models_from_the_user_registry_without_overriding(
         check=True,
     )
     assert result.stdout.split()[-4:] == ["/somewhere", "None", "True", "True"]
+
+
+def test_an_unexpected_error_while_reading_the_package_version_is_not_hidden(monkeypatch):
+    import importlib.metadata as metadata
+
+    class CorruptMetadataError(RuntimeError):
+        pass
+
+    def _broken(_name):
+        raise CorruptMetadataError
+
+    monkeypatch.setattr(metadata, "version", _broken)
+    with pytest.raises(CorruptMetadataError):
+        fm._tp_version()
