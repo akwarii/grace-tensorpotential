@@ -46,7 +46,10 @@ def test_a_submodule_still_imports_from_the_package(tmp_path):
     code = "from tensorpotential.uq import constants, gmmuq; print(constants.__name__, gmmuq.__name__)"
     result = run_fresh_python(code, tmp_path)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.split()[-2:] == ["tensorpotential.uq.constants", "tensorpotential.uq.gmmuq"]
+    assert result.stdout.split()[-2:] == [
+        "tensorpotential.uq.constants",
+        "tensorpotential.uq.gmmuq",
+    ]
 
 
 def test_an_unknown_name_raises_attribute_error(tmp_path):
