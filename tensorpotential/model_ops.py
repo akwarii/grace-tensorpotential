@@ -2,6 +2,9 @@
 
 Each operation takes explicit keyword arguments, so it can be called from code; the ``grace_utils`` command turns
 its parsed arguments into these calls. ``checkpoint_path`` is given without the ``.index`` suffix.
+
+``update_model`` and ``reduce_elements`` end the process with ``sys.exit(0)`` when the model is already in (or not yet in)
+the dict format, as the command always did; a caller that must survive catches ``SystemExit``.
 """
 
 from __future__ import annotations

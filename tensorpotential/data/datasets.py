@@ -1,3 +1,5 @@
+"""Library: loading, weighting and batching of the training and test datasets (formerly ``cli/data.py``)."""
+
 from __future__ import annotations
 
 import glob

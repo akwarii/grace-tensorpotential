@@ -423,14 +423,22 @@ def check(
     return 1 if failed else 0
 
 
+def _moved_legacy(legacy_path: Path, moves: dict[str, str]) -> list[str]:
+    """The legacy list with the moves applied; empty when there is no list yet."""
+    if not legacy_path.is_file():
+        return []
+    return [moves.get(path, path) for path in read_legacy(legacy_path)]
+
+
 def _split_problems(listed: list[str], splits: dict[str, str]) -> list[str]:
     """Why a ``--split`` cannot be taken: its source is not a legacy file, or its target already is one."""
-    return [
-        f"--split {old} {new}: {old} is not a legacy file" if old not in listed
-        else f"--split {old} {new}: {new} is a legacy file already"
-        for new, old in sorted(splits.items())
-        if old not in listed or new in listed
-    ]
+    problems = []
+    for new, old in sorted(splits.items()):
+        if old not in listed:
+            problems.append(f"--split {old} {new}: {old} is not a legacy file")
+        elif new in listed:
+            problems.append(f"--split {old} {new}: {new} is a legacy file already")
+    return problems
 
 
 def _recorded_list(
@@ -443,8 +451,7 @@ def _recorded_list(
     """
     if not legacy_path.is_file():
         return [f for f in lintable_files(root) if not in_new_package(f)]
-    moved = {moves.get(path, path) for path in read_legacy(legacy_path)}
-    moved |= set(splits)
+    moved = {*_moved_legacy(legacy_path, moves), *splits}
     return sorted(path for path in moved if (root / path).is_file())
 
 
@@ -468,9 +475,7 @@ def record(
     """Write the current counts and the legacy list; refuse to record a rise unless allowed."""
     moves = moves or {}
     splits = splits or {}
-    problems = _split_problems(
-        sorted({moves.get(p, p) for p in read_legacy(legacy_path)}) if legacy_path.is_file() else [], splits
-    )
+    problems = _split_problems(_moved_legacy(legacy_path, moves), splits)
     if problems:
         sys.stdout.write("\n".join(problems) + "\n")
         return 1

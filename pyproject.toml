@@ -182,6 +182,8 @@ ignore_imports = [
     "tensorpotential -> tensorflow",
 ]
 
+# Not listed: the command layers themselves, compat (legacy, out of scope), resources (data files) and the package marker
+# modules; tests/test_import_direction.py checks that every other top-level module is listed.
 [[tool.importlinter.contracts]]
 name = "Library code does not import the command layers (cli, scripts)"
 type = "forbidden"
