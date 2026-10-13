@@ -6,7 +6,7 @@ import os
 import yaml
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 from tensorpotential import _tf_options  # noqa: F401
@@ -522,7 +522,7 @@ class ComputeEquivariantForces(ComputeFunction):
 
 
 def extract_basis_functions(
-    basis_reduce_instruction: TPInstruction, input_data: Dict[str, tf.Tensor]
+    basis_reduce_instruction: TPInstruction, input_data: dict[str, tf.Tensor]
 ) -> tf.Tensor:
     """
     Extract basis functions from computed data.
@@ -530,7 +530,7 @@ def extract_basis_functions(
     Parameters
     ----------
     basis_reduce_instruction: TPInstruction - instruction that reduces basis functions
-    input_data: Dict[str,tf.Tensor] - dictionary with computed tensors
+    input_data: dict[str, tf.Tensor] - dictionary with computed tensors
 
     Returns
     -------
@@ -574,7 +574,7 @@ class ExtractBasisFunctions(ComputeFunction):
         self.reduce_2L_instruction_name = reduce_2L_instruction_name
 
     def find_function_reduce_name(
-        self, instructions: Dict[str, TPInstruction]
+        self, instructions: dict[str, TPInstruction]
     ) -> list[str]:
         """This function will find all namees of the FunctionReduceN"""
         function_reduce_ins_names = []
@@ -1187,7 +1187,7 @@ class TPModel(tf.Module):
         """Generate a formatted summary string of all instructions."""
         break_line = "\n" + separator * separator_length + "\n"
 
-        vars_counter: Dict[str, int] = dict()
+        vars_counter: dict[str, int] = dict()
         lines = [
             f"{i + 1}. {ins.summary(verbose, vars_counter, **kwargs)}"
             for i, ins in enumerate(self.instructions.values())

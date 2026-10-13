@@ -10,16 +10,10 @@ from abc import ABC, abstractmethod
 
 from enum import Enum
 from typing import (
-    Callable,
-    Iterable,
     Literal,
-    Set,
-    List,
-    Optional,
-    Tuple,
-    Dict,
     Any,
-)  # noqa: F401
+)
+from collections.abc import Callable, Iterable  # noqa: F401
 import datetime
 import numpy as np
 import pandas as pd
@@ -89,7 +83,7 @@ class NoInstructionManager:
         _instruction_manager = self.orig_ins_manager
 
 
-_instruction_manager: Optional[InstructionManager] = None
+_instruction_manager: InstructionManager | None = None
 
 
 def active_dense_nbr() -> bool:
@@ -441,7 +435,7 @@ class TPInstruction(tf.Module, ABC):
         return input_data
 
     def summary(
-        self, verbose: summary_verbose_type, shown_vars: Set[str] | None = None
+        self, verbose: summary_verbose_type, shown_vars: set[str] | None = None
     ) -> str:
         """Return a printable summary of the instruction (see ``InstructionPrinter.get_summary``)."""
         return InstructionPrinter.get_summary(self, verbose, shown_vars)
@@ -735,7 +729,7 @@ class InstructionPrinter:
     def get_summary(
         instruction: TPInstruction,
         verbose: summary_verbose_type = 0,
-        shown_vars: Set[str] | None = None,
+        shown_vars: set[str] | None = None,
     ) -> str:
         """Return the instruction line plus the table of its new trainable variables and, for
         ``verbose`` 1 and 2, the coupling tables."""
@@ -832,7 +826,7 @@ class InstructionPrinter:
 
     @staticmethod
     def repr_var_info(
-        instruction: TPInstruction, vars_counter: Dict[str, int] | None = None
+        instruction: TPInstruction, vars_counter: dict[str, int] | None = None
     ) -> str:
         """Return the table of the trainable variables of ``instruction`` not yet in ``vars_counter``.
 
@@ -840,7 +834,7 @@ class InstructionPrinter:
         result is empty when no new parameter is listed.
         """
 
-        def hash_var_item(k: str, v: List[int]) -> str:
+        def hash_var_item(k: str, v: list[int]) -> str:
             return f"{k}={v}"
 
         substr = ""
@@ -899,7 +893,7 @@ class ParityType(Enum):
     UNKNOWN_PARITY = ("UNKNOWN_PARITY",)
 
     @classmethod
-    def get_parity_type(cls, parity: List[Tuple[int, int]]) -> "ParityType":
+    def get_parity_type(cls, parity: list[tuple[int, int]]) -> "ParityType":
         """Classify a list of ``(l, parity)`` pairs as real, pseudo or unknown parity."""
         parity_ar = np.array(parity)
 
