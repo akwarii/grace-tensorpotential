@@ -224,3 +224,12 @@ def test_export_to_fs_yaml_keeps_an_explicit_yml_name(tmp_path):
     assert _run(model, checkpoint, "export", "-sf", "-n", str(target)) == 0
     assert target.exists()
     assert not Path(f"{target}.yaml").exists()
+
+
+def test_export_writes_a_saved_model_with_the_compute_signatures(one_element, tmp_path):
+    model, checkpoint = one_element
+    target = tmp_path / "exported_model"
+    assert _run(model, checkpoint, "export", "-n", str(target)) == 0
+    signatures = tf.saved_model.load(str(target)).signatures
+    assert "compute" in signatures
+    assert "compute_energy" in signatures

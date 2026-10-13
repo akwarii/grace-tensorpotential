@@ -3,7 +3,7 @@
 ``param_dtype`` has several code defaults that disagree (SPEC1 records it): a yaml without a ``param_dtype``
 key resolves to float64 here and in ``scripts/grace_utils.py``, while ``TensorPotential`` and
 ``utils.get_param_dtype_from_config`` default to float32. The disagreement is pinned as it is, not endorsed;
-the tests of the other code paths are in ``test_grace_utils_export.py``, ``test_utils.py`` and
+the tests of the other code paths are in ``test_model_ops.py``, ``test_utils.py`` and
 ``test_tensorpot.py``.
 """
 

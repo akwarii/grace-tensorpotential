@@ -1,4 +1,4 @@
-"""Characterization tests for ``load_and_prepare_datasets`` (``tensorpotential/cli/data.py``).
+"""Characterization tests for ``load_and_prepare_datasets`` (``tensorpotential/data/datasets.py``).
 
 Logic layer: every branch of the function (reference energy options, stress extraction, shift,
 scale, convex hull, duplicate indices, element maps, saving, extra builders, the streaming and the
