@@ -370,7 +370,24 @@ class PaddingManager:
 
         return batch
 
-    def is_large_padding(self, nreal_atoms, nreal_neigh, upper_bound):
+    def is_large_padding(
+        self, nreal_atoms: int, nreal_neigh: int, upper_bound: Tuple[int, int]
+    ) -> bool:
+        """Tell whether padding up to ``upper_bound`` is excessive.
+
+        Parameters
+        ----------
+        nreal_atoms, nreal_neigh : int
+            Numbers of real atoms and real neighbours of the structure.
+        upper_bound : tuple of int
+            Padded (atoms, neighbours) sizes.
+
+        Returns
+        -------
+        bool
+            True when more than 1000 entries are added and the padding fraction
+            exceeds ``pad_neighbors_fraction``.
+        """
         npad_atoms = upper_bound[0] - nreal_atoms
         npad_neigh = upper_bound[1] - nreal_neigh
         padding_fraction = (npad_atoms + npad_neigh) / (nreal_atoms + nreal_neigh)
@@ -611,6 +628,7 @@ class DensePaddingManager:
             self._eval_s_global = _ema(self._eval_s_global, elapsed_s, a)
 
     def get_data(self, atoms) -> Dict[str, Any]:
+        """Build the padded dense-layout batch dictionary for one ``ase.Atoms``."""
         data_dict: Dict[str, Any] = {}
         for db in self.data_builders:
             data_dict.update(db.extract_from_ase_atoms(atoms))
@@ -982,7 +1000,7 @@ class TPCalculator(Calculator):
                 "Uncertainty quantification is enabled (mode='%s'). "
                 "Call calc.enable_uq(mode='gamma_only'/'full') to switch, "
                 "or calc.disable_uq() to use standard compute.",
-                self._uq_state["mode"],
+                self._uq_state["mode"],  # ty: ignore[not-subscriptable]  # set by enable_uq(); ty cannot narrow through the _uq_enabled property
             )
 
     @property
@@ -994,7 +1012,7 @@ class TPCalculator(Calculator):
         """List of UQ modes exposed by the loaded SavedModel."""
         return list(self._saved_model_uq_sigs.keys())
 
-    def enable_uq(self, mode: str | None = None):
+    def enable_uq(self, mode: str | None = None) -> None:
         """Switch to a compute_uq signature (UQ + standard outputs).
 
         Only works when the calculator was loaded from a SavedModel that
@@ -1022,7 +1040,7 @@ class TPCalculator(Calculator):
                 f"UQ mode {mode!r} not available; SavedModel exposes "
                 f"{list(self._saved_model_uq_sigs)}"
             )
-        if self._uq_enabled and self._uq_state["mode"] == mode:
+        if self._uq_enabled and self._uq_state["mode"] == mode:  # ty: ignore[not-subscriptable]  # guarded by the _uq_enabled property; ty cannot narrow through it
             return
         if self._uq_enabled:
             # Mode switch: restore baseline first so the snapshot is clean
@@ -1050,7 +1068,7 @@ class TPCalculator(Calculator):
         self.data_keys = list(sig_kwargs)
         self._configure_uq_properties_from_signature(sig)
 
-    def disable_uq(self):
+    def disable_uq(self) -> None:
         """Restore the standard compute signature, removing UQ outputs."""
         if self._uq_state is None:
             return
@@ -1093,7 +1111,7 @@ class TPCalculator(Calculator):
         checkpoint: str | None = None,
         param_dtype=None,
         compute_dsigma_dr: bool = True,
-    ):
+    ) -> None:
         """Load GMM-UQ artifacts and enable uncertainty quantification.
 
         For saved models (the common case), ``model_yaml`` and ``checkpoint``
@@ -1181,7 +1199,11 @@ class TPCalculator(Calculator):
         )
         self._set_uq_extra_properties(extra, truncate)
 
-    def get_data(self, atoms):
+    def get_data(self, atoms) -> None:
+        """Convert ``atoms`` to the padded model input and store it in ``self.data``.
+
+        Raises ``RuntimeError`` when the minimal bond distance is below ``min_dist``.
+        """
         current_symbs = atoms.symbols.species()
         assert all([x in self.element_map for x in current_symbs]), (
             f"This model is configured to process "
@@ -1211,7 +1233,12 @@ class TPCalculator(Calculator):
             )
         self.data = Dataset.from_tensors(data).get_single_element()
 
-    def find_upper_padding_bound(self, max_nat):
+    def find_upper_padding_bound(self, max_nat: int) -> tuple:
+        """Return the entry of ``padding_history`` that fits ``max_nat`` atoms.
+
+        It is the last entry whose atom bound equals that of the first entry with
+        a bound of at least ``max_nat``.
+        """
         # find first entry, when max_nat<=
         for ind, upper_bound_tuple in enumerate(self.padding_history):
             if upper_bound_tuple[0] >= max_nat:
@@ -1230,7 +1257,18 @@ class TPCalculator(Calculator):
         atoms=None,
         properties=("energy", "forces", "stress"),
         system_changes=all_changes,
-    ):
+    ) -> None:
+        """Compute the requested properties and store them in ``self.results``.
+
+        Parameters
+        ----------
+        atoms : ase.Atoms
+            Structure to evaluate.
+        properties : sequence of str
+            Requested properties.
+        system_changes : list of str
+            Changes since the last calculation (ASE convention).
+        """
         Calculator.calculate(self, atoms, properties, system_changes)
 
         self.forces = np.empty((len(atoms), 3))
