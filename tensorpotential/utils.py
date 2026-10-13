@@ -446,10 +446,9 @@ def select_elements_in_model(
     # selection of ChemicalEmbedding
     Z = None
     for name, ins in instructions_dict.items():
-        if isinstance(ins, ScalarChemicalEmbedding):
-            if Z is None:
-                Z = ins
-                break
+        if isinstance(ins, ScalarChemicalEmbedding) and Z is None:
+            Z = ins
+            break
     if Z is None:
         raise ValueError("No ScalarChemicalEmbedding found in instructions dict")
 

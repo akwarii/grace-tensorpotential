@@ -833,9 +833,10 @@ class TPModel(tf.Module):
     ):
         self.param_dtype = param_dtype
         for sm in self.submodules:
-            if hasattr(sm, "build"):
-                if not hasattr(sm, "is_built") or not sm.is_built:
-                    sm.build(param_dtype)
+            if hasattr(sm, "build") and (
+                not hasattr(sm, "is_built") or not sm.is_built
+            ):
+                sm.build(param_dtype)
             if hasattr(sm, "input_tensor_spec"):
                 self.instructions_specs.update(sm.input_tensor_spec.copy())
 

@@ -173,9 +173,8 @@ def load_train_test_datasets(data_config, seed=None):
         if test_filename:
             log.info(f"Loading test data: {test_filename}")
             test_df = load_dataset(test_filename)
-            if test_size is not None:
-                if test_size > 1:
-                    test_df = test_df.sample(n=test_size, random_state=seed)
+            if test_size is not None and test_size > 1:
+                test_df = test_df.sample(n=test_size, random_state=seed)
             # run train data builder
         elif test_size is not None:
             log.info(f"Split test data from train dataset (fraction = {test_size})")
