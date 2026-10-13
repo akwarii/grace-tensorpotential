@@ -548,6 +548,16 @@
   milestone: [CLI1]
   upstream: pending
 
+- path: tensorpotential/uq/cli/strategies.py
+  reason: 'built-in generics and X | None in the annotations (typing.List, Dict, Optional replaced)'
+  milestone: [QUAL6]
+  upstream: pending
+
+- path: tensorpotential/uq/constants.py
+  reason: 'built-in generics in the annotations (typing.Tuple replaced)'
+  milestone: [QUAL6]
+  upstream: pending
+
 - path: tests/test_gen_tensor_wizard.py
   reason: 'tests of the wizard sections, the review, the entry point and the tensor property converters added'
   milestone: [CLI1]
