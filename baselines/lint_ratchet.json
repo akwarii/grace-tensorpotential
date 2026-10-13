@@ -26,7 +26,6 @@
    "PLR0913": 1
   },
   "tensorpotential/calculator/foundation_models.py": {
-   "BLE001": 1,
    "PTH103": 2,
    "PTH104": 1,
    "PTH105": 1,
@@ -210,7 +209,6 @@
   },
   "tensorpotential/data/dataset_plotter.py": {
    "B007": 1,
-   "BLE001": 1,
    "PLR0913": 2,
    "RET505": 2
   },
@@ -259,7 +257,6 @@
    "PTH207": 1
   },
   "tensorpotential/data/streaming.py": {
-   "BLE001": 2,
    "C901": 2,
    "PLR0912": 1,
    "PLR0913": 1,
@@ -282,7 +279,6 @@
   "tensorpotential/export.py": {
    "B007": 3,
    "B905": 1,
-   "BLE001": 2,
    "C901": 1,
    "PLR0912": 1,
    "PLR0915": 1,
@@ -330,7 +326,6 @@
    "RUF012": 1
   },
   "tensorpotential/extra/gen_tensor/wizard.py": {
-   "BLE001": 6,
    "C901": 2,
    "ERA001": 1,
    "PLR0912": 1,
@@ -530,7 +525,6 @@
   "tensorpotential/tensorpot.py": {
    "B007": 1,
    "B905": 3,
-   "BLE001": 1,
    "C901": 3,
    "ERA001": 1,
    "PLR0913": 2,
@@ -683,7 +677,6 @@
   },
   "tensorpotential/utils.py": {
    "B007": 3,
-   "BLE001": 1,
    "C901": 1,
    "PLR0913": 2,
    "PTH113": 1,
