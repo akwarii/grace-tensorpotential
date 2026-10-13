@@ -25,35 +25,29 @@ def preprocess_args(args):
         args.checkpoint_path = args.checkpoint_path.replace(".index", "")
 
 
+def _converting_kwargs(args):
+    """The keyword arguments the operations that write a converted model share."""
+    return {
+        "potential": args.potential,
+        "checkpoint_path": args.checkpoint_path,
+        "output_suffix": args.output_suffix,
+        "param_dtype_name": getattr(args, "param_dtype", None),
+    }
+
+
 def update_model(args):
     preprocess_args(args)
-    model_ops.update_model(
-        potential=args.potential,
-        checkpoint_path=args.checkpoint_path,
-        output_suffix=args.output_suffix,
-        param_dtype_name=getattr(args, "param_dtype", None),
-    )
+    model_ops.update_model(**_converting_kwargs(args))
 
 
 def resave_checkpoint(args):
     preprocess_args(args)
-    model_ops.resave_checkpoint(
-        potential=args.potential,
-        checkpoint_path=args.checkpoint_path,
-        output_suffix=args.output_suffix,
-        param_dtype_name=getattr(args, "param_dtype", None),
-    )
+    model_ops.resave_checkpoint(**_converting_kwargs(args))
 
 
 def reduce_elements(args):
     preprocess_args(args)
-    model_ops.reduce_elements(
-        potential=args.potential,
-        checkpoint_path=args.checkpoint_path,
-        output_suffix=args.output_suffix,
-        elements=args.elements,
-        param_dtype_name=getattr(args, "param_dtype", None),
-    )
+    model_ops.reduce_elements(**_converting_kwargs(args), elements=args.elements)
 
 
 def cast_model_param(args):
