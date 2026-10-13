@@ -1,7 +1,7 @@
 {
  "legacy": {
-  "count": 274,
-  "sha256": "96b2126b9c6b6457f7b458e67fafe228603a16707cae504541a3eb45b1c3dc2c"
+  "count": 272,
+  "sha256": "58649d9891b8db92ea5abd59fdc33b60e171d8157e90241a5c56f93815e00385"
  },
  "ruff": {
   "examples/grace/visualize_metrics.ipynb": {
@@ -694,14 +694,6 @@
    "RUF012": 6,
    "SIM102": 1
   },
-  "tests/MoNbTaW-CUSTOM/model.py": {
-   "PLR0913": 1,
-   "RET504": 1,
-   "RUF012": 1
-  },
-  "tests/MoNbTaW-CUSTOM/model_mlp_emb.py": {
-   "PLR0913": 1
-  },
   "tests/conftest.py": {
    "PTH118": 1,
    "PTH120": 1,
@@ -1145,9 +1137,6 @@
   },
   "tensorpotential/uq/cli/select.py": {
    "no-matching-overload": 1
-  },
-  "tests/MoNbTaW-CUSTOM/model.py": {
-   "invalid-method-override": 1
   },
   "tests/test_instructions.py": {
    "not-iterable": 6,

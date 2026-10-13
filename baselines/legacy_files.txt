@@ -128,8 +128,6 @@ tensorpotential/uq/feature_extraction.py
 tensorpotential/uq/gmmuq.py
 tensorpotential/uq/instructions.py
 tensorpotential/utils.py
-tests/MoNbTaW-CUSTOM/model.py
-tests/MoNbTaW-CUSTOM/model_mlp_emb.py
 tests/__init__.py
 tests/cli_help.py
 tests/conftest.py
