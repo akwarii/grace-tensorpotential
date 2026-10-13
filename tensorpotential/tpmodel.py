@@ -6,7 +6,7 @@ import os
 import yaml
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Dict
+from typing import Any
 
 import numpy as np
 from tensorpotential import _tf_options  # noqa: F401
@@ -92,7 +92,17 @@ def load_model_metadata(model_path: str) -> dict | None:
     return None
 
 
-def extract_cutoff_and_elements(instructions):
+def extract_cutoff_and_elements(
+    instructions: dict | list,
+) -> tuple[float, Any, Any]:
+    """Largest cutoff and the element map of a list (or dict) of instructions.
+
+    Returns
+    -------
+    tuple
+        Maximum cutoff (0.0 if none), element symbols and element indices
+        (``None`` when no instruction defines an element map).
+    """
     cuts = [0.0]
     element_map_symbols = None
     element_map_index = None
@@ -111,7 +121,7 @@ def extract_cutoff_and_elements(instructions):
     return cutoff, element_map_symbols, element_map_index
 
 
-def extract_cutoff_matrix(instructions) -> np.array:
+def extract_cutoff_matrix(instructions: dict | list) -> np.ndarray | None:
     """
     Aggregate cutoff matrix over all instructions using cumulative max
     Reshape it into square matrix
@@ -134,7 +144,9 @@ def extract_cutoff_matrix(instructions) -> np.array:
         return np.array(cutoff_matrix).reshape(nels, nels)
 
 
-def extract_cutoff_dict(instructions):
+def extract_cutoff_dict(
+    instructions: dict | list,
+) -> dict[tuple[str, str], float] | None:
     """
     Extract cutoff_dict from instructions.
     Returns: dict[tuple[str, str], float]
@@ -152,7 +164,16 @@ def extract_cutoff_dict(instructions):
     return cutoff_dict
 
 
-def compute_batch_virials_from_pair_forces(pair_f, input_data):
+def compute_batch_virials_from_pair_forces(
+    pair_f: Any, input_data: dict
+) -> tf.Tensor:
+    """Virial of every structure of a batch from the pair forces.
+
+    Returns
+    -------
+    tf.Tensor
+        Shape ``(n_structures, 6)``, ordered xx, yy, zz, xy, xz, yz.
+    """
     # virials xx,yy,zz
     virial_012 = tf.reshape(
         tf.math.unsorted_segment_sum(
@@ -196,7 +217,16 @@ def compute_batch_virials_from_pair_forces(pair_f, input_data):
     return virial
 
 
-def compute_structure_virials_from_pair_forces(pair_f, input_data):
+def compute_structure_virials_from_pair_forces(
+    pair_f: Any, input_data: dict
+) -> tf.Tensor:
+    """Virial of a single structure from its pair forces.
+
+    Returns
+    -------
+    tf.Tensor
+        Shape ``(6,)``, ordered xx, yy, zz, xy, xz, yz.
+    """
     virial_012 = tf.reshape(
         tf.reduce_sum(pair_f * input_data[constants.BOND_VECTOR], axis=0),
         [
@@ -247,7 +277,12 @@ class ComputeFunction(ABC):
         raise NotImplementedError()
 
 
-def execute_instructions(input_data, instructions, training=False, local=False):
+def execute_instructions(
+    input_data: dict,
+    instructions: list | dict,
+    training: bool = False,
+    local: bool = False,
+) -> None:
     """
     Function that loop over instructions (either as list or dict) and execute them.
 
@@ -487,15 +522,15 @@ class ComputeEquivariantForces(ComputeFunction):
 
 
 def extract_basis_functions(
-    basis_reduce_instruction: TPInstruction, input_data: Dict[str, tf.Tensor]
-):
+    basis_reduce_instruction: TPInstruction, input_data: dict[str, tf.Tensor]
+) -> tf.Tensor:
     """
     Extract basis functions from computed data.
 
     Parameters
     ----------
     basis_reduce_instruction: TPInstruction - instruction that reduces basis functions
-    input_data: Dict[str,tf.Tensor] - dictionary with computed tensors
+    input_data: dict[str, tf.Tensor] - dictionary with computed tensors
 
     Returns
     -------
@@ -538,7 +573,9 @@ class ExtractBasisFunctions(ComputeFunction):
         self.reduce_1L_instruction_name = reduce_1L_instruction_name
         self.reduce_2L_instruction_name = reduce_2L_instruction_name
 
-    def find_function_reduce_name(self, instructions: Dict[str, TPInstruction]):
+    def find_function_reduce_name(
+        self, instructions: dict[str, TPInstruction]
+    ) -> list[str]:
         """This function will find all namees of the FunctionReduceN"""
         function_reduce_ins_names = []
         for name, ins in instructions.items():
@@ -714,7 +751,14 @@ class ComputeBlockOutputGradient(ComputeFunction):
         return res
 
 
-def to_instructions_list(instructions):
+def to_instructions_list(instructions: list | dict) -> list:
+    """The instructions as a list (the values of a dict, a list unchanged).
+
+    Raises
+    ------
+    ValueError
+        If ``instructions`` is neither a list nor a dict.
+    """
     if isinstance(instructions, dict):
         return list(instructions.values())
     elif isinstance(instructions, list):
@@ -807,7 +851,8 @@ class TPModel(tf.Module):
                 setattr(self, funcname, create_wrapper(tf_decorated_func, sig_keys))
 
     @property
-    def variables_to_train(self):
+    def variables_to_train(self) -> list[tf.Variable]:
+        """Trainable variables not switched off through ``set_trainable_variables``."""
         self._variables_to_train = []
         for var in self.trainable_variables:
             if not hasattr(var, "_trainable") or (var._trainable):
@@ -815,13 +860,15 @@ class TPModel(tf.Module):
         return self._variables_to_train
 
     @property
-    def train_specs(self):
+    def train_specs(self) -> dict[str, dict]:
+        """Input specs (shape, dtype) of the instructions and of the train function."""
         self._train_specs.update(self.instructions_specs)
         self._train_specs.update(self.train_function.specs.copy())
         return self._train_specs
 
     @property
-    def compute_specs(self):
+    def compute_specs(self) -> dict[str, dict]:
+        """Input specs (shape, dtype) of the instructions and of the compute function."""
         self._compute_specs.update(self.instructions_specs)
         self._compute_specs.update(self.compute_function.specs.copy())
         return self._compute_specs
@@ -831,7 +878,18 @@ class TPModel(tf.Module):
         param_dtype: tf.dtypes.DType,
         input_signature_float_dtype: tf.dtypes.DType = tf.float64,
         jit_compile: bool = True,
-    ):
+    ) -> None:
+        """Build the instructions and trace the auxiliary compute functions.
+
+        Parameters
+        ----------
+        param_dtype : tf.dtypes.DType
+            Dtype of the model parameters.
+        input_signature_float_dtype : tf.dtypes.DType
+            Dtype of the floating-point inputs in the signatures.
+        jit_compile : bool
+            Compile the traced functions with XLA.
+        """
         self.param_dtype = param_dtype
         for sm in self.submodules:
             if hasattr(sm, "build"):
@@ -844,7 +902,8 @@ class TPModel(tf.Module):
             input_signature_float_dtype, jit_compile=jit_compile
         )
 
-    def get_flat_trainable_variables(self):
+    def get_flat_trainable_variables(self) -> tf.Tensor:
+        """All trainable variables concatenated into one vector; records the slice offsets."""
         self.count_coefs = 0
         self.slices = [0]
         flat_val = []
@@ -857,7 +916,8 @@ class TPModel(tf.Module):
 
         return flat_vars
 
-    def set_flat_trainable_variables(self, flat_vars):
+    def set_flat_trainable_variables(self, flat_vars: Any) -> None:
+        """Assign the trainable variables from a flat vector laid out as by ``get_flat_trainable_variables``."""
         for i, var in enumerate(self.variables_to_train):
             new_values = flat_vars[self.slices[i] : self.slices[i + 1]]
             new_values = tf.reshape(new_values, tf.shape(var))
@@ -869,7 +929,8 @@ class TPModel(tf.Module):
         self,
         input_signature_float_dtype: tf.dtypes.DType = tf.float64,
         jit_compile: bool = True,
-    ):
+    ) -> None:
+        """Replace ``compute`` by a ``tf.function`` with the input signature of ``compute_specs``."""
         dtypes = _make_dtype_map(input_signature_float_dtype)
         input_signature = _build_input_signature(self.compute_specs, dtypes)
         self.compute = tf.function(
@@ -880,9 +941,33 @@ class TPModel(tf.Module):
         self,
         path: str,
         jit_compile: bool = True,
-        input_signature_float_dtype=tf.float64,
-        gmm_uq_model=None,
-    ):
+        input_signature_float_dtype: tf.dtypes.DType = tf.float64,
+        gmm_uq_model: Any = None,
+    ) -> None:
+        """Export the model as a SavedModel with metadata files into ``path``.
+
+        Parameters
+        ----------
+        path : str
+            Output directory.
+        jit_compile : bool
+            Compile the exported functions with XLA.
+        input_signature_float_dtype : tf.dtypes.DType
+            Dtype of the floating-point inputs in the signatures.
+        gmm_uq_model
+            Optional GMM uncertainty artifact; its ``interp_thresholds`` must be set.
+
+        Raises
+        ------
+        ValueError
+            If no instruction defines an element map (the metadata needs the chemical
+            symbols), or if the UQ artifact has no thresholds or is not a basis-RP artifact.
+        """
+        if extract_cutoff_and_elements(self.instructions)[1] is None:
+            raise ValueError(
+                "cannot export the model: no instruction defines an element map, so the "
+                "chemical symbols of the metadata are unknown"
+            )
         if gmm_uq_model is not None:
             if gmm_uq_model.interp_thresholds is None:
                 raise ValueError(
@@ -1052,7 +1137,8 @@ class TPModel(tf.Module):
         with open(os.path.join(path, "metadata.json"), "w") as f:
             json.dump(metadata, f, indent=4)
 
-    def compute_regularization_loss(self):
+    def compute_regularization_loss(self) -> defaultdict:
+        """L2 regularization loss summed over the instructions that request it, keyed by component name."""
         total_reg_loss = defaultdict(lambda: 0.0)
         instructions = to_instructions_list(self.instructions)
         for ins in instructions:
@@ -1062,7 +1148,8 @@ class TPModel(tf.Module):
                 ] += ins.compute_l2_regularization_loss()
         return total_reg_loss
 
-    def compute_l2_regularization_loss(self):
+    def compute_l2_regularization_loss(self) -> Any:
+        """L2 regularization loss summed over the instructions that define one."""
         l2_loss = 0.0
         instructions = to_instructions_list(self.instructions)
         for ins in instructions:
@@ -1071,6 +1158,7 @@ class TPModel(tf.Module):
         return l2_loss
 
     def compute(self, input_data: dict) -> dict[str, tf.Tensor]:
+        """Run the compute function on a copy of ``input_data`` in inference mode."""
         copy_data = input_data.copy()
 
         output = self.compute_function(self.instructions, copy_data, training=False)
@@ -1085,7 +1173,8 @@ class TPModel(tf.Module):
 
         return output
 
-    def export_to_yaml(self, filename):
+    def export_to_yaml(self, filename: str) -> None:
+        """Write the instructions to a ``model.yaml`` file."""
         export_to_yaml(self.instructions, filename)
 
     def summary(
@@ -1098,7 +1187,7 @@ class TPModel(tf.Module):
         """Generate a formatted summary string of all instructions."""
         break_line = "\n" + separator * separator_length + "\n"
 
-        vars_counter: Dict[str, int] = dict()
+        vars_counter: dict[str, int] = dict()
         lines = [
             f"{i + 1}. {ins.summary(verbose, vars_counter, **kwargs)}"
             for i, ins in enumerate(self.instructions.values())
@@ -1117,7 +1206,10 @@ class TPModel(tf.Module):
             f"{i + 1}. {repr(ins)}" for i, ins in enumerate(self.instructions)
         )
 
-    def set_trainable_variables(self, only_trainable_names: list[str], verbose=False):
+    def set_trainable_variables(
+        self, only_trainable_names: list[str], verbose: bool = False
+    ) -> None:
+        """Train only the variables whose name contains one of ``only_trainable_names``."""
         for var in self.variables:
             # check if any of only_trainable_names in var.name
             if any(
@@ -1129,7 +1221,15 @@ class TPModel(tf.Module):
             else:
                 var._trainable = False
 
-    def enable_lora_adaptation(self, lora_config=None):
+    def enable_lora_adaptation(self, lora_config: dict | None = None) -> None:
+        """Create LoRA updates in the instructions selected by ``lora_config``.
+
+        Parameters
+        ----------
+        lora_config : dict, optional
+            Instruction name to LoRA options; the key ``"all"`` applies to every LoRA-capable
+            instruction. ``None`` does nothing; an instruction that already has LoRA is kept.
+        """
         if lora_config is None:
             return
 
@@ -1166,14 +1266,16 @@ class TPModel(tf.Module):
                     )
                     ins.enable_lora_adaptation(ins_lora_config)
 
-    def finalize_lora_update(self):
+    def finalize_lora_update(self) -> None:
+        """Merge the LoRA updates of every instruction into its weights."""
         logging.info("Reducing LoRA")
         for ins_name, ins in self.instructions.items():
             if isinstance(ins, LORAInstructionMixin) and ins.lora:
                 logging.info(f" - reducing LoRA for {ins_name}")
                 ins.finalize_lora_update()
 
-    def is_lora_enabled(self):
+    def is_lora_enabled(self) -> bool:
+        """Whether any instruction carries LoRA updates."""
         for ins_name, ins in self.instructions.items():
             if isinstance(ins, LORAInstructionMixin) and ins.lora:
                 return True

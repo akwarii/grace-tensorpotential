@@ -22,7 +22,9 @@ from tensorpotential.metadata_utils import get_dtype_by_name
 
 
 class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
+    """JSON encoder that serializes numpy integers, floats and arrays."""
+
+    def default(self, obj):  # ty: ignore[invalid-method-override]  # json.JSONEncoder names the parameter `o`; renaming `obj` would change the signature
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):

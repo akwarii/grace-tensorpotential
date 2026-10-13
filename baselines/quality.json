@@ -2,13 +2,13 @@
  "metrics": {
   "api.docstrings": {
    "kind": "ratio",
-   "have": 252,
-   "total": 772
+   "have": 405,
+   "total": 777
   },
   "api.return_annotations": {
    "kind": "ratio",
-   "have": 224,
-   "total": 772
+   "have": 378,
+   "total": 777
   },
   "clones.library.functions": {
    "kind": "count",
@@ -20,7 +20,7 @@
   },
   "clones.library.redundant_lines": {
    "kind": "count",
-   "value": 140.0
+   "value": 141.0
   },
   "clones.tests.functions": {
    "kind": "count",
@@ -41,8 +41,8 @@
   },
   "coverage.cli": {
    "kind": "ratio",
-   "have": 2859,
-   "total": 3651
+   "have": 2180,
+   "total": 2679
   },
   "coverage.compat": {
    "kind": "ratio",
@@ -56,8 +56,8 @@
   },
   "coverage.data": {
    "kind": "ratio",
-   "have": 1759,
-   "total": 1995
+   "have": 2698,
+   "total": 3238
   },
   "coverage.extra": {
    "kind": "ratio",
@@ -86,13 +86,13 @@
   },
   "coverage.scripts": {
    "kind": "ratio",
-   "have": 2659,
-   "total": 3699
+   "have": 1943,
+   "total": 2378
   },
   "coverage.toplevel": {
    "kind": "ratio",
-   "have": 2918,
-   "total": 3013
+   "have": 3956,
+   "total": 4673
   },
   "coverage.torch_backend": {
    "kind": "ratio",
@@ -101,8 +101,8 @@
   },
   "coverage.total": {
    "kind": "ratio",
-   "have": 22713,
-   "total": 26684
+   "have": 23295,
+   "total": 27294
   },
   "coverage.uq": {
    "kind": "ratio",
@@ -111,7 +111,7 @@
   },
   "divergence.upstream_files": {
    "kind": "count",
-   "value": 116.0
+   "value": 119.0
   },
   "lint.ruff.B006": {
    "kind": "count",
@@ -159,7 +159,7 @@
   },
   "lint.ruff.C901": {
    "kind": "count",
-   "value": 80.0
+   "value": 79.0
   },
   "lint.ruff.E402": {
    "kind": "count",
@@ -203,7 +203,7 @@
   },
   "lint.ruff.PLR0912": {
    "kind": "count",
-   "value": 51.0
+   "value": 50.0
   },
   "lint.ruff.PLR0913": {
    "kind": "count",
@@ -211,7 +211,7 @@
   },
   "lint.ruff.PLR0915": {
    "kind": "count",
-   "value": 56.0
+   "value": 55.0
   },
   "lint.ruff.PLW0108": {
    "kind": "count",
@@ -275,7 +275,7 @@
   },
   "lint.ruff.PTH110": {
    "kind": "count",
-   "value": 42.0
+   "value": 41.0
   },
   "lint.ruff.PTH111": {
    "kind": "count",
@@ -303,7 +303,7 @@
   },
   "lint.ruff.PTH119": {
    "kind": "count",
-   "value": 13.0
+   "value": 12.0
   },
   "lint.ruff.PTH120": {
    "kind": "count",
@@ -415,7 +415,7 @@
   },
   "lint.ruff.SIM105": {
    "kind": "count",
-   "value": 14.0
+   "value": 13.0
   },
   "lint.ruff.SIM108": {
    "kind": "count",
@@ -467,39 +467,35 @@
   },
   "lint.ty.invalid-assignment": {
    "kind": "count",
-   "value": 22.0
+   "value": 20.0
   },
   "lint.ty.invalid-method-override": {
    "kind": "count",
-   "value": 23.0
+   "value": 1.0
   },
   "lint.ty.invalid-return-type": {
    "kind": "count",
    "value": 5.0
   },
-  "lint.ty.invalid-type-arguments": {
-   "kind": "count",
-   "value": 1.0
-  },
   "lint.ty.invalid-type-form": {
-   "kind": "count",
-   "value": 9.0
-  },
-  "lint.ty.missing-argument": {
    "kind": "count",
    "value": 4.0
   },
+  "lint.ty.missing-argument": {
+   "kind": "count",
+   "value": 1.0
+  },
   "lint.ty.no-matching-overload": {
    "kind": "count",
-   "value": 20.0
+   "value": 12.0
   },
   "lint.ty.not-iterable": {
    "kind": "count",
-   "value": 18.0
+   "value": 15.0
   },
   "lint.ty.not-subscriptable": {
    "kind": "count",
-   "value": 30.0
+   "value": 28.0
   },
   "lint.ty.unknown-argument": {
    "kind": "count",

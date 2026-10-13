@@ -298,37 +298,6 @@ REFERENCE = {
                 ["input_stress.yaml"],
             ],
     ),
-    "lr_reduce_on_plateau": dict(
-        folder="MoNbTaW-LINEAR",
-        train_ref_metrics={
-            "total_loss/train": 86388.96089855464,
-            "mae/depa": 293.91999064125366,
-            "mae/de": 587.8399812825073,
-            "rmse/depa": 293.91999064125366,
-            "rmse/de": 587.8399812825073,
-            "mae/f_comp": 1.709743457922741e-14,
-            "rmse/f_comp": 2.5537382093454438e-14,
-            "loss_component/energy/train": 17277.792179710927,
-            "loss_component/forces/train": 6.521578841870874e-28,
-            "total_time/train/per_atom": 0.003750124989892356,
-            "epoch": 5,
-        },
-        test_ref_metrics={
-            "total_loss/test": 1078.717976030194,
-            "loss_component/energy/test": 34.13630846923014,
-            "loss_component/forces/test": 19.799590332279568,
-            "mae/depa": 18.419813604139947,
-            "mae/de": 318.0004536704866,
-            "rmse/depa": 23.75680161302725,
-            "rmse/de": 417.32888026700016,
-            "mae/f_comp": 1.9076265481110548,
-            "rmse/f_comp": 6.903826426461479,
-            "total_time/test/per_atom": 0.0008932093492380762,
-            "epoch": 5,
-        },
-        ref_n_epochs=5,
-        input="input_lr_reduce_on_plateau.yaml",
-    ),
     "lr_reduce_on_plateau_new_api": dict(
         folder="MoNbTaW-LINEAR",
         train_ref_metrics={
@@ -765,85 +734,6 @@ def test_MoNbTaW_GRACE_2L():
 #     )
 
 
-@pytest.mark.skip(reason="skip custom model")
-def test_MoNbTaW_CUSTOM_switch_ef_ema():
-
-    train_ref_metrics = {
-        "total_loss/train": 2.1716064211221107,
-        "mae/depa": 0.10643320385933963,
-        "mae/de": 1.5048795721041994,
-        "rmse/depa": 0.14552660157733377,
-        "rmse/de": 2.1043438739612728,
-        "mae/f_comp": 0.15971624941433762,
-        "rmse/f_comp": 0.4417355799348502,
-        "loss_component/energy/train": 0.1058899588332402,
-        "loss_component/forces/train": 0.11127068327897087,
-        "total_time/train/per_atom": 0.001399472983473021,
-        "epoch": 2.0,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 4.663940382682648,
-        "loss_component/energy/test": 0.16472797742800233,
-        "loss_component/forces/test": 0.06846904170613011,
-        "mae/depa": 0.11826169834236133,
-        "mae/de": 2.6328969175460974,
-        "rmse/depa": 0.18150921597979663,
-        "rmse/de": 4.866076088767953,
-        "mae/f_comp": 0.13372188836891163,
-        "rmse/f_comp": 0.3139186430622856,
-        "total_time/test/per_atom": 0.00015732100000604988,
-        "epoch": 2.0,
-    }
-
-    general_integration_test(
-        "MoNbTaW-CUSTOM",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-    )
-
-
-@pytest.mark.skip(reason="skip custom model")
-def test_MoNbTaW_CUSTOM_mlp_emb():
-
-    train_ref_metrics = {
-        "total_loss/train": 12526.25160185599,
-        "mae/depa": 10.948964532181693,
-        "mae/de": 201.9527117081654,
-        "rmse/depa": 11.191204806568912,
-        "rmse/de": 249.14284284551678,
-        "mae/f_comp": 0.15880805468319745,
-        "rmse/f_comp": 0.4410328331173345,
-        "loss_component/energy/train": 1252.4306502257116,
-        "loss_component/forces/train": 0.19450995988750266,
-        "total_time/train/per_atom": 0.0011867424131512803,
-        "epoch": 2.0,
-    }
-
-    test_ref_metrics = {
-        "total_loss/test": 13786.440637133539,
-        "loss_component/energy/test": 689.2716697031861,
-        "loss_component/forces/test": 0.0503621534908115,
-        "mae/depa": 11.690077081686086,
-        "mae/de": 203.29138883030566,
-        "rmse/depa": 11.741138528296021,
-        "rmse/de": 239.52060799979654,
-        "mae/f_comp": 0.13613908328714555,
-        "rmse/f_comp": 0.31737092964167807,
-        "total_time/test/per_atom": 0.00010057043777230908,
-        "epoch": 2.0,
-    }
-
-    general_integration_test(
-        "MoNbTaW-CUSTOM",
-        input="input_mlp_emb.yaml",
-        train_ref_metrics=train_ref_metrics,
-        test_ref_metrics=test_ref_metrics,
-        ref_n_epochs=2,
-    )
-
-
 @pytest.mark.slow
 def test_MoNbTaW_FS_restart():
 
@@ -944,11 +834,6 @@ def test_MoNbTaW_LINEAR_f32():
         ],
         rel=1e-5,
     )
-
-
-@pytest.mark.skip(reason="Deprecated due to new API")
-def test_MoNbTaW_LINEAR_lr_reduce_on_plateau():
-    _run_reference("lr_reduce_on_plateau")
 
 
 @pytest.mark.slow
