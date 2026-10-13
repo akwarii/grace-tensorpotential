@@ -960,8 +960,14 @@ class TPModel(tf.Module):
         Raises
         ------
         ValueError
-            If the UQ artifact has no thresholds or is not a basis-RP artifact.
+            If no instruction defines an element map (the metadata needs the chemical
+            symbols), or if the UQ artifact has no thresholds or is not a basis-RP artifact.
         """
+        if extract_cutoff_and_elements(self.instructions)[1] is None:
+            raise ValueError(
+                "cannot export the model: no instruction defines an element map, so the "
+                "chemical symbols of the metadata are unknown"
+            )
         if gmm_uq_model is not None:
             if gmm_uq_model.interp_thresholds is None:
                 raise ValueError(
