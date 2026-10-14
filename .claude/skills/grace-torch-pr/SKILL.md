@@ -15,7 +15,7 @@ base:   torch-backend              (the integration branch on the fork; never ma
 ```
 
 - When the work is ready (see `CLAUDE.md`), open a **draft** PR yourself and ask the user to review it; marking it ready, auto-merge and merging are never yours. Its description contains `Refs #<issue number>` (not `Closes`: the issue is closed by `board.py done` after the merge) and the Verify
-  output and per-unit coverage. Then `python tools/board.py status CLEAN1 "PR Open"` (it refuses unless an open PR references the issue). Make sure your `torch-backend` is current first.
+  output and per-unit coverage. Then `python tools/board.py status CLEAN1 "PR Open"` (it refuses unless an open PR references the issue). Bring the branch up to date first (see "Before you open the PR") and watch CI afterwards (see "After you open the PR").
 - **Work in your own worktree** (rule in `CLAUDE.md`): `git worktree add -b <id>-<slug> ../<repository>-<id> origin/torch-backend`, then `git branch --unset-upstream` in it: git sets the upstream
   to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. **When the PR is merged** and `board.py done` has run:
   `git worktree remove ../<repository>-<id>` (no `--force`; a refusal means uncommitted work, so report it) and `git branch -d <branch>` (it refuses when your checkout of `torch-backend` lacks the merge: pull it, or check ancestry with
@@ -30,6 +30,8 @@ base:   torch-backend              (the integration branch on the fork; never ma
 
 ## Before you open the PR
 
+- **Bring the branch up to date.** `git fetch origin && git merge origin/torch-backend` in your worktree (in a worktree the app made for the session, its `sync_with_base_branch` tool does the same). A merge, not a rebase: the branch is shared with the PR once pushed. Resolve the conflicts the way the Precedence rule says
+  (the issue's scope first), then re-run what the merge can affect: the tests of the files both sides touched, `tools/divergence.py check`, `tools/lint_ratchet.py check` (the ratchets and baselines move on `torch-backend`), and the checks your issue names. Do this **before** the tidy-up pass and the final Verify, so they run on the code that will be merged.
 - **Tidy up your code first** (rule in `CLAUDE.md`): four reviews of the diff against `origin/torch-backend`, one per lens, run as parallel subagents or with the `simplify` skill. Give each the diff and the touched files, and tell it to report, not to edit.
   Reuse: an existing helper, base class or tool that does the same, duplicates the diff adds (`python tools/check_clones.py check`). Simplification: nesting, dead branches, parameters nobody varies, functions above complexity 10 or 50 statements.
   Efficiency: a cost that a measurement shows (rule R7), not a guess. Altitude: logic placed in the wrong layer or module, private names used across modules, an import against the direction of the layers.
@@ -42,6 +44,13 @@ base:   torch-backend              (the integration branch on the fork; never ma
 - The checks that are easy to forget: `tools/tests` (run with `pytest --noconftest tools/tests`), `tools/divergence.py check` (a row for every upstream file touched, docs and tests included) and
   `tools/check_touched_coverage.py` **without `--unit`** (diff mode: every unit the branch changed, not a fixed list) must all be run before a PR; `lint-imports` of the shared venv may not start (stale shebang): `python -c "import sys; from importlinter.cli import lint_imports_command; sys.exit(lint_imports_command())"`. A new file needs no opt-in: `python tools/lint_ratchet.py check` holds it to the strict set (see Code style); to see the strict findings of one file before that, `ruff check --no-cache --config 'lint.per-file-ignores={}' FILE`.
 - **A GPU- or HPC-marked issue needs that hardware.** State what ran where; never report GPU or real-weight results from a local CPU run.
+
+## After you open the PR
+
+- **Watch CI until every job has finished.** `gh pr checks <n> --repo akwarii/grace-tensorpotential` (a few GraphQL points a call): look about every 5 minutes, the TF shards take 5 to 7 minutes each, and never use `--watch` or a loop (the budget is shared). In the desktop app, the PR tools (`get_status`, then Auto-fix offered by the app) replace manual polling; do not schedule your own polling.
+- **A red job is yours.** Read its log (`gh run view <run-id> --log-failed`), fix it on the branch in a new commit, push, and watch again. When the failure is not caused by your diff (a flaky test, a runner shutdown, a change that landed on `torch-backend`), say so on the PR and file a finding on the issue (`board.py finding`); re-run the job once, never more, and never loosen a check or a tolerance to get green.
+- **Keep the PR mergeable.** When `torch-backend` moves and the PR conflicts or a check depends on the new baselines, merge `origin/torch-backend` again and push.
+- **Report the result to the user** in one line when all jobs are done: the PR number, green or which job failed and why. The required job names are in `.github/CI.md`; an agent never changes them.
 
 ## Writing the PR summary
 
