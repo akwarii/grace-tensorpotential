@@ -413,3 +413,8 @@ def test_a_cached_checkpoint_is_updated_through_the_checkpoint_fetcher(
     assert fetched == ["_fake_model"]
     assert "  _fake_model [checkpoint]: model-v3-uq-v6 -> model-v5-uq-v6\n" in out
     assert "kokkos" not in out
+
+
+def test_the_public_tag_parser_is_the_function_the_private_name_resolves_to():
+    assert fm.tag_from_url is fm._tag_from_url
+    assert fm.tag_from_url(V3) == "model-v3-uq-v6"

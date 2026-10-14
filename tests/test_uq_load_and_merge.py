@@ -324,3 +324,17 @@ def test_an_unknown_feature_transform_is_refused(uq_setup, instruction_dict, tmp
     )
     with pytest.raises(ValueError, match="unsupported feature_transform"):
         _merge_uq_artifacts(_weights(uq_setup), path, N_ELEMENTS, instruction_dict)
+
+
+def test_default_eff_counts_back_fills_from_raw_counts_and_keeps_given_ones():
+    """Hand case: missing effective counts equal the raw counts as float64; given ones are only cast."""
+    from tensorpotential.uq import artifact_builder
+
+    counts = np.array([3, 0, 5])
+    filled = artifact_builder.default_eff_counts(counts)
+    assert filled.dtype == np.float64
+    np.testing.assert_array_equal(filled, [3.0, 0.0, 5.0])
+    given = artifact_builder.default_eff_counts(counts, np.array([6, 0, 2.5], dtype=np.float32))
+    assert given.dtype == np.float64
+    np.testing.assert_array_equal(given, [6.0, 0.0, 2.5])
+    assert artifact_builder._default_eff_counts is artifact_builder.default_eff_counts
