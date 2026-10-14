@@ -6,8 +6,8 @@ machine is idle before, between and after, and prints a markdown table of median
 depends on the machine: it goes into the pull request and the issue, never into ``baselines/``.
 
 Cases: ``import:MODULE`` and ``script:NAME`` (the ``--help`` of a console script of ``pyproject.toml``),
-``calc_init:YAML``, ``builder:small|medium|large`` (neighbour list per structure), ``train_step`` and
-``train_run`` (tiny model), ``calc_eval`` (``TPCalculator`` on 100 structures).
+``calc_init:YAML`` (jit-decorated, as the calculator tests do), ``builder:small|medium|large`` (neighbour list per structure), ``train_step`` and
+``train_run`` (tiny model), ``calc_eval`` (``TPCalculator`` loaded from the SavedModel of the tests, 100 structures).
 
 Usage (from the repository root, machine idle)::
 
@@ -40,6 +40,9 @@ YAMLS = (
     "model_grace_2L_omat.yaml",
     "model_grace_2L_omat_large_base.yaml",
 )
+SAVED_MODEL = (
+    TESTS / "test_calculator_model"
+)  # a SavedModel on Mo, Nb, Ta, W, the way users load one
 STRUCTURES = TESTS / "data" / "MoNbTaW_test50.pkl.gz"
 BUILDER_SIZES = {
     "small": 1,
@@ -150,6 +153,10 @@ def _calc_init_case(yaml_name: str) -> dict[str, float]:
     from tensorpotential.calculator import TPCalculator
 
     model = _timed(phases, "build_model_ms", lambda: _model_of(yaml_name))
+    # as the calculator tests and the foundation-model loader do: an undecorated model runs eagerly
+    _timed(
+        phases, "decorate_ms", lambda: model.decorate_compute_function(jit_compile=True)
+    )
     _timed(phases, "construct_calculator_ms", lambda: TPCalculator(model))
     return phases
 
@@ -257,8 +264,9 @@ def _calc_eval_case(structures: int = 100) -> dict[str, float]:
     _tensorflow_phases(phases)
     from tensorpotential.calculator import TPCalculator
 
-    model = _timed(phases, "build_model_ms", lambda: _model_of(YAMLS[0]))
-    calc = _timed(phases, "construct_calculator_ms", lambda: TPCalculator(model))
+    calc = _timed(
+        phases, "load_calculator_ms", lambda: TPCalculator(model=str(SAVED_MODEL))
+    )
     for compiled in calc.models:
         compiled.compute = _wrapped(phases, "model_ms", compiled.compute)
     calc.get_data = _wrapped(phases, "data_ms", calc.get_data)
