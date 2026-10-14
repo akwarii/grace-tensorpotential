@@ -23,7 +23,12 @@ from tensorpotential.data.databuilder import (
     GeometricalDataBuilder,
     ReferenceEnergyForcesStressesDataBuilder,
 )
-from tensorpotential.data.streaming import ElasticBatchIterator, MultiBinMetricBatcher
+from tensorpotential.data.streaming import (
+    ElasticBatchIterator,
+    MultiBinMetricBatcher,
+    StreamingConfig,
+    StreamingDatasetWrapper,
+)
 
 DATA = os.path.join(os.path.dirname(__file__), "data", "MoNbTaW_train50.pkl.gz")
 ATOMS, BONDS, STRUCTS = (
@@ -398,3 +403,101 @@ def test_a_quiet_first_epoch_logs_no_intermediate_statistics(
         iterator._pad_batch(structures[:1])
         iterator._pad_batch(structures[-3:])
     assert not any("Intermediate padding stats" in r.message for r in caplog.records)
+
+
+# --- StreamingDatasetWrapper.__iter__ ---
+
+
+@pytest.fixture(scope="module")
+def frame() -> pd.DataFrame:
+    return pd.read_pickle(DATA).iloc[:20]
+
+
+def _structure_ids(batches: list[dict[str, Any]]) -> list[int]:
+    ids: list[int] = []
+    for batch in batches:
+        ids.extend(int(i) for i in batch[tc.DATA_STRUCTURE_ID].flatten() if int(i) >= 0)
+    return ids
+
+
+def _wrapper(source, builders, **config) -> StreamingDatasetWrapper:
+    options = {"target_metric": 1500, "num_bins": 2, **config}
+    return StreamingDatasetWrapper(
+        source, builders, StreamingConfig(**options), shuffle=False
+    )
+
+
+def test_a_prefetching_wrapper_yields_the_batches_of_the_serial_one(builders, frame):
+    serial = list(_wrapper(frame, builders))
+    prefetched = list(_wrapper(frame, builders, prefetch_queue_size=3))
+    assert len(prefetched) == len(serial)
+    assert _structure_ids(prefetched) == _structure_ids(serial)
+    for left, right in zip(serial, prefetched):
+        assert int(left[tc.N_ATOMS_BATCH_TOTAL]) == int(right[tc.N_ATOMS_BATCH_TOTAL])
+
+
+def test_a_dataframe_is_streamed_in_row_order_with_the_frame_index_as_structure_id(
+    builders, frame
+):
+    batches = list(_wrapper(frame, builders))
+    assert sorted(_structure_ids(batches)) == sorted(frame.index)
+
+
+def test_a_generator_of_rows_is_streamed_with_its_running_number_as_structure_id(
+    builders, frame
+):
+    rows = (frame.iloc[i] for i in range(8))
+    wrapper = _wrapper(rows, builders)
+    with pytest.raises(TypeError, match="no len"):
+        len(wrapper)
+    batches = list(wrapper)
+    assert sorted(_structure_ids(batches)) == list(range(8))
+
+
+def test_a_generator_of_bare_atoms_is_wrapped_into_rows(builders, frame):
+    atoms = (a for a in list(frame["ase_atoms"])[:5])
+    batches = list(_wrapper(atoms, builders[:1]))
+    assert sum(int(b[tc.N_STRUCTURES_BATCH_REAL]) for b in batches) == 5
+
+
+def test_the_epoch_updates_the_estimate_and_keeps_the_buckets_for_the_next_one(
+    builders, frame
+):
+    wrapper = _wrapper(frame, builders)
+    first = list(wrapper)
+    assert len(wrapper) == len(first)
+    assert wrapper._buckets
+    kept = [dict(b) for b in wrapper._buckets]
+    second = list(wrapper)
+    assert len(second) == len(first)
+    assert wrapper._buckets == kept  # the same shapes cover the second epoch
+
+
+def test_the_first_epoch_logs_its_padding_statistics_and_later_epochs_do_not(
+    builders, frame, caplog
+):
+    wrapper = _wrapper(frame, builders)
+    with caplog.at_level(logging.INFO, logger="tensorpotential.data.streaming"):
+        list(wrapper)
+        first = [
+            r.message for r in caplog.records if "Epoch padding stats" in r.message
+        ]
+        list(wrapper)
+        total = [
+            r.message for r in caplog.records if "Epoch padding stats" in r.message
+        ]
+    assert len(first) == 1
+    assert len(total) == 1
+    assert "num. real structures: 20" in first[0]
+
+
+def test_the_length_during_the_first_epoch_follows_the_atoms_seen_so_far(
+    builders, frame
+):
+    wrapper = _wrapper(frame, builders)
+    total_atoms = sum(len(a) for a in frame["ase_atoms"])
+    seen_atoms = 0
+    for count, batch in enumerate(wrapper, start=1):
+        seen_atoms += int(batch[tc.N_ATOMS_BATCH_REAL])
+        expected = max(1, round(total_atoms / (seen_atoms / count)))
+        assert len(wrapper) == expected
