@@ -174,21 +174,12 @@ def test_an_ensemble_is_refused(uq_setup):
         calc.load_uq_artifacts(uq_setup["artifact_path"])
 
 
-def test_an_artifact_without_the_basis_rp_feature_is_refused_for_a_mutable_model(
-    uq_setup, tmp_path
+@pytest.mark.parametrize("missing_key", [uqc.UQ_FEATURE_MODE, uqc.UQ_RP_MATRIX])
+def test_an_artifact_without_the_basis_rp_feature_or_its_matrix_is_refused_for_a_mutable_model(
+    missing_key, uq_setup, tmp_path
 ):
     path = _edited_artifact(
-        tmp_path, uq_setup, "no_rp", lambda raw: raw.pop(uqc.UQ_FEATURE_MODE)
-    )
-    with pytest.raises(ValueError, match="was not built with the basis-RP feature"):
-        TPCalculator(model=_model(uq_setup)).load_uq_artifacts(path)
-
-
-def test_an_artifact_without_its_projection_matrix_is_refused_for_a_mutable_model(
-    uq_setup, tmp_path
-):
-    path = _edited_artifact(
-        tmp_path, uq_setup, "no_matrix", lambda raw: raw.pop(uqc.UQ_RP_MATRIX)
+        tmp_path, uq_setup, "broken", lambda raw: raw.pop(missing_key)
     )
     with pytest.raises(ValueError, match="was not built with the basis-RP feature"):
         TPCalculator(model=_model(uq_setup)).load_uq_artifacts(path)
