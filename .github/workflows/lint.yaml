@@ -61,7 +61,7 @@ jobs:
         uses: ./.github/actions/run-pytest
         with:
           python: .venv/bin/python
-          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py tools/tests/test_merge_durations.py tools/tests/test_dead_code.py
+          tests: tools/tests/test_wheel_smoke.py tools/tests/test_resolve_extras.py tools/tests/test_merge_durations.py tools/tests/test_dead_code.py tools/tests/test_agent_file_budget.py
       - name: Clone ratchet (duplicated functions may not rise)
         run: uv run --frozen --no-sync python tools/check_clones.py check
       - name: Fetch upstream master (read-only, public, no credential)
