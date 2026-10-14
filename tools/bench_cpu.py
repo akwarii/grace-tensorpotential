@@ -324,8 +324,11 @@ def busy_processes(ps_output: str) -> list[str]:
     return [line for line in ps_output.splitlines() if BUSY_PATTERN.search(line)]
 
 
-def idle_problem() -> str | None:
-    """Why the machine is not idle (one-minute load above ``MAX_LOAD``, a test or training process), or ``None``."""
+def idle_problem(check_load: bool = True) -> str | None:
+    """Why the machine is not idle (one-minute load above ``MAX_LOAD`` if ``check_load``, a test or training process), or ``None``.
+
+    The benchmark's own interpreters raise the load average, so only the first check reads it.
+    """
     load = os.getloadavg()[0]
     ps = subprocess.run(
         ["ps", "-eo", "pid,etimes,args"],  # noqa: S607
@@ -336,7 +339,7 @@ def idle_problem() -> str | None:
     others = [
         line for line in busy_processes(ps) if f" {os.getpid()} " not in f" {line} "
     ]
-    if load > MAX_LOAD:
+    if check_load and load > MAX_LOAD:
         return f"one-minute load {load:.2f} is above {MAX_LOAD}"
     return f"{len(others)} test or training process(es) running" if others else None
 
@@ -451,7 +454,7 @@ def run(
     load_before = os.getloadavg()[0]
     rows = []
     for name in cases:
-        problem = idle_problem()
+        problem = idle_problem(check_load=not rows)
         if problem and not allow_busy:
             raise SystemExit(  # noqa: TRY003
                 f"machine not idle before {name}: {problem}"
@@ -466,7 +469,7 @@ def run(
         "python": sys.version.split()[0],
         "load_average_1min_before": load_before,
         "load_average_1min_after": os.getloadavg()[0],
-        "idle_at_end": idle_problem() is None,
+        "idle_at_end": idle_problem(check_load=False) is None,
         "rows": rows,
     }
 

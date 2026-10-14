@@ -94,6 +94,28 @@ def test_idle_problem_names_the_reason(monkeypatch, load, ps, expected):
     assert (problem is None) if expected is None else (expected in problem)
 
 
+def test_idle_problem_ignores_the_load_when_asked_not_to_read_it(monkeypatch):
+    monkeypatch.setattr(bc.os, "getloadavg", lambda: (9.0, 0.0, 0.0))
+    monkeypatch.setattr(
+        bc.subprocess, "run", lambda *_a, **_k: SimpleNamespace(stdout="")
+    )
+
+    assert bc.idle_problem(check_load=False) is None
+    assert "load" in bc.idle_problem()
+
+
+def test_only_the_first_check_of_a_run_reads_the_load(monkeypatch):
+    checks = []
+    monkeypatch.setattr(
+        bc, "idle_problem", lambda check_load=True: checks.append(check_load)
+    )
+    monkeypatch.setattr(bc, "run_sample", lambda *_a: _sample(1, a_ms=1))
+
+    bc.run(["a", "b", "c"], repeats=1, steps=1, structures=1)
+
+    assert checks == [True, False, False, False]  # the last is the check at the end
+
+
 def test_summarise_reports_median_not_mean_and_the_spread():
     samples = [
         _sample(w, rss=r, foreign=f, a_ms=a)
@@ -153,7 +175,7 @@ def test_render_table_marks_an_unmeasured_load():
 
 def test_run_repeats_every_case_and_records_the_load(monkeypatch):
     calls = []
-    monkeypatch.setattr(bc, "idle_problem", lambda: None)
+    monkeypatch.setattr(bc, "idle_problem", lambda **_kw: None)
     monkeypatch.setattr(
         bc,
         "run_sample",
@@ -171,7 +193,9 @@ def test_run_repeats_every_case_and_records_the_load(monkeypatch):
 
 
 def test_run_refuses_a_busy_machine_unless_allowed(monkeypatch):
-    monkeypatch.setattr(bc, "idle_problem", lambda: "one-minute load 9 is above 4.0")
+    monkeypatch.setattr(
+        bc, "idle_problem", lambda **_kw: "one-minute load 9 is above 4.0"
+    )
     monkeypatch.setattr(bc, "run_sample", lambda *_a: _sample(1, a_ms=1))
 
     with pytest.raises(SystemExit, match="not idle before a"):
@@ -218,7 +242,7 @@ def test_main_case_prints_one_json_line(monkeypatch, capsys):
 def test_main_run_prints_the_table_and_writes_the_summary(
     monkeypatch, capsys, tmp_path
 ):
-    monkeypatch.setattr(bc, "idle_problem", lambda: None)
+    monkeypatch.setattr(bc, "idle_problem", lambda **_kw: None)
     monkeypatch.setattr(bc, "run_sample", lambda *_a: _sample(10, import_ms=9))
     out = tmp_path / "bench.json"
 
