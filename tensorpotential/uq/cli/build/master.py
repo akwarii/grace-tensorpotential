@@ -31,7 +31,7 @@ from tensorpotential.uq import (
     tf_dataset_feature_iterator,
 )
 from tensorpotential.uq import constants as uq_constants
-from tensorpotential.uq.artifact_builder import _default_eff_counts
+from tensorpotential.uq.artifact_builder import default_eff_counts
 from tensorpotential.uq.factories import (
     load_uq_model,
     make_basis_rp_spec,
@@ -473,7 +473,7 @@ def run_master(args):
                 )
             w_data = GMMUQArtifactBuilder.load(path)
             for e, d in w_data.items():
-                d_eff = _default_eff_counts(
+                d_eff = default_eff_counts(
                     d[uq_constants.COUNTS], d.get(uq_constants.EFFECTIVE_COUNT)
                 )
                 if base[e][uq_constants.SCATTER] is None:
@@ -498,7 +498,7 @@ def run_master(args):
         )
         for e in sorted(base.keys()):
             lbl = format_elem_label(e, element_names)
-            base[e][uq_constants.EFFECTIVE_COUNT] = _default_eff_counts(
+            base[e][uq_constants.EFFECTIVE_COUNT] = default_eff_counts(
                 base[e][uq_constants.COUNTS],
                 base[e].get(uq_constants.EFFECTIVE_COUNT),
             )

@@ -239,3 +239,182 @@ def test_update_refuses_an_explicit_local_path(tmp_path, monkeypatch, capsys):
     update_models(_update_args(model_name=["_pathy"]))
     assert (d / "saved_model.pb").read_text() == "mine"
     assert "explicit local path" in capsys.readouterr().out
+
+
+# --- update_models: the cached-model walk (characterization) ----------------------------------------------------------
+
+
+def _no_download(monkeypatch):
+    for fetcher in ("get_or_download_model", "get_or_download_checkpoint"):
+        monkeypatch.setattr(
+            fm, fetcher, lambda n: pytest.fail("nothing may be downloaded")
+        )
+
+
+def _summary(out: str) -> str:
+    return out.strip().splitlines()[-1]
+
+
+def test_update_without_a_model_name_does_nothing(capsys):
+    from tensorpotential.scripts.grace_models import update_models
+
+    update_models(_update_args())
+    assert capsys.readouterr().out == (
+        "Nothing to do: give one or more model names, or --all.\n"
+    )
+
+
+def test_update_skips_an_unknown_model_and_counts_it(monkeypatch, capsys):
+    from tensorpotential.scripts.grace_models import update_models
+
+    _no_download(monkeypatch)
+    update_models(_update_args(model_name=["_not_registered"]))
+    out = capsys.readouterr().out
+    assert "  _not_registered: not a known model - skipped\n" in out
+    assert _summary(out) == "up-to-date: 0   updated: 0   skipped: 1"
+
+
+def test_update_all_walks_the_core_models(tmp_path, monkeypatch, capsys):
+    from tensorpotential.scripts.grace_models import update_models
+
+    _fake_cached_model(tmp_path, monkeypatch)
+    monkeypatch.setattr(fm, "CORE_MODELS_NAME_LIST", ["_fake_model"])
+    update_models(_update_args(all=True, dry_run=True))
+    assert "  _fake_model [model]: model-v3-uq-v6 -> model-v5-uq-v6\n" in (
+        capsys.readouterr().out
+    )
+
+
+def test_a_current_payload_is_counted_and_left_alone_unless_forced(
+    tmp_path, monkeypatch, capsys
+):
+    from tensorpotential.scripts.grace_models import update_models
+
+    d = _fake_cached_model(tmp_path, monkeypatch, url=V5)
+    _no_download(monkeypatch)
+    update_models(_update_args(model_name=["_fake_model"]))
+    out = capsys.readouterr().out
+    assert " -> " not in out
+    assert _summary(out) == "up-to-date: 1   updated: 0   skipped: 0"
+    assert (d / "saved_model.pb").read_text() == "payload"
+
+    update_models(_update_args(model_name=["_fake_model"], force=True, dry_run=True))
+    out = capsys.readouterr().out
+    assert "  _fake_model [model]: model-v5-uq-v6 -> model-v5-uq-v6\n" in out
+    assert _summary(out) == "up-to-date: 0   would update: 1   skipped: 0"
+
+
+@pytest.mark.parametrize(
+    ("record", "was"),
+    [(False, "no provenance record"), (True, "?")],
+    ids=["no-sidecar", "sidecar-without-tag"],
+)
+def test_the_printed_origin_of_a_payload_without_a_tag(
+    tmp_path, monkeypatch, capsys, record, was
+):
+    """A payload with no sidecar, or a sidecar that holds no tag, is reported and its new URL printed untagged."""
+    import json
+
+    from tensorpotential.scripts.grace_models import update_models
+
+    d = _fake_cached_model(tmp_path, monkeypatch)
+    sidecar = d / fm.ORIGIN_SIDECAR
+    if record:
+        sidecar.write_text(json.dumps({"url": V3}))
+    else:
+        sidecar.unlink()
+    plain = "https://example.org/no/tag/here.tar.gz"
+    monkeypatch.setitem(fm.MODELS_METADATA, "_fake_model", {fm.MODEL_URL_KEY: plain})
+    update_models(_update_args(model_name=["_fake_model"], dry_run=True))
+    assert f"  _fake_model [model]: {was} -> {plain}\n" in capsys.readouterr().out
+
+
+def test_a_symlinked_cache_entry_is_refused(tmp_path, monkeypatch, capsys):
+    from tensorpotential.scripts.grace_models import update_models
+
+    store = tmp_path / "store"
+    store.mkdir()
+    (store / "saved_model.pb").write_text("curated")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "_linked").symlink_to(store, target_is_directory=True)
+    monkeypatch.setattr(fm, "FOUNDATION_CACHE_DIR", str(cache))
+    monkeypatch.setattr(fm, "FOUNDATION_CHECKPOINTS_CACHE_DIR", str(tmp_path / "c"))
+    monkeypatch.setitem(fm.MODELS_METADATA, "_linked", {fm.MODEL_URL_KEY: V5})
+    _no_download(monkeypatch)
+    update_models(_update_args(model_name=["_linked"]))
+    out = capsys.readouterr().out
+    assert f"REFUSING: {cache / '_linked'} is a symlink -> {store}" in out
+    assert _summary(out) == "up-to-date: 0   updated: 0   skipped: 1"
+    assert (store / "saved_model.pb").read_text() == "curated"
+
+
+def test_a_dry_run_changes_nothing(tmp_path, monkeypatch, capsys):
+    from tensorpotential.scripts.grace_models import update_models
+
+    d = _fake_cached_model(tmp_path, monkeypatch)
+    _no_download(monkeypatch)
+    update_models(_update_args(model_name=["_fake_model"], dry_run=True))
+    out = capsys.readouterr().out
+    assert _summary(out) == "up-to-date: 0   would update: 1   skipped: 0"
+    assert (d / "saved_model.pb").read_text() == "payload"
+    assert not (tmp_path / "_fake_model.pre-update").exists()
+
+
+def test_an_update_replaces_a_stash_left_by_an_earlier_run_and_notes_the_kokkos_file(
+    tmp_path, monkeypatch, capsys
+):
+    from tensorpotential.scripts.grace_models import update_models
+
+    d = _fake_cached_model(tmp_path, monkeypatch)
+    stale = tmp_path / "_fake_model.pre-update"
+    stale.mkdir()
+    (stale / "old").write_text("leftover")
+
+    def fake_fetch(name):
+        (tmp_path / name).mkdir()
+
+    monkeypatch.setattr(fm, "get_or_download_model", fake_fetch)
+    update_models(_update_args(model_name=["_fake_model"]))
+    out = capsys.readouterr().out
+    assert not stale.exists()
+    assert not (d / "kokkos.npz").exists()
+    assert "note: kokkos.npz was replaced; re-fetch with `grace_models download _fake_model --kokkos`" in out
+    assert _summary(out) == "up-to-date: 0   updated: 1   skipped: 0"
+
+
+def test_a_cached_checkpoint_is_updated_through_the_checkpoint_fetcher(
+    tmp_path, monkeypatch, capsys
+):
+    from tensorpotential.scripts.grace_models import update_models
+
+    ckpt_root = tmp_path / "ckpt"
+    d = ckpt_root / "_fake_model"
+    d.mkdir(parents=True)
+    (d / "checkpoint.index").write_text("old")
+    fm.write_origin_sidecar(str(d), "_fake_model", "checkpoint", V3)
+    monkeypatch.setattr(fm, "FOUNDATION_CACHE_DIR", str(tmp_path / "models"))
+    monkeypatch.setattr(fm, "FOUNDATION_CHECKPOINTS_CACHE_DIR", str(ckpt_root))
+    monkeypatch.setitem(
+        fm.MODELS_METADATA, "_fake_model", {fm.CHECKPOINT_URL_KEY: V5}
+    )
+    fetched = []
+
+    def fake_fetch(name):
+        fetched.append(name)
+        (ckpt_root / name).mkdir()
+
+    monkeypatch.setattr(fm, "get_or_download_checkpoint", fake_fetch)
+    monkeypatch.setattr(
+        fm, "get_or_download_model", lambda n: pytest.fail("a checkpoint only")
+    )
+    update_models(_update_args(model_name=["_fake_model"]))
+    out = capsys.readouterr().out
+    assert fetched == ["_fake_model"]
+    assert "  _fake_model [checkpoint]: model-v3-uq-v6 -> model-v5-uq-v6\n" in out
+    assert "kokkos" not in out
+
+
+def test_the_public_tag_parser_is_the_function_the_private_name_resolves_to():
+    assert fm.tag_from_url is fm._tag_from_url
+    assert fm.tag_from_url(V3) == "model-v3-uq-v6"

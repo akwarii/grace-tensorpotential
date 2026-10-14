@@ -16,6 +16,8 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -28,6 +30,7 @@ from tensorpotential.scripts import grace_preprocess
 from tensorpotential.tpmodel import extract_cutoff_and_elements
 from tensorpotential.uq import constants as uqc
 from tensorpotential.uq.cli.build import build_main
+from tensorpotential.uq.cli.build import master
 from tensorpotential.uq.cli.build.master import (
     _flatten_weighted_train_data,
     _worker_has_finished,
@@ -581,3 +584,245 @@ def test_a_worker_without_a_step_expects_no_file_and_is_never_finished(tmp_path,
 
     assert _worker_has_finished(Args) is False
     assert "Worker 3 Step None: 0 file(s) missing, running. (e.g. ?)" in capsys.readouterr().out
+
+
+# --- the master driver: options, resuming, restarting, failures (characterization of run_master) ------------------------
+
+WEIGHT = 2.0
+
+
+def _run_build(folder: Path, model_dir: Path, *extra: str) -> str:
+    """Run ``grace_uq build`` in ``folder`` and return what it printed.
+
+    Logging is disabled meanwhile: the live-log handler of pytest swaps ``sys.stdout`` back to its own capture on the first
+    record, which would discard the redirect.
+    """
+    out = io.StringIO()
+    with pytest.MonkeyPatch.context() as patch, contextlib.redirect_stdout(out):
+        patch.chdir(folder)
+        logging.disable(logging.CRITICAL)
+        try:
+            assert build_main(common_args(model_dir, *extra)) == 0
+        finally:
+            logging.disable(logging.NOTSET)
+    return out.getvalue()
+
+
+def _make_importable(patch: pytest.MonkeyPatch, folder: Path) -> None:
+    """Let the master (``sys.path``) and its worker subprocesses (``PYTHONPATH``) import the filter module of ``folder``."""
+    patch.syspath_prepend(str(folder))
+    patch.setenv("PYTHONPATH", str(folder) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+
+
+@pytest.fixture(scope="module")
+def option_run(model_dir, training_frame, tmp_path_factory):
+    """One build with every optional stage on: several k (elbow), a weighted group, a filter, a fraction, a percentile, the export."""
+    folder = tmp_path_factory.mktemp("uq_options")
+    data = folder / "train.pkl.gz"
+    training_frame.to_pickle(data)
+    (folder / "keep_all_filter.py").write_text("def keep(atoms):\n    return len(atoms) >= 1\n")
+    args = (
+        "--n-clusters", "2", "3",
+        "--train-data-weighted", str(WEIGHT), str(data),
+        "--filter-fn", "keep_all_filter:keep",
+        "--frac", "1.0",
+        "--threshold-percentile", "90",
+        "--verbose",
+    )  # fmt: skip
+    with pytest.MonkeyPatch.context() as patch:
+        _make_importable(patch, folder)
+        stdout = _run_build(folder, model_dir, *args)
+    return {"folder": folder, "args": args, "stdout": stdout, "artifact": folder / "gmm_artifacts.npz"}
+
+
+def test_several_candidate_k_select_one_by_the_elbow_and_write_the_report(option_run):
+    out = option_run["stdout"]
+    assert "Per-element elbow results:" in out
+    assert "Global optimal k = " in out
+    assert (option_run["folder"] / "gmm_artifacts_elbow.txt").is_file()
+    with np.load(option_run["artifact"]) as artifact:
+        assert artifact["counts_0"].ndim == 1
+        assert artifact["counts_0"].shape[0] in (2, 3)
+
+
+def test_the_weight_of_a_group_scales_the_effective_counts_of_each_cluster(option_run, training_frame):
+    """Every atom of the single weighted group counts WEIGHT times: effective count = WEIGHT x raw count, summing to WEIGHT x atoms."""
+    expected = atoms_per_element(training_frame)
+    with np.load(option_run["artifact"]) as artifact:
+        for index, symbol in enumerate(ELEMENTS):
+            counts = artifact[f"counts_{index}"]
+            effective = artifact[f"{uqc.EFFECTIVE_COUNT}_{index}"]
+            assert counts.sum() == expected[symbol]
+            np.testing.assert_allclose(effective, WEIGHT * counts)
+
+
+def test_the_unweighted_build_stores_effective_counts_equal_to_the_raw_counts(master_run):
+    with np.load(master_run["artifact"]) as artifact:
+        for index in range(len(ELEMENTS)):
+            np.testing.assert_array_equal(
+                artifact[f"{uqc.EFFECTIVE_COUNT}_{index}"], artifact[f"counts_{index}"].astype(np.float64)
+            )
+
+
+def test_the_percentile_estimator_is_announced_and_recorded_in_the_artifact(option_run):
+    assert "thresholds: 90-th percentile of the training sigma distribution" in option_run["stdout"]
+    with np.load(option_run["artifact"]) as artifact:
+        assert str(artifact["threshold_mode"]) == "percentile_90"
+
+
+def test_a_second_run_in_the_same_folder_skips_every_finished_stage(option_run, model_dir):
+    before = {name: np.load(option_run["artifact"])[name] for name in ("counts_0", "interp_thresholds")}
+    with pytest.MonkeyPatch.context() as patch:
+        _make_importable(patch, option_run["folder"])
+        out = _run_build(option_run["folder"], model_dir, *option_run["args"])
+    for stage in ("Skipping Step 1.", "Skipping Step 2.", "Skipping Step 3.", "Skipping export."):
+        assert stage in out
+    assert "--threshold-percentile was given but step 3 was skipped" in out
+    assert "Spawning" not in out
+    with np.load(option_run["artifact"]) as artifact:
+        for name, value in before.items():
+            np.testing.assert_array_equal(artifact[name], value)
+
+
+def test_restart_rebuilds_everything_with_the_same_result(option_run, model_dir):
+    with np.load(option_run["artifact"]) as artifact:
+        before = {name: artifact[name] for name in ("counts_0", "counts_3")}
+    with pytest.MonkeyPatch.context() as patch:
+        _make_importable(patch, option_run["folder"])
+        out = _run_build(option_run["folder"], model_dir, *option_run["args"], "--restart")
+    assert "Restarting: cleaning up old checkpoint files..." in out
+    assert "Skipping" not in out
+    assert out.count("Spawning 1 workers...") == 3
+    with np.load(option_run["artifact"]) as artifact:
+        for name, value in before.items():
+            np.testing.assert_array_equal(artifact[name], value)
+
+
+@pytest.fixture
+def staged_build(option_run, model_dir, training_frame, tmp_path):
+    """A folder with the data and the finished step files of ``option_run`` copied in, for the failure tests below."""
+
+    def stage(*files: str) -> Path:
+        training_frame.to_pickle(tmp_path / "train.pkl.gz")
+        for name in files:
+            shutil.copy(option_run["folder"] / name, tmp_path / name)
+        return tmp_path
+
+    return stage
+
+
+@pytest.mark.parametrize(
+    ("step", "present"),
+    [(1, ()), (2, (".step1_final.npz",)), (3, (".step1_final.npz", ".step2_final.npz"))],
+)
+def test_workers_that_report_success_without_writing_their_file_are_an_error(
+    staged_build, model_dir, monkeypatch, step, present
+):
+    """The master checks the checkpoint of every worker; a missing one names the step."""
+    folder = staged_build(*present)
+    monkeypatch.setattr(master, "spawn_and_monitor", lambda *a, **k: [])
+    monkeypatch.chdir(folder)
+    with pytest.raises(RuntimeError, match=rf"Worker file '.*' missing after Step {step} completed"):
+        build_main(common_args(model_dir, "--n-clusters", "2", "--no-export", "--train-data", str(folder / "train.pkl.gz")))
+
+
+def test_a_failed_worker_stops_the_pipeline_with_the_failed_ids(staged_build, model_dir, monkeypatch):
+    folder = staged_build()
+    monkeypatch.setattr(master, "spawn_and_monitor", lambda *a, **k: [0])
+    monkeypatch.chdir(folder)
+    with pytest.raises(RuntimeError, match=r"Step 1: worker\(s\) \[0\] failed"):
+        build_main(common_args(model_dir, "--n-clusters", "2", "--no-export", "--train-data", str(folder / "train.pkl.gz")))
+
+
+def test_workers_whose_files_are_all_present_are_not_spawned_again(staged_build, model_dir, option_run, monkeypatch, capsys):
+    """Resuming after the master died between the workers and the merge: the worker files of the step are found on disk."""
+    folder = staged_build()
+    for k in (2, 3):
+        (folder / f".step1_w0_k{k}.npz").write_bytes(b"")
+    monkeypatch.setattr(
+        master, "spawn_and_monitor", lambda *a, **k: pytest.fail("no worker may be spawned")
+    )
+    monkeypatch.chdir(folder)
+    with pytest.raises(EOFError):  # the stub files are not npz: the merge that follows fails, after the check under test
+        build_main(common_args(model_dir, "--n-clusters", "2", "3", "--no-export", "--train-data", str(folder / "train.pkl.gz")))
+    assert "All workers for Step 1 already finished." in capsys.readouterr().out
+
+
+def test_the_results_of_several_workers_are_merged_into_the_counts_of_the_whole_data(
+    staged_build, model_dir, training_frame, monkeypatch
+):
+    """Two workers each see half of the atoms: the merged counts still add up to the atoms of each element."""
+    folder = staged_build(".step1_final.npz")
+    monkeypatch.chdir(folder)
+    build_main(
+        common_args(
+            model_dir, "--n-clusters", "2", "3", "--n-workers", "2", "--no-export",
+            "--train-data", str(folder / "train.pkl.gz"),
+        )
+    )  # fmt: skip
+    expected = atoms_per_element(training_frame)
+    with np.load(folder / "gmm_artifacts.npz") as artifact:
+        for index, symbol in enumerate(ELEMENTS):
+            assert artifact[f"counts_{index}"].sum() == expected[symbol]
+            np.testing.assert_array_equal(
+                artifact[f"{uqc.EFFECTIVE_COUNT}_{index}"], artifact[f"counts_{index}"].astype(np.float64)
+            )
+
+
+def test_restart_removes_the_old_step_files_and_survives_one_that_cannot_be_removed(
+    staged_build, model_dir, monkeypatch, capsys
+):
+    """``--restart`` is best effort on the old checkpoints: a file that cannot be removed is left and the run goes on."""
+    folder = staged_build(".step1_final.npz", ".step2_final.npz")
+    (folder / ".step9_stuck.npz").write_bytes(b"")
+    real_remove = os.remove
+
+    def remove(path, *args, **kwargs):
+        if str(path).endswith(".step9_stuck.npz"):
+            raise PermissionError(path)
+        real_remove(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "remove", remove)
+    monkeypatch.setattr(master, "spawn_and_monitor", lambda *a, **k: [0])
+    monkeypatch.chdir(folder)
+    with pytest.raises(RuntimeError, match="Step 1"):
+        build_main(
+            common_args(
+                model_dir, "--n-clusters", "2", "--no-export", "--restart", "--threads-per-worker", "2",
+                "--train-data", str(folder / "train.pkl.gz"),
+            )
+        )  # fmt: skip
+    assert "Restarting: cleaning up old checkpoint files..." in capsys.readouterr().out
+    assert not (folder / ".step1_final.npz").exists()
+    assert not (folder / ".step2_final.npz").exists()
+    assert (folder / ".step9_stuck.npz").exists()
+
+
+def test_groups_of_different_weights_and_an_element_without_data(model_dir, training_frame, tmp_path, caplog):
+    """Nine frames without tungsten in two weighted groups: W is absent from the artifact, and the effective counts of Mo, Nb and Ta are
+    the weighted sums of the atoms of each group (computed here from the frames)."""
+    light = [1, 2, 3, 6]
+    heavy = [7, 8, 9, 10, 11]
+    weights = {"light.pkl.gz": 1.0, "heavy.pkl.gz": 5.0}
+    expected = dict.fromkeys(ELEMENTS, 0.0)
+    for (name, rows), weight in zip((("light.pkl.gz", light), ("heavy.pkl.gz", heavy)), weights.values(), strict=True):
+        training_frame.iloc[rows].reset_index(drop=True).to_pickle(tmp_path / name)
+        for atoms in training_frame.iloc[rows]["ase_atoms"]:
+            for symbol in atoms.get_chemical_symbols():
+                expected[symbol] += weight
+    assert expected["W"] == 0.0
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(tmp_path)
+        build_main(
+            common_args(
+                model_dir, "--n-clusters", "2", "--no-export",
+                "--train-data-weighted", "1.0", str(tmp_path / "light.pkl.gz"),
+                "--train-data-weighted", "5.0", str(tmp_path / "heavy.pkl.gz"),
+            )
+        )  # fmt: skip
+    assert "element W(3) has no training atoms" in caplog.text
+    with np.load(tmp_path / "gmm_artifacts.npz") as artifact:
+        for index, symbol in enumerate(ELEMENTS[:3]):
+            effective = artifact[f"{uqc.EFFECTIVE_COUNT}_{index}"]
+            assert effective.sum() == pytest.approx(expected[symbol])
+        assert "counts_3" not in artifact.files
