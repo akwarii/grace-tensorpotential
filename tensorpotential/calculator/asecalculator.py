@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import math
 import numpy as np
@@ -712,6 +713,101 @@ def _load_one_model(m) -> "_LoadedModel":
     raise ValueError("model type is not recognized")
 
 
+def _validated_mode(mode: str) -> str:
+    """Lower-case ``mode`` and check it is ``"uniform"`` or ``"diverse"``."""
+    mode = str(mode).lower()
+    if mode not in ("uniform", "diverse"):
+        raise ValueError(
+            f"mode must be 'uniform' (dense, for a single structure or a uniform "
+            f"dataset) or 'diverse' (segment_sum, for many heterogeneous structures), "
+            f"got {mode!r}"
+        )
+    return mode
+
+
+def _resolve_engine(mode: str, can_seg: bool, can_dense: bool) -> bool:
+    """Whether the dense engine runs: ``mode`` against what the model(s) can run.
+
+    Each mode uses its preferred engine when available, else falls back to the other
+    (with a warning) -- some models are single-engine (in-memory TPModels; seg-only
+    SavedModels).
+    """
+    want_dense = mode == "uniform"
+    if want_dense and can_dense:
+        return True
+    if (not want_dense) and can_seg:
+        return False
+    if can_dense and not can_seg:
+        log.warning(
+            "mode='diverse' (segment_sum) requested, but this model only provides the "
+            "dense engine -- using dense. (Rebuild/export with a segment_sum `compute` "
+            "signature for the diverse engine.)"
+        )
+        return True
+    if can_seg and not can_dense:
+        log.warning(
+            "mode='uniform' (dense) requested, but this model has no `compute_dense` "
+            "signature -- falling back to segment_sum. (Export the model with a dense "
+            "signature to use the uniform engine.)"
+        )
+        return False
+    raise ValueError("model supports neither a segment_sum nor a dense compute engine")
+
+
+def _cutoff_from_matrices(
+    matrices: list[np.ndarray], element_map: dict
+) -> tuple[Any, dict[tuple, Any]]:
+    """The largest cutoff and the per-element-pair cutoffs of the largest matrix."""
+    assert len({m.shape for m in matrices}) == 1
+    # get one max matrix over possibly many
+    nelems = len(element_map)
+    matrix = np.max(matrices, axis=0).reshape(nelems, nelems)
+    inv_element_map = {v: k for k, v in element_map.items()}
+    cutoff_dict = {}
+    for comb in combinations_with_replacement(np.arange(nelems), 2):
+        el0, el1 = inv_element_map[comb[0]], inv_element_map[comb[1]]
+        cutoff_dict[(el0, el1)] = matrix[comb[0], comb[1]]
+    # get single max value
+    return np.max(matrix), cutoff_dict
+
+
+# (data key, module, class, takes the cutoff): builders of optional data keys
+_OPTIONAL_DATA_BUILDERS = (
+    (
+        constants.ATOMIC_MAGMOM,
+        "tensorpotential.experimental.mag.databuilder",
+        "MagMomDataBuilder",
+        False,
+    ),
+    (
+        constants.ATOMIC_POS,
+        "tensorpotential.extra.gen_tensor.databuilder",
+        "PositionsDataBuilder",
+        True,
+    ),
+    (
+        constants.CELL_VECTORS,
+        "tensorpotential.extra.gen_tensor.databuilder",
+        "CellDataBuilder",
+        True,
+    ),
+)
+
+
+def _optional_builder_class(module_name: str, class_name: str) -> type:
+    """Import a builder of an optional data key, with a clear error when it is absent."""
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as err:
+        raise ImportError(
+            f"{module_name.replace('tensorpotential', 'TensorPotential', 1)} not found"
+        ) from err
+    try:
+        return getattr(module, class_name)
+    except AttributeError as err:
+        raise ImportError(f"cannot import name {class_name!r} from {module_name!r}") from err
+
+
 class TPCalculator(Calculator):
     """
     Atomic Simulation Environment (ASE) calculator for TensorPotential models.
@@ -799,59 +895,9 @@ class TPCalculator(Calculator):
 
         # Engine mode (see class docstring): "uniform" -> dense reshape aggregation;
         # "diverse" -> segment_sum. Resolved against each model's capabilities below.
-        mode = str(mode).lower()
-        if mode not in ("uniform", "diverse"):
-            raise ValueError(
-                f"mode must be 'uniform' (dense, for a single structure or a uniform "
-                f"dataset) or 'diverse' (segment_sum, for many heterogeneous structures), "
-                f"got {mode!r}"
-            )
-        self.mode = mode
-        is_ensemble = isinstance(model, list)
-        model_specs = model if is_ensemble else [model]
-        self.models = []
-        self.data_keys = []
-        model_paths = []  # track paths for metadata loading
-        can_seg, can_dense = True, True   # engine capability ANDed across the ensemble
-        for i, m in enumerate(model_specs):
-            r = _load_one_model(m)
-            can_seg, can_dense = can_seg and r.can_seg, can_dense and r.can_dense
-            model_paths.append(r.path)
-            self.models.append(r.model)
-            if i == 0:
-                self.data_keys = r.data_keys
-                if not is_ensemble:
-                    self._saved_model_uq_sigs = r.uq_sigs
-            elif not set(self.data_keys).issubset(r.data_keys):
-                raise ValueError(
-                    f"Models have inconsistent data keys: expected superset of "
-                    f"{self.data_keys}, got {r.data_keys}"
-                )
-
-        # Resolve the requested mode against what the model(s) can actually run. Each mode
-        # uses its preferred engine when available, else falls back to the other (with a
-        # warning) -- some models are single-engine (in-memory TPModels; seg-only SavedModels).
-        want_dense = self.mode == "uniform"
-        if want_dense and can_dense:
-            self.dense_reshape = True
-        elif (not want_dense) and can_seg:
-            self.dense_reshape = False
-        elif can_dense and not can_seg:
-            self.dense_reshape = True
-            log.warning(
-                "mode='diverse' (segment_sum) requested, but this model only provides the "
-                "dense engine -- using dense. (Rebuild/export with a segment_sum `compute` "
-                "signature for the diverse engine.)"
-            )
-        elif can_seg and not can_dense:
-            self.dense_reshape = False
-            log.warning(
-                "mode='uniform' (dense) requested, but this model has no `compute_dense` "
-                "signature -- falling back to segment_sum. (Export the model with a dense "
-                "signature to use the uniform engine.)"
-            )
-        else:
-            raise ValueError("model supports neither a segment_sum nor a dense compute engine")
+        self.mode = _validated_mode(mode)
+        can_seg, can_dense, model_paths = self._load_models(model)
+        self.dense_reshape = _resolve_engine(self.mode, can_seg, can_dense)
 
         # On a SavedModel running dense, rebind the default callable so model.compute(...)
         # dispatches to the fast dense path (shares the same weights; identical inputs).
@@ -868,67 +914,15 @@ class TPCalculator(Calculator):
                 "recompiles. For a single structure or a uniform dataset use mode='uniform'."
             )
 
-        cutoffs, element_maps, cutoff_matrices = [], [], []
-        for i, model in enumerate(self.models):
-            # Try metadata.yaml first (reliable for saved models)
-            model_path = model_paths[i] if i < len(model_paths) else None
-            metadata = load_model_metadata(model_path)
-            if metadata is not None and "cutoff" in metadata and "chemical_symbols" in metadata:
-                cutoffs.append(metadata["cutoff"])
-                symbols = metadata["chemical_symbols"]
-                element_maps.append(
-                    {sym: idx for idx, sym in enumerate(symbols)}
-                )
-                if "cutoff_matrix" in metadata:
-                    cutoff_matrices.append(np.array(metadata["cutoff_matrix"]))
-            else:
-                # Fall back to extracting from instruction objects
-                cutoff, element_map_symbols, element_map_index = (
-                    extract_cutoff_and_elements(model.instructions)
-                )
-                cutoffs.append(cutoff)
-                element_maps.append(
-                    {k: v for k, v in zip(element_map_symbols, element_map_index)}
-                )
-                cutoff_matrix = extract_cutoff_matrix(model.instructions)
-                if cutoff_matrix is not None:
-                    cutoff_matrices.append(cutoff_matrix)
+        cutoffs, element_maps, cutoff_matrices = self._read_cutoffs_and_elements(
+            model_paths
+        )
         cutoff = np.max(cutoffs)
         assert all(
             [ems == element_maps[0]] for ems in element_maps
         )  # check that all maps are identical
         self.element_map = element_maps[0]
-
-        actual_cutoff_matrices = [m for m in cutoff_matrices if m is not None]
-
-        if len(actual_cutoff_matrices) == 0:
-            self.cutoff_dict = None
-            if cutoff > 0:
-                if self.cutoff is not None and self.cutoff != cutoff:
-                    log.warning(
-                        f"Cutoff of the potential {cutoff} A is different from calculator's {self.cutoff} A. "
-                        f"Using the value from the potential."
-                    )
-                self.cutoff = cutoff
-            else:
-                log.warning(
-                    f"Couldn't extract cutoff value from the model. Using the value from calculator: {self.cutoff}A"
-                )
-        else:
-            assert len(set([m.shape for m in actual_cutoff_matrices])) == 1
-            # get one max matrix over possibly many
-            nelems = len(self.element_map)
-            matrix = np.max(actual_cutoff_matrices, axis=0).reshape(nelems, nelems)
-            # get single max value
-            self.cutoff = np.max(matrix)
-            # construct dict
-            all_bond_comb = combinations_with_replacement(np.arange(nelems), 2)
-            inv_element_map = {v: k for k, v in self.element_map.items()}
-
-            self.cutoff_dict = {}
-            for comb in all_bond_comb:
-                el0, el1 = inv_element_map[comb[0]], inv_element_map[comb[1]]
-                self.cutoff_dict[(el0, el1)] = matrix[comb[0], comb[1]]
+        self._set_cutoffs(cutoff, cutoff_matrices)
 
         self.geom_data_builder = GeometricalDataBuilder(
             elements_map=self.element_map,
@@ -938,40 +932,7 @@ class TPCalculator(Calculator):
             # driven by the DensePaddingManager-selected (atoms, width) shape.
             dense_nbr=self.dense_reshape,
         )
-        self.data_builders = [self.geom_data_builder]
-        if constants.ATOMIC_MAGMOM in self.data_keys:
-            try:
-                from tensorpotential.experimental.mag.databuilder import (
-                    MagMomDataBuilder,
-                )
-            except ModuleNotFoundError as err:
-                raise ImportError(
-                    "TensorPotential.experimental.mag.databuilder not found"
-                ) from err
-
-            self.data_builders.append(MagMomDataBuilder())
-        if constants.ATOMIC_POS in self.data_keys:
-            try:
-                from tensorpotential.extra.gen_tensor.databuilder import (
-                    PositionsDataBuilder,
-                )
-            except ModuleNotFoundError as err:
-                raise ImportError(
-                    "TensorPotential.extra.gen_tensor.databuilder not found"
-                ) from err
-
-            self.data_builders.append(PositionsDataBuilder(cutoff=self.cutoff))
-        if constants.CELL_VECTORS in self.data_keys:
-            try:
-                from tensorpotential.extra.gen_tensor.databuilder import (
-                    CellDataBuilder,
-                )
-            except ModuleNotFoundError as err:
-                raise ImportError(
-                    "TensorPotential.extra.gen_tensor.databuilder not found"
-                ) from err
-
-            self.data_builders.append(CellDataBuilder(cutoff=self.cutoff))
+        self.data_builders = [self.geom_data_builder, *self._optional_data_builders()]
 
         self.padding_manager = PaddingManager(
             data_builders=self.data_builders,
@@ -1002,6 +963,94 @@ class TPCalculator(Calculator):
                 "or calc.disable_uq() to use standard compute.",
                 self._uq_state["mode"],  # ty: ignore[not-subscriptable]  # set by enable_uq(); ty cannot narrow through the _uq_enabled property
             )
+
+    def _load_models(self, model: Any) -> tuple[bool, bool, list]:
+        """Load the model or the ensemble; return the engine capabilities and the paths."""
+        is_ensemble = isinstance(model, list)
+        model_specs = model if is_ensemble else [model]
+        self.models = []
+        self.data_keys = []
+        model_paths = []  # track paths for metadata loading
+        can_seg, can_dense = True, True  # engine capability ANDed across the ensemble
+        for i, m in enumerate(model_specs):
+            r = _load_one_model(m)
+            can_seg, can_dense = can_seg and r.can_seg, can_dense and r.can_dense
+            model_paths.append(r.path)
+            self.models.append(r.model)
+            if i == 0:
+                self.data_keys = r.data_keys
+                if not is_ensemble:
+                    self._saved_model_uq_sigs = r.uq_sigs
+            elif not set(self.data_keys).issubset(r.data_keys):
+                raise ValueError(
+                    f"Models have inconsistent data keys: expected superset of "
+                    f"{self.data_keys}, got {r.data_keys}"
+                )
+        return can_seg, can_dense, model_paths
+
+    def _read_cutoffs_and_elements(self, model_paths: list) -> tuple[list, list, list]:
+        """Cutoff, element map and cutoff matrix (when any) of every model."""
+        cutoffs, element_maps, cutoff_matrices = [], [], []
+        for i, model in enumerate(self.models):
+            # Try metadata.yaml first (reliable for saved models)
+            model_path = model_paths[i] if i < len(model_paths) else None
+            metadata = load_model_metadata(model_path)
+            if (
+                metadata is not None
+                and "cutoff" in metadata
+                and "chemical_symbols" in metadata
+            ):
+                cutoffs.append(metadata["cutoff"])
+                symbols = metadata["chemical_symbols"]
+                element_maps.append({sym: idx for idx, sym in enumerate(symbols)})
+                if "cutoff_matrix" in metadata:
+                    cutoff_matrices.append(np.array(metadata["cutoff_matrix"]))
+            else:
+                # Fall back to extracting from instruction objects
+                cutoff, element_map_symbols, element_map_index = (
+                    extract_cutoff_and_elements(model.instructions)
+                )
+                cutoffs.append(cutoff)
+                element_maps.append(
+                    {k: v for k, v in zip(element_map_symbols, element_map_index)}
+                )
+                cutoff_matrix = extract_cutoff_matrix(model.instructions)
+                if cutoff_matrix is not None:
+                    cutoff_matrices.append(cutoff_matrix)
+        return cutoffs, element_maps, cutoff_matrices
+
+    def _set_cutoffs(self, cutoff: Any, cutoff_matrices: list) -> None:
+        """Set ``cutoff`` and ``cutoff_dict`` from the models (the matrices win when present)."""
+        actual_cutoff_matrices = [m for m in cutoff_matrices if m is not None]
+
+        if len(actual_cutoff_matrices) == 0:
+            self.cutoff_dict = None
+            if cutoff > 0:
+                if self.cutoff is not None and self.cutoff != cutoff:
+                    log.warning(
+                        f"Cutoff of the potential {cutoff} A is different from calculator's {self.cutoff} A. "
+                        f"Using the value from the potential."
+                    )
+                self.cutoff = cutoff
+            else:
+                log.warning(
+                    f"Couldn't extract cutoff value from the model. Using the value from calculator: {self.cutoff}A"
+                )
+        else:
+            self.cutoff, self.cutoff_dict = _cutoff_from_matrices(
+                actual_cutoff_matrices, self.element_map
+            )
+
+    def _optional_data_builders(self) -> list[AbstractDataBuilder]:
+        """Builders of the optional data keys (magnetic moments, positions, cell) the model needs."""
+        builders = []
+        for key, module_name, class_name, takes_cutoff in _OPTIONAL_DATA_BUILDERS:
+            if key in self.data_keys:
+                builder_class = _optional_builder_class(module_name, class_name)
+                builders.append(
+                    builder_class(cutoff=self.cutoff) if takes_cutoff else builder_class()
+                )
+        return builders
 
     @property
     def _uq_enabled(self) -> bool:
