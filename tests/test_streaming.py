@@ -542,3 +542,11 @@ def test_only_the_first_epoch_logs_intermediate_bucket_statistics(
         total = sum("Intermediate padding stats" in r.message for r in caplog.records)
     assert first > 0
     assert total == first
+
+
+def test_an_epoch_without_atoms_logs_no_padding_statistics(builders, frame, caplog):
+    wrapper = _wrapper(frame.iloc[:0], builders)
+    with caplog.at_level(logging.INFO, logger="tensorpotential.data.streaming"):
+        assert list(wrapper) == []
+    assert not any("Epoch padding stats" in r.message for r in caplog.records)
+    assert len(wrapper) == 0  # the empty epoch is the exact count
