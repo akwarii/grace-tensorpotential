@@ -75,7 +75,7 @@
 
 - path: tensorpotential/calculator/asecalculator.py
   reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); QUAL7: largest functions split into named steps (PaddingManager.get_data, TPCalculator.__init__ and calculate)'
-  milestone: [CLEAN2, QUAL1, CORE1, ARCH1, QUAL7]
+  milestone: [CLEAN2, QUAL1, CORE1, ARCH1, ARCH2, QUAL7]
   upstream: pending
 
 - path: tensorpotential/calculator/foundation_models.py
@@ -295,7 +295,7 @@
 
 - path: tensorpotential/tpmodel.py
   reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation skips active instructions and leaves the config of the caller unedited; QUAL7: save_model split into named steps'
-  milestone: [CLEAN2, QUAL1, CORE1, LORA1, QUAL7]
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1, ARCH2, QUAL7]
   upstream: pending
 
 - path: tensorpotential/uq/__init__.py
@@ -320,7 +320,7 @@
 
 - path: tensorpotential/uq/factories.py
   reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CORE1]
+  milestone: [CORE1, ARCH2]
   upstream: pending
 
 - path: tensorpotential/uq/feature_extraction.py
@@ -330,7 +330,7 @@
 
 - path: tensorpotential/uq/gmmuq.py
   reason: 'TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CORE1]
+  milestone: [CORE1, ARCH2]
   upstream: pending
 
 - path: tensorpotential/uq/instructions.py
