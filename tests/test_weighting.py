@@ -332,6 +332,26 @@ def test_the_order_of_the_selected_structures_is_shuffled_with_the_seed():
     assert all(sorted(o) == list(range(6)) for o in orders)
 
 
+# Selected rows in output order, taken from the code before it was split into steps (#177):
+# numpy's legacy ``RandomState`` stream (``seed``, ``choice``, ``shuffle``) is stable across versions.
+# Counts at the tier sizes (6 low, 4 upper) pin the ``<=`` boundaries: the whole tier is taken
+# without drawing from the stream.
+SELECTION_ORDERS = [
+    ({"n_lower": 6, "n_upper": 4}, [8, 1, 5, 0, 7, 2, 9, 4, 3, 6]),
+    ({"nfit": 10}, [3, 8, 0, 6, 5, 2, 1, 7, 4, 9]),
+    ({"nfit": 7, "seed": 3}, [9, 2, 1, 4, 5, 0, 3]),
+    ({"n_lower": 3, "n_upper": 4, "seed": 5}, [8, 2, 7, 4, 5, 6, 9]),
+    ({"n_lower": 6, "n_upper": 2, "seed": 9}, [9, 4, 1, 2, 3, 0, 7, 5]),
+    ({"nfit": 8, "seed": 11}, [8, 0, 2, 3, 9, 4, 5, 1]),
+]
+
+
+@pytest.mark.parametrize(("kwargs", "order"), SELECTION_ORDERS)
+def test_the_selection_and_its_order_follow_the_seeded_random_stream(kwargs, order):
+    result = _weights(_frame(LOW + UP), **kwargs)
+    assert list(result.index) == order
+
+
 # --- the energy weights ---
 
 
