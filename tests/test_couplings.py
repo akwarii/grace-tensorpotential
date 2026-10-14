@@ -21,6 +21,8 @@ import json
 import math
 import os
 import pathlib
+import sys
+from typing import Any
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -70,6 +72,11 @@ GRID_OPTIONS = {
 GRID_STEP = 7  # every 7th of the 512 combinations: 74 per frame, three frames, all values of every option
 
 
+def _couple(**kwargs: Any) -> pd.DataFrame:
+    """``real_coupling_metainformation`` with keyword arguments of any type (the grid builds them)."""
+    return real_coupling_metainformation(**kwargs)
+
+
 def _canonical(value: object) -> object:
     """Turn a table cell into JSON-able data that keeps every float bit."""
     if isinstance(value, (float, np.floating)):
@@ -103,7 +110,7 @@ def _preset_frames() -> dict[str, pd.DataFrame]:
     return frames
 
 
-def _grid_cases(frames: dict[str, pd.DataFrame]) -> dict[str, dict]:
+def _grid_cases(frames: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]:
     """A deterministic subset of the option grid on three frames of different size."""
     chosen = {
         "A": frames["GRACE_1LAYER_latest:1:A"],
@@ -112,7 +119,7 @@ def _grid_cases(frames: dict[str, pd.DataFrame]) -> dict[str, dict]:
     }
     keys = list(GRID_OPTIONS)
     combos = [
-        dict(zip(keys, values))
+        dict(zip(keys, values, strict=True))
         for values in itertools.product(*(GRID_OPTIONS[k] for k in keys))
     ]
     cases = {}
@@ -123,9 +130,9 @@ def _grid_cases(frames: dict[str, pd.DataFrame]) -> dict[str, dict]:
     return cases
 
 
-def _grid_digest(kwargs: dict) -> str:
+def _grid_digest(kwargs: dict[str, Any]) -> str:
     try:
-        return digest(real_coupling_metainformation(**kwargs))
+        return digest(_couple(**kwargs))
     except (
         ValueError,
         KeyError,
@@ -166,7 +173,10 @@ def test_every_table_is_bit_identical_to_the_reference(
 
 
 def _frame(rows: list[tuple[int, int, str, int, int]]) -> pd.DataFrame:
-    return pd.DataFrame(rows, columns=["l", "m", "hist", "parity", "sum_of_ls"])
+    return pd.DataFrame(
+        [list(row) for row in rows],
+        columns=pd.Index(["l", "m", "hist", "parity", "sum_of_ls"]),
+    )
 
 
 VECTOR = _frame([(1, -1, "1", -1, 1), (1, 0, "1", -1, 1), (1, 1, "1", -1, 1)])
@@ -175,23 +185,23 @@ SCALAR = _frame([(0, 0, "0", 1, 0)])
 
 def test_scalar_product_of_two_vectors_is_the_trace_over_root_three():
     # real harmonics: Y_1 . Y_1 -> L=0 with cg = 1/sqrt(3) on each diagonal pair
-    result = real_coupling_metainformation(
-        A=VECTOR, B=VECTOR, lmax=1, Lmax=0, normalize=False
-    )
+    result = _couple(A=VECTOR, B=VECTOR, lmax=1, Lmax=0, normalize=False)
     assert len(result) == 1
     row = result.iloc[0]
     assert (row["l"], row["m"], row["parity"]) == (0, 0, 1)
-    assert sorted(zip(row["left_inds"], row["right_inds"])) == [(0, 0), (1, 1), (2, 2)]
+    assert sorted(zip(row["left_inds"], row["right_inds"], strict=True)) == [
+        (0, 0),
+        (1, 1),
+        (2, 2),
+    ]
     np.testing.assert_allclose(row["cg_list"], 1 / math.sqrt(3), rtol=0, atol=CG_ATOL)
 
 
 def test_cross_product_of_two_vectors_has_two_terms_of_one_over_root_two_per_component():
-    result = real_coupling_metainformation(
-        A=VECTOR, B=VECTOR, lmax=1, Lmax=1, normalize=False
-    )
+    result = _couple(A=VECTOR, B=VECTOR, lmax=1, Lmax=1, normalize=False)
     cross = result[result["l"] == 1]
     assert len(cross) == 3
-    for cg_list, left in zip(cross["cg_list"], cross["left_inds"]):
+    for cg_list, left in zip(cross["cg_list"], cross["left_inds"], strict=True):
         assert len(left) == 2
         np.testing.assert_allclose(
             sorted(np.abs(cg_list)), [1 / math.sqrt(2)] * 2, rtol=0, atol=CG_ATOL
@@ -200,19 +210,15 @@ def test_cross_product_of_two_vectors_has_two_terms_of_one_over_root_two_per_com
 
 
 def test_equal_operands_keep_the_symmetric_part_only_and_halve_the_pairs():
-    plain = real_coupling_metainformation(A=VECTOR, B=VECTOR, lmax=1, Lmax=2)
-    equal = real_coupling_metainformation(
-        A=VECTOR, B=VECTOR, lmax=1, Lmax=2, is_A_B_equal=True
-    )
+    plain = _couple(A=VECTOR, B=VECTOR, lmax=1, Lmax=2)
+    equal = _couple(A=VECTOR, B=VECTOR, lmax=1, Lmax=2, is_A_B_equal=True)
     assert set(equal["l"]) == {0, 2}  # the antisymmetric L=1 combination cancels
     assert len(equal) < len(plain)
 
 
 def test_history_strings_carry_parity_markers_unless_legacy():
-    marked = real_coupling_metainformation(A=VECTOR, B=SCALAR, lmax=1, Lmax=1)
-    legacy = real_coupling_metainformation(
-        A=VECTOR, B=SCALAR, lmax=1, Lmax=1, legacy_format=True
-    )
+    marked = _couple(A=VECTOR, B=SCALAR, lmax=1, Lmax=1)
+    legacy = _couple(A=VECTOR, B=SCALAR, lmax=1, Lmax=1, legacy_format=True)
     assert set(marked["hist"]) == {"(11-,00+)"}
     assert set(legacy["hist"]) == {"(11,00)"}
 
@@ -233,23 +239,21 @@ def test_history_strings_carry_parity_markers_unless_legacy():
 )
 def test_each_filter_removes_the_couplings_it_excludes(kwargs, expected_l):
     options = {"lmax": 1, "Lmax": 1, **kwargs}
-    result = real_coupling_metainformation(A=VECTOR, B=SCALAR, **options)
+    result = _couple(A=VECTOR, B=SCALAR, **options)
     assert set(result["l"]) == expected_l
 
 
 def test_lmax_hist_b_limits_the_history_of_the_right_operand_only():
     # VECTOR has history "1" (largest l = 1), SCALAR has "0"
     kwargs = {"A": SCALAR, "B": VECTOR, "lmax": 1, "Lmax": 1}
-    assert real_coupling_metainformation(**kwargs, lmax_hist_B=0).empty
-    assert not real_coupling_metainformation(**kwargs, lmax_hist_B=1).empty
-    assert not real_coupling_metainformation(**kwargs, lmax_hist_A=0).empty
+    assert _couple(**kwargs, lmax_hist_B=0).empty
+    assert not _couple(**kwargs, lmax_hist_B=1).empty
+    assert not _couple(**kwargs, lmax_hist_A=0).empty
 
 
 def test_keep_parity_accepts_a_list_of_lists_and_rejects_other_containers():
     with pytest.raises(ValueError, match="Only list of"):
-        real_coupling_metainformation(
-            A=VECTOR, B=SCALAR, lmax=1, Lmax=1, keep_parity=((1, -1),)
-        )
+        _couple(A=VECTOR, B=SCALAR, lmax=1, Lmax=1, keep_parity=((1, -1),))
 
 
 @pytest.mark.parametrize("side", ["A", "B"])
@@ -257,14 +261,12 @@ def test_a_table_with_a_repeated_l_m_history_is_rejected(side):
     twice = pd.concat([VECTOR, VECTOR.iloc[:1]], ignore_index=True)
     tables = {"A": VECTOR, "B": VECTOR, side: twice}
     with pytest.raises(ValueError, match=f"{side} has non-unique"):
-        real_coupling_metainformation(**tables, lmax=1, Lmax=1)
+        _couple(**tables, lmax=1, Lmax=1)
 
 
 def test_history_drop_list_removes_a_history_for_the_given_target_l_only():
-    full = real_coupling_metainformation(
-        A=VECTOR, B=SCALAR, lmax=1, Lmax=1, legacy_format=True
-    )
-    dropped = real_coupling_metainformation(
+    full = _couple(A=VECTOR, B=SCALAR, lmax=1, Lmax=1, legacy_format=True)
+    dropped = _couple(
         A=VECTOR,
         B=SCALAR,
         lmax=1,
@@ -276,7 +278,7 @@ def test_history_drop_list_removes_a_history_for_the_given_target_l_only():
     )
     assert len(full) == 3
     assert dropped.empty
-    kept = real_coupling_metainformation(
+    kept = _couple(
         A=VECTOR,
         B=SCALAR,
         lmax=1,
@@ -289,17 +291,19 @@ def test_history_drop_list_removes_a_history_for_the_given_target_l_only():
 
 def test_the_default_exclusion_lists_differ_between_legacy_and_parity_aware_paths():
     kwargs = {"A": VECTOR, "B": VECTOR, "lmax": 1, "Lmax": 2}
-    assert len(real_coupling_metainformation(**kwargs, legacy_format=True)) > 0
-    assert len(real_coupling_metainformation(**kwargs)) > 0
+    assert len(_couple(**kwargs, legacy_format=True)) > 0
+    assert len(_couple(**kwargs)) > 0
 
 
 def test_the_result_is_sorted_by_l_parity_hist_and_m_with_a_fresh_index():
-    result = real_coupling_metainformation(A=VECTOR, B=VECTOR, lmax=1, Lmax=2)
-    keys = list(zip(result["l"], result["parity"], result["hist"], result["m"]))
+    result = _couple(A=VECTOR, B=VECTOR, lmax=1, Lmax=2)
+    keys = list(
+        zip(result["l"], result["parity"], result["hist"], result["m"], strict=True)
+    )
     assert keys == sorted(keys)
     assert list(result.index) == list(range(len(result)))
 
 
 if __name__ == "__main__":
     DIGESTS.write_text(json.dumps(_all_digests(), indent=0, sort_keys=True) + "\n")
-    print("wrote", DIGESTS)
+    sys.stdout.write(f"wrote {DIGESTS}\n")

@@ -300,7 +300,6 @@ def test_ensemble_of_a_dense_and_a_segment_sum_model_has_no_common_engine():
 
 def one_layer_with(element_map: dict) -> TPModel:
     tf.random.set_seed(3)
-    np.random.seed(3)
     return build_model(
         GRACE_1LAYER_v2_25(
             element_map=element_map,

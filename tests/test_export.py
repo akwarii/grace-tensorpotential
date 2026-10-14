@@ -67,7 +67,6 @@ def test_export_to_yaml(tmp_path):
 
 
 def test_export_to_yaml_gives_the_same_file_for_a_list_and_a_dict_and_records_shift_and_scale(tmp_path):
-    np.random.seed(1)
     tf.random.set_seed(1)
     fs_ins = FS(
         element_map={"Al": 0, "Li": 1},

@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -31,7 +32,7 @@ from tensorpotential.data.streaming import (
     StreamingDatasetWrapper,
 )
 
-DATA = os.path.join(os.path.dirname(__file__), "data", "MoNbTaW_train50.pkl.gz")
+DATA = Path(__file__).parent / "data" / "MoNbTaW_train50.pkl.gz"
 ATOMS, BONDS, STRUCTS = (
     tc.PAD_MAX_N_ATOMS,
     tc.PAD_MAX_N_NEIGHBORS,
@@ -55,7 +56,7 @@ def builders() -> list[Any]:
 @pytest.fixture(scope="module")
 def structures(builders) -> list[dict[str, Any]]:
     """Per-structure dicts of the first rows of the MoNbTaW set, smallest first."""
-    frame = pd.read_pickle(DATA).iloc[:12]
+    frame = _load(12)
     out = []
     for i in range(len(frame)):
         data: dict[str, Any] = {}
@@ -67,6 +68,12 @@ def structures(builders) -> list[dict[str, Any]]:
             )
         out.append(data)
     return sorted(out, key=_real_atoms)
+
+
+def _load(rows: int) -> pd.DataFrame:
+    """The first ``rows`` structures of the MoNbTaW set."""
+    frame = cast(pd.DataFrame, pd.read_pickle(DATA))  # noqa: S301 - a pickle committed with the tests
+    return frame.iloc[:rows]
 
 
 def _real_atoms(structure: dict[str, Any]) -> int:
@@ -85,7 +92,11 @@ def _iterator(builders, buckets, **kwargs) -> ElasticBatchIterator:
     """An iterator whose metric axis is the structure count with a target of one slot, so the
     cap on the metric axis never raises a bucket above the required size."""
     batcher = MultiBinMetricBatcher(num_bins=1, target_metric=10**9)
-    options = {"metric_strategy": "structures", "target_metric": 1, **kwargs}
+    options: dict[str, Any] = {
+        "metric_strategy": "structures",
+        "target_metric": 1,
+        **kwargs,
+    }
     return ElasticBatchIterator(
         structure_iter=iter(()),
         batcher=batcher,
@@ -411,7 +422,7 @@ def test_a_quiet_first_epoch_logs_no_intermediate_statistics(
 
 @pytest.fixture(scope="module")
 def frame() -> pd.DataFrame:
-    return pd.read_pickle(DATA).iloc[:20]
+    return _load(20)
 
 
 def _structure_ids(batches: list[dict[str, Any]]) -> list[int]:
@@ -422,7 +433,7 @@ def _structure_ids(batches: list[dict[str, Any]]) -> list[int]:
 
 
 def _wrapper(source, builders, **config) -> StreamingDatasetWrapper:
-    options = {"target_metric": 1500, "num_bins": 2, **config}
+    options: dict[str, Any] = {"target_metric": 1500, "num_bins": 2, **config}
     return StreamingDatasetWrapper(
         source, builders, StreamingConfig(**options), shuffle=False
     )
@@ -433,7 +444,7 @@ def test_a_prefetching_wrapper_yields_the_batches_of_the_serial_one(builders, fr
     prefetched = list(_wrapper(frame, builders, prefetch_queue_size=3))
     assert len(prefetched) == len(serial)
     assert _structure_ids(prefetched) == _structure_ids(serial)
-    for left, right in zip(serial, prefetched):
+    for left, right in zip(serial, prefetched, strict=True):
         assert int(left[tc.N_ATOMS_BATCH_TOTAL]) == int(right[tc.N_ATOMS_BATCH_TOTAL])
 
 
@@ -510,7 +521,6 @@ def test_the_shuffle_is_a_seeded_permutation_of_the_rows_independent_of_the_glob
     wrapper = StreamingDatasetWrapper(
         frame, builders, StreamingConfig(), shuffle=True, seed=5
     )
-    np.random.seed(0)
     ids = [int(d[tc.DATA_STRUCTURE_ID]) for d in wrapper._structure_dicts()]
     expected = list(frame.index[np.random.default_rng(5).permutation(len(frame))])
     assert ids == expected

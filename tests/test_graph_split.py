@@ -398,7 +398,9 @@ class TestGraphSplitSaveReload:
 
             # Load model
             # metadata.yaml: shape (batch axis dropped) and locality of each communicated output
-            communication = load_model_metadata(model_path)["parallel_communication"]
+            metadata = load_model_metadata(model_path)
+            assert metadata is not None
+            communication = metadata["parallel_communication"]
             assert set(communication) == set(l1_outputs_orig)
             assert any(c["non_local"] for c in communication.values())
             for key, entry in communication.items():
