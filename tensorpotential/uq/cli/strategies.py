@@ -11,7 +11,7 @@ Adding a new strategy: decorate a generator function with
 
 from __future__ import annotations
 
-from typing import Callable, Iterator
+from collections.abc import Callable, Iterator
 import logging
 
 import numpy as np

@@ -21,10 +21,10 @@ numbers move with it; the sheets are re-pinned by the issue that changes the uni
 
 | Family | Sheets | Status |
 |---|---|---|
-| Geometry and radial | [BondLength](BondLength.md), [ScaledBondVector](ScaledBondVector.md), [RadialBasis](RadialBasis.md), [SphericalHarmonic](SphericalHarmonic.md), [MLPRadialFunction](MLPRadialFunction.md), [MLPRadialFunction_v2](MLPRadialFunction_v2.md) | draft; proposals accepted, review pending |
-| Embedding and single-particle basis | [ScalarChemicalEmbedding](ScalarChemicalEmbedding.md), [SingleParticleBasisFunctionScalarInd](SingleParticleBasisFunctionScalarInd.md), [SingleParticleBasisFunctionEquivariantInd](SingleParticleBasisFunctionEquivariantInd.md) | draft, awaiting review |
-| Product and reduce | [ProductFunction](ProductFunction.md), [FCRight2Left](FCRight2Left.md), [FunctionReduceN](FunctionReduceN.md) | draft, awaiting review |
-| Norm and output | [InvariantLayerRMSNorm](InvariantLayerRMSNorm.md), [CreateOutputTarget](CreateOutputTarget.md), [LinMLPOut2ScalarTarget](LinMLPOut2ScalarTarget.md), [ConstantScaleShiftTarget](ConstantScaleShiftTarget.md), [TrainableShiftTarget](TrainableShiftTarget.md) | draft, awaiting review |
+| Geometry and radial | [BondLength](BondLength.md), [ScaledBondVector](ScaledBondVector.md), [RadialBasis](RadialBasis.md), [SphericalHarmonic](SphericalHarmonic.md), [MLPRadialFunction](MLPRadialFunction.md), [MLPRadialFunction_v2](MLPRadialFunction_v2.md) | reviewed (owner, 2026-10-04) |
+| Embedding and single-particle basis | [ScalarChemicalEmbedding](ScalarChemicalEmbedding.md), [SingleParticleBasisFunctionScalarInd](SingleParticleBasisFunctionScalarInd.md), [SingleParticleBasisFunctionEquivariantInd](SingleParticleBasisFunctionEquivariantInd.md) | reviewed (owner, 2026-10-04) |
+| Product and reduce | [ProductFunction](ProductFunction.md), [FCRight2Left](FCRight2Left.md), [FunctionReduceN](FunctionReduceN.md) | reviewed (owner, 2026-10-04) |
+| Norm and output | [InvariantLayerRMSNorm](InvariantLayerRMSNorm.md), [CreateOutputTarget](CreateOutputTarget.md), [LinMLPOut2ScalarTarget](LinMLPOut2ScalarTarget.md), [ConstantScaleShiftTarget](ConstantScaleShiftTarget.md), [TrainableShiftTarget](TrainableShiftTarget.md) | reviewed (owner, 2026-10-04) |
 
 ## Layout of a sheet
 

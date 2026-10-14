@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Callable, Optional, Any
+from typing import Any
+from collections.abc import Callable
 
 from tensorpotential import _tf_options  # noqa: F401
 import tensorflow as tf
@@ -258,7 +259,7 @@ class DenseLayer(tf.Module):
         self,
         n_in: int,
         n_out: int,
-        activation: Optional[Callable] = None,
+        activation: Callable | None = None,
         name: str = "DenseLayer",
         no_weight_decay: bool = False,
         use_bias: bool = False,

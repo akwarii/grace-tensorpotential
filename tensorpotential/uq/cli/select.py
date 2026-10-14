@@ -20,7 +20,7 @@ import argparse
 import logging
 import os
 from collections import Counter
-from typing import Iterator
+from collections.abc import Iterator
 
 import numpy as np
 import pandas as pd

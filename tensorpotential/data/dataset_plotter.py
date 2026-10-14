@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
-from typing import Iterable, List, Mapping, Optional, Union, Iterator, NamedTuple
+from typing import NamedTuple
+from collections.abc import Iterable, Mapping, Iterator
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 LOG_FMT = "%(asctime)s %(levelname).1s - %(message)s"
 log = logging.getLogger()
 
-DatasetContainer = Union[Mapping[str, pd.DataFrame], Iterable[pd.DataFrame]]
+DatasetContainer = Mapping[str, pd.DataFrame] | Iterable[pd.DataFrame]
 
 
 class UnitTransformTuple(NamedTuple):
@@ -48,13 +49,13 @@ class IDatasetPlotter(ABC):
     def plot(
         cls,
         datasets: DatasetContainer,
-        output_dir: Union[Path, str],
-        plot_targets: Optional[Iterable[str]] = DEFAULT_PLOT_TARGETS,
+        output_dir: Path | str,
+        plot_targets: Iterable[str] | None = DEFAULT_PLOT_TARGETS,
         xscale: str = "linear",
         yscale: str = "linear",
-        bins: Union[int, Iterable[int]] = 25,
+        bins: int | Iterable[int] = 25,
         alpha_decay: float = 0.66,
-        units_transform: Optional[Mapping[str, UnitTransformTuple]] = None,
+        units_transform: Mapping[str, UnitTransformTuple] | None = None,
         **kwargs,
     ) -> None:
         pass
@@ -77,13 +78,13 @@ class DatasetHistPlotter(IDatasetPlotter):
     def plot(
         cls,
         datasets: DatasetContainer,
-        output_dir: Union[Path, str],
-        plot_targets: Optional[Iterable[str]] = DEFAULT_PLOT_TARGETS,
+        output_dir: Path | str,
+        plot_targets: Iterable[str] | None = DEFAULT_PLOT_TARGETS,
         xscale: str = "linear",
         yscale: str = "log",
-        bins: Union[int, Iterable[int]] = 100,
+        bins: int | Iterable[int] = 100,
         alpha_decay: float = 0.66,
-        units_transform: Optional[Mapping[str, UnitTransformTuple]] = None,
+        units_transform: Mapping[str, UnitTransformTuple] | None = None,
         **kwargs,
     ) -> None:
         output_dir = Path(output_dir)
@@ -134,7 +135,7 @@ class DatasetHistPlotter(IDatasetPlotter):
         return np.linspace(x_min, x_max, n_bins)
 
     @staticmethod
-    def _get_target_data(datasets: DatasetContainer, target: str) -> List[np.ndarray]:
+    def _get_target_data(datasets: DatasetContainer, target: str) -> list[np.ndarray]:
         data = []
         for ds_lbl, ds in DatasetHistPlotter._iter_datasets(datasets):
             try:
@@ -149,7 +150,7 @@ class DatasetHistPlotter(IDatasetPlotter):
     @staticmethod
     def _iter_datasets(
         datasets: DatasetContainer,
-    ) -> Iterator[tuple[Union[str, int], pd.DataFrame]]:
+    ) -> Iterator[tuple[str | int, pd.DataFrame]]:
         if isinstance(datasets, Mapping):
             return ((k, v) for k, v in datasets.items())
         else:
@@ -167,7 +168,7 @@ class DatasetHistPlotter(IDatasetPlotter):
 
     @staticmethod
     def _make_x_lbl(
-        target: str, units_transform: Optional[Mapping[str, UnitTransformTuple]] = None
+        target: str, units_transform: Mapping[str, UnitTransformTuple] | None = None
     ) -> str:
         if not units_transform or target not in units_transform:
             return target

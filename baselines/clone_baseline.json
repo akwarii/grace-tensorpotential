@@ -7,9 +7,9 @@
     "redundant_lines": 26
    },
    "renamed": {
-    "functions": 14,
-    "groups": 5,
-    "redundant_lines": 115
+    "functions": 12,
+    "groups": 4,
+    "redundant_lines": 92
    }
   },
   "tests": {

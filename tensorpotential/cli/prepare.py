@@ -14,7 +14,6 @@ import tensorflow as tf
 from tensorpotential.data.datasets import FutureDistributedDataset
 
 from dataclasses import dataclass
-from typing import Dict
 
 from tqdm import tqdm
 
@@ -71,8 +70,8 @@ class ModelFunctions:
 
 
 def construct_model(
-    potential_config: Dict,
-    element_map: Dict,
+    potential_config: dict,
+    element_map: dict,
     rcut: float,
     cutoff_dict: dict | None = None,
     avg_n_neigh: float | dict = 1.0,

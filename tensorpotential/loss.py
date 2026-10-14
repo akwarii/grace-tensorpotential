@@ -429,7 +429,30 @@ class WeightedMAEEPALoss(LossComponent):
         return loss_e
 
 
-class WeightedPiecewiseLinearEnergyPerAtomLoss(LossComponent):
+class _PiecewiseLinearLoss(LossComponent, ABC):
+    """Base of the losses with three linear regions, joined at ``delta_1`` and ``delta_2``."""
+
+    def _set_piecewise_parameters(
+        self,
+        delta_1: float,
+        delta_2: float,
+        beta_1: float,
+        beta_2: float,
+        beta_3: float,
+    ) -> None:
+        """Check the region limits and the slopes, then store them."""
+        assert 0 < delta_1 < delta_2, "require 0 < delta_1 < delta_2"
+        assert beta_1 >= beta_2 >= beta_3 > 0, (
+            "slopes must satisfy beta_1 >= beta_2 >= beta_3 > 0"
+        )
+        self.delta_1 = delta_1
+        self.delta_2 = delta_2
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.beta_3 = beta_3
+
+
+class WeightedPiecewiseLinearEnergyPerAtomLoss(_PiecewiseLinearLoss):
     """Three-region piecewise-linear loss on per-atom energy error.
 
     Same shape as WeightedPiecewiseLinearForceLoss but applied to the scalar
@@ -464,15 +487,7 @@ class WeightedPiecewiseLinearEnergyPerAtomLoss(LossComponent):
             name=name,
             normalize_by_samples=normalize_by_samples,
         )
-        assert 0 < delta_1 < delta_2, "require 0 < delta_1 < delta_2"
-        assert beta_1 >= beta_2 >= beta_3 > 0, (
-            "slopes must satisfy beta_1 >= beta_2 >= beta_3 > 0"
-        )
-        self.delta_1 = delta_1
-        self.delta_2 = delta_2
-        self.beta_1 = beta_1
-        self.beta_2 = beta_2
-        self.beta_3 = beta_3
+        self._set_piecewise_parameters(delta_1, delta_2, beta_1, beta_2, beta_3)
 
     def compute_loss_component(
         self,
@@ -760,7 +775,7 @@ class WeightedMAEStressLoss(LossComponent):
         return loss_v
 
 
-class WeightedPiecewiseLinearStressLoss(LossComponent):
+class WeightedPiecewiseLinearStressLoss(_PiecewiseLinearLoss):
     """Three-region piecewise-linear loss on stress (virial / volume).
 
     Mirrors the design of WeightedPiecewiseLinearForceLoss applied to the
@@ -797,15 +812,7 @@ class WeightedPiecewiseLinearStressLoss(LossComponent):
             name=name,
             normalize_by_samples=normalize_by_samples,
         )
-        assert 0 < delta_1 < delta_2, "require 0 < delta_1 < delta_2"
-        assert beta_1 >= beta_2 >= beta_3 > 0, (
-            "slopes must satisfy beta_1 >= beta_2 >= beta_3 > 0"
-        )
-        self.delta_1 = delta_1
-        self.delta_2 = delta_2
-        self.beta_1 = beta_1
-        self.beta_2 = beta_2
-        self.beta_3 = beta_3
+        self._set_piecewise_parameters(delta_1, delta_2, beta_1, beta_2, beta_3)
         self.use_frobenius_norm = use_frobenius_norm
 
     def compute_loss_component(
@@ -995,7 +1002,7 @@ class WeightedHuberForceLoss(HuberLoss):
         return loss_f
 
 
-class WeightedPiecewiseLinearForceLoss(LossComponent):
+class WeightedPiecewiseLinearForceLoss(_PiecewiseLinearLoss):
     """Three-region piecewise-linear force loss with progressively damped slope.
 
     Region 1 ("important", |x| <= delta_1): full slope beta_1.
@@ -1034,15 +1041,7 @@ class WeightedPiecewiseLinearForceLoss(LossComponent):
             name=name,
             normalize_by_samples=normalize_by_samples,
         )
-        assert 0 < delta_1 < delta_2, "require 0 < delta_1 < delta_2"
-        assert beta_1 >= beta_2 >= beta_3 > 0, (
-            "slopes must satisfy beta_1 >= beta_2 >= beta_3 > 0"
-        )
-        self.delta_1 = delta_1
-        self.delta_2 = delta_2
-        self.beta_1 = beta_1
-        self.beta_2 = beta_2
-        self.beta_3 = beta_3
+        self._set_piecewise_parameters(delta_1, delta_2, beta_1, beta_2, beta_3)
         self.use_l2_norm = use_l2_norm
 
     def compute_loss_component(
