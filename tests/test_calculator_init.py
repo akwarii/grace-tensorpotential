@@ -298,6 +298,31 @@ def test_ensemble_of_a_dense_and_a_segment_sum_model_has_no_common_engine():
         TPCalculator(model=[two_layer(dense=True), two_layer(dense=False)])
 
 
+def one_layer_with(element_map: dict) -> TPModel:
+    tf.random.set_seed(3)
+    np.random.seed(3)
+    return build_model(
+        GRACE_1LAYER_v2_25(
+            element_map=element_map,
+            rcut=RCUT,
+            lmax=2,
+            n_rad_base=4,
+            n_rad_max=6,
+            prod_func_n_max=8,
+            embedding_size=6,
+            n_mlp_dens=4,
+            max_order=2,
+        ).get_instructions()
+    )
+
+
+def test_ensemble_with_different_element_maps_is_accepted_and_takes_the_first_map():
+    # PINNED: the consistency check compares a list, which is always true, so the maps are never compared
+    swapped = one_layer_with({"Li": 0, "Al": 1})
+    calc = TPCalculator(model=[one_layer(), swapped])
+    assert {str(k): int(v) for k, v in calc.element_map.items()} == ELEMENTS
+
+
 @pytest.mark.parametrize("order", [(0, 1), (1, 0)])
 def test_ensemble_with_different_data_keys_is_refused(order, default_one_layer):
     models = [default_one_layer, tensor_model()]
