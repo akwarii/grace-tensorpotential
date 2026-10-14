@@ -246,12 +246,27 @@ def render(rows: list[dict[str, Any]], whole_ms: float, top: int | None = None) 
     return "\n".join(lines)
 
 
+def peak_rss_mb(status: Path = Path("/proc/self/status")) -> float | None:
+    """Return the peak resident memory of this process in MB, or ``None`` without ``/proc``."""
+    if not status.exists():
+        return None
+    for line in status.read_text().splitlines():
+        if line.startswith("VmHWM:"):
+            return int(line.split()[1]) / 1024
+    return None
+
+
 def profile_model(args: argparse.Namespace, tf, yaml_name: str) -> dict[str, Any]:
     """Return the full profile of one yaml as a JSON-ready dict."""
     model = build_model(tf, yaml_name, args.dtype, args.option)
     atoms = structure(args.supercell)
     data = input_batch(tf, model, atoms)
-    rows = profile_instructions(tf, model, data, args.repeats, args.grads == "all")
+    whole_only = getattr(args, "whole_only", False)
+    rows = (
+        []
+        if whole_only
+        else profile_instructions(tf, model, data, args.repeats, args.grads == "all")
+    )
     add_shares(rows)
     result: dict[str, Any] = {
         "yaml": yaml_name,
@@ -263,10 +278,14 @@ def profile_model(args: argparse.Namespace, tf, yaml_name: str) -> dict[str, Any
         "grads": args.grads,
         "rows": rows,
     }
+    if whole_only and args.device == "gpu":
+        # the peak of the whole model alone: weights, input and the compiled computation
+        tf.config.experimental.reset_memory_stats("GPU:0")
     result["whole_ms"] = whole_model_ms(tf, model, data, args.repeats)
     if args.device == "gpu":
         info = tf.config.experimental.get_memory_info("GPU:0")
         result["gpu_peak_memory_mb"] = info["peak"] / 2**20
+    result["peak_rss_mb"] = peak_rss_mb()
     return result
 
 
@@ -290,6 +309,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--supercell", type=int, default=2, help="repeats of the 54-atom cell per axis"
     )
+    parser.add_argument(
+        "--whole-only",
+        action="store_true",
+        help="skip the per-class rows: time and memory of the whole model only",
+    )
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--top", type=int, help="print only the N largest rows")
     parser.add_argument(
@@ -302,9 +326,12 @@ def main(argv: list[str] | None = None) -> int:
         result = profile_model(args, tf, name)
         results.append(result)
         header = f"{name}: {result['n_atoms']} atoms, {result['n_bonds']} bonds, {args.dtype}, option {args.option}, {args.device}"
-        sys.stdout.write(
-            f"\n{header}\n{render(result['rows'], result['whole_ms'], args.top)}\n"
+        body = (
+            f"whole model {result['whole_ms']:.1f} ms"
+            if args.whole_only
+            else render(result["rows"], result["whole_ms"], args.top)
         )
+        sys.stdout.write(f"\n{header}\n{body}\n")
     if args.json:
         payload = {"environment": environment(tf, args.device), "profiles": results}
         args.json.write_text(json.dumps(payload, indent=1) + "\n")

@@ -238,6 +238,7 @@ def test_profile_model_reports_the_layout_and_a_gpu_peak_only_on_a_gpu():
         repeats=1,
         device="cpu",
         grads="all",
+        whole_only=False,
     )
 
     result = pi.profile_model(args, tf, YAML)
@@ -307,3 +308,61 @@ def test_main_accepts_the_grads_option_and_records_it(tmp_path):
     ])
 
     assert json.loads(out.read_text())["profiles"][0]["grads"] == "inputs"
+
+
+def test_whole_only_skips_the_rows_but_times_the_model_and_reads_the_peak_memory():
+    args = pi.argparse.Namespace(
+        dtype="float64",
+        option="none",
+        supercell=1,
+        repeats=1,
+        device="cpu",
+        grads="all",
+        whole_only=True,
+    )
+
+    result = pi.profile_model(args, tf, YAML)
+
+    assert result["rows"] == []
+    assert result["whole_ms"] > 0
+    assert result["peak_rss_mb"] > 100  # TensorFlow alone holds several hundred MB
+
+
+def test_main_whole_only_prints_one_line_without_a_table(capsys):
+    assert pi.main([YAML, "--supercell", "1", "--repeats", "1", "--whole-only"]) == 0
+
+    text = capsys.readouterr().out
+    assert "whole model" in text
+    assert "| instruction |" not in text
+
+
+def test_a_whole_only_gpu_run_resets_the_memory_statistics_first(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tf.config.experimental, "reset_memory_stats", calls.append)
+    monkeypatch.setattr(
+        tf.config.experimental, "get_memory_info", lambda _device: {"peak": 5 * 2**20}
+    )
+    args = pi.argparse.Namespace(
+        dtype="float64",
+        option="none",
+        supercell=1,
+        repeats=1,
+        device="gpu",
+        grads="all",
+        whole_only=True,
+    )
+
+    result = pi.profile_model(args, tf, YAML)
+
+    assert calls == ["GPU:0"]
+    assert result["gpu_peak_memory_mb"] == 5.0
+
+
+def test_peak_rss_reads_the_high_water_mark_of_a_status_file(tmp_path):
+    status = tmp_path / "status"
+    status.write_text("VmRSS:\t10 kB\nVmHWM:\t 4096 kB\n")
+
+    assert pi.peak_rss_mb(status) == 4.0
+    assert pi.peak_rss_mb(tmp_path / "missing") is None
+    status.write_text("Name:\tx\n")
+    assert pi.peak_rss_mb(status) is None
