@@ -807,3 +807,136 @@ def test_find_upper_padding_bound_returns_valid_superset():
 
     # Query exactly matching a bucket.
     assert pm.find_upper_padding_bound(10, 200) == (10, 200)
+
+
+# --- TPCalculator.calculate: how the outputs of the models become results (#177) ---
+
+
+class _EditedOutputs:
+    """A real model whose outputs are edited, standing in for a differing member of an ensemble."""
+
+    def __init__(self, model, energy_shift=0.0, force_shift=0.0, drop=(), extra=None):
+        self._model = model
+        self._energy_shift = energy_shift
+        self._force_shift = force_shift
+        self._drop = drop
+        self._extra = extra or {}
+
+    def compute(self, data):
+        from tensorpotential import constants
+
+        output = dict(self._model.compute(data))
+        output[constants.PREDICT_TOTAL_ENERGY] = (
+            output[constants.PREDICT_TOTAL_ENERGY] + self._energy_shift
+        )
+        output[constants.PREDICT_FORCES] = output[constants.PREDICT_FORCES] + self._force_shift
+        for key in self._drop:
+            output.pop(key, None)
+        output.update(self._extra)
+        return output
+
+
+@pytest.fixture(scope="module")
+def tungsten_calculator_and_atoms():
+    ins = load_instructions(MODEL_GRACE_YAML)
+    for instr in ins:
+        if hasattr(instr, "inv_avg_n_neigh"):
+            setattr(instr, "inv_avg_n_neigh", 1 / 30.0)
+    model = TPModel(ins)
+    model.build(float64)
+    atoms = bulk("W", cubic=True) * (2, 2, 1)
+    atoms.rattle(0.1, seed=4)
+    return model, atoms
+
+
+def _calculate(model, atoms, members, **options):
+    calc = TPCalculator(model=model, **options)
+    calc.models = members
+    atoms = atoms.copy()
+    atoms.calc = calc
+    atoms.get_potential_energy()
+    return calc
+
+
+def test_ensemble_results_are_the_mean_and_the_spread_of_its_members(tungsten_calculator_and_atoms):
+    model, atoms = tungsten_calculator_and_atoms
+    base = _calculate(model, atoms, [model])
+    shifted = _calculate(
+        model,
+        atoms,
+        [model, _EditedOutputs(model, energy_shift=0.4, force_shift=0.2)],
+    )
+    # two values a and a + d: mean a + d/2, population standard deviation d/2
+    assert shifted.results["energy"] == pytest.approx(base.results["energy"] + 0.2, abs=1e-9)
+    assert shifted.results["energy_std"] == pytest.approx(0.2, abs=1e-9)
+    np.testing.assert_allclose(shifted.results["forces"], base.results["forces"] + 0.1, atol=1e-9)
+    np.testing.assert_allclose(shifted.results["forces_std"], 0.1, atol=1e-9)
+    assert shifted.results["free_energy"] == shifted.results["energy"]
+
+
+def test_a_model_without_an_energy_output_contributes_zero_energy(tungsten_calculator_and_atoms):
+    from tensorpotential import constants
+
+    model, atoms = tungsten_calculator_and_atoms
+    calc = _calculate(model, atoms, [_EditedOutputs(model, drop=(constants.PREDICT_TOTAL_ENERGY,))])
+    # the shift is added before the drop: only the dropped key matters
+    assert calc.results["energy"] == 0.0
+
+
+def test_a_model_without_forces_gives_zero_forces_for_the_real_atoms(tungsten_calculator_and_atoms):
+    from tensorpotential import constants
+
+    model, atoms = tungsten_calculator_and_atoms
+    calc = _calculate(model, atoms, [_EditedOutputs(model, drop=(constants.PREDICT_FORCES,))])
+    np.testing.assert_array_equal(calc.results["forces"], np.zeros((len(atoms), 3)))
+
+
+def test_a_model_without_a_virial_output_gives_zero_stress(tungsten_calculator_and_atoms):
+    from tensorpotential import constants
+
+    model, atoms = tungsten_calculator_and_atoms
+    calc = _calculate(model, atoms, [_EditedOutputs(model, drop=(constants.PREDICT_VIRIAL,))])
+    np.testing.assert_array_equal(calc.results["stress"], np.zeros(6))
+
+
+def test_a_cluster_is_given_a_periodic_box_by_the_data_builder_before_the_stress_is_read(
+    tungsten_calculator_and_atoms,
+):
+    # PINNED: get_data edits the caller's atoms (a box and pbc), so the ``cell.rank == 0``
+    # shortcut of ``calculate`` never applies to a cluster and its stress is the (tiny) one of the box.
+    model, _ = tungsten_calculator_and_atoms
+    cluster = Atoms("W2", positions=[[0, 0, 0], [0, 0, 2.6]])
+    assert cluster.get_cell().rank == 0
+    calc = TPCalculator(model=model)
+    cluster.calc = calc
+    cluster.get_potential_energy()
+    assert cluster.get_cell().rank == 3
+    assert calc.results["stress"].shape == (6,)
+    assert np.abs(calc.results["stress"]).max() < 1e-5
+
+
+def test_extra_properties_are_averaged_and_truncated_to_the_real_atoms_when_asked(
+    tungsten_calculator_and_atoms,
+):
+    model, atoms = tungsten_calculator_and_atoms
+    n = len(atoms)
+    padded = tf.constant(np.arange((n + 3) * 2, dtype=np.float64).reshape(n + 3, 2))
+    members = [_EditedOutputs(model, extra={"cut": padded, "kept": padded})]
+    calc = _calculate(
+        model,
+        atoms,
+        members,
+        extra_properties=["cut", "kept", "absent"],
+        truncate_extras_by_natoms=["cut"],
+    )
+    np.testing.assert_array_equal(calc.results["cut"], padded.numpy()[:n])
+    np.testing.assert_array_equal(calc.results["kept"], padded.numpy())
+    np.testing.assert_array_equal(calc.results["absent"], np.zeros((1, 1)))  # a missing output
+    everything = _calculate(
+        model,
+        atoms,
+        members,
+        extra_properties=["kept"],
+        truncate_extras_by_natoms=True,
+    )
+    assert everything.results["kept"].shape == (n, 2)
