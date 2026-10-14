@@ -33,16 +33,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "tensorpotential.cli.prompts",
         "*",
     ): "the prompt helpers are private in cli/prompts; making them public is the owner's call (finding on ARCH2)",
-    (
-        "tensorpotential.scripts.grace_models",
-        "tensorpotential.calculator.foundation_models",
-        "_tag_from_url",
-    ): "update_models is 73% covered, so ARCH2 may not edit it; follow-up: characterize it, then switch",
-    (
-        "tensorpotential.uq.cli.build.master",
-        "tensorpotential.uq.artifact_builder",
-        "_default_eff_counts",
-    ): "run_master is 73% covered, so ARCH2 may not edit it; follow-up: characterize it, then switch",
 }
 # the TensorFlow options module is imported for its side effect, never for a name
 IGNORED_NAMES = {"_tf_options"}

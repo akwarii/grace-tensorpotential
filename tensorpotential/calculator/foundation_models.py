@@ -473,6 +473,10 @@ def _tag_from_url(url: str) -> str | None:
     return parts[1].split("/", 1)[0] if len(parts) == 2 else None
 
 
+# Public name for other packages (``scripts/grace_models.py``); the private name keeps resolving to the same function.
+tag_from_url = _tag_from_url
+
+
 def write_origin_sidecar(path: str, model: str, payload: str, url: str, **extra) -> None:
     """Stamp ``<path>/.grace_origin.json`` with the URL the payload came from.
 

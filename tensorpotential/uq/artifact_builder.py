@@ -53,6 +53,10 @@ def _default_eff_counts(counts: np.ndarray, eff: np.ndarray | None = None) -> np
     return np.asarray(eff, dtype=np.float64)
 
 
+# Public name for other packages (``uq/cli/build/master.py``); the private name keeps resolving to the same function.
+default_eff_counts = _default_eff_counts
+
+
 class GMMUQArtifactBuilder:
     """Two-pass streaming builder for GMM-UQ uncertainty artifacts.
 

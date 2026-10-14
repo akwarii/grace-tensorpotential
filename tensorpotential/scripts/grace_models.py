@@ -383,7 +383,7 @@ def update_models(args):
         MODEL_PATH_KEY,
         CHECKPOINT_PATH_KEY,
         read_origin_sidecar,
-        _tag_from_url,
+        tag_from_url,
         get_or_download_model,
         get_or_download_checkpoint,
     )
@@ -419,7 +419,7 @@ def update_models(args):
                 n_ok += 1
                 continue
             was = (rec or {}).get("tag") or ("no provenance record" if rec is None else "?")
-            print(f"  {name} [{payload}]: {was} -> {_tag_from_url(url) or url}")
+            print(f"  {name} [{payload}]: {was} -> {tag_from_url(url) or url}")
 
             # Never delete a directory this package did not create. Two spellings of
             # "the user curates this": an explicit path override in the metadata, and
