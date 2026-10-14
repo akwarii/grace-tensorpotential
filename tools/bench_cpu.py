@@ -13,6 +13,10 @@ Usage (from the repository root, machine idle)::
 
     python tools/bench_cpu.py run --out bench.json
     python tools/bench_cpu.py run --cases import:tensorflow train_step --repeats 5
+    python tools/bench_cpu.py run --device gpu --cases calc_init:model_grace.yaml train_run calc_eval
+
+``--device gpu`` leaves the GPUs visible, stops when TensorFlow sees none, records the device in the
+summary and adds the peak GPU memory (``gpu_peak_mb``) to the phases of every case that uses TensorFlow.
 """
 
 from __future__ import annotations
@@ -50,6 +54,7 @@ BUILDER_SIZES = {
     "large": 4,
 }  # supercell edge of the 54-atom cell
 TRAIN_PRESET = "GRACE_2LAYER_v1_24"
+DEVICE_ENV = "GRACE_BENCH_DEVICE"
 MAX_LOAD = 4.0  # CLAUDE.md: busy above this one-minute load
 MAX_FOREIGN_CORES = (
     0.5  # other processes' cores during a run above which a sample is marked
@@ -116,18 +121,28 @@ def _script_case(name: str) -> dict[str, float]:
     return phases
 
 
+def bench_device() -> str:
+    """Return the device of this run (``cpu`` or ``gpu``), set by ``--device`` through the environment."""
+    return os.environ.get(DEVICE_ENV, "cpu")
+
+
 def _tensorflow_phases(phases: dict[str, float]) -> None:
     import importlib
 
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+    if bench_device() == "cpu":
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     _timed(
         phases,
         "import_tensorpotential_ms",
         lambda: importlib.import_module("tensorpotential"),
     )
-    _timed(
+    tf = _timed(
         phases, "import_tensorflow_ms", lambda: importlib.import_module("tensorflow")
     )
+    if bench_device() == "gpu" and not tf.config.list_physical_devices("GPU"):
+        raise RuntimeError(  # noqa: TRY003
+            "--device gpu: TensorFlow sees no GPU (CUDA_VISIBLE_DEVICES, driver or tensorflow[and-cuda])"
+        )
 
 
 def _model_of(yaml_name: str):
@@ -311,6 +326,11 @@ def run_case(name: str, steps: int = 100, structures: int = 100) -> dict[str, An
             f"unknown case {name!r}; known: {', '.join(default_cases())}"
         )
     phases = runners[kind]()
+    if bench_device() == "gpu" and "tensorflow" in sys.modules:
+        peak = sys.modules["tensorflow"].config.experimental.get_memory_info("GPU:0")[
+            "peak"
+        ]
+        phases["gpu_peak_mb"] = peak / 2**20
     return {"phases_ms": phases, "peak_rss_mb": peak_rss_mb()}
 
 
@@ -360,9 +380,10 @@ def run_sample(name: str, steps: int, structures: int) -> dict[str, Any]:
     env = {
         **os.environ,
         "PYTHONPATH": str(ROOT),
-        "CUDA_VISIBLE_DEVICES": "-1",
         "TF_CPP_MIN_LOG_LEVEL": "3",
     }
+    if bench_device() == "cpu":
+        env["CUDA_VISIBLE_DEVICES"] = "-1"
     machine0 = grace_probe.machine_busy_seconds()
     children0 = resource.getrusage(resource.RUSAGE_CHILDREN)
     start = time.perf_counter()
@@ -478,6 +499,7 @@ def run(
     return {
         "repeats": repeats,
         "python": sys.version.split()[0],
+        "device": bench_device(),
         "load_average_1min_before": load_before,
         "load_average_1min_after": os.getloadavg()[0],
         "idle_at_end": idle_problem(check_load=False) is None,
@@ -506,6 +528,12 @@ def main(argv: list[str] | None = None) -> int:
         help="seconds to wait for an idle machine before a case (then give up)",
     )
     bench.add_argument(
+        "--device",
+        choices=("cpu", "gpu"),
+        default="cpu",
+        help="gpu leaves the GPUs visible and refuses to run without one",
+    )
+    bench.add_argument(
         "--allow-busy",
         action="store_true",
         help="measure on a busy machine (numbers are not quotable)",
@@ -523,6 +551,7 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(run_case(args.name, args.steps, args.structures)) + "\n"
         )
         return 0
+    os.environ[DEVICE_ENV] = args.device
     result = run(
         args.cases,
         args.repeats,
@@ -533,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     sys.stdout.write(render_table(result["rows"]) + "\n")
     sys.stdout.write(
-        f"load average before {result['load_average_1min_before']:.2f}, after {result['load_average_1min_after']:.2f}\n"
+        f"device {result['device']}, load average before {result['load_average_1min_before']:.2f}, after {result['load_average_1min_after']:.2f}\n"
     )
     if args.out:
         args.out.write_text(json.dumps(result, indent=1) + "\n")

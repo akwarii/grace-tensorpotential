@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 import bench_cpu as bc  # noqa: E402
 
 pytest.importorskip("tensorpotential")
-pytest.importorskip("tensorflow")
+tf = pytest.importorskip("tensorflow")
 
 import grace_probe as gp  # noqa: E402
 
@@ -356,3 +356,76 @@ def test_run_case_reports_peak_memory_of_this_process():
 
     assert result["phases_ms"]["import_ms"] >= 0
     assert result["peak_rss_mb"] > 5
+
+
+# ------------------------------------------------------------------ device
+
+
+def test_the_device_is_the_cpu_unless_the_environment_says_gpu(monkeypatch):
+    monkeypatch.delenv(bc.DEVICE_ENV, raising=False)
+    assert bc.bench_device() == "cpu"
+
+    monkeypatch.setenv(bc.DEVICE_ENV, "gpu")
+    assert bc.bench_device() == "gpu"
+
+
+def test_a_gpu_run_without_a_gpu_is_refused(monkeypatch):
+    monkeypatch.setenv(bc.DEVICE_ENV, "gpu")
+    monkeypatch.setattr(tf.config, "list_physical_devices", lambda _kind=None: [])
+
+    with pytest.raises(RuntimeError, match="sees no GPU"):
+        bc._tensorflow_phases({})
+
+
+def test_a_cpu_run_hides_the_gpus_and_a_gpu_run_does_not(monkeypatch):
+    seen = []
+
+    def fake_run(_command, **kwargs):
+        seen.append(kwargs["env"].get("CUDA_VISIBLE_DEVICES"))
+        return SimpleNamespace(
+            returncode=0, stdout='{"phases_ms": {}, "peak_rss_mb": 1}\n', stderr=""
+        )
+
+    monkeypatch.setattr(bc.subprocess, "run", fake_run)
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setenv(bc.DEVICE_ENV, "cpu")
+    bc.run_sample("import:json", steps=1, structures=1)
+    monkeypatch.setenv(bc.DEVICE_ENV, "gpu")
+    bc.run_sample("import:json", steps=1, structures=1)
+
+    assert seen == ["-1", None]
+
+
+def test_a_gpu_case_reports_the_peak_gpu_memory_in_mb(monkeypatch):
+    monkeypatch.setenv(bc.DEVICE_ENV, "gpu")
+    monkeypatch.setattr(
+        tf.config.experimental, "get_memory_info", lambda _device: {"peak": 3 * 2**20}
+    )
+
+    result = bc.run_case("import:json")
+
+    assert result["phases_ms"]["gpu_peak_mb"] == 3.0
+
+
+def test_main_run_sets_the_device_and_the_summary_names_it(
+    monkeypatch, capsys, tmp_path
+):
+    monkeypatch.setenv(bc.DEVICE_ENV, "cpu")
+    monkeypatch.setattr(bc, "idle_problem", lambda **_kw: None)
+    monkeypatch.setattr(bc, "run_sample", lambda *_a: _sample(10, import_ms=9))
+    out = tmp_path / "bench.json"
+
+    bc.main([
+        "run",
+        "--device",
+        "gpu",
+        "--cases",
+        "import:json",
+        "--repeats",
+        "1",
+        "--out",
+        str(out),
+    ])
+
+    assert "device gpu" in capsys.readouterr().out
+    assert json.loads(out.read_text())["device"] == "gpu"
