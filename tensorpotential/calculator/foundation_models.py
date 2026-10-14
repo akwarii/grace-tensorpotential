@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 import tarfile
 from datetime import datetime, timezone
 
@@ -13,6 +12,10 @@ from typing import TYPE_CHECKING, Any, Final
 import requests
 import yaml
 from tqdm import tqdm
+
+from tensorpotential.errors import ArchiveError
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from tensorpotential.calculator.asecalculator import TPCalculator
@@ -326,7 +329,7 @@ def to_valid_variable_name(name: str) -> str:
 def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
     """Safely extract a ``.tar.gz`` archive that holds a single top-level directory.
 
-    Raises ``ValueError`` for several top-level items, a top-level file, or unsafe
+    Raises :class:`~tensorpotential.errors.ArchiveError` (a ``ValueError``) for several top-level items, a top-level file, or unsafe
     member paths. Returns the name of the top-level directory.
     """
     with tarfile.open(tar_filename, "r:gz") as tar:
@@ -340,20 +343,20 @@ def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
         if len(top_level_items) == 1:
             top_folder_name, member = next(iter(top_level_items.items()))
             if not member.isdir():  # Ensure it's a directory
-                raise ValueError(
+                raise ArchiveError(
                     f"Expected a directory, but found a file: {top_folder_name}"
                 )
         else:
-            raise ValueError(
+            raise ArchiveError(
                 f"Expected one top-level folder, found: {list(top_level_items.keys())}"
             )
 
         has_data_filter = hasattr(tarfile, "data_filter")  # Python 3.11.4 and later
         for member in tar.getmembers():
             if member.name.startswith("/") or ".." in member.name:
-                raise ValueError(f"Unsafe path detected: {member.name}")
+                raise ArchiveError(f"Unsafe path detected: {member.name}")
             if not has_data_filter and not (member.isreg() or member.isdir()):
-                raise ValueError(
+                raise ArchiveError(
                     f"Unsafe archive member (link or special file): {member.name}"
                 )
         try:
@@ -363,7 +366,7 @@ def safe_extract(tar_filename: str, path: str = ".", members=None) -> str:
             else:
                 tar.extractall(path, members)  # noqa: S202  (members checked above)
         except tarfile.FilterError as err:
-            raise ValueError(f"Unsafe archive member: {err}") from err
+            raise ArchiveError(f"Unsafe archive member: {err}") from err
 
         return top_folder_name
 
@@ -425,7 +428,7 @@ def _stream_download(url, dest_path, desc=None):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             if attempt < DOWNLOAD_RETRIES:
-                print(
+                log.warning(
                     f"  download attempt {attempt}/{DOWNLOAD_RETRIES} failed "
                     f"({err}); retrying..."
                 )
@@ -526,13 +529,12 @@ def check_origin(path: str, model: str, payload: str, expected_url: str | None) 
     cached_from = (
         f"{rec.get('tag') or rec.get('url')}" if rec else "no provenance record"
     )
-    print(
+    log.warning(
         f"[tensorpotential] WARNING: cached GRACE {payload} '{model}' may be outdated.\n"
         f"  cached from : {cached_from}\n"
         f"  package uses: {_tag_from_url(expected_url) or expected_url}\n"
         f"  update with : grace_models update {model}\n"
         f"  suppress    : {NO_UPDATE_CHECK_ENV}=1",
-        file=sys.stderr,
     )
     return False
 
@@ -547,14 +549,14 @@ def download_extract_rename(url: str, model_path: str) -> None:
     root_folder = os.path.dirname(model_path)
     os.makedirs(root_folder, exist_ok=True)
     # download and save to disk
-    print(f"Downloading from {url!r}")
+    log.info(f"Downloading from {url!r}")
     # Define the file path
     filename = os.path.join(root_folder, TMP_TAR_GZ)
     local_filename = _stream_download(
         url, filename, desc=os.path.basename(model_path) + " (archive)"
     )
     # Unpack the .tar.gz file
-    print(
+    log.info(
         f"Unpacking model from {url!r} (local file: {local_filename}) to {root_folder}"
     )
     top_folder_name = safe_extract(local_filename, path=root_folder)
@@ -579,18 +581,18 @@ def get_or_download_model(model: str) -> str:
         url = model_metadata.get(MODEL_URL_KEY)
         if url is None:
             raise ValueError(f"No available URL to download for {model}")
-        print("Downloading GRACE model")
+        log.info("Downloading GRACE model")
         download_extract_rename(url, model_path)
         write_origin_sidecar(
             model_path, model, "model", url,
             kokkos_url=model_metadata.get(KOKKOS_URL_KEY),
         )
-        print(f"GRACE model downloaded to {model_path}")
+        log.info(f"GRACE model downloaded to {model_path}")
     else:
-        print(f"Using cached GRACE model from {model_path}")
+        log.info(f"Using cached GRACE model from {model_path}")
         if not model_metadata.get(MODEL_PATH_KEY):
             check_origin(model_path, model, "model", model_metadata.get(MODEL_URL_KEY))
-    print(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
+    log.info(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
     return model_path
 
 
@@ -610,18 +612,18 @@ def get_or_download_checkpoint(model: str) -> str:
         url = model_metadata.get(CHECKPOINT_URL_KEY)
         if url is None:
             raise ValueError(f"No available checkpoint URL for {model}")
-        print("Downloading GRACE checkpoint")
+        log.info("Downloading GRACE checkpoint")
         download_extract_rename(url, checkpoint_path)
         write_origin_sidecar(checkpoint_path, model, "checkpoint", url)
-        print(f"GRACE model checkpoint downloaded to {checkpoint_path}")
+        log.info(f"GRACE model checkpoint downloaded to {checkpoint_path}")
     else:
-        print(f"Using cached GRACE checkpoint from {checkpoint_path}")
+        log.info(f"Using cached GRACE checkpoint from {checkpoint_path}")
         if not model_metadata.get(CHECKPOINT_PATH_KEY):
             check_origin(
                 checkpoint_path, model, "checkpoint",
                 model_metadata.get(CHECKPOINT_URL_KEY),
             )
-    print(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
+    log.info(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
     return checkpoint_path
 
 
@@ -641,7 +643,7 @@ def get_or_download_kokkos(model: str) -> str:
     )
     kokkos_path = os.path.join(model_path, "kokkos.npz")
     if os.path.isfile(kokkos_path):
-        print(f"Using cached kokkos.npz from {kokkos_path}")
+        log.info(f"Using cached kokkos.npz from {kokkos_path}")
         return kokkos_path
     url = model_metadata.get(KOKKOS_URL_KEY)
     if url is None:
@@ -649,9 +651,9 @@ def get_or_download_kokkos(model: str) -> str:
     if "sciebo" in url and not url.endswith("/download"):
         url += "/download"
     os.makedirs(model_path, exist_ok=True)
-    print(f"Downloading kokkos.npz from {url!r}")
+    log.info(f"Downloading kokkos.npz from {url!r}")
     _stream_download(url, kokkos_path, desc=f"{model} kokkos.npz")
-    print(f"kokkos.npz downloaded to {kokkos_path}")
+    log.info(f"kokkos.npz downloaded to {kokkos_path}")
     return kokkos_path
 
 

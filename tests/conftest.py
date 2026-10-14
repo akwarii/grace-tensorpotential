@@ -102,3 +102,12 @@ def cu_two_layer():
     shared = CuTwoLayerModels()
     yield shared.get
     assert not shared.changed(), "a test changed a shared Cu 2-layer model"
+
+
+@pytest.fixture
+def info_logs(caplog):
+    """Capture the ``INFO`` records of the package (the root logger drops them by default)."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="tensorpotential"):
+        yield caplog

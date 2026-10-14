@@ -48,6 +48,8 @@ from tensorpotential.utils import (
 from tests.tolerances import FLOAT64_ARITHMETIC
 from tests.tolerances import FLOAT64_ARITHMETIC as ARITH
 
+pytestmark = pytest.mark.usefixtures("info_logs")
+
 
 class RecordingLog:
     """The two methods of a logger that ``get_param_dtype_from_config`` calls, remembering the arguments."""
@@ -468,12 +470,12 @@ def test_the_common_prefix_can_be_cut_at_the_last_folder_separator(names, align,
     assert get_common_prefix(tuple(names), align_folder=align) == expected
 
 
-def test_update_fit_metrics_loads_new_folders_and_reports_the_epochs(tmp_path, capsys):
+def test_update_fit_metrics_loads_new_folders_and_reports_the_epochs(tmp_path, caplog):
     a = _write_fit(tmp_path / "a", [0.5, 0.4, 0.3])
     fits: dict = {}
     update_fit_metrics(fits, [a])
     assert list(fits) == [a] and len(fits[a]["test"]) == 3
-    assert f"{a}: 3 epochs" in capsys.readouterr().out
+    assert f"{a}: 3 epochs" in caplog.text
 
 
 def test_update_fit_metrics_reloads_a_known_running_fit(tmp_path):
@@ -494,24 +496,24 @@ def test_update_fit_metrics_skips_a_fit_marked_finished_unless_asked_to_rerun(tm
     assert fits[a]["name"] == a  # reloaded
 
 
-def test_a_fit_that_has_not_changed_for_the_wait_time_is_marked_finished(tmp_path, capsys):
+def test_a_fit_that_has_not_changed_for_the_wait_time_is_marked_finished(tmp_path, caplog):
     a = _write_fit(tmp_path / "a", [0.5])
     old = time.time() - (3 * 3600 + 25 * 60 + 7)
     os.utime(f"{a}/test_metrics.yaml", (old, old))
     fits = {a: {"marker": "kept"}}
     update_fit_metrics(fits, [a], wait_time_seconds=3600)
     assert fits[a] == {"marker": "kept", "finished": True}
-    assert "no update for 3h:25m:7s, mark as finished" in capsys.readouterr().out
+    assert "no update for 3h:25m:7s, mark as finished" in caplog.text
     fresh = {a: {"marker": "kept"}}
     update_fit_metrics(fresh, [a], wait_time_seconds=10 * 3600)
     assert "finished" not in fresh[a] and fresh[a]["name"] == a
 
 
-def test_a_folder_that_cannot_be_read_is_reported_and_leaves_the_dictionary_alone(tmp_path, capsys):
+def test_a_folder_that_cannot_be_read_is_reported_and_leaves_the_dictionary_alone(tmp_path, caplog):
     fits: dict = {}
     update_fit_metrics(fits, [str(tmp_path / "missing")])
     assert fits == {}
-    assert capsys.readouterr().out.startswith("Error:")
+    assert caplog.messages[0].startswith("Error:")
 
 
 def _fit_dict(tmp_path):
@@ -606,14 +608,15 @@ def test_plot_fit_takes_the_current_axes_and_the_short_name_by_default(matplotli
     assert matplotlib_axes.gca().lines[0].get_label() == "short(500.0)"
 
 
-def test_many_fits_are_plotted_by_decreasing_best_test_value_from_a_dict_or_a_list(matplotlib_axes, capsys):
+def test_many_fits_are_plotted_by_decreasing_best_test_value_from_a_dict_or_a_list(matplotlib_axes, caplog):
     fits = [_fit([0.5], [1.0], "mid"), _fit([0.9], [1.0], "worst"), _fit([0.1], [1.0], "best")]
     matplotlib_axes.figure()
     plot_many_fits({i: f for i, f in enumerate(fits)})
-    assert capsys.readouterr().out.split() == ["worst", "mid", "best"]
+    assert caplog.messages == ["worst", "mid", "best"]
+    caplog.clear()
     original = list(fits)
     plot_many_fits(fits, plot_train=True)
-    assert capsys.readouterr().out.split() == ["worst", "mid", "best"]
+    assert caplog.messages == ["worst", "mid", "best"]
     assert fits == original  # the caller's list keeps its order
     with pytest.raises(UnboundLocalError):  # pinned: only a dict or a list is accepted
         plot_many_fits(tuple(fits))

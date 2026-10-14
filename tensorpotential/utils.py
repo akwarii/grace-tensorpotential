@@ -12,12 +12,15 @@ import logging
 from contextlib import contextmanager
 
 from tensorpotential.core.cutoffs import CUTOFF_PRESETS, process_cutoff_dict  # noqa: F401  (re-exported; the code moved to core)
+from tensorpotential.errors import ModelFormatError
 from tensorpotential.instructions.base import ElementsReduceInstructionMixin
 from yaml import YAMLError, safe_load
 
 from tensorpotential import _tf_options  # noqa: F401
 from tensorflow.dtypes import float32, float64, DType
 from tensorpotential.metadata_utils import get_dtype_by_name
+
+log = logging.getLogger(__name__)
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -190,7 +193,7 @@ def plot_many_fits(fits, k="rmse/f_comp", plot_test=True, plot_train=False):
         list_of_fits, key=lambda fd: fd["test"][k].min(), reverse=True
     )
     for f in list_of_fits:
-        print(f["name"])
+        log.info(f["name"])
         plot_fit(f, k=k, plot_test=plot_test, plot_train=plot_train)
 
 
@@ -228,17 +231,17 @@ def update_fit_metrics(fit_dict, folders, wait_time_seconds=3600, rerun=False):
             current_time = time.time()
             pass_time = current_time - last_timestamp
             if pass_time > wait_time_seconds:
-                print(
+                log.info(
                     f"{f} - no update for {int(pass_time//3600)}h:{int((pass_time % 3600)//60)}m:{int((pass_time % 3600) % 60)}s, mark as finished"
                 )
                 res["finished"] = True
                 continue
         try:
             fd = load_fit(f)
-            print(f"{f}: {len(fd['test'])} epochs")
+            log.info(f"{f}: {len(fd['test'])} epochs")
             fit_dict[f] = fd
         except (OSError, YAMLError, ValueError) as e:
-            print("Error:", e)
+            log.warning("Error: %s", e)
 
 
 def get_common_prefix(names, align_folder=True):
@@ -490,10 +493,6 @@ def select_elements_in_model(
             ins.upd_init_args_new_elements(new_element_map)
 
     return tp
-
-
-class ModelFormatError(ValueError):
-    """The model file is in a format the operation does not accept (the old list of instructions)."""
 
 
 def convert_model_reduce_elements(

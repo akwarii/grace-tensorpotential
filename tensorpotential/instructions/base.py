@@ -23,6 +23,7 @@ import tensorflow as tf
 from tensorflow.python.trackable.data_structures import ListWrapper
 
 from tensorpotential import __version__
+from tensorpotential.errors import ClassPathError
 from tensorpotential.poly import Monomial, Polynomial, get_symbol, normalize_poly
 
 
@@ -116,21 +117,21 @@ def str_to_class(class_name: str | None, base: type | None = None) -> Any:
 
     Raises
     ------
-    ValueError
-        The string is not a dotted path, the module has no such name, or the object is not a subclass of ``base``.
+    ClassPathError
+        A ``ValueError``: the string is not a dotted path, the module has no such name, or the object is not a subclass of ``base``.
     ModuleNotFoundError
         The module part cannot be imported.
     """
     if class_name is None:
         return None
     if not isinstance(class_name, str) or not _DOTTED_PATH.fullmatch(class_name):
-        raise ValueError("Couldn't deserialize class `{}`".format(class_name))
+        raise ClassPathError("Couldn't deserialize class `{}`".format(class_name))
     module, _, name = class_name.rpartition(".")
     imported = importlib.import_module(module)
     try:
         resolved = getattr(imported, name)
     except AttributeError as err:
-        raise ValueError(
+        raise ClassPathError(
             "Couldn't deserialize class `{}`: module `{}` has no attribute `{}`".format(
                 class_name, module, name
             )
@@ -138,7 +139,7 @@ def str_to_class(class_name: str | None, base: type | None = None) -> Any:
     if base is not None and not (
         isinstance(resolved, type) and issubclass(resolved, base)
     ):
-        raise ValueError(
+        raise ClassPathError(
             "Couldn't deserialize class `{}`: it is not a subclass of `{}`".format(
                 class_name, class_to_str(base)
             )

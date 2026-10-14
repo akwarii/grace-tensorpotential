@@ -472,6 +472,7 @@ TF_FREE_MODULES = (
     "tensorpotential.core",
     "tensorpotential.core.cutoffs",
     "tensorpotential.core.lazy",
+    "tensorpotential.errors",
     "tensorpotential.torch_backend",
     "tensorpotential.torch_backend.spec",
     "tensorpotential.torch_backend.spec.errors",
@@ -549,14 +550,14 @@ def test_tf_free_names_work_and_tf_names_explain_what_is_missing(tf_blocked_run)
 
 def test_the_import_contract_is_kept():
     """``lint-imports`` reads ``[tool.importlinter]`` of pyproject.toml: no path from the TF-free modules to TensorFlow,
-    none from library code to the command layers."""
+    none from library code to the command layers, and the layer directions that hold."""
     result = run_fresh_python(
         "from importlinter.cli import lint_imports_command as main; main()",
         REPO_ROOT,
         args=("--no-cache",),
     )
     assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-1000:]
-    assert "2 kept, 0 broken" in result.stdout
+    assert "4 kept, 0 broken" in result.stdout
 
 
 def test_the_contract_lists_torch_backend_once_it_exists():

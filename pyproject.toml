@@ -163,6 +163,7 @@ source_modules = [
     "tensorpotential.core",
     "tensorpotential.torch_backend",
     "tensorpotential.constants",
+    "tensorpotential.errors",
     "tensorpotential.poly",
     "tensorpotential.functions.couplings",
     "tensorpotential.calculator.foundation_models",
@@ -192,6 +193,7 @@ source_modules = [
     "tensorpotential.constants",
     "tensorpotential.core",
     "tensorpotential.data",
+    "tensorpotential.errors",
     "tensorpotential.export",
     "tensorpotential.export_kokkos",
     "tensorpotential.extra",
@@ -217,6 +219,67 @@ forbidden_modules = ["tensorpotential.cli", "tensorpotential.scripts"]
 # prompt helpers of cli/ inside its functions.
 ignore_imports = [
     "tensorpotential.extra.gen_tensor.wizard -> tensorpotential.cli.prompts",
+]
+
+# Layer contracts (ARCH1). The library is not a strict stack (see the finding on the issue: tpmodel and uq import each other,
+# and in-function imports close a larger cycle), so each contract states one direction that holds today.
+[[tool.importlinter.contracts]]
+name = "Foundation modules import nothing above them"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "tensorpotential.constants",
+    "tensorpotential.core",
+    "tensorpotential.errors",
+    "tensorpotential.formatting",
+    "tensorpotential.functions",
+    "tensorpotential.keras_adapter",
+    "tensorpotential.metadata_utils",
+    "tensorpotential.metrics",
+    "tensorpotential.optimizer_layout",
+    "tensorpotential.poly",
+]
+forbidden_modules = [
+    "tensorpotential.calculator",
+    "tensorpotential.data",
+    "tensorpotential.export",
+    "tensorpotential.export_kokkos",
+    "tensorpotential.extra",
+    "tensorpotential.instructions",
+    "tensorpotential.loss",
+    "tensorpotential.model_ops",
+    "tensorpotential.potentials",
+    "tensorpotential.tensorpot",
+    "tensorpotential.tpmodel",
+    "tensorpotential.uq",
+    "tensorpotential.utils",
+]
+
+[[tool.importlinter.contracts]]
+name = "Instructions and data do not import the model layers"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "tensorpotential.data",
+    "tensorpotential.instructions",
+]
+forbidden_modules = [
+    "tensorpotential.calculator",
+    "tensorpotential.export_kokkos",
+    "tensorpotential.extra",
+    "tensorpotential.model_ops",
+    "tensorpotential.potentials",
+    "tensorpotential.tensorpot",
+    "tensorpotential.tpmodel",
+    "tensorpotential.uq",
+]
+# Two functions sit above the layer they live in; each builds a model on purpose, and moving them is a decision for the
+# owner of the file (findings on ARCH1): data.datasets loads a foundation model into a TensorPotential and a TPCalculator
+# to align energies, instruction_graph_utils builds the two-layer TPModel of an instruction graph.
+ignore_imports = [
+    "tensorpotential.data.datasets -> tensorpotential.calculator.asecalculator",
+    "tensorpotential.data.datasets -> tensorpotential.tensorpot",
+    "tensorpotential.instructions.instruction_graph_utils -> tensorpotential.tpmodel",
 ]
 
 # Declared against imported dependencies (DEPS4): `deptry tensorpotential` must exit 0. Every entry says why it is not a finding.

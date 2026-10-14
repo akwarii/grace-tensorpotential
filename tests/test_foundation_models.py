@@ -31,6 +31,8 @@ KOKKOS_URL = "https://example.org/resolve/kk-v9/kokkos/Toy-kokkos.npz"
 
 # --- archives and a fake network ---
 
+pytestmark = pytest.mark.usefixtures("info_logs")
+
 
 def _make_tar(path: Path, entries: dict[str, bytes | None]) -> bytes:
     """Write a ``.tar.gz`` of ``entries`` (a ``None`` content is a directory) and return its bytes."""
@@ -397,7 +399,7 @@ def test_a_download_without_content_length_still_completes(network, tmp_path):
 
 
 def test_a_html_answer_is_refused_at_once_with_the_url_and_is_not_retried(
-    network, tmp_path, capsys
+    network, tmp_path, caplog
 ):
     # the RuntimeError is not one of the transient errors that are retried
     fake = network(_FakeResponse(b"<html/>", content_type="text/html; charset=utf-8"))
@@ -409,11 +411,11 @@ def test_a_html_answer_is_refused_at_once_with_the_url_and_is_not_retried(
         fm._stream_download("https://x/f", str(dest))
     assert len(fake.calls) == 1
     assert not dest.exists() and not (tmp_path / "f.part").exists()
-    assert "retrying" not in capsys.readouterr().out
+    assert "retrying" not in caplog.text
 
 
 def test_a_persistent_network_error_is_reported_after_every_retry(
-    network, tmp_path, capsys
+    network, tmp_path, caplog
 ):
     fake = network(requests.ConnectionError("reset"))
     with pytest.raises(
@@ -421,7 +423,7 @@ def test_a_persistent_network_error_is_reported_after_every_retry(
     ):
         fm._stream_download("https://x/f", str(tmp_path / "f"))
     assert len(fake.calls) == fm.DOWNLOAD_RETRIES
-    out = capsys.readouterr().out
+    out = caplog.text
     assert (
         "download attempt 1/3 failed (reset); retrying" in out
         and "download attempt 2/3 failed" in out
@@ -553,7 +555,7 @@ def test_an_unsafe_archive_is_not_unpacked_and_the_download_stays_behind(
 
 
 def test_a_missing_model_is_downloaded_stamped_with_its_origin_and_its_license_printed(
-    cache, network, tmp_path, capsys
+    cache, network, tmp_path, caplog
 ):
     network(_FakeResponse(_model_archive(tmp_path)))
     path = fm.get_or_download_model(MODEL_NAME)
@@ -567,33 +569,32 @@ def test_a_missing_model_is_downloaded_stamped_with_its_origin_and_its_license_p
         "model-v9",
     )
     assert record["kokkos_url"] == KOKKOS_URL
-    out = capsys.readouterr().out
+    out = caplog.text
     assert "Downloading GRACE model" in out and "Model license: Toy License" in out
 
 
 def test_a_cached_model_is_used_without_the_network_and_its_origin_is_checked(
-    cache, network, capsys
+    cache, network, caplog
 ):
     fake = network(requests.ConnectionError("must not be called"))
     (cache / MODEL_NAME).mkdir(parents=True)
     path = fm.get_or_download_model(MODEL_NAME)
     assert path == str(cache / MODEL_NAME)
     assert fake.calls == []
-    captured = capsys.readouterr()
-    assert "Using cached GRACE model" in captured.out
-    assert "may be outdated" in captured.err  # no sidecar: counted as outdated
+    assert "Using cached GRACE model" in caplog.text
+    assert "may be outdated" in caplog.text  # no sidecar: counted as outdated
 
 
 @pytest.mark.usefixtures("cache")
 def test_an_explicit_model_path_is_used_and_never_checked_or_downloaded(
-    network, monkeypatch, tmp_path, capsys
+    network, monkeypatch, tmp_path, caplog
 ):
     local = tmp_path / "mine"
     local.mkdir()
     monkeypatch.setitem(fm.MODELS_METADATA[MODEL_NAME], fm.MODEL_PATH_KEY, str(local))
     network(requests.ConnectionError("must not be called"))
     assert fm.get_or_download_model(MODEL_NAME) == str(local)
-    assert "may be outdated" not in capsys.readouterr().err
+    assert "may be outdated" not in caplog.text
 
 
 @pytest.mark.usefixtures("cache")
@@ -611,15 +612,15 @@ def test_an_aliased_name_resolves_to_the_registered_model(cache, monkeypatch):
     assert fm.get_or_download_model("Old-Name") == str(cache / MODEL_NAME)
 
 
-def test_a_missing_license_is_reported_as_not_provided(cache, monkeypatch, capsys):
+def test_a_missing_license_is_reported_as_not_provided(cache, monkeypatch, caplog):
     monkeypatch.delitem(fm.MODELS_METADATA[MODEL_NAME], fm.LICENSE_KEY)
     (cache / MODEL_NAME).mkdir(parents=True)
     fm.get_or_download_model(MODEL_NAME)
-    assert "Model license: not provided" in capsys.readouterr().out
+    assert "Model license: not provided" in caplog.text
 
 
 def test_a_missing_checkpoint_is_downloaded_below_the_checkpoint_directory(
-    cache, network, tmp_path, capsys
+    cache, network, tmp_path, caplog
 ):
     network(_FakeResponse(_model_archive(tmp_path, top="ckpt")))
     path = fm.get_or_download_checkpoint(MODEL_NAME)
@@ -634,24 +635,25 @@ def test_a_missing_checkpoint_is_downloaded_below_the_checkpoint_directory(
         "checkpoint-v9",
     )
     assert "kokkos_url" not in record
-    assert "GRACE model checkpoint downloaded to" in capsys.readouterr().out
+    assert "GRACE model checkpoint downloaded to" in caplog.text
 
 
 def test_a_cached_checkpoint_is_checked_for_its_origin_unless_the_entry_names_a_path(
-    cache, monkeypatch, tmp_path, capsys
+    cache, monkeypatch, tmp_path, caplog
 ):
     (cache / "checkpoints" / MODEL_NAME).mkdir(parents=True)
     assert fm.get_or_download_checkpoint(MODEL_NAME) == str(
         cache / "checkpoints" / MODEL_NAME
     )
-    assert "may be outdated" in capsys.readouterr().err
+    assert "may be outdated" in caplog.text
+    caplog.clear()
     local = tmp_path / "mine"
     local.mkdir()
     monkeypatch.setitem(
         fm.MODELS_METADATA[MODEL_NAME], fm.CHECKPOINT_PATH_KEY, str(local)
     )
     assert fm.get_or_download_checkpoint(MODEL_NAME) == str(local)
-    assert "may be outdated" not in capsys.readouterr().err
+    assert "may be outdated" not in caplog.text
 
 
 @pytest.mark.usefixtures("cache")
@@ -664,16 +666,16 @@ def test_a_checkpoint_without_url_that_is_not_cached_is_refused(monkeypatch):
 
 
 def test_the_kokkos_file_is_downloaded_next_to_the_model_and_then_reused(
-    cache, network, capsys
+    cache, network, caplog
 ):
     network(_FakeResponse(b"npz-bytes"))
     path = fm.get_or_download_kokkos(MODEL_NAME)
     assert path == str(cache / MODEL_NAME / "kokkos.npz")
     assert Path(path).read_bytes() == b"npz-bytes"
-    assert "kokkos.npz downloaded to" in capsys.readouterr().out
+    assert "kokkos.npz downloaded to" in caplog.text
     network(requests.ConnectionError("must not be called"))
     assert fm.get_or_download_kokkos(MODEL_NAME) == path
-    assert "Using cached kokkos.npz" in capsys.readouterr().out
+    assert "Using cached kokkos.npz" in caplog.text
 
 
 @pytest.mark.usefixtures("cache")

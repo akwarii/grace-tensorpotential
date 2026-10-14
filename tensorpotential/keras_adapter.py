@@ -40,11 +40,9 @@ from typing import Any
 from tensorpotential import _tf_options  # noqa: F401
 import keras
 
+from tensorpotential.errors import KerasVariableUnavailableError
+
 PATCH_MARK = "_tensorpotential_type_comparison_fix"
-
-
-class KerasVariableUnavailableError(RuntimeError):
-    """``keras.Variable`` or its ``__eq__`` is missing, so the comparison fix cannot be installed."""
 
 
 def install_variable_comparison_fix() -> None:
