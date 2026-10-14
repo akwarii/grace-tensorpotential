@@ -401,10 +401,17 @@ def test_forces_of_an_activated_lora_model_match_finite_differences_of_its_energ
     _, forces = _energy_forces(tp, atoms)
 
     atom, axis, step = 1, 0, FD_STEP
-    plus, minus = atoms.copy(), atoms.copy()
-    plus.positions[atom, axis] += step
-    minus.positions[atom, axis] -= step
-    derivative = -(_energy_forces(tp, plus)[0] - _energy_forces(tp, minus)[0]) / (2 * step)
+
+    def energy_at(shift: int) -> float:
+        moved = atoms.copy()
+        moved.positions[atom, axis] += shift * step
+        return _energy_forces(tp, moved)[0]
+
+    # Five-point stencil (error of order step**4): the random model has energies of 1e6 to 1e10, so the
+    # third derivative is large and the plain central difference (error of order step**2) is off by
+    # more than FD.rtol for some random initialisations (it failed in CI at 14%); here the relative
+    # difference is below 1e-10 for 14 initialisations.
+    derivative = -(8 * (energy_at(1) - energy_at(-1)) - (energy_at(2) - energy_at(-2))) / (12 * step)
 
     assert forces[atom, axis] == pytest.approx(derivative, rel=FD.rtol, abs=FD.atol)
 
