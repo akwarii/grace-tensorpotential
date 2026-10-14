@@ -10,7 +10,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from tensorpotential import _tf_options  # noqa: F401
-from tensorflow.data import Dataset
+import tensorflow as tf
 
 from typing import Any, NamedTuple
 from itertools import combinations_with_replacement
@@ -1285,7 +1285,7 @@ class TPCalculator(Calculator):
             raise RuntimeError(
                 f"Minimal bond distance {self.current_min_dist} is smaller than {self.min_dist}"
             )
-        self.data = Dataset.from_tensors(data).get_single_element()
+        self.data = {key: tf.convert_to_tensor(value) for key, value in data.items()}
 
     def find_upper_padding_bound(self, max_nat: int) -> tuple:
         """Return the entry of ``padding_history`` that fits ``max_nat`` atoms.

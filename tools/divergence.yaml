@@ -74,8 +74,8 @@
   upstream: never
 
 - path: tensorpotential/calculator/asecalculator.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); QUAL7: largest functions split into named steps (PaddingManager.get_data, TPCalculator.__init__ and calculate)'
-  milestone: [CLEAN2, QUAL1, CORE1, ARCH1, ARCH2, QUAL7]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); QUAL7: largest functions split into named steps (PaddingManager.get_data, TPCalculator.__init__ and calculate); QUAL9: TPCalculator.get_data converts its input with tf.convert_to_tensor instead of a tf.data pipeline (same dtypes and values)'
+  milestone: [CLEAN2, QUAL1, CORE1, ARCH1, ARCH2, QUAL7, QUAL9]
   upstream: pending
 
 - path: tensorpotential/calculator/foundation_models.py
