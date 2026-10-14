@@ -64,7 +64,7 @@ evidence; do not leave the ticking to the end.
 ```bash
 python tools/board.py dod CLEAN1                                   # numbered checklist
 python tools/board.py check CLEAN1 1 4 --note "command and result"  # tick boxes 1 and 4, comment the evidence
-python tools/board.py na CLEAN1 7 "why it does not apply"           # a box that cannot apply is marked, never left blank
+python tools/board.py na CLEAN1 7 "why it does not apply"           # a box that does not apply is marked, never left blank; a box that cannot be met because of a planning gap is a question to the user (CLAUDE.md), not an `na`
 python tools/board.py uncheck CLEAN1 4                              # if a later change invalidates it
 ```
 

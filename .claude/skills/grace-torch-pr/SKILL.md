@@ -20,7 +20,7 @@ base:   torch-backend              (the integration branch on the fork; never ma
   to `origin/torch-backend`, and a plain `git push` would then try to update the integration branch itself instead of the PR branch. **When the PR is merged** and `board.py done` has run:
   `git worktree remove ../<repository>-<id>` (no `--force`; a refusal means uncommitted work, so report it) and `git branch -d <branch>` (it refuses when your checkout of `torch-backend` lacks the merge: pull it, or check ancestry with
   `git merge-base --is-ancestor <branch> origin/torch-backend`); the remote branch stays unless the user says to delete it. `git worktree list` shows what is still around.
-- **The issue's scope is binding.** If it turns out bigger than its estimate, propose a split with a finding. Do not expand silently and do not fold in
+- **The issue's scope is binding.** If it turns out bigger than its estimate, propose a split with a finding. If a task or exit criterion cannot be met within the scope (a planning gap, for example a unit below 90% coverage that you must modify while the issue puts new tests out of scope), ask the user an explicit question with the options and your recommendation; the rule is in `CLAUDE.md`. Do not expand silently and do not fold in
   an unrelated fix you noticed. A tolerance change, regenerating a golden reference, or reformatting existing files is never part of a feature PR.
 - **Units that could be offered upstream** (non-breaking, not about PyTorch, no new dependency) are cut from `upstream/master` as `pr/U<n>-<slug>` so the
   fork never waits; nothing is sent to ICAMS without an explicit go for that unit. `CLAUDE.md`, `.claude/`, `tools/` and `baselines/` never appear on such a branch:
