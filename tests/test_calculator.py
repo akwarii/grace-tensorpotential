@@ -871,6 +871,7 @@ def test_ensemble_results_are_the_mean_and_the_spread_of_its_members(tungsten_ca
     assert shifted.results["energy_std"] == pytest.approx(0.2, abs=1e-9)
     np.testing.assert_allclose(shifted.results["forces"], base.results["forces"] + 0.1, atol=1e-9)
     np.testing.assert_allclose(shifted.results["forces_std"], 0.1, atol=1e-9)
+    assert shifted.results["forces_std"].shape == (len(atoms), 3)  # the padding atom is cut
     assert shifted.results["free_energy"] == shifted.results["energy"]
 
 
