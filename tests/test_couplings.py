@@ -226,7 +226,6 @@ def test_history_strings_carry_parity_markers_unless_legacy():
         ({"max_sum_l": 0}, set()),
         ({"lmax_hist": 0}, set()),
         ({"lmax_hist_A": 0}, set()),
-        ({"lmax_hist_B": 0}, {1}),
         ({"keep_parity": [[1, -1]]}, {1}),
         ({"keep_parity": [[1, 1]]}, set()),
         ({"Lmax": 0}, set()),
@@ -236,6 +235,14 @@ def test_each_filter_removes_the_couplings_it_excludes(kwargs, expected_l):
     options = {"lmax": 1, "Lmax": 1, **kwargs}
     result = real_coupling_metainformation(A=VECTOR, B=SCALAR, **options)
     assert set(result["l"]) == expected_l
+
+
+def test_lmax_hist_b_limits_the_history_of_the_right_operand_only():
+    # VECTOR has history "1" (largest l = 1), SCALAR has "0"
+    kwargs = {"A": SCALAR, "B": VECTOR, "lmax": 1, "Lmax": 1}
+    assert real_coupling_metainformation(**kwargs, lmax_hist_B=0).empty
+    assert not real_coupling_metainformation(**kwargs, lmax_hist_B=1).empty
+    assert not real_coupling_metainformation(**kwargs, lmax_hist_A=0).empty
 
 
 def test_keep_parity_accepts_a_list_of_lists_and_rejects_other_containers():
