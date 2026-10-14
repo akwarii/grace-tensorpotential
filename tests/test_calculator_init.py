@@ -316,10 +316,15 @@ def one_layer_with(element_map: dict) -> TPModel:
     )
 
 
-def test_ensemble_with_different_element_maps_is_accepted_and_takes_the_first_map():
-    # PINNED: the consistency check compares a list, which is always true, so the maps are never compared
+def test_ensemble_with_different_element_maps_is_refused():
     swapped = one_layer_with({"Li": 0, "Al": 1})
-    calc = TPCalculator(model=[one_layer(), swapped])
+    with pytest.raises(ValueError, match="inconsistent element maps"):
+        TPCalculator(model=[one_layer(), swapped])
+
+
+def test_ensemble_with_equal_element_maps_in_any_dict_order_is_accepted():
+    reordered = one_layer_with({"Al": 0, "Li": 1})
+    calc = TPCalculator(model=[one_layer(), reordered])
     assert {str(k): int(v) for k, v in calc.element_map.items()} == ELEMENTS
 
 

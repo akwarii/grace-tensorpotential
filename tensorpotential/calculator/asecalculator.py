@@ -921,9 +921,11 @@ class TPCalculator(Calculator):
             model_paths
         )
         cutoff = np.max(cutoffs)
-        assert all(
-            [ems == element_maps[0]] for ems in element_maps
-        )  # check that all maps are identical
+        if any(ems != element_maps[0] for ems in element_maps):
+            raise ValueError(
+                f"Models have inconsistent element maps: {element_maps}. "
+                "All models of an ensemble must use the same elements in the same order."
+            )
         self.element_map = element_maps[0]
         self._set_cutoffs(cutoff, cutoff_matrices)
 
