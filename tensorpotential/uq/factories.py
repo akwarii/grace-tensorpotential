@@ -432,5 +432,6 @@ def get_gmm_uq_calculator(
     return calc
 
 
-# Public name of the helper that other modules import; the private name stays for the callers that still use it.
+# Public name for the other modules of the library; the definition keeps its private name because renaming it would
+# modify a unit that is not covered at 90% (ARCH2).
 basis_rp_spec_from_artifact = _basis_rp_spec_from_artifact

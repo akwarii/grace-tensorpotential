@@ -12,30 +12,40 @@ import ast
 from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
 PACKAGE = Path(__file__).resolve().parent.parent / "tensorpotential"
 SKIPPED_PARTS = {"compat"}  # legacy converter, out of scope for every issue
-ALLOWED: dict[tuple[str, str], str] = {
+# Every name an importer may take from a module of another package, with the reason; "*" stands for every private name.
+ALLOWED: dict[tuple[str, str, str], str] = {
     (
         "tensorpotential.cli.data",
         "tensorpotential.data.datasets",
+        "*",
     ): "the old path re-exports every name of the moved module",
     (
         "tensorpotential.scripts._kokkos_export",
         "tensorpotential.export_kokkos",
+        "*",
     ): "the old path re-exports every name of the moved module",
-    (
-        "tensorpotential.scripts.grace_models",
-        "tensorpotential.calculator.foundation_models",
-    ): "update_models (73% covered) uses _tag_from_url; no change to a unit below 90% in ARCH2",
-    (
-        "tensorpotential.uq.cli.build.master",
-        "tensorpotential.uq.artifact_builder",
-    ): "run_master (73% covered) uses _default_eff_counts; no change to a unit below 90% in ARCH2",
     (
         "tensorpotential.extra.gen_tensor.wizard",
         "tensorpotential.cli.prompts",
-    ): "the prompt helpers of the input wizards, private since CLI1",
+        "*",
+    ): "the prompt helpers are private in cli/prompts; making them public is the owner's call (finding on ARCH2)",
+    (
+        "tensorpotential.scripts.grace_models",
+        "tensorpotential.calculator.foundation_models",
+        "_tag_from_url",
+    ): "update_models is 73% covered, so ARCH2 may not edit it; follow-up: characterize it, then switch",
+    (
+        "tensorpotential.uq.cli.build.master",
+        "tensorpotential.uq.artifact_builder",
+        "_default_eff_counts",
+    ): "run_master is 73% covered, so ARCH2 may not edit it; follow-up: characterize it, then switch",
 }
+# the TensorFlow options module is imported for its side effect, never for a name
+IGNORED_NAMES = {"_tf_options"}
 
 
 def _module_name(path: Path, root: Path) -> str:
@@ -66,19 +76,43 @@ def private_imports(root: Path = PACKAGE) -> Iterator[tuple[str, str, str]]:
                 if (
                     alias.name.startswith("_")
                     and not alias.name.startswith("__")
-                    and alias.name != "_tf_options"
+                    and alias.name not in IGNORED_NAMES
                 ):
                     yield importer, node.module, alias.name
 
 
-def test_no_library_module_imports_a_private_name_of_another_package():
-    found = {(importer, owner) for importer, owner, _ in private_imports()}
-    assert found - set(ALLOWED) == set(), "make the name public or move the code"
+@pytest.fixture(scope="module")
+def found() -> set[tuple[str, str, str]]:
+    return set(private_imports())
 
 
-def test_every_allowed_import_still_exists():
-    found = {(importer, owner) for importer, owner, _ in private_imports()}
-    assert set(ALLOWED) - found == set(), "the import is gone: remove its entry"
+def _allowed(site: tuple[str, str, str]) -> bool:
+    importer, owner, name = site
+    return (importer, owner, name) in ALLOWED or (importer, owner, "*") in ALLOWED
+
+
+def test_no_library_module_imports_a_private_name_of_another_package(found):
+    assert {site for site in found if not _allowed(site)} == set(), (
+        "make the name public or move the code"
+    )
+
+
+def test_every_allowed_import_still_exists(found):
+    stale = [
+        key
+        for key in ALLOWED
+        if not any(site[:2] == key[:2] and key[2] in {"*", site[2]} for site in found)
+    ]
+    assert stale == [], "the import is gone: remove its entry"
+
+
+def test_the_helpers_other_packages_import_are_public_and_the_old_names_resolve_to_the_same_objects():
+    from tensorpotential.uq import factories, gmmuq
+
+    assert (
+        factories.basis_rp_spec_from_artifact is factories._basis_rp_spec_from_artifact
+    )
+    assert gmmuq.MISSING_ELEM_INV_COV_DIAG == gmmuq._MISSING_ELEM_INV_COV_DIAG == 1e6
 
 
 def test_a_planted_private_import_is_found(tmp_path):

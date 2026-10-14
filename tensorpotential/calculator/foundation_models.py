@@ -707,7 +707,3 @@ class GRACEModels:
 for model_name in MODELS_NAME_LIST:
     model_name_clean = to_valid_variable_name(model_name)
     setattr(GRACEModels, model_name_clean, model_name)
-
-
-# Public name of the helper that other modules import; the private name stays for the callers that still use it.
-tag_from_url = _tag_from_url

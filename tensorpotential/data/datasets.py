@@ -1428,7 +1428,3 @@ def is_tf_distr_dataset(dataset):
     from tensorflow.python.distribute.input_lib import DistributedDatasetsFromFunction
 
     return isinstance(dataset, (tf.data.Dataset, DistributedDatasetsFromFunction))
-
-
-# Public name of the helper that other modules import; the private name stays for the callers that still use it.
-log_dense_padding_report = _log_dense_padding_report

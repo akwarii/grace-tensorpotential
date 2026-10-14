@@ -27,10 +27,13 @@ from tensorpotential.uq.factories import get_gmm_uq_calculator
 N_ELEMENTS = 4
 
 
-def _edited_artifact(tmp_path, uq_setup, name, edit):
-    """Copy the artifact of the fixture with ``edit(raw)`` applied to its arrays."""
+def _edited_artifact(tmp_path, uq_setup, name, edit=None, *, thresholds=False):
+    """Copy the artifact of the fixture, with interpolation thresholds when asked, and ``edit(raw)`` applied to its arrays."""
     raw = dict(np.load(uq_setup["artifact_path"], allow_pickle=True))
-    edit(raw)
+    if thresholds:
+        _with_thresholds(raw)
+    if edit is not None:
+        edit(raw)
     path = str(tmp_path / f"{name}.npz")
     np.savez(path, **raw)
     return path
@@ -142,11 +145,18 @@ def test_a_mutable_model_takes_the_dtype_of_the_artifact_loader_when_one_is_give
     )
 
 
-def test_a_saved_model_is_rebuilt_from_its_yaml_and_checkpoint(
-    uq_setup, reference, tmp_path
-):
-    export_path = str(tmp_path / "saved")
+@pytest.fixture(scope="module")
+def saved_model(tmp_path_factory, uq_setup):
+    """A SavedModel export of the fixture's model, made once (the tests only read it)."""
+    export_path = str(tmp_path_factory.mktemp("saved") / "model")
     _model(uq_setup).save_model(export_path)
+    return export_path
+
+
+def test_a_saved_model_is_rebuilt_from_its_yaml_and_checkpoint(
+    uq_setup, reference, saved_model
+):
+    export_path = saved_model
     calc = TPCalculator(export_path)
     calc.load_uq_artifacts(
         uq_setup["artifact_path"],
@@ -163,11 +173,9 @@ def test_a_saved_model_is_rebuilt_from_its_yaml_and_checkpoint(
     )
 
 
-def test_a_saved_model_needs_its_yaml_and_checkpoint(uq_setup, tmp_path):
-    export_path = str(tmp_path / "saved")
-    _model(uq_setup).save_model(export_path)
+def test_a_saved_model_needs_its_yaml_and_checkpoint(uq_setup, saved_model):
     with pytest.raises(ValueError, match="model_yaml and checkpoint are required"):
-        TPCalculator(export_path).load_uq_artifacts(uq_setup["artifact_path"])
+        TPCalculator(saved_model).load_uq_artifacts(uq_setup["artifact_path"])
 
 
 def test_a_mutable_model_whose_compute_was_never_traced_is_not_supported_yet(uq_setup):
@@ -273,11 +281,13 @@ def test_a_model_without_element_names_skips_the_order_check(
 def test_an_artifact_without_the_basis_rp_feature_is_refused_for_the_kokkos_export(
     uq_setup, instruction_dict, tmp_path
 ):
-    def edit(raw):
-        _with_thresholds(raw)
-        raw.pop(uqc.UQ_FEATURE_MODE)
-
-    path = _edited_artifact(tmp_path, uq_setup, "no_rp", edit)
+    path = _edited_artifact(
+        tmp_path,
+        uq_setup,
+        "no_rp",
+        lambda raw: raw.pop(uqc.UQ_FEATURE_MODE),
+        thresholds=True,
+    )
     with pytest.raises(ValueError, match="requires a basis-RP artifact"):
         _merge_uq_artifacts(_weights(uq_setup), path, N_ELEMENTS, instruction_dict)
 
@@ -285,13 +295,14 @@ def test_an_artifact_without_the_basis_rp_feature_is_refused_for_the_kokkos_expo
 def test_a_feature_dimension_that_disagrees_with_the_spec_is_refused(
     uq_setup, instruction_dict, tmp_path
 ):
-    def edit(raw):
-        _with_thresholds(raw)
-        raw[uqc.UQ_RP_DENSITY] = np.array(
-            True
-        )  # promises density channels the stored features do not have
-
-    path = _edited_artifact(tmp_path, uq_setup, "density", edit)
+    # promises density channels that the stored features do not have
+    path = _edited_artifact(
+        tmp_path,
+        uq_setup,
+        "density",
+        lambda raw: raw.update({uqc.UQ_RP_DENSITY: np.array(True)}),
+        thresholds=True,
+    )
     with pytest.raises(ValueError, match="feature dim"):
         _merge_uq_artifacts(_weights(uq_setup), path, N_ELEMENTS, instruction_dict)
 
@@ -304,10 +315,12 @@ def test_an_artifact_without_thresholds_is_refused(uq_setup, instruction_dict):
 
 
 def test_an_unknown_feature_transform_is_refused(uq_setup, instruction_dict, tmp_path):
-    def edit(raw):
-        _with_thresholds(raw)
-        raw[uqc.UQ_FEATURE_TRANSFORM] = np.array("cosh")
-
-    path = _edited_artifact(tmp_path, uq_setup, "transform", edit)
+    path = _edited_artifact(
+        tmp_path,
+        uq_setup,
+        "transform",
+        lambda raw: raw.update({uqc.UQ_FEATURE_TRANSFORM: np.array("cosh")}),
+        thresholds=True,
+    )
     with pytest.raises(ValueError, match="unsupported feature_transform"):
         _merge_uq_artifacts(_weights(uq_setup), path, N_ELEMENTS, instruction_dict)

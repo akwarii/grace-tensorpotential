@@ -893,7 +893,3 @@ class GMMUQArtifactBuilder:
                 a[uq_constants.INV_COV][k] = inv_k
 
         return artifacts
-
-
-# Public name of the helper that other modules import; the private name stays for the callers that still use it.
-default_eff_counts = _default_eff_counts
