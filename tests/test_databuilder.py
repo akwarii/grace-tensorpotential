@@ -1015,3 +1015,10 @@ def test_the_stages_are_logged_when_verbose(caplog):
     text = caplog.text
     for stage in ("1/3. Converting", "2/4. Splitting", "3/4. Joining", "4/4. Padding"):
         assert stage in text, stage
+
+
+def test_garbage_collection_between_the_stages_can_be_switched_off_and_does_not_change_the_batches():
+    kept = _padded(gc_collect=True)
+    skipped = _padded(gc_collect=False)
+    assert _totals(kept, constants.N_ATOMS_BATCH_TOTAL) == _totals(skipped, constants.N_ATOMS_BATCH_TOTAL)
+    assert _totals(kept, constants.N_STRUCTURES_BATCH_REAL) == _totals(skipped, constants.N_STRUCTURES_BATCH_REAL)

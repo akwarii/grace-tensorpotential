@@ -113,6 +113,12 @@ def test_shift_and_scale_entries_follow_what_the_target_instruction_holds():
     _add_shift_and_scale(entries, {"ConstantScaleShiftTarget": plain})
     assert entries == {"shift": 0.25, "scale": 3.0}
 
+    # a scale that is not a number of this model (None): no scale entry
+    none_scale = SimpleNamespace(scale=None, constant_shift=0.5, atomic_shift_map=None)
+    entries = {}
+    _add_shift_and_scale(entries, {"ConstantScaleShiftTarget": none_scale})
+    assert entries == {"shift": 0.5}
+
     entries = {}
     _add_shift_and_scale(entries, {})  # no target instruction: nothing added
     assert entries == {}

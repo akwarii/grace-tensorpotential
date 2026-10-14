@@ -617,3 +617,13 @@ def test_swapping_the_labels_of_two_atoms_does_not_change_the_energy(default_one
         rtol=COVARIANCE_F64.rtol,
         atol=COVARIANCE_F64.atol,
     )
+
+
+def test_an_absent_optional_builder_module_or_class_is_an_import_error_naming_it():
+    from tensorpotential.calculator.asecalculator import _optional_builder_class
+
+    with pytest.raises(ImportError, match=r"TensorPotential\.no_such_package\.builder not found"):
+        _optional_builder_class("tensorpotential.no_such_package.builder", "Builder")
+    with pytest.raises(ImportError, match="cannot import name 'NoSuchBuilder'"):
+        _optional_builder_class("tensorpotential.constants", "NoSuchBuilder")
+    assert _optional_builder_class("tensorpotential.constants", "ATOMIC_POS") == constants.ATOMIC_POS
