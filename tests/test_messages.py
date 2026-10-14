@@ -110,11 +110,9 @@ def test_configure_logging_of_the_scripts_shows_the_messages_as_bare_text(tmp_pa
 
 
 def test_info_is_shown_whatever_the_level_of_the_root_logger(tmp_path):
-    code = (
-        "from tensorpotential.core.messages import get_messages_logger, show_messages\n"
-        "show_messages()\n"
-        "get_messages_logger().info('shown')\n"
+    shown = run_fresh_python(
+        "import logging; from tensorpotential.core import messages as m; m.show_messages(); m.get_messages_logger().info('shown'); print(logging.getLogger().level)",
+        tmp_path,
     )
-    result = run_fresh_python(code, tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines()[-1] == "shown"
+    assert shown.returncode == 0, shown.stderr
+    assert shown.stdout.splitlines()[-2:] == ["shown", str(logging.WARNING)]
