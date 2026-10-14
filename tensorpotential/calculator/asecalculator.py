@@ -1132,7 +1132,7 @@ class TPCalculator(Calculator):
             build_uq_compute_from_yaml,
             default_uq_extra_properties,
             patch_instructions_for_basis_rp_features,
-            _basis_rp_spec_from_artifact,
+            basis_rp_spec_from_artifact,
         )
 
         if len(self.models) != 1:
@@ -1163,7 +1163,7 @@ class TPCalculator(Calculator):
             if param_dtype is None:
                 param_dtype = model.param_dtype
             gmm_uq = GMMUQModel(artifact_path, param_dtype=param_dtype)
-            spec = _basis_rp_spec_from_artifact(gmm_uq)
+            spec = basis_rp_spec_from_artifact(gmm_uq)
             if spec is None or spec.get("matrix") is None:
                 raise ValueError(
                     f"UQ artifact '{artifact_path}' was not built with the "

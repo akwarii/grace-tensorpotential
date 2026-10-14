@@ -977,10 +977,10 @@ class TPModel(tf.Module):
             # unsupported.
             from tensorpotential.uq.factories import (
                 patch_instructions_for_basis_rp_features,
-                _basis_rp_spec_from_artifact,
+                basis_rp_spec_from_artifact,
             )
 
-            spec = _basis_rp_spec_from_artifact(gmm_uq_model)
+            spec = basis_rp_spec_from_artifact(gmm_uq_model)
             if spec is None or spec.get("matrix") is None:
                 raise ValueError(
                     "SavedModel export requires a basis-RP UQ artifact (missing "
