@@ -74,7 +74,7 @@ def row_of(profile: dict[str, Any]) -> list[str]:
         _device(profile),
         profile["dtype"],
         profile["option"],
-        profile.get("grads", "all"),
+        profile.get("grads", "all") if profile["rows"] else "",
         str(atoms),
         str(bonds),
         f"{profile['whole_ms']:.0f}",

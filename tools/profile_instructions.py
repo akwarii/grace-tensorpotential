@@ -18,6 +18,7 @@ Usage (from the repository root)::
     python tools/profile_instructions.py model_grace.yaml --device gpu --dtype float32 --option dense_nbr
 
 ``--device gpu`` stops with an error when TensorFlow sees no GPU; the result file records the device.
+Exit status 3 means the bond layout option does not apply to the model (no instruction takes it).
 """
 
 from __future__ import annotations
@@ -37,7 +38,12 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 STRUCTURES = TESTS / "data" / "MoNbTaW_test50.pkl.gz"
 SEED = 7
+NOT_APPLICABLE = 3  # exit status: the model has nothing the requested option applies to
 OPTIONS = ("none", "dense_nbr", "lm_first")
+
+
+class UnsupportedOptionError(ValueError):
+    """The model has no instruction that takes the requested bond layout option."""
 
 
 def configure_tensorflow(device: str):
@@ -86,7 +92,10 @@ def build_model(tf, yaml_name: str, dtype: str, option: str):
     path = path if path.exists() else TESTS / yaml_name
     instructions = load_instructions(str(path))
     if option != "none":
-        instructions = osn.with_layout_option(instructions, option)
+        try:
+            instructions = osn.with_layout_option(instructions, option)
+        except ValueError as exc:
+            raise UnsupportedOptionError(f"{path.name}: {exc}") from exc  # noqa: TRY003
     model = TPModel(instructions)
     model.build(getattr(tf, dtype))
     for var in model.trainable_variables:
@@ -323,7 +332,11 @@ def main(argv: list[str] | None = None) -> int:
     tf = configure_tensorflow(args.device)
     results = []
     for name in args.yamls:
-        result = profile_model(args, tf, name)
+        try:
+            result = profile_model(args, tf, name)
+        except UnsupportedOptionError as exc:
+            sys.stderr.write(f"not applicable: {exc}\n")
+            return NOT_APPLICABLE
         results.append(result)
         header = f"{name}: {result['n_atoms']} atoms, {result['n_bonds']} bonds, {args.dtype}, option {args.option}, {args.device}"
         body = (

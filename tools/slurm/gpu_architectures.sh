@@ -9,7 +9,8 @@
 #      (`--grads inputs`, forces and virial only), and float64 with `--grads all` (what training adds);
 #   2. whole model only (time and peak GPU memory) for growing sizes, each size in its own process so that an
 #      out-of-memory failure ends only that size: float64 and float32, default and dense_nbr bond layouts.
-#      A size that fails stops the sizes above it for that configuration (recorded in failures.txt).
+#      A size that fails stops the sizes above it for that configuration (recorded in failures.txt); an option that
+#      does not apply to a model (FS has no dense_nbr layout) is skipped, not a failure.
 # Then the summary table (tools/summarise_profiles.py) is written to OUTPUT_DIR/summary.md.
 #
 # Environment: PYTHON (default python), REPEATS (default 5), CELLS (default "1 2 3 4 5 6 8": 54 to 27,648 atoms),
@@ -66,8 +67,14 @@ for arch in $ARCHS; do
     for option in none dense_nbr; do
       for cell in $CELLS; do
         tag="whole_${name}_${dtype}_${option}_s${cell}"
-        if ! run "$tag" "$PYTHON" tools/profile_instructions.py "$yaml" --device "$DEVICE" --dtype "$dtype" \
-            --option "$option" --supercell "$cell" --whole-only --repeats "$REPEATS" --json "$OUT/$tag.json"; then
+        run "$tag" "$PYTHON" tools/profile_instructions.py "$yaml" --device "$DEVICE" --dtype "$dtype" \
+            --option "$option" --supercell "$cell" --whole-only --repeats "$REPEATS" --json "$OUT/$tag.json"
+        status=$?
+        if [ "$status" -eq 3 ]; then
+          echo "   skipped: option $option does not apply to $name" | tee -a "$OUT/steps.log"
+          rm -f "$OUT/$tag".*
+          break
+        elif [ "$status" -ne 0 ]; then
           echo "$tag (stopping larger sizes for ${name} ${dtype} ${option})" >> "$OUT/failures.txt"
           break
         fi

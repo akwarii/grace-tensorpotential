@@ -366,3 +366,32 @@ def test_peak_rss_reads_the_high_water_mark_of_a_status_file(tmp_path):
     assert pi.peak_rss_mb(tmp_path / "missing") is None
     status.write_text("Name:\tx\n")
     assert pi.peak_rss_mb(status) is None
+
+
+def test_an_option_no_instruction_takes_ends_with_the_not_applicable_status(
+    monkeypatch, capsys
+):
+    def refuse(_instructions, _option):
+        raise ValueError("no instruction takes the option")  # noqa: TRY003
+
+    import oracle_snapshot as osn
+
+    monkeypatch.setattr(osn, "with_layout_option", refuse)
+
+    status = pi.main([
+        YAML,
+        "--option",
+        "dense_nbr",
+        "--supercell",
+        "1",
+        "--repeats",
+        "1",
+    ])
+
+    assert status == pi.NOT_APPLICABLE == 3
+    assert "not applicable: model_grace.yaml" in capsys.readouterr().err
+
+
+def test_a_value_error_of_another_origin_is_not_taken_for_a_missing_option():
+    with pytest.raises(FileNotFoundError):
+        pi.build_model(tf, "no_such_model.yaml", "float64", "none")

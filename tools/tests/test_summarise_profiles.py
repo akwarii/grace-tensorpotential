@@ -94,10 +94,13 @@ def test_a_gpu_row_names_the_gpu_and_the_memory_per_bond():
     assert cells[9:11] == ["4", "2"]  # 4 MB over 2048 bonds = 2 KB each
 
 
-def test_a_whole_only_profile_has_no_top_classes():
+def test_a_whole_only_profile_has_no_top_classes_and_no_gradient_label():
     profile = {**_profile(), "rows": [], "environment": {}}
 
-    assert sp.row_of(profile)[12] == ""
+    cells = sp.row_of(profile)
+
+    assert cells[12] == ""
+    assert cells[4] == ""
 
 
 def test_load_profiles_reads_nested_files_and_skips_other_json(tmp_path):
