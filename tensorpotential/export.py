@@ -4,6 +4,7 @@ import copy
 import dataclasses
 import logging
 import re
+from typing import Any, NamedTuple
 
 import numpy as np
 import yaml
@@ -60,9 +61,19 @@ def extract_const_shift_scale(fs_ins_dict):
     return None
 
 
-def export_to_yaml(
-    fs_ins_dict: list[TPInstruction] | dict[str, TPInstruction], filename: str
-):
+class _FSInstructions(NamedTuple):
+    """The instructions of a Finnis-Sinclair-type model that the TDACE export reads."""
+
+    rad_basis: Any
+    chem_emb_fun: Any
+    sing_part_basis_fun: Any
+    lin_rad_fun: Any
+    collector_ins: Any
+    fs_emb_ins: Any
+
+
+def _select_instructions(fs_ins_dict: dict[str, TPInstruction]) -> _FSInstructions:
+    """Pick the named instructions of the model and check their types."""
     # to avoid circular import
     from tensorpotential.instructions.compute import (
         RadialBasis,
@@ -73,10 +84,6 @@ def export_to_yaml(
         FunctionReduceN,
     )
     from tensorpotential.instructions.output import FSOut2ScalarTarget
-
-    fs_ins_dict = fs_ins_dict
-    if isinstance(fs_ins_dict, list):
-        fs_ins_dict = {ins.name: ins for ins in fs_ins_dict}
 
     rad_basis = fs_ins_dict["RadialBasis"]
     assert isinstance(rad_basis, RadialBasis)
@@ -95,26 +102,13 @@ def export_to_yaml(
 
     fs_emb_ins = fs_ins_dict["FSOut2ScalarTarget"]
     assert isinstance(fs_emb_ins, FSOut2ScalarTarget)
+    return _FSInstructions(
+        rad_basis, chem_emb_fun, sing_part_basis_fun, lin_rad_fun, collector_ins, fs_emb_ins
+    )
 
-    elements = [s.decode() for s in chem_emb_fun.element_map_symbols.numpy()]
 
-    rad_basis_type = rad_basis.basis_type
-    nradbase = rad_basis.basis_function.nfunc
-    cutoff = rad_basis.basis_function.rcut
-    nradmax = lin_rad_fun.n_rad_max
-
-    assert collector_ins.is_central_atom_type_dependent
-    ndens = collector_ins.n_out
-
-    collector_dict = collector_ins.collector
-
-    A_ins_dict: dict[str, TPEquivariantInstruction] = {
-        ins.name: ins for _, ins in fs_ins_dict.items() if ins.name in collector_dict
-    }
-
-    A_ins = A_ins_dict["A"]
-    init_coupling_symbols(A_ins)
-
+def _collector_coefficients(collector_ins) -> list[np.ndarray]:
+    """Reducing coefficients times their norms, one array per collected instruction."""
     coeffs_list = []
 
     # mult by collector_ins.norm_{k}
@@ -123,7 +117,13 @@ def export_to_yaml(
         coeffs_list.append(
             getattr(collector_ins, f"reducing_{ci.name}").numpy() * norm_coeff
         )  # list of arrays (shape=[num_elems, num_dens, nrad, num_ls_0_funcs])
+    return coeffs_list
 
+
+def _basis_functions(
+    collector_dict: dict, A_ins_dict: dict[str, TPEquivariantInstruction], ndens: int
+) -> list[TDACEBBasisFunction]:
+    """One coefficient-free basis function per collected polynomial."""
     # actually collected B-funcs
     collected_polynomials = []
     for name, val in collector_dict.items():
@@ -172,7 +172,17 @@ def export_to_yaml(
         )
 
         ls_b_funcs_list.append(bfunc)
+    return ls_b_funcs_list
 
+
+def _functions_by_element(
+    elements: list[str],
+    coeffs_list: list[np.ndarray],
+    ls_b_funcs_list: list[TDACEBBasisFunction],
+    nradmax: int,
+    ndens: int,
+) -> dict[int, list[TDACEBBasisFunction]]:
+    """The basis functions of every element and radial index with their coefficients, sorted."""
     num_of_ls_funcs = sum([c.shape[-1] for c in coeffs_list])
     assert num_of_ls_funcs == len(
         ls_b_funcs_list
@@ -196,7 +206,6 @@ def export_to_yaml(
             for orig_bfunc, cur_coeff in zip(ls_b_funcs_list, cur_coeffs):
                 bfunc = copy.copy(orig_bfunc)
 
-
                 bfunc.ns = n + 1  # [n + 1] * rank
                 bfunc.ndensity = ndens
                 bfunc.mu0 = el_ind
@@ -204,41 +213,34 @@ def export_to_yaml(
 
                 functions_dict[el_ind].append(bfunc)
 
-    functions_dict = {
+    return {
         k: sorted(v, key=lambda f: (f.rank, f.ns, f.ls))
         for k, v in functions_dict.items()
     }
 
-    crad = lin_rad_fun.crad.numpy()  # shape = [n_rad_max, lmax + 1, n_rad_base]
-    chem_emb = chem_emb_fun.w.numpy()  # shape = [n_elem, chem_emb_size]
-    Z_to_n = sing_part_basis_fun.lin_transform.w.numpy()
-    Z_norm = sing_part_basis_fun.lin_transform.norm.numpy()
+
+def _radial_basis_spec(ins: _FSInstructions) -> dict[str, Any]:
+    """Radial basis, its coefficients and the chemical embedding folded into ``Z``."""
+    crad = ins.lin_rad_fun.crad.numpy()  # shape = [n_rad_max, lmax + 1, n_rad_base]
+    chem_emb = ins.chem_emb_fun.w.numpy()  # shape = [n_elem, chem_emb_size]
+    Z_to_n = ins.sing_part_basis_fun.lin_transform.w.numpy()
+    Z_norm = ins.sing_part_basis_fun.lin_transform.norm.numpy()
     chem_Z = np.einsum("ek,kn->en", chem_emb, Z_to_n) * Z_norm
 
-    rad_basis_spec = {
-        "n_rad_base": nradbase,
-        "nradmax": nradmax,
-        "radbasename": rad_basis_type,
-        "cutoff": cutoff,
+    return {
+        "n_rad_base": ins.rad_basis.basis_function.nfunc,
+        "nradmax": ins.lin_rad_fun.n_rad_max,
+        "radbasename": ins.rad_basis.basis_type,
+        "cutoff": ins.rad_basis.basis_function.rcut,
         "crad": crad.flatten().tolist(),
         "Z": chem_Z.flatten().tolist(),
         "crad_shape": list(np.shape(crad)),
         "Z_shape": list(np.shape(chem_Z)),
     }
 
-    emb_spec = {
-        "type": "FinnisSinclairShiftedScaled",
-        "params": np.array(fs_emb_ins.fs_parameters).flatten().tolist(),
-    }
 
-    tdyaml_dict = {
-        "elements": elements,
-        "nnorm": float(A_ins.inv_avg_n_neigh.numpy()),
-        "emb_spec": emb_spec,
-        "radial_basis": rad_basis_spec,
-        "functions": {k: [f.todict() for f in v] for k, v in functions_dict.items()},
-    }
-
+def _add_shift_and_scale(tdyaml_dict: dict, fs_ins_dict: dict) -> None:
+    """Add ``E0``, ``shift`` and ``scale`` when the model has a constant scale-shift target."""
     shift_scale_tuple = extract_const_shift_scale(fs_ins_dict)
     if shift_scale_tuple is not None:
         scale, constant_shift, atomic_shift_map = shift_scale_tuple
@@ -249,8 +251,9 @@ def export_to_yaml(
         if scale is not None:
             tdyaml_dict["scale"] = float(scale)
 
-    # Step 3. Store potential in .tdyaml
 
+def _write_tdyaml(tdyaml_dict: dict, filename: str) -> None:
+    """Write the ``.tdyaml`` file: flow-style values, one basis function per line."""
     # custom save yaml
     with open(filename, "w+") as f:
         for key, yaml_obj in tdyaml_dict.items():
@@ -278,3 +281,61 @@ def export_to_yaml(
                                 width=999999,
                             )
                         )
+
+
+def export_to_yaml(
+    fs_ins_dict: list[TPInstruction] | dict[str, TPInstruction], filename: str
+):
+    """Write a Finnis-Sinclair-type model as a ``.tdyaml`` file (the format of the TDACE code).
+
+    Parameters
+    ----------
+    fs_ins_dict : list or dict of TPInstruction
+        The built instructions of the model, or a dict of them by name.
+    filename : str
+        Output file.
+    """
+    if isinstance(fs_ins_dict, list):
+        fs_ins_dict = {ins.name: ins for ins in fs_ins_dict}
+
+    ins = _select_instructions(fs_ins_dict)
+    elements = [s.decode() for s in ins.chem_emb_fun.element_map_symbols.numpy()]
+    nradmax = ins.lin_rad_fun.n_rad_max
+
+    assert ins.collector_ins.is_central_atom_type_dependent
+    ndens = ins.collector_ins.n_out
+
+    collector_dict = ins.collector_ins.collector
+
+    A_ins_dict: dict[str, TPEquivariantInstruction] = {
+        k_ins.name: k_ins
+        for _, k_ins in fs_ins_dict.items()
+        if k_ins.name in collector_dict
+    }
+
+    A_ins = A_ins_dict["A"]
+    init_coupling_symbols(A_ins)
+
+    coeffs_list = _collector_coefficients(ins.collector_ins)
+    ls_b_funcs_list = _basis_functions(collector_dict, A_ins_dict, ndens)
+    functions_dict = _functions_by_element(
+        elements, coeffs_list, ls_b_funcs_list, nradmax, ndens
+    )
+
+    emb_spec = {
+        "type": "FinnisSinclairShiftedScaled",
+        "params": np.array(ins.fs_emb_ins.fs_parameters).flatten().tolist(),
+    }
+
+    tdyaml_dict = {
+        "elements": elements,
+        "nnorm": float(A_ins.inv_avg_n_neigh.numpy()),
+        "emb_spec": emb_spec,
+        "radial_basis": _radial_basis_spec(ins),
+        "functions": {k: [f.todict() for f in v] for k, v in functions_dict.items()},
+    }
+
+    _add_shift_and_scale(tdyaml_dict, fs_ins_dict)
+
+    # Step 3. Store potential in .tdyaml
+    _write_tdyaml(tdyaml_dict, filename)

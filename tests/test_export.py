@@ -64,3 +64,31 @@ def test_export_to_yaml(tmp_path):
     }.items():
         assert k in tdbfunc
         assert tdbfunc[k] == v or np.allclose(tdbfunc[k], v)
+
+
+def test_export_to_yaml_gives_the_same_file_for_a_list_and_a_dict_and_records_shift_and_scale(tmp_path):
+    np.random.seed(1)
+    tf.random.set_seed(1)
+    fs_ins = FS(
+        element_map={"Al": 0, "Li": 1},
+        lmax=1,
+        n_rad_base=4,
+        n_rad_max=4,
+        embedding_size=4,
+        max_order=2,
+    ).get_instructions()
+    for _, ins in fs_ins.items():
+        ins.build(tf.float64)
+
+    from_dict = tmp_path / "dict.yaml"
+    from_list = tmp_path / "list.yaml"
+    export_to_yaml(fs_ins, str(from_dict))
+    export_to_yaml(list(fs_ins.values()), str(from_list))
+    assert from_dict.read_text() == from_list.read_text()
+
+    exported = yaml.safe_load(from_dict.read_text())
+    assert exported["shift"] == 0.0 and exported["scale"] == 1.0
+    # one block per element; every function carries n_rad_max radial indices' coefficients
+    assert sorted(exported["functions"]) == [0, 1]
+    assert len(exported["functions"][0]) == len(exported["functions"][1])
+    assert {f["ns"] for f in exported["functions"][0]} == {1, 2, 3, 4}
