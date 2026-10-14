@@ -92,22 +92,12 @@ def _atoms_list() -> list:
     return list(pd.read_pickle(STRUCTURES)["ase_atoms"])  # noqa: S301 - repo test data
 
 
-def _import_case(spec: str) -> dict[str, float]:
+def _import_case(module: str) -> dict[str, float]:
     import importlib
 
-    if spec == "tensorflow":
-        phases: dict[str, float] = {}
-        _timed(phases, "import_ms", lambda: importlib.import_module("tensorflow"))
-        return phases
-    return {"import_ms": _import_time(spec)}
-
-
-def _import_time(module: str) -> float:
-    import importlib
-
-    start = time.perf_counter()
-    importlib.import_module(module)
-    return (time.perf_counter() - start) * 1e3
+    phases: dict[str, float] = {}
+    _timed(phases, "import_ms", lambda: importlib.import_module(module))
+    return phases
 
 
 def _script_case(name: str) -> dict[str, float]:
