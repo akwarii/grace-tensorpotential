@@ -939,7 +939,7 @@ def _merge_uq_artifacts(all_weights, uq_artifacts_path, n_elements, instruction_
     everything the C++ pair style needs to compute per-atom sigma and gamma.
     """
     from tensorpotential.uq import constants as uqc
-    from tensorpotential.uq.gmmuq import GMMUQModel, _MISSING_ELEM_INV_COV_DIAG
+    from tensorpotential.uq.gmmuq import GMMUQModel, MISSING_ELEM_INV_COV_DIAG
 
     logger.info(f"Loading UQ artifacts from {uq_artifacts_path}...")
     # Validates the schema on load and builds the dense padded tensors.
@@ -973,11 +973,11 @@ def _merge_uq_artifacts(all_weights, uq_artifacts_path, n_elements, instruction_
     # The retired readout-hidden feature (D == 1 + last energy-MLP hidden width)
     # is unsupported. Parse the spec via the single shared reader.
     from tensorpotential.uq.factories import (
-        _basis_rp_spec_from_artifact,
+        basis_rp_spec_from_artifact,
         trace_energy_path_invariant_reduces,
     )
 
-    spec = _basis_rp_spec_from_artifact(m)
+    spec = basis_rp_spec_from_artifact(m)
     if spec is None or spec.get("matrix") is None:
         raise ValueError(
             "kokkos UQ export requires a basis-RP artifact (missing "
@@ -1028,7 +1028,7 @@ def _merge_uq_artifacts(all_weights, uq_artifacts_path, n_elements, instruction_
     all_weights["uq_max_clusters"] = np.array([m.K_max], dtype=np.int64)
     all_weights["uq_feature_dim"] = np.array([m.D], dtype=np.int64)
     all_weights["uq_missing_elem_inv_cov_diag"] = np.array(
-        [_MISSING_ELEM_INV_COV_DIAG], dtype=np.float32
+        [MISSING_ELEM_INV_COV_DIAG], dtype=np.float32
     )
 
     all_weights["uq_centroids"] = m.centroids.numpy().astype(np.float32)

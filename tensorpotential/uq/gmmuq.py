@@ -19,6 +19,8 @@ log = logging.getLogger(__name__)
 # so scale=1e6 gives sigma ~1000x the feature norm — reliably flags these atoms as
 # high-uncertainty regardless of the actual feature value.
 _MISSING_ELEM_INV_COV_DIAG = 1e6
+# Public name of the helper that other modules import; the private name stays for the callers that still use it.
+MISSING_ELEM_INV_COV_DIAG = _MISSING_ELEM_INV_COV_DIAG
 
 
 class GMMUQModel(tf.Module):

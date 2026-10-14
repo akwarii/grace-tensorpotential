@@ -430,3 +430,7 @@ def get_gmm_uq_calculator(
     calc.tensorpotential = tp_uq
     calc.gmm_uq_model = gmm_uq
     return calc
+
+
+# Public name of the helper that other modules import; the private name stays for the callers that still use it.
+basis_rp_spec_from_artifact = _basis_rp_spec_from_artifact
