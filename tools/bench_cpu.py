@@ -443,18 +443,31 @@ def render_table(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def wait_until_idle(
+    check_load: bool, wait_s: float, poll_s: float = 15.0
+) -> str | None:
+    """Poll ``idle_problem`` for up to ``wait_s`` seconds; return the last problem, ``None`` once idle."""
+    deadline = time.monotonic() + wait_s
+    problem = idle_problem(check_load=check_load)
+    while problem and time.monotonic() < deadline:
+        time.sleep(poll_s)
+        problem = idle_problem(check_load=check_load)
+    return problem
+
+
 def run(
     cases: Sequence[str],
     repeats: int,
     steps: int,
     structures: int,
     allow_busy: bool = False,
+    wait_idle_s: float = 1800.0,
 ) -> dict[str, Any]:
-    """Every case ``repeats`` times; the idle check runs before each case and once at the end."""
+    """Every case ``repeats`` times; before each case wait up to ``wait_idle_s`` for an idle machine."""
     load_before = os.getloadavg()[0]
     rows = []
     for name in cases:
-        problem = idle_problem(check_load=not rows)
+        problem = wait_until_idle(not rows, 0 if allow_busy else wait_idle_s)
         if problem and not allow_busy:
             raise SystemExit(  # noqa: TRY003
                 f"machine not idle before {name}: {problem}"
@@ -489,6 +502,12 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--repeats", type=int, default=5)
     bench.add_argument("--out", type=Path, help="also write the summary as JSON")
     bench.add_argument(
+        "--wait-idle",
+        type=float,
+        default=1800.0,
+        help="seconds to wait for an idle machine before a case (then give up)",
+    )
+    bench.add_argument(
         "--allow-busy",
         action="store_true",
         help="measure on a busy machine (numbers are not quotable)",
@@ -506,7 +525,14 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(run_case(args.name, args.steps, args.structures)) + "\n"
         )
         return 0
-    result = run(args.cases, args.repeats, args.steps, args.structures, args.allow_busy)
+    result = run(
+        args.cases,
+        args.repeats,
+        args.steps,
+        args.structures,
+        args.allow_busy,
+        args.wait_idle,
+    )
     sys.stdout.write(render_table(result["rows"]) + "\n")
     sys.stdout.write(
         f"load average before {result['load_average_1min_before']:.2f}, after {result['load_average_1min_after']:.2f}\n"

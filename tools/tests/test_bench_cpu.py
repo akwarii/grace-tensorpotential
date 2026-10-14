@@ -192,6 +192,23 @@ def test_run_repeats_every_case_and_records_the_load(monkeypatch):
     assert result["load_average_1min_before"] >= 0
 
 
+def test_wait_until_idle_polls_until_the_problem_goes_away(monkeypatch):
+    answers = iter(["busy", "busy", None])
+    sleeps = []
+    monkeypatch.setattr(bc, "idle_problem", lambda **_kw: next(answers))
+    monkeypatch.setattr(bc.time, "sleep", sleeps.append)
+
+    assert bc.wait_until_idle(False, wait_s=1e6, poll_s=3) is None
+    assert sleeps == [3, 3]
+
+
+def test_wait_until_idle_gives_up_after_the_wait(monkeypatch):
+    monkeypatch.setattr(bc, "idle_problem", lambda **_kw: "busy")
+    monkeypatch.setattr(bc.time, "sleep", lambda _s: None)
+
+    assert bc.wait_until_idle(True, wait_s=0) == "busy"
+
+
 def test_run_refuses_a_busy_machine_unless_allowed(monkeypatch):
     monkeypatch.setattr(
         bc, "idle_problem", lambda **_kw: "one-minute load 9 is above 4.0"
@@ -199,7 +216,7 @@ def test_run_refuses_a_busy_machine_unless_allowed(monkeypatch):
     monkeypatch.setattr(bc, "run_sample", lambda *_a: _sample(1, a_ms=1))
 
     with pytest.raises(SystemExit, match="not idle before a"):
-        bc.run(["a"], repeats=1, steps=1, structures=1)
+        bc.run(["a"], repeats=1, steps=1, structures=1, wait_idle_s=0)
 
     result = bc.run(["a"], repeats=1, steps=1, structures=1, allow_busy=True)
     assert result["idle_at_end"] is False
