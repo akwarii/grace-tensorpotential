@@ -15,6 +15,7 @@ from typing import Any
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -501,3 +502,33 @@ def test_the_length_during_the_first_epoch_follows_the_atoms_seen_so_far(
         seen_atoms += int(batch[tc.N_ATOMS_BATCH_REAL])
         expected = max(1, round(total_atoms / (seen_atoms / count)))
         assert len(wrapper) == expected
+
+
+def test_the_shuffle_is_a_seeded_permutation_of_the_rows_independent_of_the_global_rng(
+    builders, frame
+):
+    wrapper = StreamingDatasetWrapper(
+        frame, builders, StreamingConfig(), shuffle=True, seed=5
+    )
+    np.random.seed(0)
+    ids = [int(d[tc.DATA_STRUCTURE_ID]) for d in wrapper._structure_dicts()]
+    expected = list(frame.index[np.random.default_rng(5).permutation(len(frame))])
+    assert ids == expected
+    assert ids != list(frame.index)  # the permutation really moves rows
+    unshuffled = _wrapper(frame, builders)
+    assert [
+        int(d[tc.DATA_STRUCTURE_ID]) for d in unshuffled._structure_dicts()
+    ] == list(frame.index)
+
+
+def test_only_the_first_epoch_logs_intermediate_bucket_statistics(
+    builders, frame, caplog
+):
+    wrapper = _wrapper(frame, builders, verbose=True, target_metric=600)
+    with caplog.at_level(logging.INFO, logger="tensorpotential.data.streaming"):
+        list(wrapper)
+        first = sum("Intermediate padding stats" in r.message for r in caplog.records)
+        list(wrapper)
+        total = sum("Intermediate padding stats" in r.message for r in caplog.records)
+    assert first > 0
+    assert total == first
