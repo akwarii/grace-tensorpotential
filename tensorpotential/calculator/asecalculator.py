@@ -1326,7 +1326,6 @@ class TPCalculator(Calculator):
         self.forces = np.empty((len(atoms), 3))
         self.stress = np.empty((1, 3, 3))
         self.energy = 0.0
-        results = {}
 
         self.get_data(atoms)
 
@@ -1340,7 +1339,6 @@ class TPCalculator(Calculator):
             extras = {prop: [] for prop in self.extra_properties}
         else:
             extras = {}
-        n_model = len(self.models)
 
         for model in self.models:
             output = model.compute(self.data)
@@ -1348,43 +1346,13 @@ class TPCalculator(Calculator):
 
         for output in self.outputs:
             if "energy" in self.compute_properties:
-                e = output.get(constants.PREDICT_TOTAL_ENERGY, None)
-                if e is None:
-                    energy_list.append(np.zeros((1, 1)))
-                else:
-                    energy_list.append(e.numpy().astype(np.float64))
-
+                energy_list.append(self._energy_of(output))
             if "forces" in self.compute_properties:
-                forces = output.get(constants.PREDICT_FORCES, None)
-                forces = (
-                    np.zeros((len(atoms), 3)) if forces is None else forces.numpy()
-                )
-                forces_list.append(forces)
-
+                forces_list.append(self._forces_of(output, atoms))
             if "stress" in self.compute_properties:
-                stress = output.get(constants.PREDICT_VIRIAL, None)
-                if stress is None or atoms.get_cell().rank == 0:
-                    stress = np.zeros((6,))
-                else:
-                    stress = (
-                        -stress.numpy().reshape((6,))[[0, 1, 2, 5, 4, 3]]
-                        / atoms.get_volume()
-                    )
-                stress_list.append(stress)
+                stress_list.append(self._stress_of(output, atoms))
             for prop in extras:
-                res = output.get(prop)
-                if res is None:
-                    extras[prop].append(np.zeros((1, 1)))
-                else:
-                    res = res.numpy()
-                    t = self.truncate_extras_by_natoms
-                    should_truncate = t is True or (
-                        isinstance(t, list) and prop in t
-                    )
-                    if should_truncate:
-                        extras[prop].append(res[: len(atoms)])
-                    else:
-                        extras[prop].append(res)
+                extras[prop].append(self._extra_of(output, prop, atoms))
         self.eval_time = time.perf_counter() - t0
 
         # Feed the dense ski-rental promotion: eval_time wraps model.compute + the result-sync, so
@@ -1393,6 +1361,47 @@ class TPCalculator(Calculator):
         if self.dense_reshape and self.dense_padding_manager is not None:
             self.dense_padding_manager.note_eval(self.eval_time)
 
+        self.results = self._aggregate_results(
+            atoms, energy_list, forces_list, stress_list, extras
+        )
+
+    @staticmethod
+    def _energy_of(output: dict) -> np.ndarray:
+        e = output.get(constants.PREDICT_TOTAL_ENERGY, None)
+        if e is None:
+            return np.zeros((1, 1))
+        return e.numpy().astype(np.float64)
+
+    @staticmethod
+    def _forces_of(output: dict, atoms) -> np.ndarray:
+        forces = output.get(constants.PREDICT_FORCES, None)
+        return np.zeros((len(atoms), 3)) if forces is None else forces.numpy()
+
+    @staticmethod
+    def _stress_of(output: dict, atoms) -> np.ndarray:
+        """Stress in Voigt order (xx, yy, zz, yz, xz, xy) from the virial; zero without one."""
+        stress = output.get(constants.PREDICT_VIRIAL, None)
+        if stress is None or atoms.get_cell().rank == 0:
+            return np.zeros((6,))
+        return (
+            -stress.numpy().reshape((6,))[[0, 1, 2, 5, 4, 3]] / atoms.get_volume()
+        )
+
+    def _extra_of(self, output: dict, prop: str, atoms) -> np.ndarray:
+        """One extra property of a model, cut to the real atoms when asked to."""
+        res = output.get(prop)
+        if res is None:
+            return np.zeros((1, 1))
+        res = res.numpy()
+        t = self.truncate_extras_by_natoms
+        should_truncate = t is True or (isinstance(t, list) and prop in t)
+        return res[: len(atoms)] if should_truncate else res
+
+    def _aggregate_results(
+        self, atoms, energy_list: list, forces_list: list, stress_list: list, extras: dict
+    ) -> dict[str, Any]:
+        """Mean over the models (and their spread when there are several)."""
+        results = {}
         self.energy = np.mean(energy_list, axis=0).flatten()[0]
 
         # ensure only real atoms have forces
@@ -1407,9 +1416,8 @@ class TPCalculator(Calculator):
         for k, v in extras.items():
             results[k] = np.mean(v, axis=0)
 
-        if n_model > 1:
+        if len(self.models) > 1:
             results["energy_std"] = np.std(energy_list, axis=0).flatten()[0]
             results["forces_std"] = np.std(forces_list, axis=0)[: len(atoms)]
             results["stress_std"] = np.std(stress_list, axis=0)
-
-        self.results = results
+        return results
