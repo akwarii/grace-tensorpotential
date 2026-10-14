@@ -74,8 +74,8 @@
   upstream: never
 
 - path: tensorpotential/calculator/asecalculator.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, CORE1, ARCH1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); QUAL7: largest functions split into named steps (PaddingManager.get_data, TPCalculator.__init__ and calculate)'
+  milestone: [CLEAN2, QUAL1, CORE1, ARCH1, QUAL7]
   upstream: pending
 
 - path: tensorpotential/calculator/foundation_models.py
@@ -119,8 +119,8 @@
   upstream: pending
 
 - path: tensorpotential/data/databuilder.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); pandas 3 readiness; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, QUAL1, DEPS1, CORE1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); pandas 3 readiness; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); QUAL7: construct_batches split into stage functions'
+  milestone: [CLEAN2, QUAL1, DEPS1, CORE1, QUAL7]
   upstream: pending
 
 - path: tensorpotential/data/dense_nbr.py
@@ -134,8 +134,8 @@
   upstream: pending
 
 - path: tensorpotential/data/streaming.py
-  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [QUAL1, CORE1]
+  reason: 'code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); QUAL7: ElasticBatchIterator._pad_batch and StreamingDatasetWrapper.__iter__ split into named steps'
+  milestone: [QUAL1, CORE1, QUAL7]
   upstream: pending
 
 - path: tensorpotential/data/symbols.py
@@ -149,8 +149,8 @@
   upstream: pending
 
 - path: tensorpotential/data/weighting.py
-  reason: 'commented-out code removed; CLI2: no logging.basicConfig at import'
-  milestone: [CLEAN2, CLI2]
+  reason: 'commented-out code removed; CLI2: no logging.basicConfig at import; QUAL7: generate_weights split into named steps'
+  milestone: [CLEAN2, CLI2, QUAL7]
   upstream: pending
 
 - path: tensorpotential/export.py
@@ -179,8 +179,8 @@
   upstream: pending
 
 - path: tensorpotential/functions/couplings.py
-  reason: 'commented-out code removed; CPU quick wins (Clebsch-Gordan cache, dictionary join); code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions)'
-  milestone: [CLEAN2, CPU1, QUAL1]
+  reason: 'commented-out code removed; CPU quick wins (Clebsch-Gordan cache, dictionary join); code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); QUAL7: real_coupling_metainformation split into named steps; unreachable _coupling_metainformation_complex deleted'
+  milestone: [CLEAN2, CPU1, QUAL1, QUAL7]
   upstream: pending
 
 - path: tensorpotential/functions/lora.py
@@ -294,8 +294,8 @@
   upstream: pending
 
 - path: tensorpotential/tpmodel.py
-  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation skips active instructions and leaves the config of the caller unedited'
-  milestone: [CLEAN2, QUAL1, CORE1, LORA1]
+  reason: 'commented-out code removed; code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); LoRA activation skips active instructions and leaves the config of the caller unedited; QUAL7: save_model split into named steps'
+  milestone: [CLEAN2, QUAL1, CORE1, LORA1, QUAL7]
   upstream: pending
 
 - path: tensorpotential/uq/__init__.py
@@ -646,4 +646,9 @@
 - path: tests/test_uq_common.py
   reason: 'tests of load_dataset_any (extxyz and pickle) (CLI2)'
   milestone: [CLI2]
+  upstream: pending
+
+- path: tests/test_uq_integration.py
+  reason: 'the exported SavedModel metadata is checked for the has_uq flag (QUAL7)'
+  milestone: [QUAL7]
   upstream: pending
