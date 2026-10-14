@@ -232,7 +232,12 @@ def test_the_forward_backward_gradient_matches_a_central_difference(setup):
 
 def test_profile_model_reports_the_layout_and_a_gpu_peak_only_on_a_gpu():
     args = pi.argparse.Namespace(
-        dtype="float64", option="dense_nbr", supercell=1, repeats=1, device="cpu"
+        dtype="float64",
+        option="dense_nbr",
+        supercell=1,
+        repeats=1,
+        device="cpu",
+        grads="all",
     )
 
     result = pi.profile_model(args, tf, YAML)
@@ -270,3 +275,35 @@ def test_main_prints_the_table_and_writes_the_json(tmp_path, capsys):
     payload = json.loads(out.read_text())
     assert payload["environment"]["device"] == "cpu"
     assert payload["profiles"][0]["rows"][0]["name"] == "BondLength"
+
+
+def test_gradients_of_inputs_only_leave_out_the_variables(setup):
+    model, _, data = setup
+    ins, snapshot = next(
+        p for p in pi.instruction_inputs(model, data) if p[0].name == "R"
+    )
+    n_vars = len(ins.variables)
+
+    _, both = pi.instruction_functions(tf, ins, snapshot, with_variables=True)
+    _, inputs_only = pi.instruction_functions(tf, ins, snapshot, with_variables=False)
+
+    assert n_vars > 0
+    assert len(both()) > len(inputs_only())
+
+
+def test_main_accepts_the_grads_option_and_records_it(tmp_path):
+    out = tmp_path / "g.json"
+
+    pi.main([
+        YAML,
+        "--supercell",
+        "1",
+        "--repeats",
+        "1",
+        "--grads",
+        "inputs",
+        "--json",
+        str(out),
+    ])
+
+    assert json.loads(out.read_text())["profiles"][0]["grads"] == "inputs"

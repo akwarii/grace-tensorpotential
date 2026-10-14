@@ -4,7 +4,8 @@ Every instruction of a model built from a yaml is jitted (XLA) on the input it s
 
 * ``fwd_ms``: the instruction's forward pass;
 * ``fwd_bwd_ms``: forward plus the gradient of the sum of its float outputs with respect to its float
-  inputs and its variables (what the force and virial derivative ask of it);
+  inputs (what the force and virial derivative ask of it at inference) and, with ``--grads all`` (the
+  default, what training adds), to its variables;
 * ``whole_ms``: the whole model (energy, forces, virial) as the calculator runs it, fused by XLA.
 
 XLA fuses across instructions, so the isolated times are an attribution, not a partition: their sum
@@ -126,7 +127,9 @@ def instruction_inputs(model, data: dict) -> list[tuple[Any, dict]]:
     return seen
 
 
-def instruction_functions(tf, ins, snapshot: dict) -> tuple[Callable, Callable]:
+def instruction_functions(
+    tf, ins, snapshot: dict, with_variables: bool = True
+) -> tuple[Callable, Callable]:
     """``(forward, forward_backward)`` of ``ins`` on ``snapshot``, plain Python (the caller jits them)."""
     floats = {k: v for k, v in snapshot.items() if v.dtype.is_floating}
     rest = {k: v for k, v in snapshot.items() if not v.dtype.is_floating}
@@ -151,7 +154,8 @@ def instruction_functions(tf, ins, snapshot: dict) -> tuple[Callable, Callable]:
                 if o.dtype.is_floating
             ]
             loss = tf.add_n(terms) if terms else tf.constant(0.0, tf.float64)
-        grads = tape.gradient(loss, [*inputs.values(), *ins.variables])
+        sources = [*inputs.values(), *(ins.variables if with_variables else [])]
+        grads = tape.gradient(loss, sources)
         return [tf.convert_to_tensor(g) for g in grads if g is not None] or [
             tf.constant(0.0)
         ]
@@ -183,11 +187,15 @@ def timed_or_error(tf, fn: Callable, repeats: int) -> tuple[float | None, str | 
         return None, f"{type(exc).__name__}: {str(exc).strip().splitlines()[-1][:160]}"
 
 
-def profile_instructions(tf, model, data: dict, repeats: int) -> list[dict[str, Any]]:
+def profile_instructions(
+    tf, model, data: dict, repeats: int, with_variables: bool = True
+) -> list[dict[str, Any]]:
     """One row per instruction: name, class, ``fwd_ms``, ``fwd_bwd_ms`` and any error."""
     rows = []
     for ins, snapshot in instruction_inputs(model, data):
-        forward, forward_backward = instruction_functions(tf, ins, snapshot)
+        forward, forward_backward = instruction_functions(
+            tf, ins, snapshot, with_variables
+        )
         fwd, err_f = timed_or_error(tf, forward, repeats)
         both, err_b = timed_or_error(tf, forward_backward, repeats)
         rows.append({
@@ -243,7 +251,7 @@ def profile_model(args: argparse.Namespace, tf, yaml_name: str) -> dict[str, Any
     model = build_model(tf, yaml_name, args.dtype, args.option)
     atoms = structure(args.supercell)
     data = input_batch(tf, model, atoms)
-    rows = profile_instructions(tf, model, data, args.repeats)
+    rows = profile_instructions(tf, model, data, args.repeats, args.grads == "all")
     add_shares(rows)
     result: dict[str, Any] = {
         "yaml": yaml_name,
@@ -252,6 +260,7 @@ def profile_model(args: argparse.Namespace, tf, yaml_name: str) -> dict[str, Any
         "n_atoms": len(atoms),
         "n_bonds": int(data["ind_i"].shape[0]),
         "repeats": args.repeats,
+        "grads": args.grads,
         "rows": rows,
     }
     result["whole_ms"] = whole_model_ms(tf, model, data, args.repeats)
@@ -271,6 +280,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dtype", choices=("float64", "float32"), default="float64")
     parser.add_argument(
         "--option", choices=OPTIONS, default="none", help="bond layout option"
+    )
+    parser.add_argument(
+        "--grads",
+        choices=("all", "inputs"),
+        default="all",
+        help="backward w.r.t. inputs and variables (training) or inputs only (inference)",
     )
     parser.add_argument(
         "--supercell", type=int, default=2, help="repeats of the 54-atom cell per axis"
