@@ -1369,20 +1369,20 @@ class TPCalculator(Calculator):
 
     @staticmethod
     def _energy_of(output: dict) -> np.ndarray:
-        e = output.get(constants.PREDICT_TOTAL_ENERGY, None)
+        e = output.get(constants.PREDICT_TOTAL_ENERGY)
         if e is None:
             return np.zeros((1, 1))
         return e.numpy().astype(np.float64)
 
     @staticmethod
     def _forces_of(output: dict, atoms) -> np.ndarray:
-        forces = output.get(constants.PREDICT_FORCES, None)
+        forces = output.get(constants.PREDICT_FORCES)
         return np.zeros((len(atoms), 3)) if forces is None else forces.numpy()
 
     @staticmethod
     def _stress_of(output: dict, atoms) -> np.ndarray:
         """Stress in Voigt order (xx, yy, zz, yz, xz, xy) from the virial; zero without one."""
-        stress = output.get(constants.PREDICT_VIRIAL, None)
+        stress = output.get(constants.PREDICT_VIRIAL)
         if stress is None or atoms.get_cell().rank == 0:
             return np.zeros((6,))
         return (

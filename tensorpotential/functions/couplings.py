@@ -6,6 +6,7 @@ import pandas as pd
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 from sympy.physics.quantum.cg import CG
 
 # (l1,l2,l3) -> mean(x**2)
@@ -2321,7 +2322,19 @@ class _CouplingLimits:
         return not (self.lmax_hist_B is not None and l2h > self.lmax_hist_B)
 
 
-def _unique_lmh_index(table: pd.DataFrame, side: str) -> dict[tuple, int]:
+@dataclass(frozen=True)
+class _CouplingTables:
+    """What the coupling of every group pair reads: the row indices and the output options."""
+
+    A_lmh: dict[Any, int]
+    B_lmh: dict[Any, int]
+    Lmax: int
+    keep_parity: list[tuple] | None
+    normalize: bool
+    merge_equal_pairs: bool
+
+
+def _unique_lmh_index(table: pd.DataFrame, side: str) -> dict[Any, int]:
     """Map (l, m, hist, parity) to the single row index of ``table``."""
     grouped = table.groupby(["l", "m", "hist", "parity"]).indices
     for key, rows in grouped.items():
@@ -2342,9 +2355,11 @@ def _as_parity_tuples(keep_parity: list[list] | None) -> list[tuple] | None:
 
 
 def _coupled_histories(
-    l1hist: str, l1: int, p1: int, l2hist: str, l2: int, p2: int, legacy_format: bool
+    left: tuple[int, str, int], right: tuple[int, str, int], legacy_format: bool
 ) -> tuple[str, str]:
     """History string of the coupled entry and of its (l1, l2) swapped twin."""
+    l1, l1hist, p1 = left
+    l2, l2hist, p2 = right
     if legacy_format:
         return f"({l1hist}{l1},{l2hist}{l2})", f"({l2hist}{l2},{l1hist}{l1})"
     s1 = _parity_sign(p1)
@@ -2356,15 +2371,13 @@ def _sparse_index_lists(
     cg_matrix: np.ndarray,
     left: tuple[int, str, int],
     right: tuple[int, str, int],
-    A_lmh: dict[tuple, int],
-    B_lmh: dict[tuple, int],
-    merge_equal_pairs: bool,
+    tables: _CouplingTables,
 ) -> tuple[list[int], list[int], list[float]]:
     """Indices into A and B and the non-zero coefficients of one (L, M) component.
 
     ``left`` and ``right`` are ``(l, hist, parity)`` of the A and B groups.
-    With ``merge_equal_pairs`` the terms of the same (A, B) index pair, in either
-    order, are summed and the vanishing sums dropped.
+    With ``tables.merge_equal_pairs`` the terms of the same (A, B) index pair, in
+    either order, are summed and the vanishing sums dropped.
     """
     l1, l1hist, p1 = left
     l2, l2hist, p2 = right
@@ -2374,16 +2387,16 @@ def _sparse_index_lists(
     b_inds: list[int] = []
     pair_sums: dict[tuple[int, int], float] = defaultdict(float)
     for (m1, m2), gen_cg in zip(ms_list, cg_list):
-        a_ind = A_lmh[l1, m1, l1hist, p1]
-        b_ind = B_lmh[l2, m2, l2hist, p2]
+        a_ind = tables.A_lmh[l1, m1, l1hist, p1]
+        b_ind = tables.B_lmh[l2, m2, l2hist, p2]
         if abs(gen_cg) > 1e-15:
             cgs.append(gen_cg)
             a_inds.append(a_ind)
             b_inds.append(b_ind)
-            if merge_equal_pairs:
+            if tables.merge_equal_pairs:
                 # bugfix to match left_inds and l1
                 pair_sums[tuple(sorted([a_ind, b_ind], reverse=True))] += gen_cg
-    if merge_equal_pairs:
+    if tables.merge_equal_pairs:
         merged = [(a, b, c) for (a, b), c in pair_sums.items() if abs(c) > 1e-15]
         cgs = [c for _, _, c in merged]
         a_inds = [a for a, _, _ in merged]
@@ -2392,16 +2405,11 @@ def _sparse_index_lists(
 
 
 def _coupled_rows(
-    A_lmh: dict[tuple, int],
-    B_lmh: dict[tuple, int],
+    tables: _CouplingTables,
     left: tuple[int, str, int],
     right: tuple[int, str, int],
     newhist: str,
     new_sum_l: int,
-    Lmax: int,
-    keep_parity: list[tuple] | None,
-    normalize: bool,
-    merge_equal_pairs: bool,
 ) -> list[list]:
     """Rows (L, M, hist, ...) of all targets coupling ``left`` to ``right``."""
     l1, _, p1 = left
@@ -2409,19 +2417,17 @@ def _coupled_rows(
     parity = p1 * p2
     rows = []
     for L in range(abs(l1 - l2), abs(l1 + l2) + 1):
-        if L > Lmax:
+        if L > tables.Lmax:
             continue
-        if keep_parity is not None and (L, parity) not in keep_parity:
+        if tables.keep_parity is not None and (L, parity) not in tables.keep_parity:
             continue
         # real-harmonics CG (l1,l2) to target (L,M): shape [2*L+1, 2*l1+1, 2*l2+1]
         RCG = gen_CG_matrix_REAL(l1, l2, L)
-        if normalize:
+        if tables.normalize:
             key = (l2, l1, L) if l1 < l2 else (l1, l2, L)
             RCG *= CG_normalization_dict.get(key, 1.0)
         for M in range(-L, L + 1):
-            a_inds, b_inds, cgs = _sparse_index_lists(
-                RCG[M + L], left, right, A_lmh, B_lmh, merge_equal_pairs
-            )
+            a_inds, b_inds, cgs = _sparse_index_lists(RCG[M + L], left, right, tables)
             if a_inds:
                 rows.append(
                     [L, M, newhist, a_inds, b_inds, l1, l2, parity, new_sum_l, cgs]
@@ -2525,9 +2531,13 @@ def real_coupling_metainformation(
     B_g = B.groupby(["l", "hist", "parity", "sum_of_ls"]).indices
     A_lmh_g = _unique_lmh_index(A, "A")
     B_lmh_g = _unique_lmh_index(B, "B")
-    keep_parity = _as_parity_tuples(keep_parity)
+    parity_keep = _as_parity_tuples(keep_parity)
     limits = _CouplingLimits(
         lmax, lmax_A, lmax_B, lmax_hist, lmax_hist_A, lmax_hist_B, max_sum_l, is_A_B_equal
+    )
+
+    tables = _CouplingTables(
+        A_lmh_g, B_lmh_g, Lmax, parity_keep, normalize, is_A_B_equal and optimize_ms_comb
     )
 
     coupled_dat = []
@@ -2541,7 +2551,7 @@ def real_coupling_metainformation(
             if not limits.allows_history(l1hist, l2hist):
                 continue
             newhist, swaphist = _coupled_histories(
-                l1hist, l1, p1, l2hist, l2, p2, legacy_format
+                (l1, l1hist, p1), (l2, l2hist, p2), legacy_format
             )
             if is_A_B_equal:
                 # if direct or swapped l1,l2,l1hist,l2hist is in visited histories already, skip
@@ -2549,18 +2559,7 @@ def real_coupling_metainformation(
                     continue
                 visited_hist.update((newhist, swaphist))
             coupled_dat.extend(
-                _coupled_rows(
-                    A_lmh_g,
-                    B_lmh_g,
-                    (l1, l1hist, p1),
-                    (l2, l2hist, p2),
-                    newhist,
-                    new_sum_l,
-                    Lmax,
-                    keep_parity,
-                    normalize,
-                    is_A_B_equal and optimize_ms_comb,
-                )
+                _coupled_rows(tables, (l1, l1hist, p1), (l2, l2hist, p2), newhist, new_sum_l)
             )
 
     dl_set = _excluded_histories(legacy_format, history_drop_list)
