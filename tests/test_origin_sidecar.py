@@ -9,10 +9,10 @@ import pytest
 
 from tensorpotential.calculator import foundation_models as fm
 
-pytestmark = pytest.mark.usefixtures("shown_messages")
-
 V3 = "https://huggingface.co/x/y/resolve/model-v3-uq-v6/models/M-model.tar.gz"
 V5 = "https://huggingface.co/x/y/resolve/model-v5-uq-v6/models/M-model.tar.gz"
+
+pytestmark = pytest.mark.usefixtures("info_logs")
 
 
 @pytest.fixture(autouse=True)
@@ -34,44 +34,45 @@ def test_roundtrip_records_url_and_tag(tmp_path):
     assert rec["model_name"] == "M" and rec["payload"] == "model"
 
 
-def test_matching_url_is_current(tmp_path, capsys):
+def test_matching_url_is_current(tmp_path, caplog):
     fm.write_origin_sidecar(str(tmp_path), "M", "model", V5)
     assert fm.check_origin(str(tmp_path), "M", "model", V5) is True
-    assert capsys.readouterr().err == ""
+    assert caplog.text == ""
 
 
-def test_stale_tag_warns(tmp_path, capsys):
+def test_stale_tag_warns(tmp_path, caplog):
     fm.write_origin_sidecar(str(tmp_path), "M", "model", V3)
     assert fm.check_origin(str(tmp_path), "M", "model", V5) is False
-    err = capsys.readouterr().err
+    err = caplog.text
     assert "model-v3-uq-v6" in err and "model-v5-uq-v6" in err
     assert "grace_models update M" in err
 
 
-def test_missing_sidecar_counts_as_outdated(tmp_path, capsys):
+def test_missing_sidecar_counts_as_outdated(tmp_path, caplog):
     assert fm.check_origin(str(tmp_path), "M", "model", V5) is False
-    assert "no provenance record" in capsys.readouterr().err
+    assert "no provenance record" in caplog.text
 
 
-def test_entry_without_url_is_never_checked(tmp_path, capsys):
+def test_entry_without_url_is_never_checked(tmp_path, caplog):
     """Local-path, user-registry and experimental entries have no URL to compare."""
     assert fm.check_origin(str(tmp_path), "M", "model", None) is True
-    assert capsys.readouterr().err == ""
+    assert caplog.text == ""
 
 
-def test_env_var_suppresses(tmp_path, monkeypatch, capsys):
+def test_env_var_suppresses(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv(fm.NO_UPDATE_CHECK_ENV, "1")
     assert fm.check_origin(str(tmp_path), "M", "model", V5) is True
-    assert capsys.readouterr().err == ""
+    assert caplog.text == ""
 
 
-def test_warns_only_once_per_model_and_payload(tmp_path, capsys):
+def test_warns_only_once_per_model_and_payload(tmp_path, caplog):
     """TPCalculator can be constructed in a loop; the warning must not spam."""
     for _ in range(3):
         fm.check_origin(str(tmp_path), "M", "model", V5)
-    assert capsys.readouterr().err.count("may be outdated") == 1
+    assert caplog.text.count("may be outdated") == 1
+    caplog.clear()
     fm.check_origin(str(tmp_path), "M", "checkpoint", V5)
-    assert capsys.readouterr().err.count("may be outdated") == 1
+    assert caplog.text.count("may be outdated") == 1
 
 
 def test_unwritable_dir_does_not_raise(tmp_path, monkeypatch):
@@ -116,18 +117,18 @@ def test_shipped_models_point_at_v5(tmp_path):
 
 
 @pytest.mark.parametrize("val", ["0", "false", "no", "off", "", "  "])
-def test_env_var_negative_spellings_keep_the_check_on(tmp_path, monkeypatch, capsys, val):
+def test_env_var_negative_spellings_keep_the_check_on(tmp_path, monkeypatch, caplog, val):
     """A bare truthiness test on the raw string would fail open on exactly these."""
     monkeypatch.setenv(fm.NO_UPDATE_CHECK_ENV, val)
     assert fm.check_origin(str(tmp_path), "M", "model", V5) is False
-    assert "may be outdated" in capsys.readouterr().err
+    assert "may be outdated" in caplog.text
 
 
 @pytest.mark.parametrize("val", ["1", "true", "TRUE", "yes", "on", " 1 "])
-def test_env_var_positive_spellings_suppress(tmp_path, monkeypatch, capsys, val):
+def test_env_var_positive_spellings_suppress(tmp_path, monkeypatch, caplog, val):
     monkeypatch.setenv(fm.NO_UPDATE_CHECK_ENV, val)
     assert fm.check_origin(str(tmp_path), "M", "model", V5) is True
-    assert capsys.readouterr().err == ""
+    assert caplog.text == ""
 
 
 def test_checkpoint_getter_resolves_aliases(monkeypatch):
@@ -148,7 +149,7 @@ def test_checkpoint_getter_resolves_aliases(monkeypatch):
     assert canonical in seen["path"]
 
 
-def test_local_path_entries_are_not_checked(tmp_path, capsys, monkeypatch):
+def test_local_path_entries_are_not_checked(tmp_path, caplog, monkeypatch):
     """An entry with an explicit `path` points at a directory the user curates."""
     name = "_local_only_model"
     monkeypatch.setitem(
@@ -156,7 +157,7 @@ def test_local_path_entries_are_not_checked(tmp_path, capsys, monkeypatch):
         {fm.MODEL_PATH_KEY: str(tmp_path), fm.MODEL_URL_KEY: V5},
     )
     fm.get_or_download_model(name)
-    assert "may be outdated" not in capsys.readouterr().err
+    assert "may be outdated" not in caplog.text
 
 
 def _update_args(**kw):

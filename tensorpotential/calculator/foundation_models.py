@@ -13,10 +13,9 @@ import requests
 import yaml
 from tqdm import tqdm
 
-from tensorpotential.core.messages import get_messages_logger
 from tensorpotential.errors import ArchiveError
 
-messages = get_messages_logger()
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from tensorpotential.calculator.asecalculator import TPCalculator
@@ -429,7 +428,7 @@ def _stream_download(url, dest_path, desc=None):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             if attempt < DOWNLOAD_RETRIES:
-                messages.warning(
+                log.warning(
                     f"  download attempt {attempt}/{DOWNLOAD_RETRIES} failed "
                     f"({err}); retrying..."
                 )
@@ -530,7 +529,7 @@ def check_origin(path: str, model: str, payload: str, expected_url: str | None) 
     cached_from = (
         f"{rec.get('tag') or rec.get('url')}" if rec else "no provenance record"
     )
-    messages.warning(
+    log.warning(
         f"[tensorpotential] WARNING: cached GRACE {payload} '{model}' may be outdated.\n"
         f"  cached from : {cached_from}\n"
         f"  package uses: {_tag_from_url(expected_url) or expected_url}\n"
@@ -550,14 +549,14 @@ def download_extract_rename(url: str, model_path: str) -> None:
     root_folder = os.path.dirname(model_path)
     os.makedirs(root_folder, exist_ok=True)
     # download and save to disk
-    messages.info(f"Downloading from {url!r}")
+    log.info(f"Downloading from {url!r}")
     # Define the file path
     filename = os.path.join(root_folder, TMP_TAR_GZ)
     local_filename = _stream_download(
         url, filename, desc=os.path.basename(model_path) + " (archive)"
     )
     # Unpack the .tar.gz file
-    messages.info(
+    log.info(
         f"Unpacking model from {url!r} (local file: {local_filename}) to {root_folder}"
     )
     top_folder_name = safe_extract(local_filename, path=root_folder)
@@ -582,18 +581,18 @@ def get_or_download_model(model: str) -> str:
         url = model_metadata.get(MODEL_URL_KEY)
         if url is None:
             raise ValueError(f"No available URL to download for {model}")
-        messages.info("Downloading GRACE model")
+        log.info("Downloading GRACE model")
         download_extract_rename(url, model_path)
         write_origin_sidecar(
             model_path, model, "model", url,
             kokkos_url=model_metadata.get(KOKKOS_URL_KEY),
         )
-        messages.info(f"GRACE model downloaded to {model_path}")
+        log.info(f"GRACE model downloaded to {model_path}")
     else:
-        messages.info(f"Using cached GRACE model from {model_path}")
+        log.info(f"Using cached GRACE model from {model_path}")
         if not model_metadata.get(MODEL_PATH_KEY):
             check_origin(model_path, model, "model", model_metadata.get(MODEL_URL_KEY))
-    messages.info(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
+    log.info(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
     return model_path
 
 
@@ -613,18 +612,18 @@ def get_or_download_checkpoint(model: str) -> str:
         url = model_metadata.get(CHECKPOINT_URL_KEY)
         if url is None:
             raise ValueError(f"No available checkpoint URL for {model}")
-        messages.info("Downloading GRACE checkpoint")
+        log.info("Downloading GRACE checkpoint")
         download_extract_rename(url, checkpoint_path)
         write_origin_sidecar(checkpoint_path, model, "checkpoint", url)
-        messages.info(f"GRACE model checkpoint downloaded to {checkpoint_path}")
+        log.info(f"GRACE model checkpoint downloaded to {checkpoint_path}")
     else:
-        messages.info(f"Using cached GRACE checkpoint from {checkpoint_path}")
+        log.info(f"Using cached GRACE checkpoint from {checkpoint_path}")
         if not model_metadata.get(CHECKPOINT_PATH_KEY):
             check_origin(
                 checkpoint_path, model, "checkpoint",
                 model_metadata.get(CHECKPOINT_URL_KEY),
             )
-    messages.info(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
+    log.info(f"Model license: {model_metadata.get(LICENSE_KEY, 'not provided')}")
     return checkpoint_path
 
 
@@ -644,7 +643,7 @@ def get_or_download_kokkos(model: str) -> str:
     )
     kokkos_path = os.path.join(model_path, "kokkos.npz")
     if os.path.isfile(kokkos_path):
-        messages.info(f"Using cached kokkos.npz from {kokkos_path}")
+        log.info(f"Using cached kokkos.npz from {kokkos_path}")
         return kokkos_path
     url = model_metadata.get(KOKKOS_URL_KEY)
     if url is None:
@@ -652,9 +651,9 @@ def get_or_download_kokkos(model: str) -> str:
     if "sciebo" in url and not url.endswith("/download"):
         url += "/download"
     os.makedirs(model_path, exist_ok=True)
-    messages.info(f"Downloading kokkos.npz from {url!r}")
+    log.info(f"Downloading kokkos.npz from {url!r}")
     _stream_download(url, kokkos_path, desc=f"{model} kokkos.npz")
-    messages.info(f"kokkos.npz downloaded to {kokkos_path}")
+    log.info(f"kokkos.npz downloaded to {kokkos_path}")
     return kokkos_path
 
 

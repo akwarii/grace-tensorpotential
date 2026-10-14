@@ -47,10 +47,10 @@ from tensorpotential.potentials.presets import (
 from tests.shared_models import weights_fingerprint
 from tests.tolerances import COVARIANCE_F64, FINITE_DIFFERENCE_F64
 
-pytestmark = pytest.mark.usefixtures("shown_messages")
-
 ELEMENTS = {"Al": 0, "Li": 1}
 RCUT = 4.0
+
+pytestmark = pytest.mark.usefixtures("info_logs")
 
 
 def build_model(instructions, compute_function=None) -> TPModel:
@@ -249,17 +249,16 @@ def test_element_map_follows_the_model(default_one_layer):
     assert {str(k): int(v) for k, v in calc.element_map.items()} == ELEMENTS
 
 
-def test_cutoff_of_the_model_wins_over_the_keyword_and_says_so(capsys, default_one_layer):
+def test_cutoff_of_the_model_wins_over_the_keyword_and_says_so(caplog, default_one_layer):
     calc = TPCalculator(model=default_one_layer, cutoff=7.5)
     assert calc.cutoff == RCUT
-    assert "different from calculator's 7.5" in capsys.readouterr().err
+    assert "different from calculator's 7.5" in caplog.text
 
 
-def test_matching_cutoff_keyword_is_silent(capsys, default_one_layer):
+def test_matching_cutoff_keyword_is_silent(caplog, default_one_layer):
     calc = TPCalculator(model=default_one_layer, cutoff=RCUT)
     assert calc.cutoff == RCUT
-    captured = capsys.readouterr()
-    assert captured.out == captured.err == ""
+    assert "different from calculator's" not in caplog.text
 
 
 def test_dense_model_uses_the_dense_engine_and_a_dense_padding_manager():
@@ -421,7 +420,7 @@ def test_saved_model_with_a_cutoff_matrix_builds_a_pair_cutoff_dict():
     assert len(got) == 10
 
 
-def test_a_zero_cutoff_in_the_metadata_falls_back_to_the_keyword(tmp_path, capsys):
+def test_a_zero_cutoff_in_the_metadata_falls_back_to_the_keyword(tmp_path, caplog):
     copy = tmp_path / "model"
     shutil.copytree(SAVED_MODEL, copy)
     (copy / "metadata.yaml").write_text(
@@ -429,7 +428,7 @@ def test_a_zero_cutoff_in_the_metadata_falls_back_to_the_keyword(tmp_path, capsy
     )
     calc = TPCalculator(model=str(copy), cutoff=5.5)
     assert calc.cutoff == 5.5
-    assert "Couldn't extract cutoff value from the model" in capsys.readouterr().err
+    assert "Couldn't extract cutoff value from the model" in caplog.text
 
 
 def test_dual_engine_saved_model_switches_engine_with_the_mode(tmp_path):

@@ -105,22 +105,9 @@ def cu_two_layer():
 
 
 @pytest.fixture
-def restore_messages():
-    """Leave the ``tensorpotential.messages`` logger as it was found: no handler, reaching the root logger."""
+def info_logs(caplog):
+    """Capture the ``INFO`` records of the package (the root logger drops them by default)."""
     import logging
 
-    from tensorpotential.core.messages import get_messages_logger
-
-    yield
-    logger = get_messages_logger()
-    logger.handlers.clear()
-    logger.setLevel(logging.NOTSET)
-    logger.propagate = True
-
-
-@pytest.fixture
-def shown_messages(restore_messages):
-    """Show the messages of the library as the command-line tools do (bare text on stdout and stderr), then undo it."""
-    from tensorpotential.core.messages import show_messages
-
-    show_messages()
+    with caplog.at_level(logging.INFO, logger="tensorpotential"):
+        yield caplog

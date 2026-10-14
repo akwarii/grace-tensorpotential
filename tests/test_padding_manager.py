@@ -17,7 +17,7 @@ from tensorpotential.calculator.asecalculator import (
     PaddingManager,
 )
 
-pytestmark = pytest.mark.usefixtures("shown_messages")
+pytestmark = pytest.mark.usefixtures("info_logs")
 
 
 class _StubBuilder:
@@ -103,7 +103,7 @@ def test_an_excessive_bound_is_reduced_until_the_allowed_number_is_used_up():
     assert len(manager.padding_bounds) == 2
 
 
-def test_verbosity_two_reports_new_and_reduced_bounds(capsys):
+def test_verbosity_two_reports_new_and_reduced_bounds(caplog):
     manager, _ = _manager(
         verbose=2,
         pad_atoms_number=10,
@@ -113,7 +113,7 @@ def test_verbosity_two_reports_new_and_reduced_bounds(capsys):
     manager.get_data((100, 10000))
     manager.get_data((200, 20000))
     manager.get_data((4, 300))
-    out = capsys.readouterr().out.splitlines()
+    out = caplog.messages
     assert out == [
         "Adding initial padding bound: (110, 15000)",
         "Adding new maximum padding bound: (210, 30000)",
@@ -121,7 +121,7 @@ def test_verbosity_two_reports_new_and_reduced_bounds(capsys):
     ]
 
 
-def test_verbosity_three_reports_every_decision(capsys):
+def test_verbosity_three_reports_every_decision(caplog):
     manager, _ = _manager(
         verbose=3,
         pad_atoms_number=10,
@@ -131,7 +131,7 @@ def test_verbosity_three_reports_every_decision(capsys):
     manager.get_data((100, 10000))
     manager.get_data((100, 10000))
     manager.get_data((4, 300))
-    out = capsys.readouterr().out.splitlines()
+    out = caplog.messages
     assert "nreal_atoms=100, nreal_neigh=10000" in out
     assert "Adding initial padding bound: (110, 15000)" in out
     assert "extract padding bounds: (110, 15000)" in out
@@ -144,19 +144,18 @@ def test_verbosity_three_reports_every_decision(capsys):
     assert len(manager.padding_fraction_history) == 3
 
 
-def test_verbosity_three_reports_the_miss_that_adds_a_bound(capsys):
+def test_verbosity_three_reports_the_miss_that_adds_a_bound(caplog):
     manager, _ = _manager(verbose=3, pad_atoms_number=10, pad_neighbors_fraction=0.5)
     manager.get_data((4, 1000))
     manager.get_data((20, 2000))
-    assert "Adding new maximum padding bound: (30, 3000)" in capsys.readouterr().out
+    assert "Adding new maximum padding bound: (30, 3000)" in caplog.text
 
 
-def test_silent_by_default(capsys):
+def test_silent_by_default(caplog):
     manager, _ = _manager()
     manager.get_data((4, 1000))
     manager.get_data((20, 2000))
-    captured = capsys.readouterr()
-    assert captured.out == captured.err == ""
+    assert caplog.text == ""
 
 
 def _adaptive(verbose: int = 0, **config: Any) -> PaddingManager:
@@ -226,11 +225,11 @@ def test_the_first_growth_is_logged_once_at_info_and_later_ones_are_not(caplog):
     assert manager._n_adaptations == 2
 
 
-def test_verbosity_one_reports_each_growth(capsys):
+def test_verbosity_one_reports_each_growth(caplog):
     manager = _adaptive(verbose=1)
     for _ in range(2):
         manager._record_and_maybe_adapt(is_miss=True)
-    out = capsys.readouterr().out
+    out = caplog.text
     assert (
         "Adaptive padding: miss_rate=1.00 > 0.5, growing margins: pad_atoms 10 -> 20"
         in out

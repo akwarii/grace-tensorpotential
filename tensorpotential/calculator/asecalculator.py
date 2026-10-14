@@ -31,10 +31,8 @@ from tensorpotential.data.databuilder import (
     AbstractDataBuilder,
 )
 from tensorpotential import constants
-from tensorpotential.core.messages import get_messages_logger
 
 log = logging.getLogger(__name__)
-messages = get_messages_logger()
 
 
 @dataclass
@@ -258,7 +256,7 @@ class PaddingManager:
             )
 
         if self.debug_padding_verbose >= 1:
-            messages.info(
+            log.info(
                 f"Adaptive padding: miss_rate={miss_rate:.2f} > {cfg.miss_rate_threshold}, "
                 f"growing margins: pad_atoms {old_atoms} -> {self._current_pad_atoms_number}, "
                 f"pad_neighbors_frac {old_neigh:.4f} -> {self._current_pad_neighbors_fraction:.4f} "
@@ -299,7 +297,7 @@ class PaddingManager:
         nreal_neigh: int = get_number_of_real_neigh(batch)
 
         if self.debug_padding_verbose >= 3:
-            messages.info(f"nreal_atoms={nreal_atoms}, nreal_neigh={nreal_neigh}")
+            log.info(f"nreal_atoms={nreal_atoms}, nreal_neigh={nreal_neigh}")
 
         # Stage 4: Padding
         if self.pad_atoms_number and self.pad_neighbors_fraction:
@@ -308,7 +306,7 @@ class PaddingManager:
                 upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
                 # insert into ordered list
                 if self.debug_padding_verbose >= 2:
-                    messages.info(f"Adding initial padding bound: {upper_bound}")
+                    log.info(f"Adding initial padding bound: {upper_bound}")
                 bisect.insort(self.padding_bounds, upper_bound)
                 self._record_and_maybe_adapt(is_miss=True)
             else:
@@ -317,12 +315,12 @@ class PaddingManager:
                     nreal_atoms, nreal_neigh
                 )
                 if self.debug_padding_verbose >= 3:
-                    messages.info(f"extract padding bounds: {upper_bound}")
+                    log.info(f"extract padding bounds: {upper_bound}")
                 if upper_bound is None:
                     upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
                     # insert into ordered list
                     if self.debug_padding_verbose >= 2:
-                        messages.info(f"Adding new maximum padding bound: {upper_bound}")
+                        log.info(f"Adding new maximum padding bound: {upper_bound}")
                     # if upper_bound not in self.padding_bounds:
                     bisect.insort(self.padding_bounds, upper_bound)
                     self._record_and_maybe_adapt(is_miss=True)
@@ -340,17 +338,17 @@ class PaddingManager:
                             )
                             # insert into ordered list
                             if self.debug_padding_verbose >= 2:
-                                messages.info(
+                                log.info(
                                     f"Reducing padding and adding new bound: {upper_bound}"
                                 )
                             # if upper_bound not in self.padding_bounds:
                             bisect.insort(self.padding_bounds, upper_bound)
                         elif self.debug_padding_verbose >= 3:
-                            messages.info(
+                            log.info(
                                 f"Padding reduction skipped or max reductions reached. Keeping bound: {upper_bound}"
                             )
                     elif self.debug_padding_verbose >= 3:
-                        messages.info(f"Using existing padding bound: {upper_bound}")
+                        log.info(f"Using existing padding bound: {upper_bound}")
 
             pad_max_n_atoms, pad_max_n_neighbors = upper_bound
 
@@ -364,7 +362,7 @@ class PaddingManager:
                 nreal_atoms + nreal_neigh
             ) - 1
             if self.debug_padding_verbose >= 3:
-                messages.info("padding_fraction={:.2f}".format(padding_fraction))
+                log.info("padding_fraction={:.2f}".format(padding_fraction))
                 self.padding_fraction_history.append(padding_fraction)
 
             for data_builder in self.data_builders:
@@ -907,13 +905,13 @@ class TPCalculator(Calculator):
             self.cutoff_dict = None
             if cutoff > 0:
                 if self.cutoff is not None and self.cutoff != cutoff:
-                    messages.warning(
+                    log.warning(
                         f"Cutoff of the potential {cutoff} A is different from calculator's {self.cutoff} A. "
                         f"Using the value from the potential."
                     )
                 self.cutoff = cutoff
             else:
-                messages.warning(
+                log.warning(
                     f"Couldn't extract cutoff value from the model. Using the value from calculator: {self.cutoff}A"
                 )
         else:
