@@ -905,3 +905,120 @@ def test_aperiodic_cluster_equals_the_isolated_cluster(seed: int) -> None:
     got = edges_with_vectors(work, data, isolated)
     assert sorted(got) == [(p.i, p.j, p.shift) for p in expected]
     assert len(expected) > 10
+
+
+# --- construct_batches: stage handling, external padding caps, statistics (#177) ---
+
+
+def _copper_structures() -> list[Atoms]:
+    cell = bulk("Cu", "fcc", a=3.6, cubic=True)
+    return [cell, cell * (2, 1, 1), cell * (2, 2, 1), cell * (2, 2, 2), cell * (3, 1, 1)]
+
+
+def _padded(external: dict | None = None, **kwargs):
+    options = {"batch_size": 2, "max_n_buckets": 2, "verbose": False, **(external or {})}
+    return construct_batches(
+        _copper_structures(),
+        data_builders=[GeometricalDataBuilder({"Cu": 0}, cutoff=4.0)],
+        **{**options, **kwargs},
+    )
+
+
+def _totals(batches, key: str) -> list[int]:
+    return [int(np.asarray(b[key])) for b in batches]
+
+
+def test_construct_batches_refuses_what_is_neither_a_list_of_atoms_nor_a_frame():
+    builder = GeometricalDataBuilder({"Cu": 0}, cutoff=4.0)
+    with pytest.raises(NotImplementedError):
+        construct_batches({"a": 1}, data_builders=[builder], batch_size=2, verbose=False)
+    with pytest.raises(NotImplementedError):
+        construct_batches(
+            [1, 2], data_builders=[builder], batch_size=2, verbose=False
+        )
+
+
+def test_without_buckets_there_are_len_over_batch_size_groups_and_no_padding_statistics():
+    batches, stats = _padded(max_n_buckets=None, return_padding_stats=True)
+    assert stats is None
+    assert [int(np.asarray(b[constants.N_STRUCTURES_BATCH_REAL])) for b in batches] == [3, 2]  # 5 // 2 = 2 groups of near-equal size
+
+
+def test_padding_statistics_match_the_counts_of_the_padded_batches():
+    batches, stats = _padded(return_padding_stats=True)
+    real = {
+        "nreal_struc": sum(_totals(batches, constants.N_STRUCTURES_BATCH_REAL)),
+        "nreal_atoms": sum(_totals(batches, constants.N_ATOMS_BATCH_REAL)),
+        "nreal_neigh": sum(_totals(batches, constants.N_NEIGHBORS_REAL)),
+    }
+    assert real["nreal_struc"] == 5
+    assert real["nreal_atoms"] == sum(len(a) for a in _copper_structures())
+    assert {k: stats[k] for k in real} == real
+    assert stats["pad_nstruct"] == sum(
+        _totals(batches, constants.N_STRUCTURES_BATCH_TOTAL)
+    ) - real["nreal_struc"]
+    assert stats["pad_nat"] == sum(_totals(batches, constants.N_ATOMS_BATCH_TOTAL)) - real["nreal_atoms"]
+
+
+def test_an_external_atom_count_above_the_data_pads_every_batch_to_it():
+    free = _padded()
+    biggest = max(_totals(free, constants.N_ATOMS_BATCH_TOTAL))
+    capped = _padded({"external_max_nat": biggest + 10})
+    assert _totals(capped, constants.N_ATOMS_BATCH_TOTAL) == [biggest + 10] * len(capped)
+
+
+def test_an_external_atom_count_below_the_data_is_ignored():
+    free = _padded()
+    biggest = max(_totals(free, constants.N_ATOMS_BATCH_TOTAL))
+    capped = _padded({"external_max_nat": 1})
+    assert _totals(capped, constants.N_ATOMS_BATCH_TOTAL) == [biggest] * len(capped)
+
+
+def test_an_external_neighbour_count_pads_every_batch_to_the_larger_of_it_and_the_data():
+    free = _padded()
+    bonds = [np.asarray(b[constants.BOND_VECTOR]).shape[0] for b in free]
+    biggest = max(bonds)
+    above = _padded({"external_max_nneigh": biggest + 100})
+    assert {np.asarray(b[constants.BOND_VECTOR]).shape[0] for b in above} == {biggest + 100}
+    below = _padded({"external_max_nneigh": 1})
+    assert {np.asarray(b[constants.BOND_VECTOR]).shape[0] for b in below} == {biggest}
+
+
+def test_the_external_caps_do_not_apply_to_the_dense_layout():
+    dense = GeometricalDataBuilder({"Cu": 0}, cutoff=4.0, dense_nbr=True)
+    plain = construct_batches(
+        _copper_structures(), data_builders=[dense], batch_size=2,
+        max_n_buckets=2, verbose=False,
+    )
+    capped = construct_batches(
+        _copper_structures(), data_builders=[dense], batch_size=2,
+        max_n_buckets=2, verbose=False, external_max_nat=500, external_max_nneigh=10**6,
+    )
+    assert _totals(plain, constants.N_ATOMS_BATCH_TOTAL) == _totals(capped, constants.N_ATOMS_BATCH_TOTAL)
+
+
+def test_a_builder_that_joins_nothing_gives_no_batch_and_the_collection_can_be_skipped():
+    class Silent(GeometricalDataBuilder):
+        def join_to_batch(self, pre_batch_list):
+            return {}
+
+    batches = construct_batches(
+        _copper_structures(), data_builders=[Silent({"Cu": 0}, cutoff=4.0)],
+        batch_size=2, max_n_buckets=None, verbose=False, gc_collect=False,
+    )
+    assert len(batches) == 0
+
+
+def test_the_stages_are_logged_when_verbose(caplog):
+    with caplog.at_level(logging.INFO):
+        _padded(verbose=True)
+    text = caplog.text
+    for stage in ("1/3. Converting", "2/4. Splitting", "3/4. Joining", "4/4. Padding"):
+        assert stage in text, stage
+
+
+def test_garbage_collection_between_the_stages_can_be_switched_off_and_does_not_change_the_batches():
+    kept = _padded(gc_collect=True)
+    skipped = _padded(gc_collect=False)
+    assert _totals(kept, constants.N_ATOMS_BATCH_TOTAL) == _totals(skipped, constants.N_ATOMS_BATCH_TOTAL)
+    assert _totals(kept, constants.N_STRUCTURES_BATCH_REAL) == _totals(skipped, constants.N_STRUCTURES_BATCH_REAL)

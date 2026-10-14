@@ -23,7 +23,7 @@ import logging
 import queue
 import threading
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 from collections.abc import Iterator
 
 import numpy as np
@@ -208,6 +208,22 @@ class MultiBinMetricBatcher:
 # ---------------------------------------------------------------------------
 
 
+class _Counts(NamedTuple):
+    """Real atoms, bonds and structures of a group of per-structure dicts."""
+
+    atoms: int
+    bonds: int
+    structs: int
+
+
+def _real_counts(batch_structures: list[Any]) -> _Counts:
+    return _Counts(
+        sum(int(s[constants.N_ATOMS_BATCH_REAL]) for s in batch_structures),
+        sum(int(s[constants.N_NEIGHBORS_REAL]) for s in batch_structures),
+        len(batch_structures),
+    )
+
+
 class ElasticBatchIterator:
     """Iterator that assembles padded batches with elastic bucket growth.
 
@@ -300,20 +316,8 @@ class ElasticBatchIterator:
         if not batch_structures:
             return None
 
-        real_atoms = sum(int(s[constants.N_ATOMS_BATCH_REAL]) for s in batch_structures)
-        real_bonds = sum(int(s[constants.N_NEIGHBORS_REAL]) for s in batch_structures)
-        real_structs = len(batch_structures)
-
-        # Find smallest existing bucket that fits
-        best_bucket = None
-        for bucket in self._buckets:
-            if (
-                bucket[constants.PAD_MAX_N_ATOMS] >= real_atoms
-                and bucket[constants.PAD_MAX_N_NEIGHBORS] >= real_bonds
-                and bucket[constants.PAD_MAX_N_STRUCTURES] >= real_structs
-            ):
-                best_bucket = bucket
-                break
+        counts = _real_counts(batch_structures)
+        best_bucket = self._find_bucket(counts)
 
         # Dynamic growth when no bucket fits
         if best_bucket is None:
@@ -321,150 +325,14 @@ class ElasticBatchIterator:
                 raise ValueError(f"Unknown outlier strategy: {self._outlier_strategy}")
 
             if self._outlier_strategy != "expand":
-                max_bucket = (
-                    self._buckets[-1]
-                    if self._buckets
-                    else {
-                        constants.PAD_MAX_N_ATOMS: 0,
-                        constants.PAD_MAX_N_NEIGHBORS: 0,
-                        constants.PAD_MAX_N_STRUCTURES: 0,
-                    }
-                )
-
-                def exceeds(s):
-                    return (
-                        int(s[constants.N_ATOMS_BATCH_REAL])
-                        > max_bucket[constants.PAD_MAX_N_ATOMS]
-                        or int(s[constants.N_NEIGHBORS_REAL])
-                        > max_bucket[constants.PAD_MAX_N_NEIGHBORS]
-                    )
-
-                outliers = [i for i, s in enumerate(batch_structures) if exceeds(s)]
-
-                if outliers:
-                    if self._outlier_strategy == "error":
-                        s = batch_structures[outliers[0]]
-                        raise ValueError(
-                            f"Structure (atoms={s[constants.N_ATOMS_BATCH_REAL]}, "
-                            f"bonds={s[constants.N_NEIGHBORS_REAL]}) exceeds largest bucket "
-                            f"with outlier_strategy='error'."
-                        )
-                    elif self._outlier_strategy == "warn_skip":
-                        log.warning(
-                            f"[ElasticBatcher({self._name})] Skipping {len(outliers)} structures "
-                            f"that exceed largest bucket."
-                        )
-                        batch_structures = [
-                            s
-                            for i, s in enumerate(batch_structures)
-                            if i not in outliers
-                        ]
-                        if not batch_structures:
-                            return None
-                        real_atoms = sum(
-                            int(s[constants.N_ATOMS_BATCH_REAL])
-                            for s in batch_structures
-                        )
-                        real_bonds = sum(
-                            int(s[constants.N_NEIGHBORS_REAL]) for s in batch_structures
-                        )
-                        real_structs = len(batch_structures)
-
-                        for bucket in self._buckets:
-                            if (
-                                bucket[constants.PAD_MAX_N_ATOMS] >= real_atoms
-                                and bucket[constants.PAD_MAX_N_NEIGHBORS] >= real_bonds
-                                and bucket[constants.PAD_MAX_N_STRUCTURES]
-                                >= real_structs
-                            ):
-                                best_bucket = bucket
-                                break
+                batch_structures = self._without_outliers(batch_structures)
+                if not batch_structures:
+                    return None
+                counts = _real_counts(batch_structures)
+                best_bucket = self._find_bucket(counts)
 
             if best_bucket is None:
-                ref_bucket = (
-                    self._buckets[-1]
-                    if self._buckets
-                    else {
-                        constants.PAD_MAX_N_ATOMS: 0,
-                        constants.PAD_MAX_N_NEIGHBORS: 0,
-                        constants.PAD_MAX_N_STRUCTURES: 0,
-                    }
-                )
-
-                def grow(req, curr, axis):
-                    if axis == self._metric_strategy:
-                        # Hard-cap at target_metric for the metric strategy axis
-                        return max(req, self._target_metric)
-                    if req > curr:
-                        frac = (
-                            self._growth_fraction.get(axis, 0.1)
-                            if isinstance(self._growth_fraction, dict)
-                            else self._growth_fraction
-                        )
-                        if frac >= 1:
-                            return max(req, curr + int(frac))
-                        return max(req, int(curr * (1 + frac)))
-                    return curr
-
-                # Pad at least +1 atom and +1 structure for the padding slot
-                new_atoms = grow(
-                    real_atoms + 1,
-                    ref_bucket.get(constants.PAD_MAX_N_ATOMS, 0),
-                    "atoms",
-                )
-                new_bonds = grow(
-                    real_bonds,
-                    ref_bucket.get(constants.PAD_MAX_N_NEIGHBORS, 0),
-                    "neighbours",
-                )
-                new_structs = grow(
-                    real_structs + 1,
-                    ref_bucket.get(constants.PAD_MAX_N_STRUCTURES, 0),
-                    "structures",
-                )
-
-                best_bucket = {
-                    constants.PAD_MAX_N_ATOMS: new_atoms,
-                    constants.PAD_MAX_N_NEIGHBORS: new_bonds,
-                    constants.PAD_MAX_N_STRUCTURES: new_structs,
-                }
-                self._buckets.append(best_bucket)
-                self._buckets.sort(
-                    key=lambda b: (
-                        b[constants.PAD_MAX_N_ATOMS] + b[constants.PAD_MAX_N_NEIGHBORS]
-                    )
-                )
-                # New bucket log is ALWAYS printed (not verbose-gated)
-                n = len(batch_structures)
-                ref_a = ref_bucket.get(constants.PAD_MAX_N_ATOMS, 0)
-                ref_b = ref_bucket.get(constants.PAD_MAX_N_NEIGHBORS, 0)
-                ref_s = ref_bucket.get(constants.PAD_MAX_N_STRUCTURES, 0)
-                axes = []
-                if real_atoms + 1 > ref_a:
-                    axes.append(f"atoms {ref_a}->{new_atoms}")
-                if real_bonds > ref_b:
-                    axes.append(f"neighbours {ref_b}->{new_bonds}")
-                if real_structs + 1 > ref_s:
-                    axes.append(f"structures {ref_s}->{new_structs}")
-                reason = ", ".join(axes) if axes else "first bucket"
-                log.info(
-                    f"[ElasticBatcher({self._name})] New bucket (total: {len(self._buckets)}): "
-                    f"atom={new_atoms}, bond={new_bonds}, structure={new_structs} "
-                    f"| {n} structure(s) in batch | grew: {reason}"
-                )
-                # Intermediate padding stats during first epoch, gated on verbose
-                if self._verbose and self._is_first_epoch:
-                    ps = self._padding_stats
-                    if ps["nreal_atoms"] > 0:
-                        log.info(
-                            f"[ElasticBatcher({self._name})] Intermediate padding stats: "
-                            f"num. real structures: {ps['nreal_struc']} "
-                            f"(+{ps['pad_nstruct'] / ps['nreal_struc'] * 1e2:.1f}%) | "
-                            f"num. real atoms: {ps['nreal_atoms']} "
-                            f"(+{ps['pad_nat'] / ps['nreal_atoms'] * 1e2:.1f}%) | "
-                            f"num. real neighbours: {ps['nreal_neigh']} "
-                            f"(+{ps['pad_nneigh'] / max(ps['nreal_neigh'], 1) * 1e2:.1f}%)"
-                        )
+                best_bucket = self._grow_bucket(counts)
 
         # Join and pad via each builder
         batch = {}
@@ -474,18 +342,144 @@ class ElasticBatchIterator:
         for builder in self._builders:
             builder.pad_batch(batch, best_bucket)
 
-        # Accumulate padding statistics
-        pad_atoms = best_bucket[constants.PAD_MAX_N_ATOMS] - real_atoms
-        pad_bonds = best_bucket[constants.PAD_MAX_N_NEIGHBORS] - real_bonds
-        pad_structs = best_bucket[constants.PAD_MAX_N_STRUCTURES] - real_structs
-        self._padding_stats["nreal_struc"] += real_structs
-        self._padding_stats["nreal_atoms"] += real_atoms
-        self._padding_stats["nreal_neigh"] += real_bonds
-        self._padding_stats["pad_nstruct"] += pad_structs
-        self._padding_stats["pad_nat"] += pad_atoms
-        self._padding_stats["pad_nneigh"] += pad_bonds
-
+        self._record_padding(best_bucket, counts)
         return batch
+
+    def _find_bucket(self, counts: _Counts) -> dict | None:
+        """The first bucket (in list order) that holds ``counts``, or ``None``."""
+        for bucket in self._buckets:
+            if (
+                bucket[constants.PAD_MAX_N_ATOMS] >= counts.atoms
+                and bucket[constants.PAD_MAX_N_NEIGHBORS] >= counts.bonds
+                and bucket[constants.PAD_MAX_N_STRUCTURES] >= counts.structs
+            ):
+                return bucket
+        return None
+
+    def _without_outliers(self, batch_structures: list[Any]) -> list[Any]:
+        """Apply the ``error`` / ``warn_skip`` strategy to structures above the largest bucket."""
+        max_bucket = self._largest_bucket()
+
+        def exceeds(s):
+            return (
+                int(s[constants.N_ATOMS_BATCH_REAL]) > max_bucket[constants.PAD_MAX_N_ATOMS]
+                or int(s[constants.N_NEIGHBORS_REAL])
+                > max_bucket[constants.PAD_MAX_N_NEIGHBORS]
+            )
+
+        outliers = [i for i, s in enumerate(batch_structures) if exceeds(s)]
+        if not outliers:
+            return batch_structures
+        if self._outlier_strategy == "error":
+            s = batch_structures[outliers[0]]
+            raise ValueError(
+                f"Structure (atoms={s[constants.N_ATOMS_BATCH_REAL]}, "
+                f"bonds={s[constants.N_NEIGHBORS_REAL]}) exceeds largest bucket "
+                f"with outlier_strategy='error'."
+            )
+        log.warning(
+            f"[ElasticBatcher({self._name})] Skipping {len(outliers)} structures "
+            f"that exceed largest bucket."
+        )
+        return [s for i, s in enumerate(batch_structures) if i not in outliers]
+
+    def _largest_bucket(self) -> dict:
+        """The last bucket of the list (the largest once sorted), or an all-zero one."""
+        if self._buckets:
+            return self._buckets[-1]
+        return {
+            constants.PAD_MAX_N_ATOMS: 0,
+            constants.PAD_MAX_N_NEIGHBORS: 0,
+            constants.PAD_MAX_N_STRUCTURES: 0,
+        }
+
+    def _grown_size(self, required: int, current: int, axis: str) -> int:
+        """Size of one bucket axis after growing from ``current`` to hold ``required``."""
+        if axis == self._metric_strategy:
+            # Hard-cap at target_metric for the metric strategy axis
+            return max(required, self._target_metric)
+        if required <= current:
+            return current
+        frac = (
+            self._growth_fraction.get(axis, 0.1)
+            if isinstance(self._growth_fraction, dict)
+            else self._growth_fraction
+        )
+        if frac >= 1:
+            return max(required, current + int(frac))
+        return max(required, int(current * (1 + frac)))
+
+    def _grow_bucket(self, counts: _Counts) -> dict:
+        """Add a bucket that holds ``counts``, grown from the largest one, and log it."""
+        ref_bucket = self._largest_bucket()
+        # Pad at least +1 atom and +1 structure for the padding slot
+        new_atoms = self._grown_size(
+            counts.atoms + 1, ref_bucket.get(constants.PAD_MAX_N_ATOMS, 0), "atoms"
+        )
+        new_bonds = self._grown_size(
+            counts.bonds, ref_bucket.get(constants.PAD_MAX_N_NEIGHBORS, 0), "neighbours"
+        )
+        new_structs = self._grown_size(
+            counts.structs + 1,
+            ref_bucket.get(constants.PAD_MAX_N_STRUCTURES, 0),
+            "structures",
+        )
+        best_bucket = {
+            constants.PAD_MAX_N_ATOMS: new_atoms,
+            constants.PAD_MAX_N_NEIGHBORS: new_bonds,
+            constants.PAD_MAX_N_STRUCTURES: new_structs,
+        }
+        self._buckets.append(best_bucket)
+        self._buckets.sort(
+            key=lambda b: b[constants.PAD_MAX_N_ATOMS] + b[constants.PAD_MAX_N_NEIGHBORS]
+        )
+        self._log_new_bucket(counts, ref_bucket, best_bucket)
+        return best_bucket
+
+    def _log_new_bucket(self, counts: _Counts, ref_bucket: dict, bucket: dict) -> None:
+        """Log a new bucket (always) and, on the first epoch, the running padding statistics."""
+        ref_a = ref_bucket.get(constants.PAD_MAX_N_ATOMS, 0)
+        ref_b = ref_bucket.get(constants.PAD_MAX_N_NEIGHBORS, 0)
+        ref_s = ref_bucket.get(constants.PAD_MAX_N_STRUCTURES, 0)
+        new_atoms = bucket[constants.PAD_MAX_N_ATOMS]
+        new_bonds = bucket[constants.PAD_MAX_N_NEIGHBORS]
+        new_structs = bucket[constants.PAD_MAX_N_STRUCTURES]
+        axes = []
+        if counts.atoms + 1 > ref_a:
+            axes.append(f"atoms {ref_a}->{new_atoms}")
+        if counts.bonds > ref_b:
+            axes.append(f"neighbours {ref_b}->{new_bonds}")
+        if counts.structs + 1 > ref_s:
+            axes.append(f"structures {ref_s}->{new_structs}")
+        reason = ", ".join(axes) if axes else "first bucket"
+        # New bucket log is ALWAYS printed (not verbose-gated)
+        log.info(
+            f"[ElasticBatcher({self._name})] New bucket (total: {len(self._buckets)}): "
+            f"atom={new_atoms}, bond={new_bonds}, structure={new_structs} "
+            f"| {counts.structs} structure(s) in batch | grew: {reason}"
+        )
+        # Intermediate padding stats during first epoch, gated on verbose
+        ps = self._padding_stats
+        if self._verbose and self._is_first_epoch and ps["nreal_atoms"] > 0:
+            log.info(
+                f"[ElasticBatcher({self._name})] Intermediate padding stats: "
+                f"num. real structures: {ps['nreal_struc']} "
+                f"(+{ps['pad_nstruct'] / ps['nreal_struc'] * 1e2:.1f}%) | "
+                f"num. real atoms: {ps['nreal_atoms']} "
+                f"(+{ps['pad_nat'] / ps['nreal_atoms'] * 1e2:.1f}%) | "
+                f"num. real neighbours: {ps['nreal_neigh']} "
+                f"(+{ps['pad_nneigh'] / max(ps['nreal_neigh'], 1) * 1e2:.1f}%)"
+            )
+
+    def _record_padding(self, bucket: dict, counts: _Counts) -> None:
+        """Accumulate the real and padded entries of one batch."""
+        stats = self._padding_stats
+        stats["nreal_struc"] += counts.structs
+        stats["nreal_atoms"] += counts.atoms
+        stats["nreal_neigh"] += counts.bonds
+        stats["pad_nstruct"] += bucket[constants.PAD_MAX_N_STRUCTURES] - counts.structs
+        stats["pad_nat"] += bucket[constants.PAD_MAX_N_ATOMS] - counts.atoms
+        stats["pad_nneigh"] += bucket[constants.PAD_MAX_N_NEIGHBORS] - counts.bonds
 
 
 # ---------------------------------------------------------------------------
@@ -604,72 +598,9 @@ class StreamingDatasetWrapper:
         raise TypeError("Object of type generator has no len()")
 
     def __iter__(self):
-        if hasattr(self.df, "iloc") and self._n_structures is not None:
-            indices = np.arange(self._n_structures)
-            if self._shuffle:
-                # Use a seeded local RNG so iteration order is reproducible
-                # regardless of global numpy state.
-                np.random.default_rng(self._seed).shuffle(indices)
-
-            def _extract_one(idx):
-                row = self.df.iloc[idx]
-                row_ind = self.df.index[idx]
-                data_dict = {}
-                for builder in self.data_builders:
-                    data_dict.update(
-                        builder.extract_from_row(
-                            row, **{constants.DATA_STRUCTURE_ID: row_ind}
-                        )
-                    )
-                return data_dict
-
-            def structure_generator():
-                for idx in indices:
-                    yield _extract_one(idx)
-        else:
-            def structure_generator():
-                for i, row in enumerate(self.df):
-                    if not isinstance(row, dict) and not hasattr(row, "get"):
-                        row = {"ase_atoms": row}
-                    data_dict = {}
-                    for builder in self.data_builders:
-                        data_dict.update(
-                            builder.extract_from_row(
-                                row, **{constants.DATA_STRUCTURE_ID: i}
-                            )
-                        )
-                    yield data_dict
-
+        structures = self._structure_dicts()
         if self.config.prefetch_queue_size > 0:
-            # Background thread fills a queue; main thread consumes from it.
-            q: queue.Queue = queue.Queue(maxsize=self.config.prefetch_queue_size)
-            _SENTINEL = object()
-
-            def _producer():
-                try:
-                    for item in structure_generator():
-                        q.put(item)
-                except Exception as exc:  # noqa: BLE001 - any failure of the producer thread is handed to the consumer, which re-raises it
-                    q.put(exc)
-                finally:
-                    q.put(_SENTINEL)
-
-            t = threading.Thread(target=_producer, daemon=True)
-            t.start()
-
-            def threaded_structure_generator():
-                while True:
-                    item = q.get()
-                    if item is _SENTINEL:
-                        break
-                    if isinstance(item, Exception):
-                        raise item
-                    yield item
-                t.join()
-                
-            iterator_to_use = threaded_structure_generator()
-        else:
-            iterator_to_use = structure_generator()
+            structures = self._prefetched(structures)
 
         batcher = MultiBinMetricBatcher(
             num_bins=self.config.num_bins,
@@ -678,7 +609,7 @@ class StreamingDatasetWrapper:
             sorting_buffer_size=self.config.sorting_buffer_size,
         )
         elastic_iter = ElasticBatchIterator(
-            structure_iter=iterator_to_use,
+            structure_iter=structures,
             batcher=batcher,
             data_builders=self.data_builders,
             buckets=self._buckets,
@@ -715,18 +646,76 @@ class StreamingDatasetWrapper:
 
         # Log padding statistics only after first epoch (suppress on subsequent epochs)
         if is_first_epoch:
-            ps = elastic_iter.padding_stats
-            if ps["nreal_atoms"] > 0:
-                log.info(
-                    f"[Streaming({self._name})] Epoch padding stats: "
-                    f"num. batches: {batch_count} | "
-                    f"num. real structures: {ps['nreal_struc']} "
-                    f"(+{ps['pad_nstruct'] / ps['nreal_struc'] * 1e2:.1f}%) | "
-                    f"num. real atoms: {ps['nreal_atoms']} "
-                    f"(+{ps['pad_nat'] / ps['nreal_atoms'] * 1e2:.1f}%) | "
-                    f"num. real neighbours: {ps['nreal_neigh']} "
-                    f"(+{ps['pad_nneigh'] / max(ps['nreal_neigh'], 1) * 1e2:.1f}%)"
+            self._log_epoch_padding_stats(elastic_iter.padding_stats, batch_count)
+
+    def _extract_structure(self, row, structure_id) -> dict:
+        """The per-structure dict of one row, filled by every data builder."""
+        data_dict: dict = {}
+        for builder in self.data_builders:
+            data_dict.update(
+                builder.extract_from_row(
+                    row, **{constants.DATA_STRUCTURE_ID: structure_id}
                 )
+            )
+        return data_dict
+
+    def _structure_dicts(self) -> Iterator[dict]:
+        """Extract the structures lazily: a (shuffled) frame by position, else any iterable."""
+        if hasattr(self.df, "iloc") and self._n_structures is not None:
+            indices = np.arange(self._n_structures)
+            if self._shuffle:
+                # Use a seeded local RNG so iteration order is reproducible
+                # regardless of global numpy state.
+                np.random.default_rng(self._seed).shuffle(indices)
+            for idx in indices:
+                yield self._extract_structure(self.df.iloc[idx], self.df.index[idx])
+        else:
+            for i, row in enumerate(self.df):
+                if not isinstance(row, dict) and not hasattr(row, "get"):
+                    row = {"ase_atoms": row}
+                yield self._extract_structure(row, i)
+
+    def _prefetched(self, structures: Iterator[dict]) -> Iterator[dict]:
+        """Fill a queue from ``structures`` in a background thread and consume it here."""
+        q: queue.Queue = queue.Queue(maxsize=self.config.prefetch_queue_size)
+        _SENTINEL = object()
+
+        def _producer():
+            try:
+                for item in structures:
+                    q.put(item)
+            except Exception as exc:  # noqa: BLE001 - any failure of the producer thread is handed to the consumer, which re-raises it
+                q.put(exc)
+            finally:
+                q.put(_SENTINEL)
+
+        t = threading.Thread(target=_producer, daemon=True)
+        t.start()
+
+        def threaded_structure_generator():
+            while True:
+                item = q.get()
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+            t.join()
+
+        return threaded_structure_generator()
+
+    def _log_epoch_padding_stats(self, ps: dict, batch_count: int) -> None:
+        if ps["nreal_atoms"] > 0:
+            log.info(
+                f"[Streaming({self._name})] Epoch padding stats: "
+                f"num. batches: {batch_count} | "
+                f"num. real structures: {ps['nreal_struc']} "
+                f"(+{ps['pad_nstruct'] / ps['nreal_struc'] * 1e2:.1f}%) | "
+                f"num. real atoms: {ps['nreal_atoms']} "
+                f"(+{ps['pad_nat'] / ps['nreal_atoms'] * 1e2:.1f}%) | "
+                f"num. real neighbours: {ps['nreal_neigh']} "
+                f"(+{ps['pad_nneigh'] / max(ps['nreal_neigh'], 1) * 1e2:.1f}%)"
+            )
 
     def _convert_batch(self, batch: dict) -> dict:
         """Filter keys to model signatures and convert to tf.Tensor."""

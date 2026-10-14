@@ -26,6 +26,7 @@ from tensorpotential.tpmodel import (
     ComputeBlock,
     ComputeBlockInputGradient,
     ComputeBlockOutputGradient,
+    load_model_metadata,
 )
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -396,6 +397,16 @@ class TestGraphSplitSaveReload:
             pair_forces_orig = -(grad_bv_l2_orig + grad_bv_l1_orig)
 
             # Load model
+            # metadata.yaml: shape (batch axis dropped) and locality of each communicated output
+            metadata = load_model_metadata(model_path)
+            assert metadata is not None
+            communication = metadata["parallel_communication"]
+            assert set(communication) == set(l1_outputs_orig)
+            assert any(c["non_local"] for c in communication.values())
+            for key, entry in communication.items():
+                assert entry["shape"] == list(l1_outputs_orig[key].shape[1:]), key
+                assert entry["non_local"] == (key in m_aux.non_local_communication_keys), key
+
             loaded_model = tf.saved_model.load(model_path)
 
             # Helper function to run loaded signature
