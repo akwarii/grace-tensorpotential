@@ -15,6 +15,8 @@ from __future__ import annotations
 import importlib.util
 from collections.abc import Mapping
 
+from tensorpotential.errors import TensorPotentialError
+
 #: Importable top-level packages that each backend (and extra) needs.
 BACKEND_PACKAGES: Mapping[str, tuple[str, ...]] = {
     "tf": ("tensorflow", "keras"),
@@ -25,7 +27,7 @@ BACKEND_PACKAGES: Mapping[str, tuple[str, ...]] = {
 _DISPLAY_NAMES = {"tf": "TensorFlow", "torch": "PyTorch", "torch-sim": "torch-sim"}
 
 
-class BackendNotInstalledError(ImportError):
+class BackendNotInstalledError(TensorPotentialError, ImportError):
     """A backend that an entry point needs is not installed.
 
     Attributes
