@@ -598,72 +598,9 @@ class StreamingDatasetWrapper:
         raise TypeError("Object of type generator has no len()")
 
     def __iter__(self):
-        if hasattr(self.df, "iloc") and self._n_structures is not None:
-            indices = np.arange(self._n_structures)
-            if self._shuffle:
-                # Use a seeded local RNG so iteration order is reproducible
-                # regardless of global numpy state.
-                np.random.default_rng(self._seed).shuffle(indices)
-
-            def _extract_one(idx):
-                row = self.df.iloc[idx]
-                row_ind = self.df.index[idx]
-                data_dict = {}
-                for builder in self.data_builders:
-                    data_dict.update(
-                        builder.extract_from_row(
-                            row, **{constants.DATA_STRUCTURE_ID: row_ind}
-                        )
-                    )
-                return data_dict
-
-            def structure_generator():
-                for idx in indices:
-                    yield _extract_one(idx)
-        else:
-            def structure_generator():
-                for i, row in enumerate(self.df):
-                    if not isinstance(row, dict) and not hasattr(row, "get"):
-                        row = {"ase_atoms": row}
-                    data_dict = {}
-                    for builder in self.data_builders:
-                        data_dict.update(
-                            builder.extract_from_row(
-                                row, **{constants.DATA_STRUCTURE_ID: i}
-                            )
-                        )
-                    yield data_dict
-
+        structures = self._structure_dicts()
         if self.config.prefetch_queue_size > 0:
-            # Background thread fills a queue; main thread consumes from it.
-            q: queue.Queue = queue.Queue(maxsize=self.config.prefetch_queue_size)
-            _SENTINEL = object()
-
-            def _producer():
-                try:
-                    for item in structure_generator():
-                        q.put(item)
-                except Exception as exc:  # noqa: BLE001 - any failure of the producer thread is handed to the consumer, which re-raises it
-                    q.put(exc)
-                finally:
-                    q.put(_SENTINEL)
-
-            t = threading.Thread(target=_producer, daemon=True)
-            t.start()
-
-            def threaded_structure_generator():
-                while True:
-                    item = q.get()
-                    if item is _SENTINEL:
-                        break
-                    if isinstance(item, Exception):
-                        raise item
-                    yield item
-                t.join()
-                
-            iterator_to_use = threaded_structure_generator()
-        else:
-            iterator_to_use = structure_generator()
+            structures = self._prefetched(structures)
 
         batcher = MultiBinMetricBatcher(
             num_bins=self.config.num_bins,
@@ -672,7 +609,7 @@ class StreamingDatasetWrapper:
             sorting_buffer_size=self.config.sorting_buffer_size,
         )
         elastic_iter = ElasticBatchIterator(
-            structure_iter=iterator_to_use,
+            structure_iter=structures,
             batcher=batcher,
             data_builders=self.data_builders,
             buckets=self._buckets,
@@ -709,18 +646,76 @@ class StreamingDatasetWrapper:
 
         # Log padding statistics only after first epoch (suppress on subsequent epochs)
         if is_first_epoch:
-            ps = elastic_iter.padding_stats
-            if ps["nreal_atoms"] > 0:
-                log.info(
-                    f"[Streaming({self._name})] Epoch padding stats: "
-                    f"num. batches: {batch_count} | "
-                    f"num. real structures: {ps['nreal_struc']} "
-                    f"(+{ps['pad_nstruct'] / ps['nreal_struc'] * 1e2:.1f}%) | "
-                    f"num. real atoms: {ps['nreal_atoms']} "
-                    f"(+{ps['pad_nat'] / ps['nreal_atoms'] * 1e2:.1f}%) | "
-                    f"num. real neighbours: {ps['nreal_neigh']} "
-                    f"(+{ps['pad_nneigh'] / max(ps['nreal_neigh'], 1) * 1e2:.1f}%)"
+            self._log_epoch_padding_stats(elastic_iter.padding_stats, batch_count)
+
+    def _extract_structure(self, row, structure_id) -> dict:
+        """The per-structure dict of one row, filled by every data builder."""
+        data_dict: dict = {}
+        for builder in self.data_builders:
+            data_dict.update(
+                builder.extract_from_row(
+                    row, **{constants.DATA_STRUCTURE_ID: structure_id}
                 )
+            )
+        return data_dict
+
+    def _structure_dicts(self) -> Iterator[dict]:
+        """Extract the structures lazily: a (shuffled) frame by position, else any iterable."""
+        if hasattr(self.df, "iloc") and self._n_structures is not None:
+            indices = np.arange(self._n_structures)
+            if self._shuffle:
+                # Use a seeded local RNG so iteration order is reproducible
+                # regardless of global numpy state.
+                np.random.default_rng(self._seed).shuffle(indices)
+            for idx in indices:
+                yield self._extract_structure(self.df.iloc[idx], self.df.index[idx])
+        else:
+            for i, row in enumerate(self.df):
+                if not isinstance(row, dict) and not hasattr(row, "get"):
+                    row = {"ase_atoms": row}
+                yield self._extract_structure(row, i)
+
+    def _prefetched(self, structures: Iterator[dict]) -> Iterator[dict]:
+        """Fill a queue from ``structures`` in a background thread and consume it here."""
+        q: queue.Queue = queue.Queue(maxsize=self.config.prefetch_queue_size)
+        _SENTINEL = object()
+
+        def _producer():
+            try:
+                for item in structures:
+                    q.put(item)
+            except Exception as exc:  # noqa: BLE001 - any failure of the producer thread is handed to the consumer, which re-raises it
+                q.put(exc)
+            finally:
+                q.put(_SENTINEL)
+
+        t = threading.Thread(target=_producer, daemon=True)
+        t.start()
+
+        def threaded_structure_generator():
+            while True:
+                item = q.get()
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+            t.join()
+
+        return threaded_structure_generator()
+
+    def _log_epoch_padding_stats(self, ps: dict, batch_count: int) -> None:
+        if ps["nreal_atoms"] > 0:
+            log.info(
+                f"[Streaming({self._name})] Epoch padding stats: "
+                f"num. batches: {batch_count} | "
+                f"num. real structures: {ps['nreal_struc']} "
+                f"(+{ps['pad_nstruct'] / ps['nreal_struc'] * 1e2:.1f}%) | "
+                f"num. real atoms: {ps['nreal_atoms']} "
+                f"(+{ps['pad_nat'] / ps['nreal_atoms'] * 1e2:.1f}%) | "
+                f"num. real neighbours: {ps['nreal_neigh']} "
+                f"(+{ps['pad_nneigh'] / max(ps['nreal_neigh'], 1) * 1e2:.1f}%)"
+            )
 
     def _convert_batch(self, batch: dict) -> dict:
         """Filter keys to model signatures and convert to tf.Tensor."""
