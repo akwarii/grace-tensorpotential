@@ -962,43 +962,7 @@ class TPModel(tf.Module):
                 "chemical symbols of the metadata are unknown"
             )
         if gmm_uq_model is not None:
-            if gmm_uq_model.interp_thresholds is None:
-                raise ValueError(
-                    "gmm_uq_model.interp_thresholds must be set before exporting to "
-                    "SavedModel. Compute thresholds first (e.g. via "
-                    "GMMUQArtifactBuilder) and reload the artifact."
-                )
-            # Attach as tracked attribute so TF includes GMM variables in variables/
-            self._gmm_uq_model = gmm_uq_model
-            # Bake the basis-RP feature into the exported graph: append the
-            # projection instruction with R recovered verbatim from the artifact
-            # (stored as a tf.constant) so the exported compute_uq signature
-            # reproduces the exact feature. The retired hidden-layer feature is
-            # unsupported.
-            from tensorpotential.uq.factories import (
-                patch_instructions_for_basis_rp_features,
-                basis_rp_spec_from_artifact,
-            )
-
-            spec = basis_rp_spec_from_artifact(gmm_uq_model)
-            if spec is None or spec.get("matrix") is None:
-                raise ValueError(
-                    "SavedModel export requires a basis-RP UQ artifact (missing "
-                    "uq_rp_matrix); rebuild with `grace_uq build`."
-                )
-            rp = patch_instructions_for_basis_rp_features(
-                self.instructions,
-                out_dim=spec["out_dim"],
-                seed=spec["seed"],
-                projection_matrix=spec["matrix"],
-                feature_transform=spec.get("transform"),
-                normalize=spec.get("normalize", False),
-                add_density_channel=spec.get("add_density_channel", False),
-                density_scale=spec.get("density_scale", 1.0),
-            )
-            # Model is already built; build the appended projection so its R
-            # constant is traced into the SavedModel.
-            rp.build(self.param_dtype)
+            self._attach_uq_artifact(gmm_uq_model)
 
         # Dense-capable model (has an equivariant SPBF): export BOTH a universal
         # `compute` (segment_sum) and a fast `compute_dense` (the reshape dense
@@ -1008,43 +972,10 @@ class TPModel(tf.Module):
         # LAYOUT the caller must supply (flat for `compute`, per-atom-uniform
         # [n_atoms*max_neigh] for `compute_dense` — see tensorpotential.data.dense_nbr).
         # Pick the mode by signature name. Non-dense models export only `compute`.
-        _instr_iter = (
-            self.instructions.values()
-            if hasattr(self.instructions, "values")
-            else self.instructions
+        dense_instr = self._dense_instructions()
+        signatures = self._compute_signatures(
+            dense_instr, jit_compile, input_signature_float_dtype
         )
-        dense_instr = [it for it in _instr_iter if getattr(it, "dense_capable", False)]
-        if dense_instr:
-            dtypes = _make_dtype_map(input_signature_float_dtype)
-            sig = [_build_input_signature(self.compute_specs, dtypes)]
-
-            def _trace_compute(use_dense):
-                # The frwrd branch reads each instruction's `dense_nbr`, but tracing
-                # is deferred to save time (and may re-trace), so set the flag at the
-                # TOP of the traced fn — the correct branch is selected on every trace.
-                # Restore it to False once the graph is built so the shared instructions
-                # don't leak `dense_nbr=True` into later traces (e.g. the compute_uq
-                # signatures, which run segment_sum). The branch is resolved during
-                # tracing, so this reset does not affect the already-built graph.
-                def _compute(input_data):
-                    for it in dense_instr:
-                        it.dense_nbr = use_dense
-                    try:
-                        return TPModel.compute(self, input_data)
-                    finally:
-                        for it in dense_instr:
-                            it.dense_nbr = False
-
-                return tf.function(_compute, input_signature=sig, jit_compile=jit_compile)
-
-            self.compute = _trace_compute(False)
-            self.compute_dense = _trace_compute(True)
-            signatures = {"compute": self.compute, "compute_dense": self.compute_dense}
-        else:
-            self.decorate_compute_function(input_signature_float_dtype, jit_compile)
-            signatures = {
-                "compute": self.compute,
-            }
         if self.aux_compute is not None:
             signatures.update(
                 # Use the underlying tf.functions, not the python wrappers
@@ -1052,29 +983,11 @@ class TPModel(tf.Module):
             )
 
         if gmm_uq_model is not None:
-            from tensorpotential.uq import constants as uq_constants
-            from tensorpotential.uq.compute import gmm_uq_compute_class
-
-            dtypes = _make_dtype_map(input_signature_float_dtype)
-
-            def _wrap(uq_fn):
-                sig = _build_input_signature(self.compute_specs, dtypes)
-                for k, spec in _build_input_signature(uq_fn.specs, dtypes).items():
-                    sig.setdefault(k, spec)
-
-                def compute_uq(input_data):
-                    return uq_fn(self.instructions, input_data.copy(), training=False)
-
-                return tf.function(
-                    compute_uq, input_signature=[sig], jit_compile=jit_compile,
+            signatures.update(
+                self._uq_signatures(
+                    gmm_uq_model, jit_compile, input_signature_float_dtype
                 )
-
-            for mode, sig_name in uq_constants.UQ_MODE_TO_SIGNATURE.items():
-                uq_fn = gmm_uq_compute_class(mode == uq_constants.UQ_MODE_FULL)(gmm_uq_model)
-                wrapped = _wrap(uq_fn)
-                # Stash on the module so SavedModel includes the GMM variables
-                setattr(self, sig_name, wrapped)
-                signatures[sig_name] = wrapped
+            )
 
         # Pin the export-time base state: at rest during save, dense_nbr is False so
         # any co-traced signature that reads it (aux computes, compute_uq*) takes the
@@ -1086,6 +999,133 @@ class TPModel(tf.Module):
         with suppress_tf_logging(logging.ERROR):
             tf.saved_model.save(self, path, signatures=signatures)
 
+        self._write_metadata(path, has_uq=gmm_uq_model is not None)
+
+    def _attach_uq_artifact(self, gmm_uq_model: Any) -> None:
+        """Track the GMM artifact and bake its basis-RP feature into the exported graph."""
+        if gmm_uq_model.interp_thresholds is None:
+            raise ValueError(
+                "gmm_uq_model.interp_thresholds must be set before exporting to "
+                "SavedModel. Compute thresholds first (e.g. via "
+                "GMMUQArtifactBuilder) and reload the artifact."
+            )
+        # Attach as tracked attribute so TF includes GMM variables in variables/
+        self._gmm_uq_model = gmm_uq_model
+        # Bake the basis-RP feature into the exported graph: append the
+        # projection instruction with R recovered verbatim from the artifact
+        # (stored as a tf.constant) so the exported compute_uq signature
+        # reproduces the exact feature. The retired hidden-layer feature is
+        # unsupported.
+        from tensorpotential.uq.factories import (
+            patch_instructions_for_basis_rp_features,
+            basis_rp_spec_from_artifact,
+        )
+
+        spec = basis_rp_spec_from_artifact(gmm_uq_model)
+        if spec is None or spec.get("matrix") is None:
+            raise ValueError(
+                "SavedModel export requires a basis-RP UQ artifact (missing "
+                "uq_rp_matrix); rebuild with `grace_uq build`."
+            )
+        rp = patch_instructions_for_basis_rp_features(
+            self.instructions,
+            out_dim=spec["out_dim"],
+            seed=spec["seed"],
+            projection_matrix=spec["matrix"],
+            feature_transform=spec.get("transform"),
+            normalize=spec.get("normalize", False),
+            add_density_channel=spec.get("add_density_channel", False),
+            density_scale=spec.get("density_scale", 1.0),
+        )
+        # Model is already built; build the appended projection so its R
+        # constant is traced into the SavedModel.
+        rp.build(self.param_dtype)
+
+    def _dense_instructions(self) -> list[Any]:
+        """The instructions that can switch between segment_sum and dense aggregation."""
+        instructions = (
+            self.instructions.values()
+            if hasattr(self.instructions, "values")
+            else self.instructions
+        )
+        return [it for it in instructions if getattr(it, "dense_capable", False)]
+
+    def _compute_signatures(
+        self,
+        dense_instr: list[Any],
+        jit_compile: bool,
+        input_signature_float_dtype: tf.dtypes.DType,
+    ) -> dict[str, Any]:
+        """The ``compute`` signature, plus ``compute_dense`` for a dense-capable model."""
+        if not dense_instr:
+            self.decorate_compute_function(input_signature_float_dtype, jit_compile)
+            return {"compute": self.compute}
+        dtypes = _make_dtype_map(input_signature_float_dtype)
+        sig = [_build_input_signature(self.compute_specs, dtypes)]
+        self.compute = self._traced_compute(dense_instr, False, sig, jit_compile)
+        self.compute_dense = self._traced_compute(dense_instr, True, sig, jit_compile)
+        return {"compute": self.compute, "compute_dense": self.compute_dense}
+
+    def _traced_compute(
+        self, dense_instr: list[Any], use_dense: bool, sig: list, jit_compile: bool
+    ) -> Any:
+        # The frwrd branch reads each instruction's `dense_nbr`, but tracing
+        # is deferred to save time (and may re-trace), so set the flag at the
+        # TOP of the traced fn — the correct branch is selected on every trace.
+        # Restore it to False once the graph is built so the shared instructions
+        # don't leak `dense_nbr=True` into later traces (e.g. the compute_uq
+        # signatures, which run segment_sum). The branch is resolved during
+        # tracing, so this reset does not affect the already-built graph.
+        def _compute(input_data):
+            for it in dense_instr:
+                it.dense_nbr = use_dense
+            try:
+                return TPModel.compute(self, input_data)
+            finally:
+                for it in dense_instr:
+                    it.dense_nbr = False
+
+        return tf.function(_compute, input_signature=sig, jit_compile=jit_compile)
+
+    def _uq_signatures(
+        self,
+        gmm_uq_model: Any,
+        jit_compile: bool,
+        input_signature_float_dtype: tf.dtypes.DType,
+    ) -> dict[str, Any]:
+        """The ``compute_uq*`` signatures; each is also stashed on the module for the SavedModel."""
+        from tensorpotential.uq import constants as uq_constants
+        from tensorpotential.uq.compute import gmm_uq_compute_class
+
+        dtypes = _make_dtype_map(input_signature_float_dtype)
+
+        def _wrap(uq_fn):
+            sig = _build_input_signature(self.compute_specs, dtypes)
+            for k, spec in _build_input_signature(uq_fn.specs, dtypes).items():
+                sig.setdefault(k, spec)
+
+            def compute_uq(input_data):
+                return uq_fn(self.instructions, input_data.copy(), training=False)
+
+            return tf.function(
+                compute_uq,
+                input_signature=[sig],
+                jit_compile=jit_compile,
+            )
+
+        signatures = {}
+        for mode, sig_name in uq_constants.UQ_MODE_TO_SIGNATURE.items():
+            uq_fn = gmm_uq_compute_class(mode == uq_constants.UQ_MODE_FULL)(
+                gmm_uq_model
+            )
+            wrapped = _wrap(uq_fn)
+            # Stash on the module so SavedModel includes the GMM variables
+            setattr(self, sig_name, wrapped)
+            signatures[sig_name] = wrapped
+        return signatures
+
+    def _write_metadata(self, path: str, has_uq: bool) -> None:
+        """Write ``metadata.yaml`` and ``metadata.json`` next to the SavedModel."""
         cutoff, element_map_symbols, element_map_index = extract_cutoff_and_elements(
             self.instructions
         )
@@ -1103,25 +1143,9 @@ class TPModel(tf.Module):
 
         # if there are 'forward_layer_1' in aux_compute, then add to metadata.yaml
         if self.aux_compute is not None and "forward_layer_1" in self.aux_compute:
-            parallel_comm = {}
-            tf_func = self._aux_tf_funcs["forward_layer_1"]
-            sig = self._aux_compute_sigs["forward_layer_1"]
-            concrete_func = tf_func.get_concrete_function(sig)
+            metadata["parallel_communication"] = self._parallel_communication()
 
-            output_specs = concrete_func.structured_outputs
-            for key, spec in output_specs.items():
-                shape = spec.shape.as_list()
-                # Skip batch dimension (None)
-                if shape and shape[0] is None:
-                    shape = shape[1:]
-                parallel_comm[key] = {
-                    "shape": shape,
-                    "non_local": key in self.non_local_communication_keys,
-                }
-
-            metadata["parallel_communication"] = parallel_comm
-
-        if gmm_uq_model is not None:
+        if has_uq:
             metadata["has_uq"] = True
 
         with open(os.path.join(path, "metadata.yaml"), "w") as f:
@@ -1129,6 +1153,25 @@ class TPModel(tf.Module):
 
         with open(os.path.join(path, "metadata.json"), "w") as f:
             json.dump(metadata, f, indent=4)
+
+    def _parallel_communication(self) -> dict[str, Any]:
+        """Shape and locality of each output of the ``forward_layer_1`` signature."""
+        parallel_comm = {}
+        tf_func = self._aux_tf_funcs["forward_layer_1"]
+        sig = self._aux_compute_sigs["forward_layer_1"]
+        concrete_func = tf_func.get_concrete_function(sig)
+
+        output_specs = concrete_func.structured_outputs
+        for key, spec in output_specs.items():
+            shape = spec.shape.as_list()
+            # Skip batch dimension (None)
+            if shape and shape[0] is None:
+                shape = shape[1:]
+            parallel_comm[key] = {
+                "shape": shape,
+                "non_local": key in self.non_local_communication_keys,
+            }
+        return parallel_comm
 
     def compute_regularization_loss(self) -> defaultdict:
         """L2 regularization loss summed over the instructions that request it, keyed by component name."""

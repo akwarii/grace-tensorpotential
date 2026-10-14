@@ -371,6 +371,7 @@ def test_savedmodel_exports_both_uq_signatures(uq_setup, tmp_path):
     )
     from tensorpotential.calculator.asecalculator import TPCalculator
     from tensorpotential.instructions import load_instructions
+    from tensorpotential.tpmodel import load_model_metadata
 
     # Inject synthetic interp_thresholds so save_model() accepts the artifact.
     raw = dict(np.load(uq_setup["artifact_path"], allow_pickle=True))
@@ -404,6 +405,8 @@ def test_savedmodel_exports_both_uq_signatures(uq_setup, tmp_path):
     loaded = tf.saved_model.load(export_path)
     assert "compute_uq" in loaded.signatures
     assert "compute_uq_gamma_only" in loaded.signatures
+    metadata = load_model_metadata(export_path)
+    assert metadata is not None and metadata["has_uq"] is True
 
     # Calculator surfaces both modes and can switch.
     calc = TPCalculator(export_path, enable_uq_if_available=True)

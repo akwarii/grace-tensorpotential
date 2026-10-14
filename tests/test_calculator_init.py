@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import collections
 import shutil
 import sys
 import types
@@ -297,6 +298,35 @@ def test_ensemble_of_a_dense_and_a_segment_sum_model_has_no_common_engine():
         TPCalculator(model=[two_layer(dense=True), two_layer(dense=False)])
 
 
+def one_layer_with(element_map: dict) -> TPModel:
+    tf.random.set_seed(3)
+    return build_model(
+        GRACE_1LAYER_v2_25(
+            element_map=element_map,
+            rcut=RCUT,
+            lmax=2,
+            n_rad_base=4,
+            n_rad_max=6,
+            prod_func_n_max=8,
+            embedding_size=6,
+            n_mlp_dens=4,
+            max_order=2,
+        ).get_instructions()
+    )
+
+
+def test_ensemble_with_different_element_maps_is_refused():
+    swapped = one_layer_with({"Li": 0, "Al": 1})
+    with pytest.raises(ValueError, match="inconsistent element maps"):
+        TPCalculator(model=[one_layer(), swapped])
+
+
+def test_ensemble_with_equal_element_maps_in_any_dict_order_is_accepted():
+    reordered = one_layer_with({"Al": 0, "Li": 1})
+    calc = TPCalculator(model=[one_layer(), reordered])
+    assert {str(k): int(v) for k, v in calc.element_map.items()} == ELEMENTS
+
+
 @pytest.mark.parametrize("order", [(0, 1), (1, 0)])
 def test_ensemble_with_different_data_keys_is_refused(order, default_one_layer):
     models = [default_one_layer, tensor_model()]
@@ -452,6 +482,26 @@ def test_dual_engine_saved_model_switches_engine_with_the_mode(tmp_path):
     )  # one input signature for both engines
 
 
+def _graph_op_counts(signature) -> collections.Counter:
+    """Operation types of a signature's graph, including the functions it calls."""
+    graph_def = signature.graph.as_graph_def()
+    counts = collections.Counter(node.op for node in graph_def.node)
+    for function in graph_def.library.function:
+        counts.update(node.op for node in function.node_def)
+    return counts
+
+
+def test_the_dense_signature_aggregates_by_reshape_where_compute_uses_a_segment_sum(tmp_path):
+    path = str(tmp_path / "dual")
+    two_layer(dense=True).save_model(path, input_signature_float_dtype=tf.float64)
+    signatures = tf.saved_model.load(path).signatures
+    segment = _graph_op_counts(signatures["compute"])
+    dense = _graph_op_counts(signatures["compute_dense"])
+    # same weights and inputs, a different graph: the dense one trades one segment sum for reshapes
+    assert dense["UnsortedSegmentSum"] < segment["UnsortedSegmentSum"]
+    assert dense["Reshape"] > segment["Reshape"]
+
+
 # ---------------------------------------------------------------------------- physics
 
 
@@ -567,3 +617,13 @@ def test_swapping_the_labels_of_two_atoms_does_not_change_the_energy(default_one
         rtol=COVARIANCE_F64.rtol,
         atol=COVARIANCE_F64.atol,
     )
+
+
+def test_an_absent_optional_builder_module_or_class_is_an_import_error_naming_it():
+    from tensorpotential.calculator.asecalculator import _optional_builder_class
+
+    with pytest.raises(ImportError, match=r"TensorPotential\.no_such_package\.builder not found"):
+        _optional_builder_class("tensorpotential.no_such_package.builder", "Builder")
+    with pytest.raises(ImportError, match="cannot import name 'NoSuchBuilder'"):
+        _optional_builder_class("tensorpotential.constants", "NoSuchBuilder")
+    assert _optional_builder_class("tensorpotential.constants", "ATOMIC_POS") == constants.ATOMIC_POS

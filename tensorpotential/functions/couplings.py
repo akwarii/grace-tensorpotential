@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 
 from collections import defaultdict
+from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 from sympy.physics.quantum.cg import CG
 
 # (l1,l2,l3) -> mean(x**2)
@@ -2282,6 +2284,192 @@ EXCLUSION_HIST_LISTS: dict[str, list[tuple[str, int]]] = {
 }
 
 
+@dataclass(frozen=True)
+class _CouplingLimits:
+    """The filters that decide whether two (l, history) groups may be coupled."""
+
+    lmax: int | None
+    lmax_A: int | None
+    lmax_B: int | None
+    lmax_hist: int | None
+    lmax_hist_A: int | None
+    lmax_hist_B: int | None
+    max_sum_l: int | None
+    is_A_B_equal: bool
+
+    def allows_pair(self, l1: int, l2: int, new_sum_l: int) -> bool:
+        """Limits on the sum of ls, on ``l1``/``l2`` and the symmetric-pair rule."""
+        if self.max_sum_l is not None and new_sum_l > self.max_sum_l:
+            return False
+        if self.lmax is not None and (l1 > self.lmax or l2 > self.lmax):
+            return False
+        if self.lmax_A is not None and l1 > self.lmax_A:
+            return False
+        if self.lmax_B is not None and l2 > self.lmax_B:
+            return False
+        return not (self.is_A_B_equal and l2 > l1)
+
+    def allows_history(self, l1hist: str, l2hist: str) -> bool:
+        """Limits on the largest l found in the coupling histories."""
+        if self.lmax_hist is None and self.lmax_hist_A is None and self.lmax_hist_B is None:
+            return True
+        l1h = lmax_from_hist(l1hist)
+        l2h = lmax_from_hist(l2hist)
+        if self.lmax_hist is not None and max(l1h, l2h) > self.lmax_hist:
+            return False
+        if self.lmax_hist_A is not None and l1h > self.lmax_hist_A:
+            return False
+        return not (self.lmax_hist_B is not None and l2h > self.lmax_hist_B)
+
+
+@dataclass(frozen=True)
+class _CouplingTables:
+    """What the coupling of every group pair reads: the row indices and the output options."""
+
+    A_lmh: dict[Any, int]
+    B_lmh: dict[Any, int]
+    Lmax: int
+    keep_parity: list[tuple] | None
+    normalize: bool
+    merge_equal_pairs: bool
+
+
+def _unique_lmh_index(table: pd.DataFrame, side: str) -> dict[Any, int]:
+    """Map (l, m, hist, parity) to the single row index of ``table``."""
+    grouped = table.groupby(["l", "m", "hist", "parity"]).indices
+    for key, rows in grouped.items():
+        if len(rows) > 1:
+            raise ValueError(f"{side} has non-unique elements for (l,m,hist)={key}")
+    return {key: rows[0] for key, rows in grouped.items()}
+
+
+def _as_parity_tuples(keep_parity: list[list] | None) -> list[tuple] | None:
+    if keep_parity is None:
+        return None
+    if not isinstance(keep_parity, list):
+        raise ValueError(
+            f"Only list of (l,p) combinations"
+            f" is possible for keep_parity, but {keep_parity} is set"
+        )
+    return list(map(tuple, keep_parity))
+
+
+def _coupled_histories(
+    left: tuple[int, str, int], right: tuple[int, str, int], legacy_format: bool
+) -> tuple[str, str]:
+    """History string of the coupled entry and of its (l1, l2) swapped twin."""
+    l1, l1hist, p1 = left
+    l2, l2hist, p2 = right
+    if legacy_format:
+        return f"({l1hist}{l1},{l2hist}{l2})", f"({l2hist}{l2},{l1hist}{l1})"
+    s1 = _parity_sign(p1)
+    s2 = _parity_sign(p2)
+    return f"({l1hist}{l1}{s1},{l2hist}{l2}{s2})", f"({l2hist}{l2}{s2},{l1hist}{l1}{s1})"
+
+
+def _sparse_index_lists(
+    cg_matrix: np.ndarray,
+    left: tuple[int, str, int],
+    right: tuple[int, str, int],
+    tables: _CouplingTables,
+) -> tuple[list[int], list[int], list[float]]:
+    """Indices into A and B and the non-zero coefficients of one (L, M) component.
+
+    ``left`` and ``right`` are ``(l, hist, parity)`` of the A and B groups.
+    With ``tables.merge_equal_pairs`` the terms of the same (A, B) index pair, in
+    either order, are summed and the vanishing sums dropped.
+    """
+    l1, l1hist, p1 = left
+    l2, l2hist, p2 = right
+    ms_list, cg_list = CG_LM_to_sparse(cg_matrix, l1, l2)
+    cgs: list[float] = []
+    a_inds: list[int] = []
+    b_inds: list[int] = []
+    pair_sums: dict[tuple[int, int], float] = defaultdict(float)
+    for (m1, m2), gen_cg in zip(ms_list, cg_list):
+        a_ind = tables.A_lmh[l1, m1, l1hist, p1]
+        b_ind = tables.B_lmh[l2, m2, l2hist, p2]
+        if abs(gen_cg) > 1e-15:
+            cgs.append(gen_cg)
+            a_inds.append(a_ind)
+            b_inds.append(b_ind)
+            if tables.merge_equal_pairs:
+                # bugfix to match left_inds and l1
+                pair_sums[tuple(sorted([a_ind, b_ind], reverse=True))] += gen_cg
+    if tables.merge_equal_pairs:
+        merged = [(a, b, c) for (a, b), c in pair_sums.items() if abs(c) > 1e-15]
+        cgs = [c for _, _, c in merged]
+        a_inds = [a for a, _, _ in merged]
+        b_inds = [b for _, b, _ in merged]
+    return a_inds, b_inds, cgs
+
+
+def _coupled_rows(
+    tables: _CouplingTables,
+    left: tuple[int, str, int],
+    right: tuple[int, str, int],
+    newhist: str,
+    new_sum_l: int,
+) -> list[list]:
+    """Rows (L, M, hist, ...) of all targets coupling ``left`` to ``right``."""
+    l1, _, p1 = left
+    l2, _, p2 = right
+    parity = p1 * p2
+    rows = []
+    for L in range(abs(l1 - l2), abs(l1 + l2) + 1):
+        if L > tables.Lmax:
+            continue
+        if tables.keep_parity is not None and (L, parity) not in tables.keep_parity:
+            continue
+        # real-harmonics CG (l1,l2) to target (L,M): shape [2*L+1, 2*l1+1, 2*l2+1]
+        RCG = gen_CG_matrix_REAL(l1, l2, L)
+        if tables.normalize:
+            key = (l2, l1, L) if l1 < l2 else (l1, l2, L)
+            RCG *= CG_normalization_dict.get(key, 1.0)
+        for M in range(-L, L + 1):
+            a_inds, b_inds, cgs = _sparse_index_lists(RCG[M + L], left, right, tables)
+            if a_inds:
+                rows.append(
+                    [L, M, newhist, a_inds, b_inds, l1, l2, parity, new_sum_l, cgs]
+                )
+    return rows
+
+
+def _excluded_histories(
+    legacy_format: bool, history_drop_list: list | None
+) -> set[tuple[str, int]]:
+    """The (history, L) pairs to drop, normalised to tuples of (str, int)."""
+    if legacy_format:
+        # Legacy path (ProductFunction / CropProductFunction): apply ONLY
+        # EXCLUSION_HIST_LIST (the frozen natural-parity list). Other
+        # EXCLUSION_HIST_LISTS slots ("natural_parity_extra",
+        # "cross_parity") are deliberately skipped here so that legacy
+        # models loaded with the legacy compute path retain their
+        # original coupling_meta_data shape and can restore existing
+        # checkpoints.
+        dl = [(h.replace("+", "").replace("-", ""), L) for h, L in EXCLUSION_HIST_LIST]
+    else:
+        # Parity-aware path (GeneralProductFunction and other callers
+        # using the default legacy_format=False). Apply all categories
+        # in EXCLUSION_HIST_LISTS.
+        dl = [e for lst in EXCLUSION_HIST_LISTS.values() for e in lst]
+    if history_drop_list is not None:
+        dl.extend(history_drop_list)
+
+    # Normalize entries to (hist, L) tuples. Without this, any
+    # history_drop_list restored from a YAML model file arrives as
+    # list-of-lists (because recursive_walk_and_modify in
+    # instructions/base.py converts each tuple to a list for YAML-safe
+    # serialization), and the tuple-vs-list equality check would
+    # silently fail -- every rebuilt model would ignore its drop list.
+    # Some callers also pass plain hist strings (no L) via legacy
+    # discovery paths; those are silently skipped, matching prior
+    # behavior (they'd never match (dat[2], dat[0]) tuples anyway).
+    return {
+        (e[0], int(e[1])) for e in dl if isinstance(e, (list, tuple)) and len(e) == 2
+    }
+
+
 def real_coupling_metainformation(
     A: pd.DataFrame = None,
     B: pd.DataFrame = None,
@@ -2339,204 +2527,43 @@ def real_coupling_metainformation(
         'sum_of_ls' - sum (over history) of coupled quantities, used for filtering
 
     """
-    # this will find all unique combinations of "l" and "hist" (with different "m"s) in each dataframe
-    # and corresponding array of indices with this combination, i.e.
-    # (0,'(00)0') -> [1,2,5,10, ...]
-
     A_g = A.groupby(["l", "hist", "parity", "sum_of_ls"]).indices
     B_g = B.groupby(["l", "hist", "parity", "sum_of_ls"]).indices
+    A_lmh_g = _unique_lmh_index(A, "A")
+    B_lmh_g = _unique_lmh_index(B, "B")
+    parity_keep = _as_parity_tuples(keep_parity)
+    limits = _CouplingLimits(
+        lmax, lmax_A, lmax_B, lmax_hist, lmax_hist_A, lmax_hist_B, max_sum_l, is_A_B_equal
+    )
 
-    # this will find all unique combinations of "l","m" and "hist" in each dataframe
-    # and corresponding UNIQUE single index
-    A_lmh_g = A.groupby(["l", "m", "hist", "parity"]).indices
-    B_lmh_g = B.groupby(["l", "m", "hist", "parity"]).indices
+    tables = _CouplingTables(
+        A_lmh_g, B_lmh_g, Lmax, parity_keep, normalize, is_A_B_equal and optimize_ms_comb
+    )
 
-    # check that it is unique mapping
-    for k, v in A_lmh_g.items():
-        if len(v) > 1:
-            raise ValueError("A has non-unique elements for (l,m,hist)={}".format(k))
-
-    for k, v in B_lmh_g.items():
-        if len(v) > 1:
-            raise ValueError("B has non-unique elements for (l,m,hist)={}".format(k))
-
-    # unwrap unique index from array to scalar build mapping (l,m,hist)->index
-    A_lmh_g = {k: v[0] for k, v in A_lmh_g.items()}
-    B_lmh_g = {k: v[0] for k, v in B_lmh_g.items()}
-
-    if keep_parity is not None:
-        if isinstance(keep_parity, list):
-            keep_parity = list(
-                map(tuple, keep_parity)
-            )  # enforce to converte into list of tuples
-        else:
-            raise ValueError(
-                f"Only list of (l,p) combinations"
-                f" is possible for keep_parity, but {keep_parity} is set"
-            )
     coupled_dat = []
     visited_hist = set()
     # for all possible outer-product of A_l1(l1hist) and  B_l2(l2hist)
     for l1, l1hist, p1, sum_l1 in A_g:
         for l2, l2hist, p2, sum_l2 in B_g:
-            parity = p1 * p2
-
-            # Apply different filtering criteria
-            # 1. Limit for sum of ls
             new_sum_l = sum_l1 + sum_l2
-            if max_sum_l is not None and new_sum_l > max_sum_l:
+            if not limits.allows_pair(l1, l2, new_sum_l):
                 continue
-            # 2. Limit for max l1 or l2
-            if lmax is not None and (l1 > lmax or l2 > lmax):
+            if not limits.allows_history(l1hist, l2hist):
                 continue
-            # 3. Limit for max l1
-            if lmax_A is not None and l1 > lmax_A:
-                continue
-            # 4. Limit for max l1
-            if lmax_B is not None and l2 > lmax_B:
-                continue
-            # 5. avoid symmetric combinations if A and B are equal
-            if is_A_B_equal and l2 > l1:
-                continue
-
-            # 6. limit for lmax in "history" of current entry
-            if (
-                lmax_hist is not None
-                or lmax_hist_A is not None
-                or lmax_hist_B is not None
-            ):
-                l1h = lmax_from_hist(l1hist)
-                l2h = lmax_from_hist(l2hist)
-                lh = max(l1h, l2h)
-                if lmax_hist is not None and lh > lmax_hist:
-                    continue
-                if lmax_hist_A is not None and l1h > lmax_hist_A:
-                    continue
-                if lmax_hist_B is not None and l2h > lmax_hist_B:
-                    continue
-
-            # Finally, generate new coupled entry
-
-            # Create new hist with explicit parity markers (unless legacy)
-            if legacy_format:
-                newhist = f"({l1hist}{l1},{l2hist}{l2})"
-            else:
-                s1 = _parity_sign(p1)
-                s2 = _parity_sign(p2)
-                newhist = f"({l1hist}{l1}{s1},{l2hist}{l2}{s2})"
-
-            # check l1,l2 swap symmetry if is_A_B_permutative
+            newhist, swaphist = _coupled_histories(
+                (l1, l1hist, p1), (l2, l2hist, p2), legacy_format
+            )
             if is_A_B_equal:
-                if legacy_format:
-                    swaphist = f"({l2hist}{l2},{l1hist}{l1})"
-                else:
-                    swaphist = f"({l2hist}{l2}{s2},{l1hist}{l1}{s1})"
-
                 # if direct or swapped l1,l2,l1hist,l2hist is in visited histories already, skip
                 if swaphist in visited_hist or newhist in visited_hist:
                     continue
-                else:
-                    # otherwise, add both (just to be sure)
-                    visited_hist.add(newhist)
-                    visited_hist.add(swaphist)
+                visited_hist.update((newhist, swaphist))
+            coupled_dat.extend(
+                _coupled_rows(tables, (l1, l1hist, p1), (l2, l2hist, p2), newhist, new_sum_l)
+            )
 
-            # MAIN LOOP
-            # for all valid combinations L=|l1-l2|...|l1+l2|
-            for L in range(abs(l1 - l2), abs(l1 + l2) + 1):
-                # do not take L > Lmax
-                if L > Lmax:
-                    continue
-                if keep_parity is not None and (L, parity) not in keep_parity:
-                    continue
-                # generate real-harmonics CG (l1,l2) to target (L,M)
-                RCG = gen_CG_matrix_REAL(l1, l2, L)  # shape: [2*L+1, 2*l1+1, 2*l2+1]
-
-                # normalization by pre-computed factors
-                if normalize:
-                    key = (l2, l1, L) if l1 < l2 else (l1, l2, L)
-                    RCG *= CG_normalization_dict.get(key, 1.0)
-
-                # for all M = -L ... L
-                for M in range(-L, L + 1):
-                    CG_real_matrix_L_M = RCG[M + L]
-                    ms_list, cg_list = CG_LM_to_sparse(CG_real_matrix_L_M, l1, l2)
-
-                    gen_cg_list = []
-                    A_ind_list = []
-                    B_ind_list = []
-                    AB_to_CG_dict = defaultdict(float)
-                    # loop over ms,cg combinations
-                    for (m1, m2), gen_cg in zip(ms_list, cg_list):
-                        A_ind = A_lmh_g[l1, m1, l1hist, p1]
-                        B_ind = B_lmh_g[l2, m2, l2hist, p2]
-                        # if CG is non-zero - accumulate into lists
-                        # of indices from A and B and CG-list
-                        if abs(gen_cg) > 1e-15:
-                            gen_cg_list.append(gen_cg)
-                            A_ind_list.append(A_ind)
-                            B_ind_list.append(B_ind)
-                            if is_A_B_equal and optimize_ms_comb:
-                                # bugfix to match left_inds and l1
-                                ind = tuple(sorted([A_ind, B_ind], reverse=True))
-                                AB_to_CG_dict[ind] += gen_cg
-                    if is_A_B_equal and optimize_ms_comb:
-                        # rebuild A_ind_list,B_ind_list
-                        gen_cg_list = []
-                        A_ind_list = []
-                        B_ind_list = []
-                        for (A_ind, B_ind), sum_cg in AB_to_CG_dict.items():
-                            if abs(sum_cg) > 1e-15:
-                                gen_cg_list.append(sum_cg)
-                                A_ind_list.append(A_ind)
-                                B_ind_list.append(B_ind)
-
-                    if len(A_ind_list) > 0:
-                        coupled_dat.append(
-                            [
-                                L,
-                                M,
-                                newhist,
-                                A_ind_list,
-                                B_ind_list,
-                                l1,
-                                l2,
-                                parity,
-                                new_sum_l,
-                                gen_cg_list,
-                            ]
-                        )
-    if legacy_format:
-        # Legacy path (ProductFunction / CropProductFunction): apply ONLY
-        # EXCLUSION_HIST_LIST (the frozen natural-parity list). Other
-        # EXCLUSION_HIST_LISTS slots ("natural_parity_extra",
-        # "cross_parity") are deliberately skipped here so that legacy
-        # models loaded with the legacy compute path retain their
-        # original coupling_meta_data shape and can restore existing
-        # checkpoints.
-        dl = [(h.replace("+", "").replace("-", ""), L) for h, L in EXCLUSION_HIST_LIST]
-    else:
-        # Parity-aware path (GeneralProductFunction and other callers
-        # using the default legacy_format=False). Apply all categories
-        # in EXCLUSION_HIST_LISTS.
-        dl = [e for lst in EXCLUSION_HIST_LISTS.values() for e in lst]
-    if history_drop_list is not None:
-        dl.extend(history_drop_list)
-
-    # Normalize entries to (hist, L) tuples. Without this, any
-    # history_drop_list restored from a YAML model file arrives as
-    # list-of-lists (because recursive_walk_and_modify in
-    # instructions/base.py converts each tuple to a list for YAML-safe
-    # serialization), and the tuple-vs-list equality check below would
-    # silently fail -- every rebuilt model would ignore its drop list.
-    # Some callers also pass plain hist strings (no L) via legacy
-    # discovery paths; those are silently skipped, matching prior
-    # behavior (they'd never match (dat[2], dat[0]) tuples anyway).
-    dl_set = set()
-    for e in dl:
-        if isinstance(e, (list, tuple)) and len(e) == 2:
-            dl_set.add((e[0], int(e[1])))
+    dl_set = _excluded_histories(legacy_format, history_drop_list)
     coupled_dat = [dat for dat in coupled_dat if (dat[2], int(dat[0])) not in dl_set]
-
     cdf = pd.DataFrame(
         coupled_dat,
         columns=[
@@ -2552,8 +2579,6 @@ def real_coupling_metainformation(
             "cg_list",
         ],
     )
-
-    # TODO: check if sorting influences on  perf
     return cdf.sort_values(["l", "parity", "hist", "m"]).reset_index(drop=True)
 
 
@@ -2626,156 +2651,3 @@ def lmax_from_hist(s):
     if tags:
         return max([int(d) for d in tags])
     return 0
-
-
-# old function, historical heritage
-def _coupling_metainformation_complex(
-    A: pd.DataFrame = None,
-    B: pd.DataFrame = None,
-    lmax: int = 1,
-    lmax_A: int | None = None,
-    lmax_B: int | None = None,
-    lmax_hist: int | None = None,
-    lmax_hist_A: int | None = None,
-    lmax_hist_B: int | None = None,
-    Lmax: int = 0,
-    is_A_B_equal: bool = False,
-    history_drop_list: list | None = None,
-):
-    # this will find all unique combinations of "l" and "hist" (with different "m"s) in each dataframe
-    # and corresponding array of indices with this combination, i.e.
-    # (0,'(00)0') -> [1,2,5,10, ...]
-    A_g = A.groupby(["l", "hist"]).indices
-    B_g = B.groupby(["l", "hist"]).indices
-
-    # this will find all unique combinations of "l","m" and "hist" in each dataframe
-    # and corresponding UNIQUE single index
-    A_lmh_g = A.groupby(["l", "m", "hist"]).indices
-    B_lmh_g = B.groupby(["l", "m", "hist"]).indices
-
-    # check that it is unique mapping
-    for k, v in A_lmh_g.items():
-        if len(v) > 1:
-            raise ValueError("A has non-unique elements for (l,m,hist)={}".format(k))
-
-    for k, v in B_lmh_g.items():
-        if len(v) > 1:
-            raise ValueError("B has non-unique elements for (l,m,hist)={}".format(k))
-
-    # unwrap unique index from array to scalar build mapping (l,m,hist)->index
-    A_lmh_g = {k: v[0] for k, v in A_lmh_g.items()}
-    B_lmh_g = {k: v[0] for k, v in B_lmh_g.items()}
-
-    coupled_dat = []
-    visited_hist = set()
-    # for all possible outer-product of A_l1(l1hist) and  B_l2(l2hist)
-    for ai in A_g.keys():
-        for bi in B_g.keys():
-            l1, l1hist = ai
-            l2, l2hist = bi
-            if lmax is not None and (l1 > lmax or l2 > lmax):
-                continue
-            if lmax_A is not None and l1 > lmax_A:
-                continue
-            if lmax_B is not None and l2 > lmax_B:
-                continue
-
-            if is_A_B_equal:
-                if l2 > l1:
-                    continue
-
-            if (
-                lmax_hist is not None
-                or lmax_hist_A is not None
-                or lmax_hist_B is not None
-            ):
-                l1h = lmax_from_hist(l1hist)
-                l2h = lmax_from_hist(l2hist)
-                lh = max(l1h, l2h)
-                if lmax_hist is not None and lh > lmax_hist:
-                    continue
-                if lmax_hist_A is not None and l1h > lmax_hist_A:
-                    continue
-                if lmax_hist_B is not None and l2h > lmax_hist_B:
-                    continue
-
-            newhist = "({l1hist}{l1},{l2hist}{l2})".format(
-                l1hist=l1hist, l2hist=l2hist, l1=l1, l2=l2
-            )
-
-            # check l1,l2 swap symmetry if is_A_B_permutative
-            if is_A_B_equal:
-                swaphist = "({l2hist}{l2},{l1hist}{l1})".format(
-                    l1hist=l1hist, l2hist=l2hist, l1=l1, l2=l2
-                )
-
-                # if direct or swapped l1,l2,l1hist,l2hist is in visited histories already, skip
-                if swaphist in visited_hist or newhist in visited_hist:
-                    continue
-                else:
-                    # otherwise, add both (just to be sure)
-                    visited_hist.add(newhist)
-                    visited_hist.add(swaphist)
-            # for all valid combinations L=|l1-l2|...|l1+l2|
-            for L in range(abs(l1 - l2), abs(l1 + l2) + 1):
-                # do not take L > Lmax
-                if L > Lmax:
-                    continue
-                # for all M = -L ... L
-                for M in range(-L, L + 1):
-                    # generate coupling tree from input (l1,l2) to target (L,M)
-                    cur_ms_cg_list = generate_ms_cg_list(  # noqa: F821
-                        [l1, l2], L=L, M=M, half_basis=False, check_is_even=False
-                    )
-
-                    gen_cg_list = []
-                    A_ind_list = []
-                    B_ind_list = []
-                    AB_to_CG_dict = defaultdict(lambda: 0)
-                    # loop over ms,cg combinations
-                    for ms_cg in cur_ms_cg_list:
-                        m1, m2 = ms_cg.ms
-                        A_ind = A_lmh_g[l1, m1, l1hist]
-                        B_ind = B_lmh_g[l2, m2, l2hist]
-                        # if CG is non-zero - accumulate into lists
-                        # of indices from A and B and CG-list
-                        if abs(ms_cg.gen_cg) > 1e-15:
-                            gen_cg_list.append(ms_cg.gen_cg)
-                            A_ind_list.append(A_ind)
-                            B_ind_list.append(B_ind)
-                            if is_A_B_equal:
-                                ind = tuple(sorted([A_ind, B_ind]))
-                                AB_to_CG_dict[ind] += ms_cg.gen_cg
-                    if is_A_B_equal:
-                        gen_cg_list = []
-                        A_ind_list = []
-                        B_ind_list = []
-                        for (A_ind, B_ind), sum_cg in AB_to_CG_dict.items():
-                            if abs(sum_cg) > 1e-15:
-                                gen_cg_list.append(sum_cg)
-                                A_ind_list.append(A_ind)
-                                B_ind_list.append(B_ind)
-
-                    if len(A_ind_list) > 0:
-                        coupled_dat.append(
-                            [L, M, newhist, A_ind_list, B_ind_list, l1, l2, gen_cg_list]
-                        )
-
-    if history_drop_list is not None:
-        sel_cd = []
-        for dat in coupled_dat:
-            if dat[2] not in history_drop_list:
-                sel_cd.append(dat)
-            else:
-                if dat[0] == 0:
-                    continue
-                else:
-                    sel_cd.append(dat)
-        coupled_dat = sel_cd
-
-    cdf = pd.DataFrame(
-        coupled_dat,
-        columns=["l", "m", "hist", "left_inds", "right_inds", "l1", "l2", "cg_list"],
-    )
-
-    return cdf
