@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import collections
 import shutil
 import sys
 import types
@@ -450,6 +451,26 @@ def test_dual_engine_saved_model_switches_engine_with_the_mode(tmp_path):
     assert set(dense.data_keys) == set(
         seg.data_keys
     )  # one input signature for both engines
+
+
+def _graph_op_counts(signature) -> collections.Counter:
+    """Operation types of a signature's graph, including the functions it calls."""
+    graph_def = signature.graph.as_graph_def()
+    counts = collections.Counter(node.op for node in graph_def.node)
+    for function in graph_def.library.function:
+        counts.update(node.op for node in function.node_def)
+    return counts
+
+
+def test_the_dense_signature_aggregates_by_reshape_where_compute_uses_a_segment_sum(tmp_path):
+    path = str(tmp_path / "dual")
+    two_layer(dense=True).save_model(path, input_signature_float_dtype=tf.float64)
+    signatures = tf.saved_model.load(path).signatures
+    segment = _graph_op_counts(signatures["compute"])
+    dense = _graph_op_counts(signatures["compute_dense"])
+    # same weights and inputs, a different graph: the dense one trades one segment sum for reshapes
+    assert dense["UnsortedSegmentSum"] < segment["UnsortedSegmentSum"]
+    assert dense["Reshape"] > segment["Reshape"]
 
 
 # ---------------------------------------------------------------------------- physics
