@@ -18,6 +18,10 @@ from tensorpotential.export_kokkos import _merge_uq_artifacts
 from tensorpotential.instructions import load_instructions
 from tensorpotential.tensorpot import TensorPotential
 from tensorpotential.uq import constants as uqc
+from tensorpotential.uq.compute import (
+    ComputeStructureEnergyAndForcesAndVirialAndGammaOnly,
+    ComputeStructureEnergyAndForcesAndVirialAndUncertainty,
+)
 from tensorpotential.uq.factories import get_gmm_uq_calculator
 
 N_ELEMENTS = 4
@@ -105,6 +109,10 @@ def test_a_mutable_model_gets_the_sigma_of_the_factory_calculator_and_keeps_its_
         float(calc.results[uqc.TOTAL_SIGMA]), reference["total_sigma"], rtol=1e-8
     )
     assert uqc.DSIGMA_DR in calc.results
+    assert isinstance(
+        calc.models[0].compute_function,
+        ComputeStructureEnergyAndForcesAndVirialAndUncertainty,
+    )
     assert calc.gmm_uq_model is not None
 
 
@@ -117,6 +125,10 @@ def test_a_mutable_model_without_the_sigma_gradient_drops_its_keys(uq_setup, ref
     )
     assert uqc.DSIGMA_DR not in calc.results
     assert uqc.VIRIAL_SIGMA not in calc.results
+    assert isinstance(
+        calc.models[0].compute_function,
+        ComputeStructureEnergyAndForcesAndVirialAndGammaOnly,
+    )
 
 
 def test_a_mutable_model_takes_the_dtype_of_the_artifact_loader_when_one_is_given(
@@ -166,10 +178,11 @@ def test_a_mutable_model_whose_compute_was_never_traced_is_not_supported_yet(uq_
         calc.load_uq_artifacts(uq_setup["artifact_path"])
 
 
-def test_an_ensemble_is_refused(uq_setup):
+@pytest.mark.parametrize("n_models", [0, 2])
+def test_anything_but_exactly_one_model_is_refused(n_models, uq_setup):
     model = _model(uq_setup)
     calc = TPCalculator(model=model)
-    calc.models = [model, model]
+    calc.models = [model] * n_models
     with pytest.raises(ValueError, match="exactly one model"):
         calc.load_uq_artifacts(uq_setup["artifact_path"])
 
