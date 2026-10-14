@@ -302,55 +302,7 @@ class PaddingManager:
 
         # Stage 4: Padding
         if self.pad_atoms_number and self.pad_neighbors_fraction:
-            if not self.padding_bounds:
-                # FIRST TIME - NO current_max_neighbors and current_max_atoms, setup with padded threshold
-                upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
-                # insert into ordered list
-                if self.debug_padding_verbose >= 2:
-                    log.info(f"Adding initial padding bound: {upper_bound}")
-                bisect.insort(self.padding_bounds, upper_bound)
-                self._record_and_maybe_adapt(is_miss=True)
-            else:
-                # extract padding bounds from self.padding_bounds
-                upper_bound: tuple[int, int] | None = self.find_upper_padding_bound(
-                    nreal_atoms, nreal_neigh
-                )
-                if self.debug_padding_verbose >= 3:
-                    log.info(f"extract padding bounds: {upper_bound}")
-                if upper_bound is None:
-                    upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
-                    # insert into ordered list
-                    if self.debug_padding_verbose >= 2:
-                        log.info(f"Adding new maximum padding bound: {upper_bound}")
-                    # if upper_bound not in self.padding_bounds:
-                    bisect.insort(self.padding_bounds, upper_bound)
-                    self._record_and_maybe_adapt(is_miss=True)
-                else:
-                    self._record_and_maybe_adapt(is_miss=False)
-                    # check if too large padding
-                    if self.is_large_padding(nreal_atoms, nreal_neigh, upper_bound):
-                        if self.max_number_reduction_recompilation is not None and (
-                            self.number_reduction_recompilation
-                            < self.max_number_reduction_recompilation
-                        ):
-                            self.number_reduction_recompilation += 1
-                            upper_bound = self.get_padded_bound(
-                                nreal_atoms, nreal_neigh
-                            )
-                            # insert into ordered list
-                            if self.debug_padding_verbose >= 2:
-                                log.info(
-                                    f"Reducing padding and adding new bound: {upper_bound}"
-                                )
-                            # if upper_bound not in self.padding_bounds:
-                            bisect.insort(self.padding_bounds, upper_bound)
-                        elif self.debug_padding_verbose >= 3:
-                            log.info(
-                                f"Padding reduction skipped or max reductions reached. Keeping bound: {upper_bound}"
-                            )
-                    elif self.debug_padding_verbose >= 3:
-                        log.info(f"Using existing padding bound: {upper_bound}")
-
+            upper_bound = self._select_padding_bound(nreal_atoms, nreal_neigh)
             pad_max_n_atoms, pad_max_n_neighbors = upper_bound
 
             batch_max_pad_dict: dict[str, int] = {
@@ -370,6 +322,57 @@ class PaddingManager:
                 data_builder.pad_batch(batch, batch_max_pad_dict)
 
         return batch
+
+    def _select_padding_bound(
+        self, nreal_atoms: int, nreal_neigh: int
+    ) -> tuple[int, int]:
+        """The padded (atoms, neighbours) size for a structure; new bounds are recorded."""
+        if not self.padding_bounds:
+            # FIRST TIME - NO current_max_neighbors and current_max_atoms, setup with padded threshold
+            upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
+            self._add_padding_bound(upper_bound, "Adding initial padding bound")
+            self._record_and_maybe_adapt(is_miss=True)
+            return upper_bound
+
+        # extract padding bounds from self.padding_bounds
+        found = self.find_upper_padding_bound(nreal_atoms, nreal_neigh)
+        if self.debug_padding_verbose >= 3:
+            log.info(f"extract padding bounds: {found}")
+        if found is None:
+            upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
+            self._add_padding_bound(upper_bound, "Adding new maximum padding bound")
+            self._record_and_maybe_adapt(is_miss=True)
+            return upper_bound
+
+        self._record_and_maybe_adapt(is_miss=False)
+        return self._reduce_large_padding(nreal_atoms, nreal_neigh, found)
+
+    def _add_padding_bound(self, upper_bound: tuple[int, int], message: str) -> None:
+        """Insert ``upper_bound`` into the ordered list of bounds."""
+        if self.debug_padding_verbose >= 2:
+            log.info(f"{message}: {upper_bound}")
+        bisect.insort(self.padding_bounds, upper_bound)
+
+    def _reduce_large_padding(
+        self, nreal_atoms: int, nreal_neigh: int, upper_bound: tuple[int, int]
+    ) -> tuple[int, int]:
+        """Replace an excessive bound by a tighter new one, within the reduction budget."""
+        if not self.is_large_padding(nreal_atoms, nreal_neigh, upper_bound):
+            if self.debug_padding_verbose >= 3:
+                log.info(f"Using existing padding bound: {upper_bound}")
+            return upper_bound
+        if self.max_number_reduction_recompilation is not None and (
+            self.number_reduction_recompilation
+            < self.max_number_reduction_recompilation
+        ):
+            self.number_reduction_recompilation += 1
+            upper_bound = self.get_padded_bound(nreal_atoms, nreal_neigh)
+            self._add_padding_bound(upper_bound, "Reducing padding and adding new bound")
+        elif self.debug_padding_verbose >= 3:
+            log.info(
+                f"Padding reduction skipped or max reductions reached. Keeping bound: {upper_bound}"
+            )
+        return upper_bound
 
     def is_large_padding(
         self, nreal_atoms: int, nreal_neigh: int, upper_bound: tuple[int, int]
