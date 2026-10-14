@@ -1047,6 +1047,153 @@ class ReferenceEnergyForcesStressesDataBuilder(AbstractDataBuilder):
                     b[self.virial_weight] /= virial_weight_sum
 
 
+def _log_stage(verbose: bool, message: str) -> None:
+    if verbose:
+        logging.info(message)
+
+
+def _collect_garbage(enabled: bool) -> None:
+    if enabled:
+        gc.collect()
+
+
+def _extract_data_dicts(
+    df_or_ase_atoms_list: list[Atoms] | pd.DataFrame,
+    data_builders: list[AbstractDataBuilder],
+    iterator_func: Callable,
+    verbose: bool,
+    max_workers: int | None,
+) -> list[dict]:
+    """Stage 1: the per-structure data dicts of a list of atoms or of a dataframe."""
+    if isinstance(df_or_ase_atoms_list, list) and isinstance(
+        df_or_ase_atoms_list[0], Atoms
+    ):
+        if verbose:
+            logging.info("1/3. Converting atomic structures to batch data")
+        data_dict_list = []
+        for ase_atoms in iterator_func(
+            df_or_ase_atoms_list,
+            total=len(df_or_ase_atoms_list),
+            mininterval=MININTERVAL,
+        ):
+            data_dict = {}
+            for data_builder in data_builders:
+                data_dict.update(data_builder.extract_from_ase_atoms(ase_atoms))
+            data_dict_list.append(data_dict)
+        return data_dict_list
+    if not isinstance(df_or_ase_atoms_list, pd.DataFrame):
+        raise NotImplementedError()
+    if max_workers is None:
+        # SERIAL PROCESSING
+        if verbose:
+            logging.info("1/4. Converting pd.DataFrame to batch data")
+        return process_dataframe(df_or_ase_atoms_list, data_builders, iterator_func)
+    # PARALLEL PROCESSING
+    if verbose:
+        logging.info(
+            f"1/4. Converting pd.DataFrame to batch data (parallel, max_workers={max_workers})"
+        )
+    return parallel_process_dataframe(
+        df_or_ase_atoms_list, data_builders, iterator_func, max_workers
+    )
+
+
+def _join_groups(
+    pre_batch_groups: list[list[dict]],
+    data_builders: list[AbstractDataBuilder],
+    iterator_func: Callable,
+) -> deque:
+    """Join each group of per-structure dicts into a batch; empty batches are dropped."""
+    batches = deque()  # for more memory-efficient batches conversion later
+    for batch_group in iterator_func(
+        pre_batch_groups, total=len(pre_batch_groups), mininterval=MININTERVAL
+    ):
+        batch = {}
+        for data_builder in data_builders:
+            batch.update(data_builder.join_to_batch(batch_group))
+        if batch:
+            batches.append(batch)
+    return batches
+
+
+def _bucketed_groups(
+    data_dict_list: list[dict],
+    data_builders: list[AbstractDataBuilder],
+    batch_size: int,
+    max_n_buckets: int | str,
+    verbose: bool,
+    max_padding_fraction: float,
+) -> tuple[list[list[dict]], list[dict], AbstractDataBuilder | None]:
+    """Stage 2: split into per-batch groups with their padding sizes; also the dense builder, if any."""
+    if verbose:
+        logging.info("2/4. Splitting batches into per-batch groups.")
+    dense_builder = next(
+        (db for db in data_builders if getattr(db, "dense_nbr", False)), None
+    )
+    if dense_builder is not None:
+        pre_batch_groups, max_pad_batches = bucketing_split_dense(
+            data_dict_list,
+            batch_size=batch_size,
+            max_n_buckets=max_n_buckets,
+            slot_budget=dense_builder.dense_slot_budget,
+            n_neigh_buckets=dense_builder.dense_n_neigh_buckets,
+            net_padding=dense_builder.dense_net_padding,
+            max_shapes=dense_builder.dense_max_shapes,
+            max_neigh_cap=dense_builder.dense_max_neigh_cap,
+            verbose=verbose,
+        )
+    else:
+        pre_batch_groups, max_pad_batches = bucketing_split(
+            data_dict_list,
+            batch_size=batch_size,
+            max_n_buckets=max_n_buckets,
+            verbose=verbose,
+            max_padding_fraction=max_padding_fraction,
+        )
+    return pre_batch_groups, max_pad_batches, dense_builder
+
+
+def _raise_to_external_cap(
+    max_pad_batches: list[dict], key: str, external: int | None
+) -> None:
+    """Pad every batch to ``external`` (or to the data's own largest size, if that is larger)."""
+    if external is None:
+        return
+    current = np.max([d[key] for d in max_pad_batches])
+    if current > external:
+        external = current
+    for d in max_pad_batches:
+        d[key] = external
+
+
+def _padding_statistics(
+    batches: deque, max_pad_batches: list[dict], iterator_func: Callable
+) -> defaultdict:
+    """Real and padded numbers of structures, atoms and neighbours over all batches."""
+    padding_stats: defaultdict = defaultdict(int)
+    for batch, max_pad_dict in iterator_func(
+        zip(batches, max_pad_batches), mininterval=MININTERVAL
+    ):
+        nreal_struc = get_number_of_real_struc(batch)
+        nreal_atoms = get_number_of_real_atoms(batch)
+        nreal_neigh = get_number_of_real_neigh(batch)
+
+        pad_nstruct = max_pad_dict[constants.PAD_MAX_N_STRUCTURES] - nreal_struc
+        pad_nat = max_pad_dict[constants.PAD_MAX_N_ATOMS] - nreal_atoms
+        pad_nneigh = max_pad_dict[constants.PAD_MAX_N_NEIGHBORS] - nreal_neigh
+
+        for k, v in {
+            "pad_nstruct": pad_nstruct,
+            "pad_nat": pad_nat,
+            "pad_nneigh": pad_nneigh,
+            "nreal_struc": nreal_struc,
+            "nreal_atoms": nreal_atoms,
+            "nreal_neigh": nreal_neigh,
+        }.items():
+            padding_stats[k] += v
+    return padding_stats
+
+
 def construct_batches(
     df_or_ase_atoms_list: list[Atoms] | pd.DataFrame,
     data_builders: list[AbstractDataBuilder],
@@ -1064,43 +1211,9 @@ def construct_batches(
     Return:    batches (a deque of dicts), or (batches, padding_stats) when ``return_padding_stats``
     """
     iterator_func = tqdm if verbose else transparent_iterator
-    data_dict_list = []
-
-    if isinstance(df_or_ase_atoms_list, list) and isinstance(
-        df_or_ase_atoms_list[0], Atoms
-    ):
-        # Stage 1. Build List of (data dict)
-        if verbose:
-            logging.info("1/3. Converting atomic structures to batch data")
-        for ase_atoms in iterator_func(
-            df_or_ase_atoms_list,
-            total=len(df_or_ase_atoms_list),
-            mininterval=MININTERVAL,
-        ):
-            data_dict = {}
-            for data_builder in data_builders:
-                data_dict.update(data_builder.extract_from_ase_atoms(ase_atoms))
-            data_dict_list.append(data_dict)
-    elif isinstance(df_or_ase_atoms_list, pd.DataFrame):
-        # Stage 1. Build List of (data dict)
-        if max_workers is None:
-            # SERIAL PROCESSING
-            if verbose:
-                logging.info("1/4. Converting pd.DataFrame to batch data")
-            data_dict_list = process_dataframe(
-                df_or_ase_atoms_list, data_builders, iterator_func
-            )
-        else:
-            # PARALLEL PROCESSING
-            if verbose:
-                logging.info(
-                    f"1/4. Converting pd.DataFrame to batch data (parallel, max_workers={max_workers})"
-                )
-            data_dict_list = parallel_process_dataframe(
-                df_or_ase_atoms_list, data_builders, iterator_func, max_workers
-            )
-    else:
-        raise NotImplementedError()
+    data_dict_list = _extract_data_dicts(
+        df_or_ase_atoms_list, data_builders, iterator_func, verbose, max_workers
+    )
 
     assert len(data_dict_list) == len(df_or_ase_atoms_list)
     padding_stats = None
@@ -1108,80 +1221,34 @@ def construct_batches(
     if max_n_buckets is None:
         # direct_split
         pre_batch_groups = direct_split(data_dict_list, batch_size=batch_size)
-        batches = deque()  # for more memory-efficient batches conversion later
-        for batch_group in iterator_func(
-            pre_batch_groups, total=len(pre_batch_groups), mininterval=MININTERVAL
-        ):
-            batch = {}
-            for data_builder in data_builders:
-                batch.update(data_builder.join_to_batch(batch_group))
-            if batch:
-                batches.append(batch)
+        batches = _join_groups(pre_batch_groups, data_builders, iterator_func)
     else:
         # bucketing
-        if verbose:
-            logging.info("2/4. Splitting batches into per-batch groups.")
-        dense_builder = next(
-            (db for db in data_builders if getattr(db, "dense_nbr", False)), None
+        pre_batch_groups, max_pad_batches, dense_builder = _bucketed_groups(
+            data_dict_list,
+            data_builders,
+            batch_size,
+            max_n_buckets,
+            verbose,
+            max_padding_fraction,
         )
-        if dense_builder is not None:
-            pre_batch_groups, max_pad_batches = bucketing_split_dense(
-                data_dict_list,
-                batch_size=batch_size,
-                max_n_buckets=max_n_buckets,
-                slot_budget=dense_builder.dense_slot_budget,
-                n_neigh_buckets=dense_builder.dense_n_neigh_buckets,
-                net_padding=dense_builder.dense_net_padding,
-                max_shapes=dense_builder.dense_max_shapes,
-                max_neigh_cap=dense_builder.dense_max_neigh_cap,
-                verbose=verbose,
-            )
-        else:
-            pre_batch_groups, max_pad_batches = bucketing_split(
-                data_dict_list,
-                batch_size=batch_size,
-                max_n_buckets=max_n_buckets,
-                verbose=verbose,
-                max_padding_fraction=max_padding_fraction,
-            )
         del data_dict_list
-        if gc_collect:
-            gc.collect()
+        _collect_garbage(gc_collect)
 
-        batches = deque()  # for more memory-efficient batches conversion later
-        if verbose:
-            logging.info("3/4. Joining groups to batches")
-        for batch_group in iterator_func(
-            pre_batch_groups, total=len(pre_batch_groups), mininterval=MININTERVAL
-        ):
-            batch = {}
-            for data_builder in data_builders:
-                batch.update(data_builder.join_to_batch(batch_group))
-            if batch:
-                batches.append(batch)
+        _log_stage(verbose, "3/4. Joining groups to batches")
+        batches = _join_groups(pre_batch_groups, data_builders, iterator_func)
         del pre_batch_groups
-        if gc_collect:
-            gc.collect()
+        _collect_garbage(gc_collect)
 
         # Stage 4. Padding batches
-        if verbose:
-            logging.info("4/4. Padding batches")
-        if dense_builder is None and external_max_nneigh is not None:
-            current_max_nneigh = np.max(
-                [d[constants.PAD_MAX_N_NEIGHBORS] for d in max_pad_batches]
+        _log_stage(verbose, "4/4. Padding batches")
+        if dense_builder is None:
+            _raise_to_external_cap(
+                max_pad_batches, constants.PAD_MAX_N_NEIGHBORS, external_max_nneigh
             )
-            if current_max_nneigh > external_max_nneigh:
-                external_max_nneigh = current_max_nneigh
-            for d in max_pad_batches:
-                d[constants.PAD_MAX_N_NEIGHBORS] = external_max_nneigh
-        if dense_builder is None and external_max_nat is not None:
-            current_max_nat = np.max(
-                [d[constants.PAD_MAX_N_ATOMS] for d in max_pad_batches]
+            _raise_to_external_cap(
+                max_pad_batches, constants.PAD_MAX_N_ATOMS, external_max_nat
             )
-            if current_max_nat > external_max_nat:
-                external_max_nat = current_max_nat
-            for d in max_pad_batches:
-                d[constants.PAD_MAX_N_ATOMS] = external_max_nat
 
         for batch, batch_max_pad_dict in iterator_func(
             zip(batches, max_pad_batches), total=len(batches), mininterval=MININTERVAL
@@ -1191,27 +1258,7 @@ def construct_batches(
 
         # accumulate stats
         if return_padding_stats:
-            padding_stats = defaultdict(int)
-            for batch, max_pad_dict in iterator_func(
-                zip(batches, max_pad_batches), mininterval=MININTERVAL
-            ):
-                nreal_struc = get_number_of_real_struc(batch)
-                nreal_atoms = get_number_of_real_atoms(batch)
-                nreal_neigh = get_number_of_real_neigh(batch)
-
-                pad_nstruct = max_pad_dict[constants.PAD_MAX_N_STRUCTURES] - nreal_struc
-                pad_nat = max_pad_dict[constants.PAD_MAX_N_ATOMS] - nreal_atoms
-                pad_nneigh = max_pad_dict[constants.PAD_MAX_N_NEIGHBORS] - nreal_neigh
-
-                for k, v in {
-                    "pad_nstruct": pad_nstruct,
-                    "pad_nat": pad_nat,
-                    "pad_nneigh": pad_nneigh,
-                    "nreal_struc": nreal_struc,
-                    "nreal_atoms": nreal_atoms,
-                    "nreal_neigh": nreal_neigh,
-                }.items():
-                    padding_stats[k] += v
+            padding_stats = _padding_statistics(batches, max_pad_batches, iterator_func)
 
     # post-processing stage
     for data_builder in data_builders:
