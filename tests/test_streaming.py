@@ -212,9 +212,14 @@ def test_the_us_spelling_of_the_metric_strategy_is_accepted(builders, structures
 
 def test_buckets_are_kept_sorted_by_atoms_plus_neighbours(builders, structures):
     iterator = _iterator(builders, [])
-    iterator._pad_batch([structures[-1]])
-    iterator._pad_batch([structures[0]] * 1 + [structures[1]])
+    iterator._pad_batch(structures[-3:])  # the large bucket first
+    iterator._pad_batch(structures[:1])  # fits it: nothing new
+    assert len(iterator.buckets) == 1
+    iterator._pad_batch(structures[-6:])  # larger: a new bucket, listed last
+    iterator._buckets.reverse()  # the list order is the caller's; growth re-sorts it
+    iterator._pad_batch(structures[-9:])
     totals = [b[ATOMS] + b[BONDS] for b in iterator.buckets]
+    assert len(totals) == 3
     assert totals == sorted(totals)
 
 
@@ -319,3 +324,77 @@ def test_later_epochs_log_the_new_bucket_but_no_intermediate_statistics(
     messages = [r.message for r in caplog.records]
     assert sum("New bucket" in m for m in messages) == 2
     assert not any("Intermediate padding stats" in m for m in messages)
+
+
+def _counts(group: list[dict[str, Any]]) -> tuple[int, int]:
+    return sum(map(_real_atoms, group)), sum(map(_real_bonds, group))
+
+
+@pytest.mark.parametrize("axis", ["atoms", "bonds", "structs"])
+def test_a_bucket_that_holds_the_group_exactly_is_used(builders, structures, axis):
+    group = structures[-3:]
+    atoms, bonds = _counts(group)
+    exact = {"atoms": atoms, "bonds": bonds, "structs": 3}
+    roomy = {"atoms": atoms + 5, "bonds": bonds + 5, "structs": 5}
+    sizes = {k: (exact if axis == k else roomy)[k] for k in exact}
+    iterator = _iterator(
+        builders, [_bucket(sizes["atoms"], sizes["bonds"], sizes["structs"])]
+    )
+    iterator._pad_batch(group)
+    assert len(iterator.buckets) == 1
+
+
+@pytest.mark.parametrize("frac", [0.5, 1, 4])
+def test_growth_from_a_nearly_sufficient_bucket_follows_the_closed_form(
+    builders, structures, frac
+):
+    group = structures[-3:]
+    atoms, bonds = _counts(group)
+    assert atoms >= 20  # the fractional step must exceed the missing slot
+    # atoms: one too few to hold the group (growth decides); bonds fit with room
+    ref = _bucket(atoms - 1, bonds + 50, 10)
+    iterator = _iterator(builders, [ref], growth_fraction=frac)
+    iterator._pad_batch(group)
+    (new,) = [b for b in iterator.buckets if b != ref]
+    assert new[ATOMS] == _grown(atoms - 1, atoms + 1, frac)
+    assert new[BONDS] == bonds + 50  # required <= current: unchanged
+    assert new[STRUCTS] == 4  # the metric axis of the helper takes the required size
+
+
+def test_an_axis_that_is_exactly_as_large_as_required_is_not_grown(
+    builders, structures
+):
+    group = structures[-3:]
+    atoms, bonds = _counts(group)
+    ref = _bucket(
+        atoms + 1, bonds - 1, 4
+    )  # atoms: required == current; bonds: too small
+    iterator = _iterator(builders, [ref], growth_fraction=0.5)
+    iterator._pad_batch(group)
+    (new,) = [b for b in iterator.buckets if b != ref]
+    assert new[ATOMS] == atoms + 1
+
+
+def test_the_log_names_the_axes_that_grew_including_the_padding_slot(
+    builders, structures, caplog
+):
+    group = structures[-3:]
+    atoms, bonds = _counts(group)
+    ref = _bucket(atoms, bonds - 1, 4)  # atoms: one short because of the padding slot
+    iterator = _iterator(builders, [ref])
+    with caplog.at_level(logging.INFO, logger="tensorpotential.data.streaming"):
+        iterator._pad_batch(group)
+    (message,) = [r.message for r in caplog.records if "New bucket" in r.message]
+    assert f"atoms {atoms}->" in message
+    assert f"neighbours {bonds - 1}->" in message
+    assert "structures" not in message.split("grew:")[1]
+
+
+def test_a_quiet_first_epoch_logs_no_intermediate_statistics(
+    builders, structures, caplog
+):
+    iterator = _iterator(builders, [], verbose=False, is_first_epoch=True)
+    with caplog.at_level(logging.INFO, logger="tensorpotential.data.streaming"):
+        iterator._pad_batch(structures[:1])
+        iterator._pad_batch(structures[-3:])
+    assert not any("Intermediate padding stats" in r.message for r in caplog.records)
