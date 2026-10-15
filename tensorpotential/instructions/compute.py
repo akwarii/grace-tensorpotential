@@ -159,12 +159,15 @@ def _contract_weight_runs(w, x, runs, lm_first, atomic_mu_i=None):
     ``[a, n, c]`` (``[c, a, n]`` if ``lm_first``), ``runs`` are the ``_tile_runs`` of
     the tile that maps each channel ``c`` to its weight index. One contraction per run
     of channels that share a weight, so the weights are never expanded to every channel.
+    The weights are split once (``tf.unstack``): the gradient of a slice per run would be
+    a dense tensor of the shape of ``w`` for every run.
     """
     w_sub = "kn," if atomic_mu_i is None else "akn,"
     eq = w_sub + ("man->mak" if lm_first else "anm->mak")
+    w_per_index = tf.unstack(w, axis=-1)
     parts = []
     for c0, c1, t in runs:
-        wt = w[..., t]
+        wt = w_per_index[t]
         if atomic_mu_i is not None:
             wt = tf.gather(wt, atomic_mu_i, axis=0)
         xr = x[c0:c1] if lm_first else x[:, :, c0:c1]
