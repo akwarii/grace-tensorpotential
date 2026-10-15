@@ -209,8 +209,8 @@
   upstream: pending
 
 - path: tensorpotential/instructions/compute.py
-  reason: 'commented-out code removed; CPU quick wins (Clebsch-Gordan cache, dictionary join); code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); FunctionReduce methods consolidated, unused symbols module removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core)'
-  milestone: [CLEAN2, CPU1, QUAL1, QUAL3, CORE1]
+  reason: 'commented-out code removed; CPU quick wins (Clebsch-Gordan cache, dictionary join); code-quality fixes (X | None annotations, per-call defaults, exception chaining, logged exceptions); FunctionReduce methods consolidated, unused symbols module removed; TensorFlow-free import path (lazy package imports, TF options on first TF-side import, cutoff helpers moved to core); CPU performance of the TensorFlow model (radial l-to-lm repeat by broadcasting, FunctionReduceN weights contracted per l block)'
+  milestone: [CLEAN2, CPU1, QUAL1, QUAL3, CORE1, QUAL10]
   upstream: pending
 
 - path: tensorpotential/instructions/instruction_graph_utils.py
