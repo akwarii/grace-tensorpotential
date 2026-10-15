@@ -147,7 +147,7 @@ unsupported-operator = "ignore"
 [tool.coverage.run]
 branch = true
 source = ["tensorpotential"]
-# fail_under is set per package in CI (M2.1)
+# fail_under is set per package in CI: quality-gates of tests.yaml holds core/ and torch_backend/ at 90 (TORCH1)
 
 # Import contract (D1, D16, R2): the TensorFlow-free modules never reach tensorflow or keras, directly or through
 # another module of the package. tests/test_import_gates.py runs `lint-imports` and fails when tensorpotential.torch_backend

@@ -74,13 +74,13 @@ Key dependencies: `tensorflow~=2.20` (Keras 3 comes with it; the package neither
 ## Commands
 
 ```bash
-uv sync --group dev          # .venv from the committed uv.lock; the dev group has pytest, pytest-cov, pytest-xdist, ruff, ty and the tf extra (TF is not a base dependency)
+uv sync --group dev --extra torch   # .venv from the committed uv.lock; the dev group has pytest, pytest-cov, pytest-xdist, ruff, ty and the tf extra (TF is not a base dependency); tests_torch and ty need the torch extra
 
 # Tests: from the repository root; they write nothing into the tree. Under -n N every worker gets cores/N TF and OpenMP threads (conftest.py).
 uv run --frozen --no-sync pytest tests -q -n 4 --dist load \
     --ignore=tests/test_structured_grid.py --ignore=tests/test_foundation_model_regression.py   # fast loop: add -m "not slow"
 uv run --frozen --no-sync pytest tests/test_instructions.py -vv    # one file, serial
-uv run --frozen --no-sync pytest tests_torch -q                     # torch-backend tests, TF-free, seconds
+uv run --frozen --no-sync pytest tests_torch -q                     # torch-backend tests, TF-free, seconds; capability markers and GRACE_REQUIRE_CAPS: tests_torch/capabilities.py
 
 # Checks (dev group pins ruff==0.16.7, ty==0.0.84; ty is pre-1.0)
 uv run --frozen --no-sync ruff check PATH                  # strict set in the new packages; elsewhere E, F, ERA001

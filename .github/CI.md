@@ -6,8 +6,8 @@ What the workflows do, why they are shaped this way, and the commands behind the
 
 | File | Jobs |
 |---|---|
-| `lint.yaml` | ruff and ty on the new packages, the lint ratchet, the import contract, `deptry`, the dead-code ratchet, registry completeness, the tests of the packaging, CI and dead-code tools, the clone ratchet, the divergence ledger |
-| `tests.yaml` | `test-core` (no TensorFlow), `test-torch` (pandas 2.3 and 3.0), `test-tf` (four shards, each uploads its coverage data), `quality-gates` (combines the coverage); also nightly |
+| `lint.yaml` | ruff and ty on the new packages (the environment has the `torch` extra, so ty resolves torch), the lint ratchet, the import contract, `deptry`, the dead-code ratchet, registry completeness, the tests of the packaging, CI and dead-code tools, the clone ratchet, the divergence ledger |
+| `tests.yaml` | `test-core` (no TensorFlow), `test-torch` (`tests_torch` with the `torch` extra and no TensorFlow, pandas 2.3 and 3.0, uploads its coverage data), `test-tf` (four shards, each uploads its coverage data), `quality-gates` (combines the coverage); also nightly |
 | `durations.yaml` | `Durations` (CI4): weekly and on request, the four shards store their durations and `tools/merge_durations.py` merges them into the artifact `test-durations`; read-only token, never pushes (section "The shard durations") |
 | `wheel.yaml` | `wheel`, `wheel-smoke`, `extras-resolve` |
 | `nightly.yml` | both stacks in one environment, torch-sim main, `quality-report` (`tools/quality_report.py check` on the coverage and junit files of the Tests run of the same commit; the table goes to the job summary, a worse metric fails the job) |
@@ -23,10 +23,10 @@ The job names a pull request must pass; the owner sets them as required checks i
 |---|---|---|
 | Lint | `lint` | strict ruff and ty on the new packages, lint ratchet, import contract, `deptry`, dead-code ratchet (`tools/dead_code.py`), registry completeness, packaging- and dead-code-tool tests, clone ratchet (`tools/check_clones.py`), divergence ledger (`tools/divergence.py`, against a read-only fetch of the public upstream master: no secret, no push permission) |
 | Tests | `test-core`, `test-torch (2.3.3)`, `test-torch (3.0.3)`, `test-tf (group 1 of 4)` to `test-tf (group 4 of 4)` | the suites |
-| Tests | `quality-gates` | combines the coverage data of the four shards, runs `tools/coverage_ratchet.py check` and, on a pull request, `tools/check_touched_coverage.py --base origin/<base branch>` (touched units at 90%) |
+| Tests | `quality-gates` | combines the coverage data of the four shards and of `test-torch`, runs `tools/coverage_ratchet.py check`, the 90% floor of `core/` and `torch_backend/` (each package on its own, lines and branches; TORCH1) and, on a pull request, `tools/check_touched_coverage.py --base origin/<base branch>` (touched units at 90%) |
 | Wheel | `wheel`, `wheel-smoke`, `extras-resolve` | packaging |
 
-`quality-gates` needs the four shards to pass, so a failing shard hides its verdict. Each shard writes `.coverage.group-N` (`COVERAGE_FILE`) and uploads it, with `junit.group-N.xml`, as the artifact `coverage-group-N`; the combine step needs the checkout path of the shards, which is the same on every hosted job.
+`quality-gates` needs the four shards and both `test-torch` runs to pass, so a failing one hides its verdict. Each shard writes `.coverage.group-N` (`COVERAGE_FILE`) and uploads it, with `junit.group-N.xml`, as the artifact `coverage-group-N`; each `test-torch` run uploads `.coverage.torch-<pandas>` as `coverage-torch-<pandas>`; the combine step needs the checkout path of the shards, which is the same on every hosted job.
 
 CI does **not** run: `python tools/board.py lint` and every other project-board query (a token with project scope; it stays in the agent procedure), the real-weight and foundation-model tests (HPC only), any GPU test, the comparisons with `baselines/` (`tools/junit_outcomes.py`, `tools/ast_manifest.py`; run them locally for a gate), and the scheduled `Nightly` and `Upstream completeness` jobs on a pull request.
 
@@ -60,7 +60,8 @@ uv run --frozen --no-sync pytest tests --splits 4 --group 1 --splitting-algorith
 
 ## Packaging (CI1, D12)
 
-- TensorFlow is the `tf` extra, not a base dependency: `pip install tensorpotential` has none; extras are `tf`, `torch`, `torch-sim`, `dashboard` (Flask, for `grace_dashboard`), `all`; `[dependency-groups] dev` includes `tensorpotential[tf,dashboard]`.
+- TensorFlow is the `tf` extra, not a base dependency: `pip install tensorpotential` has none; extras are `tf`, `torch`, `torch-sim`, `dashboard` (Flask, for `grace_dashboard`), `all`; `[dependency-groups] dev` includes `tensorpotential[tf,dashboard]`; the `lint` job adds `--extra torch`, and so does a local sync that type-checks or tests the torch backend (`tests_torch` needs torch).
+- `tests_torch` markers (`tests_torch/capabilities.py`): `golden`, `slow` and the capabilities `tf`, `torchsim`, `vesin`, `gpu`, `cueq`, `hpc`. A test that needs a missing capability is skipped; a job that exports `GRACE_REQUIRE_CAPS` (for example `torchsim,vesin`) fails at the start when one it names is missing, and a parametrisation over an empty list fails the collection. `test-torch` guarantees none of them yet, and runs with `--strict-markers`.
 - `tensorpotential/_tf_options.py` calls `core.backends.require_backend("tf")` first (it checks with `find_spec`, never imports TF), so every TF-side module, hence the console scripts `gracemaker`, `grace_predict`, `grace_preprocess`, `grace_utils` and `extxyz2df`, stops with the `pip install 'tensorpotential[tf]'` hint in a TF-free environment (a script needs no guard of its own; `grace_dashboard` needs `flask`, which the `dashboard` extra installs).
 - Package discovery is `[tool.setuptools.packages.find]` (`tensorpotential*`); an unscoped `find_packages()` would ship the tracked `tests` package.
 - TF and torch resolve together in `uv.lock`, but **import `torch` (and `torch_sim`) before `tensorflow` in one process**: `import tensorflow, triton` segfaults on triton 3.8.0 / TF 2.20 (finding on the CI1 issue).
