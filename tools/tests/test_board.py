@@ -161,7 +161,9 @@ class FakeGH:
             "opt-prog": "In Progress",
             "opt-pr": "PR Open",
             "opt-done": "Done",
+            "opt-drop": "Dropped",
         }
+        self.blocking = {}  # issue number -> numbers of the issues it natively blocks
 
     def issue(self, number):
         return next(i for i in self.issues if i["number"] == number)
@@ -246,6 +248,10 @@ class FakeGH:
             issue, blocking = find(r'issueId: "node-(\d+)", blockingIssueId: "node-(\d+)"', query).groups()
             self.blocked.append((int(issue), int(blocking)))
             return ""
+        if "blocking(first" in query:
+            number = int(find(r"issue\(number: (\d+)\)", query).group(1))
+            nodes = [{"number": n} for n in self.blocking.get(number, [])]
+            return json.dumps({"data": {"repository": {"issue": {"blocking": {"nodes": nodes}}}}})
         if "repository(owner" in query:
             nodes = {f"n{n}": {"id": f"node-{n}"} for n in re.findall(r"n(\d+): issue", query)}
             return json.dumps({"data": {"repository": nodes}})
@@ -1494,3 +1500,86 @@ def test_an_estimate_is_compared_as_a_number_not_as_text(fake, tmp_path, capsys)
     body = new_body().replace("- Estimate: 2.5 focused days", "- Estimate: 2 focused days")
     board.cmd_create(create_args(tmp_path, body, days=2.0))
     assert "dry run" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- drop
+
+
+def test_cmd_drop_refuses_while_an_issue_that_depends_on_it_is_open(fake):
+    with pytest.raises(SystemExit, match="CLEAN1 cannot be dropped: these issues depend on it and are neither Done nor Dropped: CLEAN2"):
+        board.cmd_drop(ns(id="CLEAN1", reason="not needed"))
+    assert fake.closed == []
+    assert fake.status["CLEAN1"] == "Todo"
+
+
+@pytest.mark.parametrize("dependent_status", ["Done", "Dropped"])
+def test_cmd_drop_closes_as_not_planned_when_the_dependents_are_finished(fake, capsys, dependent_status):
+    fake.status["CLEAN2"] = dependent_status
+
+    board.cmd_drop(ns(id="CLEAN1", reason="superseded by another issue"))
+
+    assert fake.closed == [3]
+    assert ("issue", "close", "3", "--repo", board.REPO, "--reason", "not planned") in fake.calls
+    assert fake.status["CLEAN1"] == "Dropped"
+    assert fake.comments[-1] == (3, "**Dropped** (closed as not planned). Reason:\n\nsuperseded by another issue")
+    assert "CLEAN1 closed as not planned (Dropped)" in capsys.readouterr().out
+
+
+def test_cmd_drop_counts_native_blocked_by_relations(fake):
+    fake.blocking[6] = [4]  # GATE-CLEAN natively blocks CLEAN2, which is still Todo
+
+    with pytest.raises(SystemExit, match="GATE-CLEAN cannot be dropped: .*: CLEAN2"):
+        board.cmd_drop(ns(id="GATE-CLEAN", reason="r"))
+
+    fake.blocking[6] = [99]  # a number that is not an issue of the board is ignored
+    board.cmd_drop(ns(id="GATE-CLEAN", reason="r"))
+    assert fake.closed == [6]
+
+
+def test_cmd_drop_of_a_dropped_closed_issue_changes_nothing(fake, capsys):
+    fake.status["GATE-CLEAN"] = "Dropped"
+    fake.issue(6)["state"] = "CLOSED"
+
+    board.cmd_drop(ns(id="GATE-CLEAN", reason="again"))
+
+    assert fake.comments == []
+    assert fake.closed == []
+    assert "GATE-CLEAN is already closed and Dropped" in capsys.readouterr().out
+
+
+def test_cmd_status_refuses_dropped_and_points_to_drop(fake):
+    with pytest.raises(SystemExit, match="use `drop`"):
+        board.cmd_status(ns(id="GATE-CLEAN", status="Dropped"))
+    assert fake.status["GATE-CLEAN"] == "Todo"
+
+
+def test_a_closed_dependent_does_not_block_even_off_the_board(fake):
+    fake.issue(4)["state"] = "CLOSED"  # CLEAN2 depends on CLEAN1 but is closed
+    del fake.status["CLEAN2"]  # and is not on the board
+
+    board.cmd_drop(ns(id="CLEAN1", reason="r"))
+
+    assert fake.closed == [3]
+
+
+def test_drop_reports_an_already_dropped_issue_before_reading_its_relations(fake, capsys):
+    fake.status["CLEAN1"] = "Dropped"
+    fake.issue(3)["state"] = "CLOSED"  # CLEAN2 (Todo) depends on it: lint reports that, drop does not refuse
+
+    board.cmd_drop(ns(id="CLEAN1", reason="again"))
+
+    assert "already closed and Dropped" in capsys.readouterr().out
+    assert not any("blocking(first" in str(c) for c in fake.calls)
+
+
+def test_lint_flags_an_open_issue_that_depends_on_a_dropped_one(fake, capsys):
+    fake.status["SAFE1"] = "Dropped"
+
+    code, out = lint(fake, capsys)
+
+    assert code == 1
+    assert "STALE  CLEAN1 (#3): depends on SAFE1, which is Dropped" in out
+    fake.status["CLEAN1"] = "Done"
+    board.reset_cache()  # a new run of the tool reads the table again
+    code, out = lint(fake, capsys)
+    assert "depends on SAFE1, which is Dropped" not in out
