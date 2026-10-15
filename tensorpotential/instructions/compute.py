@@ -160,17 +160,16 @@ def _contract_weight_runs(w, x, runs, lm_first, atomic_mu_i=None):
     the tile that maps each channel ``c`` to its weight index. One contraction per run
     of channels that share a weight, so the weights are never expanded to every channel.
     """
+    w_sub = "kn," if atomic_mu_i is None else "akn,"
+    eq = w_sub + ("man->mak" if lm_first else "anm->mak")
     parts = []
     for c0, c1, t in runs:
         wt = w[..., t]
-        xr = x[c0:c1] if lm_first else x[:, :, c0:c1]
-        if atomic_mu_i is None:
-            eq = "kn,man->mak" if lm_first else "kn,anm->mak"
-        else:
+        if atomic_mu_i is not None:
             wt = tf.gather(wt, atomic_mu_i, axis=0)
-            eq = "akn,man->mak" if lm_first else "akn,anm->mak"
+        xr = x[c0:c1] if lm_first else x[:, :, c0:c1]
         parts.append(tf.einsum(eq, wt, xr))
-    return parts[0] if len(parts) == 1 else tf.concat(parts, axis=0)
+    return tf.concat(parts, axis=0)
 
 
 def _lmp_lookup(coupling_meta_data):
