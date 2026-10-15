@@ -77,6 +77,22 @@ def _resolve_dense_nbr(dense_nbr):
     return bool(raw)
 
 
+def _expand_l_to_lm(x, lmax):
+    """Repeat entry ``l`` of the last axis ``2l+1`` times: ``[..., lmax+1] -> [..., (lmax+1)**2]``.
+
+    The values of ``tf.gather(x, l_tile, axis=-1)``, built by broadcasting: its gradient is a
+    sum over the ``2l+1`` copies instead of the scatter of a gather along the minor axis.
+    """
+    lead = tf.shape(x)[:-1]
+    return tf.concat(
+        [
+            tf.broadcast_to(x[..., l : l + 1], tf.concat([lead, [2 * l + 1]], axis=0))
+            for l in range(lmax + 1)
+        ],
+        axis=-1,
+    )
+
+
 def _equiv_cg_couple(prod, lr_inds, cg, m_sum_ind, nfunc, lm_first, name):
     """Clebsch-Gordan couple the spherical-harmonic ⊗ indicator product.
 
@@ -664,7 +680,7 @@ class LinearRadialFunction(TPInstruction):
 
         crad = tf.cast(self.crad, dtype=basis.dtype)
         y = tf.einsum("nlk,ak->anl", crad, basis)
-        return tf.gather(y, self.l_tile, axis=-1)
+        return _expand_l_to_lm(y, self.lmax)
 
 
 @capture_init_args
@@ -816,7 +832,7 @@ class MLPRadialFunction(TPInstruction, LORAInstructionMixin):
             y = y * inv * gamma
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        return tf.gather(y, self.l_tile, axis=-1)
+        return _expand_l_to_lm(y, self.lmax)
 
 
 @capture_init_args
@@ -970,7 +986,7 @@ class MLPRadialFunction_v2(TPInstruction, LORAInstructionMixin):
             y *= embedding
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        return tf.gather(y, self.l_tile, axis=-1)
+        return _expand_l_to_lm(y, self.lmax)
 
 
 @capture_init_args
@@ -1860,8 +1876,8 @@ class SPBF(TPEquivariantInstruction):
         x = self.mlp_layers[-1](x)
         # [n_bonds, n_rad_max * (lmax+1)] -> [n_bonds, n_rad_max, lmax+1]
         x = tf.reshape(x, [-1, self.n_rad_max, self._lmax + 1])
-        # Gather by l: [n_bonds, n_rad_max, (lmax+1)^2]
-        return tf.gather(x, self.l_tile, axis=-1)
+        # Repeat by l: [n_bonds, n_rad_max, (lmax+1)^2]
+        return _expand_l_to_lm(x, self._lmax)
 
     def frwrd(self, input_data: dict, training=False, local=False):
         # Bond distances
