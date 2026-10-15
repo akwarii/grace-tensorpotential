@@ -1,14 +1,21 @@
-"""Exception types of the torch backend.
+"""Exception types of the torch backend: the one module that defines them (rule R5).
 
-Every error is a :class:`SpecError` (a ``ValueError``), so a caller that only wants to know that a ``model.yaml``
-cannot be loaded catches one type, and a test can ask for the kind. The message names the instruction and, where
-there is one, the class or the key involved: nothing is skipped or approximated silently (rule R3).
+Every error is a :class:`TorchBackendError`, which is a
+:class:`~tensorpotential.errors.TensorPotentialError`, so one ``except`` catches every error the library raises on
+purpose. Below it, each family also derives from the builtin type a caller expects: a ``model.yaml`` that cannot be
+loaded is a :class:`SpecError` (a ``ValueError``), and a test can ask for the kind. The message names the object
+involved (instruction, class, key, weight or atom) and what to do: nothing is skipped or approximated silently
+(rule R3).
+
+Layer: below every other module of the backend; it imports only :mod:`tensorpotential.errors`.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
+
+from tensorpotential.errors import TensorPotentialError
 
 ProblemKind = Literal[
     "unknown_class",
@@ -48,8 +55,20 @@ class Problem:
     message: str
 
 
-class SpecError(ValueError):
+class TorchBackendError(TensorPotentialError):
+    """Base of the errors the torch backend raises on purpose."""
+
+
+class SpecError(TorchBackendError, ValueError):
     """A ``model.yaml`` cannot be turned into a :class:`~tensorpotential.torch_backend.spec.loader.ModelSpec`."""
+
+
+class WeightMismatchError(TorchBackendError, ValueError):
+    """Stored weights do not fit the model: a key is missing or left over, or a shape or dtype differs."""
+
+
+class NeighbourListError(TorchBackendError, ValueError):
+    """A neighbour list is inconsistent with its structure: an index out of range, a pair beyond the cutoff."""
 
 
 class MalformedModelError(SpecError):
