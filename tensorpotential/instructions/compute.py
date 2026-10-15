@@ -140,6 +140,39 @@ def _equiv_cg_couple(prod, lr_inds, cg, m_sum_ind, nfunc, lm_first, name):
     return tf.transpose(prod_g, [1, 2, 0], name=f"trans_120{name}")
 
 
+def _tile_runs(tile) -> tuple[tuple[int, int, int], ...]:
+    """Maximal runs ``(start, stop, value)`` of equal consecutive entries of a weight tile."""
+    tile = np.asarray(tile).astype(np.int64).reshape(-1)
+    runs = []
+    start = 0
+    for i in range(1, len(tile) + 1):
+        if i == len(tile) or tile[i] != tile[start]:
+            runs.append((start, i, int(tile[start])))
+            start = i
+    return tuple(runs)
+
+
+def _contract_weight_runs(w, x, runs, lm_first, atomic_mu_i=None):
+    """Contract per-l weights with channels: ``out[c, a, k] = sum_n w[(mu_a,) k, n, tile[c]] x[a, n, c]``.
+
+    ``w`` is ``[k, n, W]`` (or ``[types, k, n, W]`` with ``atomic_mu_i``), ``x`` is
+    ``[a, n, c]`` (``[c, a, n]`` if ``lm_first``), ``runs`` are the ``_tile_runs`` of
+    the tile that maps each channel ``c`` to its weight index. One contraction per run
+    of channels that share a weight, so the weights are never expanded to every channel.
+    """
+    parts = []
+    for c0, c1, t in runs:
+        wt = w[..., t]
+        xr = x[c0:c1] if lm_first else x[:, :, c0:c1]
+        if atomic_mu_i is None:
+            eq = "kn,man->mak" if lm_first else "kn,anm->mak"
+        else:
+            wt = tf.gather(wt, atomic_mu_i, axis=0)
+            eq = "akn,man->mak" if lm_first else "akn,anm->mak"
+        parts.append(tf.einsum(eq, wt, xr))
+    return parts[0] if len(parts) == 1 else tf.concat(parts, axis=0)
+
+
 def _lmp_lookup(coupling_meta_data):
     """Map ``(l, m, parity)`` to the row labels of ``coupling_meta_data`` having it, in row order."""
     lookup = {}
@@ -3267,15 +3300,7 @@ class FunctionReduceN(
             else input_data[constants.ATOMIC_MU_I]
         )
 
-        # Determine gather axis and einsum based on layout
-        if self.lm_first:
-            gather_ax = 0
-            eq_base = "knw,wan->wak"
-            eq_elem_base = "aknw,wan->wak"
-        else:
-            gather_ax = 2
-            eq_base = "knw,anw->wak"
-            eq_elem_base = "aknw,anw->wak"
+        gather_ax = 0 if self.lm_first else 2
 
         for instr in self.instructions:
             instruction_collection = self.collector[instr.name]
@@ -3309,19 +3334,25 @@ class FunctionReduceN(
                 lora_tensors = getattr(self, f"reducing_{instr.name}_lora_tensors")
                 w = w + lora_reconstruction(*lora_tensors, lora_config=self.lora_config)
 
-            w = tf.gather(w, instruction_collection["w_l_tile"], axis=-1)
+            mu = None
             if self.is_central_atom_type_dependent:
-                eq = eq_elem_base
-                w = tf.gather(w, atomic_mu_i, axis=0)
+                mu = atomic_mu_i
                 if not self.lm_first:
                     A_r = A_r[: tf.shape(atomic_mu_i)[0]]
                 else:
                     A_r = A_r[:, : tf.shape(atomic_mu_i)[0], :]
-            else:
-                eq = eq_base
 
             norm = getattr(self, f"norm_{instr.name}")
-            pr = tf.einsum(eq, w, A_r, name=f"ein_{instr.name}") * norm
+            pr = (
+                _contract_weight_runs(
+                    w,
+                    A_r,
+                    _tile_runs(instruction_collection["w_l_tile"]),
+                    self.lm_first,
+                    mu,
+                )
+                * norm
+            )
 
             if self.only_invar:
                 collection += tf.reduce_sum(pr, axis=0, keepdims=True)
