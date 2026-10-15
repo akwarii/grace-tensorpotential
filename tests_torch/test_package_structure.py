@@ -81,8 +81,7 @@ def _import_failures(modules: tuple[str, ...], refused: str, cwd) -> dict[str, s
 
 
 def test_the_walk_finds_the_skeleton():
-    names = set(MODULES)
-    for layer in (
+    layers = (
         "spec",
         "plans",
         "weights",
@@ -91,9 +90,11 @@ def test_the_walk_finds_the_skeleton():
         "model",
         "convert",
         "torchsim",
-    ):
-        assert f"{backend.__name__}.{layer}" in names
-    assert {errors.__name__, f"{backend.__name__}.protocol"} <= names
+    )
+    expected = {
+        f"{backend.__name__}.{name}" for name in (*layers, "errors", "protocol")
+    }
+    assert expected <= set(MODULES)
     assert f"{backend.__name__}.spec.loader" in TORCH_FREE
     assert f"{backend.__name__}.ops" not in TORCH_FREE
 
@@ -114,25 +115,27 @@ def test_the_refusing_interpreter_reports_a_refused_import(tmp_path):
     assert "refused by the test" in failed["tomllib"]
 
 
-@pytest.mark.parametrize("module", _modules(), ids=lambda m: m.__name__)
-def test_exceptions_live_in_the_errors_module(module):
+def _violations(module: ModuleType) -> list[str]:
+    found = []
     for cls in _defined_here(module):
-        if issubclass(cls, BaseException):
-            assert module is errors, (
-                f"{cls.__qualname__} is defined in {module.__name__}"
-            )
-            assert issubclass(cls, errors.TorchBackendError), cls.__qualname__
+        where = f"{module.__name__}.{cls.__name__}"
+        if issubclass(cls, BaseException) and module is not errors:
+            found.append(f"{where} is an exception outside {errors.__name__}")
+        if issubclass(cls, BaseException) and not issubclass(
+            cls, errors.TorchBackendError
+        ):
+            found.append(f"{where} does not derive from TorchBackendError")
+        if dataclasses.is_dataclass(cls) and not cls.__dataclass_params__.frozen:  # ty: ignore[unresolved-attribute]
+            found.append(f"{where} is a dataclass that is not frozen")
+    return found
 
 
 @pytest.mark.parametrize("module", _modules(), ids=lambda m: m.__name__)
-def test_dataclasses_are_frozen(module):
-    for cls in _defined_here(module):
-        if dataclasses.is_dataclass(cls):
-            params = cls.__dataclass_params__  # ty: ignore[unresolved-attribute]
-            assert params.frozen, f"{module.__name__}.{cls.__qualname__} is not frozen"
+def test_errors_live_in_one_module_and_dataclasses_are_frozen(module):
+    assert _violations(module) == []
 
 
-def test_the_structure_checks_see_a_violation():
+def test_the_structure_check_sees_a_violation():
     planted = ModuleType("planted")
 
     @dataclasses.dataclass
@@ -144,7 +147,8 @@ def test_the_structure_checks_see_a_violation():
 
     Loose.__module__ = StrayError.__module__ = planted.__name__
     planted.Loose, planted.StrayError = Loose, StrayError  # ty: ignore[unresolved-attribute]
-    with pytest.raises(AssertionError, match="Loose is not frozen"):
-        test_dataclasses_are_frozen(planted)
-    with pytest.raises(AssertionError, match="StrayError is defined in planted"):
-        test_exceptions_live_in_the_errors_module(planted)
+    assert _violations(planted) == [
+        "planted.Loose is a dataclass that is not frozen",
+        "planted.StrayError is an exception outside tensorpotential.torch_backend.errors",
+        "planted.StrayError does not derive from TorchBackendError",
+    ]

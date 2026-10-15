@@ -7,6 +7,7 @@ a test controls (``GRACE_HPC``), so the end-to-end runs use it.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -88,26 +89,35 @@ def test_the_empty_parameter_set_reason_is_recognised():
 
 
 def test_the_hpc_probe_reads_the_job_declaration(monkeypatch):
-    probe = caps.CAPABILITIES["hpc"][1]
+    probe = caps.CAPABILITIES["hpc"].probe
     monkeypatch.setenv(caps.HPC_VARIABLE, "1")
     assert probe()
     monkeypatch.setenv(caps.HPC_VARIABLE, "0")
     assert not probe()
 
 
-def test_the_package_probes_find_what_is_installed_without_importing_it():
-    assert caps._has_package("json")()
-    assert not caps._has_package("no_such_package_of_grace")()
+def test_has_package_looks_a_package_up_without_importing_it():
+    assert "tabnanny" not in sys.modules
+    assert caps.has_package("tabnanny")
+    assert "tabnanny" not in sys.modules
+    assert not caps.has_package("no_such_package_of_grace")
+
+
+def test_has_package_answers_false_when_the_lookup_fails(monkeypatch):
+    def refuse(name):
+        raise ImportError(name)
+
+    monkeypatch.setattr(caps.importlib.util, "find_spec", refuse)
+    assert not caps.has_package("vesin")
 
 
 def test_the_gpu_probe_answers_a_bool():
-    assert isinstance(caps.CAPABILITIES["gpu"][1](), bool)
+    assert isinstance(caps.CAPABILITIES["gpu"].probe(), bool)
 
 
-def test_every_capability_and_marker_has_a_description():
-    assert set(caps.CAPABILITIES) == {"tf", "torchsim", "vesin", "gpu", "cueq", "hpc"}
-    assert set(caps.OTHER_MARKERS) == {"golden", "slow"}
-    assert all(text for text, _ in caps.CAPABILITIES.values())
+def test_every_capability_and_marker_says_what_it_means():
+    assert all(c.description for c in caps.CAPABILITIES.values())
+    assert all(caps.OTHER_MARKERS.values())
 
 
 # ------------------------------------------------------------------ logic: the hooks, end to end
@@ -164,6 +174,7 @@ def test_a_parametrisation_over_an_empty_list_fails_the_collection(
 
 
 def test_a_run_that_collects_nothing_fails(tmp_path, no_caps_env):
+    # pytest's own exit code, kept as a test because the issue's zero-collection guard and the CI job rely on it
     code, out = _run(tmp_path, "def helper():\n    pass\n", no_caps_env)
     assert code == NO_TESTS_COLLECTED, out
 

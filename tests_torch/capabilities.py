@@ -14,14 +14,29 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Callable, Iterable, Mapping
-from typing import Final
+from typing import Final, NamedTuple
 
 REQUIRE_VARIABLE: Final = "GRACE_REQUIRE_CAPS"
 HPC_VARIABLE: Final = "GRACE_HPC"
 
 
-def _has_package(name: str) -> Callable[[], bool]:
-    return lambda: importlib.util.find_spec(name) is not None
+class Capability(NamedTuple):
+    """What a capability means (the text of its marker and skip reason) and how to tell whether it is there."""
+
+    description: str
+    probe: Callable[[], bool]
+
+
+def has_package(name: str) -> bool:
+    """Tell whether ``name`` can be imported, without importing it (``False`` when the lookup itself fails)."""
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _package(name: str) -> Callable[[], bool]:
+    return lambda: has_package(name)
 
 
 def _has_gpu() -> bool:
@@ -34,30 +49,28 @@ def _on_hpc() -> bool:
     return os.environ.get(HPC_VARIABLE) == "1"
 
 
-CAPABILITIES: Final[Mapping[str, tuple[str, Callable[[], bool]]]] = {
-    "tf": (
+CAPABILITIES: Final[Mapping[str, Capability]] = {
+    "tf": Capability(
         "TensorFlow is installed (a comparison with the TF code itself)",
-        _has_package("tensorflow"),
+        _package("tensorflow"),
     ),
-    "torchsim": (
-        "torch-sim is installed (the torch_sim package)",
-        _has_package("torch_sim"),
+    "torchsim": Capability(
+        "torch-sim is installed (the torch_sim package)", _package("torch_sim")
     ),
-    "vesin": ("the vesin neighbour list is installed", _has_package("vesin")),
-    "gpu": ("torch sees a CUDA device", _has_gpu),
-    "cueq": (
-        "cuEquivariance for torch is installed",
-        _has_package("cuequivariance_torch"),
+    "vesin": Capability("the vesin neighbour list is installed", _package("vesin")),
+    "gpu": Capability("torch sees a CUDA device", _has_gpu),
+    "cueq": Capability(
+        "cuEquivariance for torch is installed", _package("cuequivariance_torch")
     ),
-    "hpc": (
+    "hpc": Capability(
         f"the job runs on the HPC with the foundation-model weights ({HPC_VARIABLE}=1)",
         _on_hpc,
     ),
 }
 
+# ``slow`` is registered in pytest.ini for both test trees.
 OTHER_MARKERS: Final[Mapping[str, str]] = {
     "golden": "compares with the golden fixtures of tests_torch/golden or tests_torch/fixtures",
-    "slow": "a test of 30 s or more (leave out with -m 'not slow')",
 }
 
 
@@ -89,7 +102,9 @@ def missing(names: Iterable[str], available: Callable[[str], bool]) -> list[str]
 
 def skip_reason(names: Iterable[str]) -> str:
     """Return the reason a test that needs the capabilities ``names`` is skipped."""
-    return "needs " + "; ".join(f"{n}: {CAPABILITIES[n][0]}" for n in sorted(names))
+    return "needs " + "; ".join(
+        f"{n}: {CAPABILITIES[n].description}" for n in sorted(names)
+    )
 
 
 def require_message(names: Iterable[str]) -> str:

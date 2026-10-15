@@ -4,7 +4,9 @@ A twin is the torch counterpart of one TF instruction of a ``model.yaml``. The e
 (:mod:`~tensorpotential.torch_backend.model`) runs the twins in file order: it gives each one the values the
 instructions before it produced, by name, and stores what :meth:`Twin.forward` returns under the twin's name, as
 ``TPModel`` does with ``frwrd``. It depends on this protocol and never on a concrete twin (import contract), so a
-twin is added by registering it, not by changing the executor.
+twin is added by registering it, not by changing the executor. The lookup from class path to twin class imports the
+concrete twins, so it belongs to :mod:`~tensorpotential.torch_backend.convert` (or the instructions), never to the
+model; it is not the class-status registry of :mod:`~tensorpotential.torch_backend.spec.registry`.
 
 Layer: beside the ops, below the instructions and the model. torch is imported for type checking only, so the
 package imports without it.

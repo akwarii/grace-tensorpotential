@@ -26,9 +26,7 @@ def test_the_base_is_a_library_error_and_nothing_more():
 
 
 @pytest.mark.parametrize("cls", FAMILIES, ids=lambda c: c.__name__)
-def test_every_error_is_a_backend_error_and_a_value_error(cls):
-    assert issubclass(cls, errors.TorchBackendError)
-    assert issubclass(cls, TensorPotentialError)
+def test_every_error_is_a_value_error(cls):
     assert issubclass(cls, ValueError)
 
 
@@ -41,13 +39,6 @@ def test_the_list_names_every_error_of_the_module():
         and obj.__module__ == errors.__name__
     }
     assert defined == {errors.TorchBackendError, *FAMILIES}
-
-
-def test_one_except_catches_a_weight_mismatch_by_its_base():
-    message = "A1/w_left: stored shape (4, 8), the twin expects (8, 4)"
-    with pytest.raises(TensorPotentialError, match=r"A1/w_left") as caught:
-        raise errors.WeightMismatchError(message)
-    assert isinstance(caught.value, errors.WeightMismatchError)
 
 
 @pytest.mark.parametrize(

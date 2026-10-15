@@ -22,12 +22,12 @@ HERE = Path(__file__).resolve().parent
 
 @functools.cache
 def _available(name: str) -> bool:
-    return caps.CAPABILITIES[name][1]()
+    return caps.CAPABILITIES[name].probe()
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    for name, (description, _) in caps.CAPABILITIES.items():
-        config.addinivalue_line("markers", f"{name}: needs {description}")
+    for name, capability in caps.CAPABILITIES.items():
+        config.addinivalue_line("markers", f"{name}: needs {capability.description}")
     for name, description in caps.OTHER_MARKERS.items():
         config.addinivalue_line("markers", f"{name}: {description}")
     try:
@@ -39,20 +39,17 @@ def pytest_configure(config: pytest.Config) -> None:
         raise pytest.UsageError(caps.require_message(lacking))
 
 
-def _skip_reasons(item: pytest.Item) -> list[str]:
-    return [
-        str(m.kwargs.get("reason", m.args[0] if m.args else ""))
+def _empty_parameter_set(item: pytest.Item) -> bool:
+    # pytest marks such a test with skip(reason="got empty parameter set ..."), always as a keyword
+    return any(
+        caps.is_empty_parameter_set(m.kwargs.get("reason", ""))
         for m in item.iter_markers("skip")
-    ]
+    )
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     ours = [item for item in items if item.path.is_relative_to(HERE)]
-    empty = [
-        item.nodeid
-        for item in ours
-        if any(map(caps.is_empty_parameter_set, _skip_reasons(item)))
-    ]
+    empty = [item.nodeid for item in ours if _empty_parameter_set(item)]
     if empty:
         msg = "parametrised over an empty list (nothing would run): " + ", ".join(empty)
         raise pytest.UsageError(msg)
