@@ -241,6 +241,39 @@ def whole_model_ms(tf, model, data: dict, repeats: int) -> float:
     return median_ms(tf, lambda: list(model.compute(data).values()), repeats)
 
 
+def train_step_ms(tf, model, data: dict, repeats: int) -> float:
+    """Median ms of a jitted training step: the gradient of an energy and forces loss with respect to every weight.
+
+    The forces are differentiated a second time, as in force training; the loss is not the one of
+    ``gracemaker`` (no weights, no stress, no regularisation), so the time is the model's share of a step.
+    """
+    from tensorpotential import constants
+    from tensorpotential.tpmodel import execute_instructions
+
+    variables = model.trainable_variables
+
+    @tf.function(jit_compile=True)
+    def step(batch: dict) -> list:
+        with tf.GradientTape() as outer:
+            inputs = dict(batch)
+            with tf.GradientTape() as inner:
+                inner.watch(inputs[constants.BOND_VECTOR])
+                execute_instructions(inputs, model.instructions, True)
+                energy = tf.reduce_sum(inputs[constants.PREDICT_ATOMIC_ENERGY])
+            pair_forces = inner.gradient(energy, inputs[constants.BOND_VECTOR])
+            loss = energy * energy + tf.reduce_sum(pair_forces * pair_forces)
+        grads = outer.gradient(loss, variables)
+        return [loss, *(tf.convert_to_tensor(g) for g in grads if g is not None)]
+
+    return median_ms(tf, lambda: step(data), repeats)
+
+
+def save_outputs(model, data: dict, path: Path) -> None:
+    """Save the outputs of the compiled model on ``data`` (energy, forces, virial, ...) as ``.npz``."""
+    outputs = model.compute(data)
+    np.savez(path, **{k: v.numpy() for k, v in outputs.items()})
+
+
 def add_shares(rows: list[dict[str, Any]]) -> None:
     """Add ``share`` (percent of the summed ``fwd_bwd_ms``) to every row that has one."""
     total = sum(r["fwd_bwd_ms"] for r in rows if r["fwd_bwd_ms"] is not None)
@@ -308,7 +341,12 @@ def profile_model(args: argparse.Namespace, tf, yaml_name: str) -> dict[str, Any
     if whole_only and args.device == "gpu":
         # the peak of the whole model alone: weights, input and the compiled computation
         tf.config.experimental.reset_memory_stats("GPU:0")
-    result["whole_ms"] = whole_model_ms(tf, model, data, args.repeats)
+    if getattr(args, "train_step", False):
+        result["train_step_ms"] = train_step_ms(tf, model, data, args.repeats)
+    else:
+        result["whole_ms"] = whole_model_ms(tf, model, data, args.repeats)
+        if getattr(args, "outputs", None):
+            save_outputs(model, data, args.outputs)
     if args.device == "gpu":
         info = tf.config.experimental.get_memory_info("GPU:0")
         result["gpu_peak_memory_mb"] = info["peak"] / 2**20
@@ -341,12 +379,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the per-class rows: time and memory of the whole model only",
     )
+    parser.add_argument(
+        "--train-step",
+        action="store_true",
+        help="with --whole-only: time a jitted training step (energy and forces loss) instead",
+    )
+    parser.add_argument(
+        "--outputs",
+        type=Path,
+        help="with --whole-only: save the model outputs here (.npz)",
+    )
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--top", type=int, help="print only the N largest rows")
     parser.add_argument(
         "--json", type=Path, help="write every profile and the environment here"
     )
     args = parser.parse_args(argv)
+    if (args.train_step or args.outputs) and not args.whole_only:
+        parser.error("--train-step and --outputs need --whole-only")
     tf = configure_tensorflow(args.device)
     results = []
     for name in args.yamls:
@@ -357,11 +407,12 @@ def main(argv: list[str] | None = None) -> int:
             return NOT_APPLICABLE
         results.append(result)
         header = f"{name}: {result['n_atoms']} atoms, {result['n_bonds']} bonds, {args.dtype}, option {args.option}, {args.device}"
-        body = (
-            f"whole model {result['whole_ms']:.1f} ms"
-            if args.whole_only
-            else render(result["rows"], result["whole_ms"], args.top)
-        )
+        if "train_step_ms" in result:
+            body = f"training step {result['train_step_ms']:.1f} ms"
+        elif args.whole_only:
+            body = f"whole model {result['whole_ms']:.1f} ms"
+        else:
+            body = render(result["rows"], result["whole_ms"], args.top)
         sys.stdout.write(f"\n{header}\n{body}\n")
     if args.json:
         payload = {"environment": environment(tf, args.device), "profiles": results}

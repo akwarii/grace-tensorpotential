@@ -445,3 +445,48 @@ def test_an_option_no_instruction_takes_ends_with_the_not_applicable_status(
 def test_a_value_error_of_another_origin_is_not_taken_for_a_missing_option():
     with pytest.raises(FileNotFoundError):
         pi.build_model(tf, "no_such_model.yaml", "float64", "none")
+
+
+def test_train_step_times_a_step_and_outputs_are_saved(tmp_path):
+    out = tmp_path / "t.json"
+    saved = tmp_path / "o.npz"
+
+    assert (
+        pi.main([
+            YAML,
+            "--supercell",
+            "1",
+            "--repeats",
+            "1",
+            "--whole-only",
+            "--train-step",
+            "--json",
+            str(out),
+        ])
+        == 0
+    )
+    assert (
+        pi.main([
+            YAML,
+            "--supercell",
+            "1",
+            "--repeats",
+            "1",
+            "--whole-only",
+            "--outputs",
+            str(saved),
+        ])
+        == 0
+    )
+
+    profile = json.loads(out.read_text())["profiles"][0]
+    assert profile["train_step_ms"] > 0
+    assert "whole_ms" not in profile
+    arrays = np.load(saved)
+    assert {"total_energy", "total_f", "virial"} <= set(arrays.files)
+    assert arrays["total_f"].shape == (54, 3)
+
+
+def test_train_step_and_outputs_need_whole_only():
+    with pytest.raises(SystemExit):
+        pi.main([YAML, "--train-step"])
