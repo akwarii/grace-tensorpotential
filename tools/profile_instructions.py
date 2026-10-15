@@ -3,14 +3,18 @@
 Every instruction of a model built from a yaml is jitted (XLA) on the input it sees in a real forward pass:
 
 * ``fwd_ms``: the instruction's forward pass;
-* ``fwd_bwd_ms``: forward plus the gradient of the sum of its float outputs with respect to its float
-  inputs (what the force and virial derivative ask of it at inference) and, with ``--grads all`` (the
-  default, what training adds), to its variables;
+* ``fwd_bwd_ms``: forward plus the backward pass of its float outputs, seeded with fixed random upstream
+  gradients, with respect to its float inputs (what the force and virial derivative ask of it at
+  inference) and, with ``--grads all`` (the default, what training adds), to its variables;
 * ``whole_ms``: the whole model (energy, forces, virial) as the calculator runs it, fused by XLA.
 
-XLA fuses across instructions, so the isolated times are an attribution, not a partition: their sum
-differs from ``whole_ms`` (both are printed). Medians of ``--repeats`` calls after one compiling call;
-each call ends by copying its outputs to the host, so a GPU timing includes the transfer.
+The inputs and upstream gradients are arguments of the jitted functions, not constants captured in
+them: XLA would otherwise fold the work that depends on them alone, and an all-ones upstream gradient
+(the gradient of a plain sum) lets it simplify most of the backward pass (QUAL10). XLA fuses across
+instructions and lays tensors out for the whole graph, so the isolated times are an attribution, not
+a partition: their sum differs from ``whole_ms`` (both are printed). Medians of ``--repeats`` calls
+after one compiling call; each call ends by copying its outputs to the host, so a GPU timing includes
+the transfer.
 
 Usage (from the repository root)::
 
@@ -33,6 +37,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
@@ -138,38 +144,50 @@ def instruction_inputs(model, data: dict) -> list[tuple[Any, dict]]:
 
 def instruction_functions(
     tf, ins, snapshot: dict, with_variables: bool = True
-) -> tuple[Callable, Callable]:
-    """``(forward, forward_backward)`` of ``ins`` on ``snapshot``, plain Python (the caller jits them)."""
+) -> tuple[Callable, Callable, tuple, tuple]:
+    """``(forward, forward_backward, forward_args, backward_args)`` of ``ins`` on ``snapshot``.
+
+    The functions are plain Python (the caller jits them) and take their inputs as arguments:
+    ``forward(floats, rest)`` and ``forward_backward(floats, rest, seeds)``, where ``seeds`` are
+    fixed random upstream gradients of the float outputs (``SEED``).
+    """
     floats = {k: v for k, v in snapshot.items() if v.dtype.is_floating}
     rest = {k: v for k, v in snapshot.items() if not v.dtype.is_floating}
 
-    def outputs(data: dict, inputs: dict) -> list:
-        return [data[k] for k in sorted(set(data) - set(inputs) - set(rest))]
+    def outputs(data: dict, inputs: dict, others: dict) -> list:
+        return [data[k] for k in sorted(set(data) - set(inputs) - set(others))]
 
-    def forward():
-        data = {**floats, **rest}
+    def float_outputs(data: dict, inputs: dict, others: dict) -> list:
+        flat = tf.nest.flatten(outputs(data, inputs, others))
+        return [o for o in flat if o.dtype.is_floating]
+
+    def forward(inputs: dict, others: dict) -> list:
+        data = {**inputs, **others}
         ins(data, training=False, local=False)
-        return outputs(data, floats)
+        return outputs(data, inputs, others)
 
-    def forward_backward():
-        inputs = {k: tf.identity(v) for k, v in floats.items()}
+    def forward_backward(inputs: dict, others: dict, seeds: list) -> list:
         with tf.GradientTape() as tape:
             tape.watch(list(inputs.values()))
-            data = {**inputs, **rest}
+            data = {**inputs, **others}
             ins(data, training=False, local=False)
-            terms = [
-                tf.reduce_sum(o)
-                for o in tf.nest.flatten(outputs(data, inputs))
-                if o.dtype.is_floating
-            ]
-            loss = tf.add_n(terms) if terms else tf.constant(0.0, tf.float64)
+            outs = float_outputs(data, inputs, others)
         sources = [*inputs.values(), *(ins.variables if with_variables else [])]
-        grads = tape.gradient(loss, sources)
+        if not outs:
+            return [tf.constant(0.0)]
+        grads = tape.gradient(outs, sources, output_gradients=seeds)
         return [tf.convert_to_tensor(g) for g in grads if g is not None] or [
             tf.constant(0.0)
         ]
 
-    return forward, forward_backward
+    data = {**floats, **rest}
+    ins(data, training=False, local=False)
+    rng = np.random.default_rng(SEED)
+    seeds = [
+        tf.constant(rng.standard_normal(o.shape), o.dtype)
+        for o in float_outputs(data, floats, rest)
+    ]
+    return forward, forward_backward, (floats, rest), (floats, rest, seeds)
 
 
 def median_ms(tf, fn: Callable, repeats: int) -> float:
@@ -188,10 +206,13 @@ def median_ms(tf, fn: Callable, repeats: int) -> float:
     return statistics.median(times)
 
 
-def timed_or_error(tf, fn: Callable, repeats: int) -> tuple[float | None, str | None]:
-    """``(median ms, None)``, or ``(None, error)`` for an instruction XLA cannot compile."""
+def timed_or_error(
+    tf, fn: Callable, repeats: int, args: tuple = ()
+) -> tuple[float | None, str | None]:
+    """``(median ms, None)`` of ``fn(*args)`` jitted, or ``(None, error)`` for an instruction XLA cannot compile."""
+    compiled = tf.function(fn, jit_compile=True)
     try:
-        return median_ms(tf, tf.function(fn, jit_compile=True), repeats), None
+        return median_ms(tf, lambda: compiled(*args), repeats), None
     except (tf.errors.OpError, ValueError, TypeError) as exc:
         return None, f"{type(exc).__name__}: {str(exc).strip().splitlines()[-1][:160]}"
 
@@ -202,11 +223,11 @@ def profile_instructions(
     """One row per instruction: name, class, ``fwd_ms``, ``fwd_bwd_ms`` and any error."""
     rows = []
     for ins, snapshot in instruction_inputs(model, data):
-        forward, forward_backward = instruction_functions(
+        forward, forward_backward, f_args, b_args = instruction_functions(
             tf, ins, snapshot, with_variables
         )
-        fwd, err_f = timed_or_error(tf, forward, repeats)
-        both, err_b = timed_or_error(tf, forward_backward, repeats)
+        fwd, err_f = timed_or_error(tf, forward, repeats, f_args)
+        both, err_b = timed_or_error(tf, forward_backward, repeats, b_args)
         rows.append({
             "name": ins.name,
             "class": type(ins).__name__,

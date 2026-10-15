@@ -143,6 +143,20 @@ def test_an_instruction_xla_cannot_compile_becomes_an_error_row():
     assert error
 
 
+def test_timed_or_error_passes_the_arguments_to_the_jitted_function():
+    seen = []
+
+    def double(x):
+        seen.append(x)
+        return x * 2.0
+
+    ms, error = pi.timed_or_error(tf, double, repeats=2, args=(tf.constant(3.0),))
+
+    assert error is None
+    assert ms > 0
+    assert len(seen) == 1  # traced once, with the argument as a symbolic input
+
+
 def test_median_ms_calls_the_function_once_to_compile_then_repeats_times():
     calls = []
 
@@ -191,8 +205,8 @@ def test_the_jitted_forward_equals_the_eager_forward_of_every_instruction(setup)
     model, _, data = setup
 
     for ins, snapshot in pi.instruction_inputs(model, data):
-        forward, _ = pi.instruction_functions(tf, ins, snapshot)
-        jitted = tf.nest.flatten(tf.function(forward, jit_compile=True)())
+        forward, _, args, _ = pi.instruction_functions(tf, ins, snapshot)
+        jitted = tf.nest.flatten(tf.function(forward, jit_compile=True)(*args))
         eager_data = dict(snapshot)
         ins(eager_data, training=False, local=False)
         eager = [eager_data[k] for k in sorted(set(eager_data) - set(snapshot))]
@@ -208,15 +222,16 @@ def test_the_forward_backward_gradient_matches_a_central_difference(setup):
     ins, snapshot = next(
         p for p in pi.instruction_inputs(model, data) if p[0].name == "RadialBasis"
     )
-    _, forward_backward = pi.instruction_functions(tf, ins, snapshot)
+    _, forward_backward, _, args = pi.instruction_functions(tf, ins, snapshot)
+    (seed,) = args[2]  # the upstream gradient of the one float output
     base = snapshot["BondLength"]  # the float input of the basis
 
     def loss_at(lengths):
         eager = {**snapshot, "BondLength": lengths}
         ins(eager, training=False, local=False)
-        return float(tf.reduce_sum(eager["RadialBasis"]))
+        return float(tf.reduce_sum(eager["RadialBasis"] * seed))
 
-    grads = [g.numpy() for g in forward_backward()]
+    grads = [g.numpy() for g in forward_backward(*args)]
     step = 1e-6
     index = 5
     bump = np.zeros(base.shape)
@@ -228,6 +243,38 @@ def test_the_forward_backward_gradient_matches_a_central_difference(setup):
         for g in grads
         if g.size == base.size
     )
+
+
+def test_the_upstream_gradients_are_fixed_random_values_not_ones(setup):
+    model, _, data = setup
+    ins, snapshot = next(
+        p for p in pi.instruction_inputs(model, data) if p[0].name == "RadialBasis"
+    )
+
+    *_, args = pi.instruction_functions(tf, ins, snapshot)
+    *_, again = pi.instruction_functions(tf, ins, snapshot)
+
+    (seed,) = args[2]
+    assert seed.shape == snapshot["BondLength"].shape[:1] + seed.shape[1:]
+    assert float(tf.math.reduce_std(seed)) > 0.5  # not a constant tensor
+    np.testing.assert_array_equal(seed.numpy(), again[2][0].numpy())
+
+
+def test_an_instruction_without_float_outputs_has_a_zero_backward(setup):
+    model, _, data = setup
+    _, snapshot = next(iter(pi.instruction_inputs(model, data)))
+    snapshot = {k: v for k, v in snapshot.items() if not v.dtype.is_floating}
+
+    class NoOutput:
+        variables = ()
+
+        def __call__(self, data, training=False, local=False):
+            return data
+
+    _, forward_backward, _, args = pi.instruction_functions(tf, NoOutput(), snapshot)
+
+    assert args[2] == []
+    assert [float(g) for g in forward_backward(*args)] == [0.0]
 
 
 def test_profile_model_reports_the_layout_and_a_gpu_peak_only_on_a_gpu():
@@ -285,11 +332,13 @@ def test_gradients_of_inputs_only_leave_out_the_variables(setup):
     )
     n_vars = len(ins.variables)
 
-    _, both = pi.instruction_functions(tf, ins, snapshot, with_variables=True)
-    _, inputs_only = pi.instruction_functions(tf, ins, snapshot, with_variables=False)
+    _, both, _, args = pi.instruction_functions(tf, ins, snapshot, with_variables=True)
+    _, inputs_only, _, _ = pi.instruction_functions(
+        tf, ins, snapshot, with_variables=False
+    )
 
     assert n_vars > 0
-    assert len(both()) > len(inputs_only())
+    assert len(both(*args)) > len(inputs_only(*args))
 
 
 def test_main_accepts_the_grads_option_and_records_it(tmp_path):
