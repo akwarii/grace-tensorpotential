@@ -89,5 +89,8 @@ and refreshes the table columns. Run `python tools/board.py lint` afterwards.
 
 - **An issue is resolved only once its PR is merged into `torch-backend` on the fork** (the user merges). **Done** then requires the exit criterion to be met: `python tools/board.py done CLEAN1 "Verify output and numbers"` checks that no box is open, comments the
   evidence, sets Done and closes the issue. A gate is closed only when its pass criterion is met.
+- **Dropping an issue is the owner's decision**, and only an issue that blocks nothing can be dropped (owner, 2026-10-15): `python tools/board.py drop CLEAN1 "reason"` refuses while an issue that depends on it
+  (its "Depends on" line or a native "blocked by" relation) is neither Done nor Dropped; otherwise it comments the reason, closes the issue as not planned and sets Status to **Dropped**.
+  Record on the later issues what they need from the dropped work (`finding --also`), and leave its branch unless the owner says otherwise. `lint` reports an issue that still depends on a Dropped one.
 
 The branch, the worktree, the tidy-up pass, the PR text and the commit conventions are in `grace-torch-pr`.

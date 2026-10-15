@@ -8,7 +8,7 @@ usage (from anywhere inside the repository):
     python tools/board.py context ID                the issue, its comments, and the comments of its hard dependencies
     python tools/board.py start ID [--force]        Status -> In Progress, plus a comment; refuses if a hard dependency is not Done
     python tools/board.py finding ID "text" [--also ID ...]   comment an UNEXPECTED finding on ID (and on later issues it affects)
-    python tools/board.py status ID STATUS          STATUS = Todo | In Progress | PR Open | Done
+    python tools/board.py status ID STATUS          STATUS = Todo | In Progress | PR Open (Done: use `done`; Dropped: use `drop`)
     python tools/board.py dod ID                    show the Definition of Done checklist of the issue, numbered
     python tools/board.py check ID N [N ...] [--note "evidence"]   tick DoD boxes (every time you finish a task of the issue)
     python tools/board.py na ID N "reason"          mark a DoD box not applicable, with the reason (never leave an inapplicable box blank)
@@ -17,6 +17,9 @@ usage (from anywhere inside the repository):
                                                     comment the evidence, Status -> Done, close the issue. Refuses while a DoD box is open, and
                                                     unless a pull request that references the issue (`Refs #ID-number`) is MERGED into the
                                                     integration branch of the fork (--waive-pr only when the user said so, e.g. for a gate)
+    python tools/board.py drop ID "reason"          close an issue as not planned, Status -> Dropped; refuses while an issue that depends on it
+                                                    (Depends on line or native "blocked by") is neither Done nor Dropped: only an issue that
+                                                    blocks nothing can be dropped (owner decision, 2026-10-15)
     python tools/board.py pr-body ID                 print a pull-request description for ID from the fork's template, pre-filled (Refs, exit criterion, DoD state)
     python tools/board.py pr-check ID FILE          check a pull-request description against the rules (Refs #N, no Closes, sections filled, comments removed, sanitised)
     python tools/board.py create ID "Title" --body FILE --stage N --days D [--priority P3] [--runs-on local] [--label L] [--no-mirror] [--yes]
@@ -59,7 +62,9 @@ REPO = os.environ.get("BOARD_REPO", "akwarii/grace-tensorpotential")
 INTEGRATION_BRANCH = os.environ.get("BOARD_BRANCH", "torch-backend")
 OWNER = REPO.split("/")[0]
 PROJECT_TITLE = "GRACE torch backend"
-STATUSES = ["Todo", "In Progress", "PR Open", "Done"]
+DROPPED = "Dropped"
+STATUSES = ["Todo", "In Progress", "PR Open", "Done", DROPPED]
+FINISHED = ("Done", DROPPED)  # statuses that wait for nothing and block nothing
 DOD_HEADING = "## Definition of Done"
 BLOCKED_FIELD = "Blocked by"  # text columns of the project table, written by `refresh`
 PR_FIELD = "PR"
@@ -693,6 +698,8 @@ def cmd_status(a) -> None:
         sys.exit(
             "An issue is resolved only when a pull request is merged into the integration branch: use `done`, which checks it."
         )
+    if a.status == DROPPED:
+        sys.exit("An issue is dropped by closing it as not planned: use `drop`, which checks that it blocks nothing.")
     if a.status == "PR Open":
         open_prs = [
             p
@@ -787,6 +794,49 @@ def cmd_done(a) -> None:
     set_status(i, "Done")
     gh("issue", "close", str(number), "--repo", REPO)
     print(f"{i} closed")
+    refresh_links(strict=False)
+
+
+def native_blocking(number: int) -> list[int]:
+    """Numbers of the issues natively "blocked by" issue ``number`` (one GraphQL read)."""
+    owner, name = REPO.split("/")
+    q = f'query {{ repository(owner: "{owner}", name: "{name}") {{ issue(number: {number}) {{ blocking(first: 100) {{ nodes {{ number }} }} }} }} }}'
+    data = json.loads(gh("api", "graphql", "-f", f"query={q}"))
+    return [n["number"] for n in data["data"]["repository"]["issue"]["blocking"]["nodes"]]
+
+
+def open_dependents(info: dict, statuses_: dict[str, str], item_id: str, native: list[int]) -> list[str]:
+    """Issues that depend on ``item_id`` (Depends on line or native relation), are open and are neither Done nor Dropped."""
+    by_number = {v["number"]: k for k, v in info.items()}
+    dependents = {k for k, v in info.items() if item_id in v["needs"]}
+    dependents |= {by_number[n] for n in native if n in by_number}
+    return sorted(
+        d for d in dependents if statuses_.get(d) not in FINISHED and info[d]["state"] != "CLOSED"
+    )
+
+
+def refuse_if_blocking(info: dict, statuses_: dict[str, str], item_id: str) -> None:
+    """Stop unless ``item_id`` blocks nothing: only a non-blocking issue can be dropped."""
+    blocking = open_dependents(info, statuses_, item_id, native_blocking(info[item_id]["number"]))
+    if blocking:
+        sys.exit(
+            f"{item_id} cannot be dropped: these issues depend on it and are neither Done nor Dropped: {', '.join(blocking)}. "
+            "Only an issue that blocks nothing can be dropped (owner decision, 2026-10-15)."
+        )
+
+
+def cmd_drop(a) -> None:
+    info, sts = issues(), statuses()
+    i = resolve(a.id, info)
+    if sts.get(i) == DROPPED and info[i]["state"] == "CLOSED":
+        print(f"{i} is already closed and {DROPPED}")
+        return
+    refuse_if_blocking(info, sts, i)
+    number = info[i]["number"]
+    comment(info, i, f"**Dropped** (closed as not planned). Reason:\n\n{a.reason}")
+    set_status(i, DROPPED)
+    gh("issue", "close", str(number), "--repo", REPO, "--reason", "not planned")
+    print(f"{i} closed as not planned ({DROPPED})")
     refresh_links(strict=False)
 
 
@@ -995,6 +1045,7 @@ def id_reference_pattern(ids: set[str]) -> re.Pattern:
 def cmd_lint(_a) -> None:
     """Report stale text in issue bodies. Hard findings should be fixed in the same task that made them stale."""
     info = issues()
+    sts = statuses()
     ids = set(info)
     appendices = {k.split()[1] for k in ids if k.startswith("Appendix ")}
     hard: list[str] = []
@@ -1036,6 +1087,12 @@ def cmd_lint(_a) -> None:
                     )
         if DOD_HEADING in body and "merged into `torch-backend`" not in body:
             hard.append(f"{head}: Definition of Done lacks the merged-PR box")
+        if sts.get(k) not in FINISHED:
+            hard.extend(
+                f"{head}: depends on {dep}, which is {DROPPED}"
+                for dep in v["needs"]
+                if sts.get(dep) == DROPPED
+            )
         for dep in v["needs"]:
             a, b = re.fullmatch(r"([A-Z]+)(\d+)", dep), re.fullmatch(r"([A-Z]+)(\d+)", k)
             if a and b and a[1] == b[1] and int(a[2]) > int(b[2]):
@@ -1210,6 +1267,10 @@ def main() -> None:
     s = sub.add_parser("sanitise")
     s.add_argument("file", nargs="?")
     s.set_defaults(fn=cmd_sanitise)
+    s = sub.add_parser("drop")
+    s.add_argument("id")
+    s.add_argument("reason")
+    s.set_defaults(fn=cmd_drop)
     s = sub.add_parser("done")
     s.add_argument("id")
     s.add_argument("evidence")
