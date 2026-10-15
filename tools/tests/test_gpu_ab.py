@@ -423,3 +423,13 @@ def test_the_wrapper_runs_the_step_of_its_array_task(tmp_path):
         check=True,
     )
     assert direct.stdout.strip() == "ARGS tools/gpu_ab.py OUT --summary"
+
+
+def test_a_relative_output_directory_still_imports_from_the_tree(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sha = ga.resolve("HEAD")
+
+    tree = ga.ensure_tree(Path("relative_out"), sha)
+
+    assert tree.is_absolute()
+    assert ga.package_location(tree) == str(tree / "tensorpotential" / "__init__.py")

@@ -215,6 +215,7 @@ def package_location(tree: Path, python: str = sys.executable) -> str:
 
 def ensure_tree(out: Path, sha: str, root: Path = ROOT) -> Path:
     """Extract ``tensorpotential/`` of commit ``sha`` into ``OUT/trees/<sha>`` once, and check the import."""
+    out = out.resolve()  # an absolute PYTHONPATH: the runs and the check do not start in the same directory
     tree = out / "trees" / sha
     with locked(out / "trees.lock"):
         if not (tree / ".complete").exists():
@@ -624,6 +625,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """Run the requested steps (all by default) and write the summary; return the exit status."""
     args = parse_args(argv)
+    args.out = args.out.resolve()
     requested = Config(
         base=resolve(args.base),
         head=resolve(args.head),
