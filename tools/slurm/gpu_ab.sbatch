@@ -25,4 +25,6 @@ cd <path-to-checkout>
 OUT="${OUT:-gpu_ab_results}"
 BASE="${BASE:-df8d556}"
 HEAD="${HEAD:-HEAD}"
-bash tools/slurm/gpu_ab.sh "$OUT" --base "$BASE" --head "$HEAD"
+# ARGS: further options of tools/gpu_ab.py, e.g.  --export=ALL,ARGS="--cell 3 --pairs 7"
+# shellcheck disable=SC2086
+bash tools/slurm/gpu_ab.sh "$OUT" --base "$BASE" --head "$HEAD" ${ARGS:-}

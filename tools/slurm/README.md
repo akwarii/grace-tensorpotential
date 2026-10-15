@@ -75,7 +75,7 @@ Steps, for each architecture (FS, 1-, 2- and 3-layer) and precision (float64, fl
 
 | step | measures |
 |---|---|
-| `infer-<arch>-<dtype>-<option>` | whole model (energy, forces, virial), 54 atoms, 5 pairs, default and `dense_nbr` layouts |
+| `infer-<arch>-<dtype>-<option>` | whole model (energy, forces, virial), 432 atoms (`--cell 2`), 5 pairs, default and `dense_nbr` layouts |
 | `train-<arch>-<dtype>` | a jitted training step (energy and forces loss, gradient of every weight), 54 atoms, 5 pairs |
 | `scan-<arch>-<dtype>-<option>` | whole model at supercells 1 to 8 until a size does not fit: largest size, time and KB per bond |
 | `numerics-<arch>-<dtype>` | outputs of A and B on the same structure: largest difference, relative to the array maximum |

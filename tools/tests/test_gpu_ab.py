@@ -36,6 +36,7 @@ def _config(**changes: Any) -> ga.Config:
         device="cpu",
         pairs=2,
         repeats=1,
+        cell=1,
         archs=(ARCH,),
         dtypes=("float64",),
         options=("none", "dense_nbr"),

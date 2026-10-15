@@ -7,7 +7,8 @@ it). Runs of the two commits alternate (A, B, A, B, ...) so that both see the sa
 
 The work is split into independent **steps** (``--list`` prints them):
 
-* ``infer-<arch>-<dtype>-<option>``: whole model (energy, forces, virial), ``pairs`` alternating runs;
+* ``infer-<arch>-<dtype>-<option>``: whole model (energy, forces, virial) at ``cell`` (432 atoms by
+  default), ``pairs`` alternating runs;
 * ``train-<arch>-<dtype>``: a jitted training step (energy and forces loss, gradient of every weight);
 * ``scan-<arch>-<dtype>-<option>``: the whole model at growing supercells, one run per size and commit,
   until a size fails (out of memory): the largest size that fits and the peak memory per bond;
@@ -78,7 +79,7 @@ class Config:
     device: str = "gpu"
     pairs: int = 5
     repeats: int = 5
-    cell: int = 1
+    cell: int = 2
     archs: tuple[str, ...] = ARCHS
     dtypes: tuple[str, ...] = ("float64", "float32")
     options: tuple[str, ...] = ("none", "dense_nbr")
@@ -605,8 +606,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--cell",
         type=int,
-        default=1,
-        help="supercell of the timed runs (54 atoms each)",
+        default=2,
+        help="supercell of the timed runs (54 atoms each; 2 = 432 atoms: 54 atoms take about 1 ms on an A100)",
     )
     parser.add_argument("--archs", nargs="+", default=list(ARCHS))
     parser.add_argument("--dtypes", nargs="+", default=["float64", "float32"])
