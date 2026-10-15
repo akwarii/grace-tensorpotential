@@ -33,7 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import make_golden as mg  # noqa: E402  # ty: ignore[unresolved-import]  (tools/ is on sys.path at run time)
 
-GOLDEN = ROOT / "tests_torch" / "golden"
+pytestmark = pytest.mark.golden
+
+GOLDEN =ROOT / "tests_torch" / "golden"
 NAMES = tuple(sorted(r.name for r in mg.requests_for("tiny")))
 BASE_NAMES = tuple(n for n in NAMES if n.endswith(("_f64", "_f32")))
 CUTOFF = 6.0
