@@ -77,12 +77,24 @@ def _resolve_dense_nbr(dense_nbr):
     return bool(raw)
 
 
-def _expand_l_to_lm(x, lmax):
+def _cpu_formulations() -> bool:
+    """Whether the CPU formulations of QUAL10 apply: when TensorFlow sees no GPU.
+
+    Decided when the model is traced. On an A100 they were slower and their extra kernels made
+    the CUDA graph of the 2-layer model fail to instantiate, so a GPU runs the original ops.
+    """
+    return not tf.config.list_logical_devices("GPU")
+
+
+def _expand_l_to_lm(x, lmax, l_tile):
     """Repeat entry ``l`` of the last axis ``2l+1`` times: ``[..., lmax+1] -> [..., (lmax+1)**2]``.
 
-    The values of ``tf.gather(x, l_tile, axis=-1)``, built by broadcasting: its gradient is a
-    sum over the ``2l+1`` copies instead of the scatter of a gather along the minor axis.
+    ``tf.gather(x, l_tile, axis=-1)`` on a GPU; on the CPU the same values by broadcasting,
+    whose gradient is a sum over the ``2l+1`` copies instead of the scatter of a gather along
+    the minor axis.
     """
+    if not _cpu_formulations():
+        return tf.gather(x, l_tile, axis=-1)
     lead = tf.shape(x)[:-1]
     return tf.concat(
         [
@@ -191,17 +203,9 @@ def _contract_expanded_weights(w, x, tile, lm_first, atomic_mu_i=None):
     return tf.einsum(eq, w, x)
 
 
-def _per_block_contraction() -> bool:
-    """Whether reductions contract their weights per l block: on the CPU only (QUAL10).
-
-    Decided when the model is traced, from the devices TensorFlow sees.
-    """
-    return not tf.config.list_logical_devices("GPU")
-
-
 def _reduce_contraction(w, x, tile, lm_first, atomic_mu_i=None):
-    """Contract the weights of a reduction with its channels, per l block on the CPU, expanded on a GPU."""
-    if _per_block_contraction():
+    """Contract the weights of a reduction with its channels: per l block on the CPU, expanded on a GPU."""
+    if _cpu_formulations():
         return _contract_weight_runs(w, x, _tile_runs(tile), lm_first, atomic_mu_i)
     return _contract_expanded_weights(w, x, tile, lm_first, atomic_mu_i)
 
@@ -746,7 +750,7 @@ class LinearRadialFunction(TPInstruction):
 
         crad = tf.cast(self.crad, dtype=basis.dtype)
         y = tf.einsum("nlk,ak->anl", crad, basis)
-        return _expand_l_to_lm(y, self.lmax)
+        return _expand_l_to_lm(y, self.lmax, self.l_tile)
 
 
 @capture_init_args
@@ -898,7 +902,7 @@ class MLPRadialFunction(TPInstruction, LORAInstructionMixin):
             y = y * inv * gamma
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        return _expand_l_to_lm(y, self.lmax)
+        return _expand_l_to_lm(y, self.lmax, self.l_tile)
 
 
 @capture_init_args
@@ -1052,7 +1056,7 @@ class MLPRadialFunction_v2(TPInstruction, LORAInstructionMixin):
             y *= embedding
 
         y = tf.reshape(y, [-1, self.n_rad_max, self.lmax + 1])
-        return _expand_l_to_lm(y, self.lmax)
+        return _expand_l_to_lm(y, self.lmax, self.l_tile)
 
 
 @capture_init_args
@@ -1943,7 +1947,7 @@ class SPBF(TPEquivariantInstruction):
         # [n_bonds, n_rad_max * (lmax+1)] -> [n_bonds, n_rad_max, lmax+1]
         x = tf.reshape(x, [-1, self.n_rad_max, self._lmax + 1])
         # Repeat by l: [n_bonds, n_rad_max, (lmax+1)^2]
-        return _expand_l_to_lm(x, self._lmax)
+        return _expand_l_to_lm(x, self._lmax, self.l_tile)
 
     def frwrd(self, input_data: dict, training=False, local=False):
         # Bond distances

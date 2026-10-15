@@ -32,7 +32,7 @@ from tensorpotential.instructions import (
 from tensorpotential.instructions.compute import (
     _contract_expanded_weights,
     _contract_weight_runs,
-    _per_block_contraction,
+    _cpu_formulations,
     _tile_runs,
 )
 
@@ -247,18 +247,18 @@ def test_function_reduce_n_on_the_gpu_path_equals_the_oracle_and_the_cpu_path(
     red, data = _reduce_inputs(4, per_type)
     cpu = red.frwrd(dict(data)).numpy()
 
-    monkeypatch.setattr(compute, "_per_block_contraction", lambda: False)
+    monkeypatch.setattr(compute, "_cpu_formulations", lambda: False)
     gpu = red.frwrd(dict(data)).numpy()
 
     np.testing.assert_allclose(gpu, _reduce_oracle(red, data), rtol=1e-12, atol=1e-13)
     np.testing.assert_allclose(gpu, cpu, rtol=1e-12, atol=1e-13)
 
 
-def test_the_per_block_contraction_runs_only_without_a_gpu(monkeypatch):
+def test_the_cpu_formulations_runs_only_without_a_gpu(monkeypatch):
     monkeypatch.setattr(tf.config, "list_logical_devices", lambda _kind=None: [])
-    assert _per_block_contraction()
+    assert _cpu_formulations()
 
     monkeypatch.setattr(
         tf.config, "list_logical_devices", lambda _kind=None: ["/device:GPU:0"]
     )
-    assert not _per_block_contraction()
+    assert not _cpu_formulations()
