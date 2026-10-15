@@ -17,6 +17,7 @@ import ast
 import json
 import os
 import re
+import tomllib
 import warnings
 from pathlib import Path
 
@@ -557,7 +558,10 @@ def test_the_import_contract_is_kept():
         args=("--no-cache",),
     )
     assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-1000:]
-    assert "4 kept, 0 broken" in result.stdout
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    count = len(config["tool"]["importlinter"]["contracts"])
+    assert count >= 6
+    assert f"{count} kept, 0 broken" in result.stdout
 
 
 def test_the_contract_lists_torch_backend_once_it_exists():
