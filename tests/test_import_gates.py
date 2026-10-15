@@ -475,7 +475,7 @@ TF_FREE_MODULES = (
     "tensorpotential.errors",
     "tensorpotential.torch_backend",
     "tensorpotential.torch_backend.spec",
-    "tensorpotential.torch_backend.spec.errors",
+    "tensorpotential.torch_backend.errors",
     "tensorpotential.torch_backend.spec.loader",
     "tensorpotential.torch_backend.spec.options",
     "tensorpotential.constants",

@@ -1,7 +1,7 @@
 """TF-free loader of ``model.yaml``: parse, resolve references, apply the pinned defaults, order the instructions.
 
 The result is a :class:`ModelSpec`: the instructions in the order of the file (the order they run in; see
-:class:`~tensorpotential.torch_backend.spec.errors.ForwardReferenceError`), each as an :class:`InstructionSpec`
+:class:`~tensorpotential.torch_backend.errors.ForwardReferenceError`), each as an :class:`InstructionSpec`
 whose ``options`` hold every constructor argument that the yaml or
 :data:`~tensorpotential.torch_backend.spec.options.DEFAULTS` gives. An ``_instruction_`` reference becomes an
 :class:`InstructionRef`, wherever it sits in the options (a list of references too).
@@ -18,7 +18,7 @@ up in tables, not imported (TF's ``str_to_class`` runs ``exec`` on it, a defect 
 
 The loader is strict (rule R3): :func:`~tensorpotential.torch_backend.spec.registry.check_supported` lists every
 unsupported class, unknown or missing option and unsupported option value of the model in one
-:class:`~tensorpotential.torch_backend.spec.errors.UnsupportedModelError`, and the model-level ``param_dtype`` is
+:class:`~tensorpotential.torch_backend.errors.UnsupportedModelError`, and the model-level ``param_dtype`` is
 checked too.
 
 The module imports neither TensorFlow nor torch.
@@ -34,7 +34,7 @@ from typing import Any, Final
 
 import yaml
 
-from tensorpotential.torch_backend.spec.errors import (
+from tensorpotential.torch_backend.errors import (
     CyclicReferenceError,
     DanglingReferenceError,
     ForwardReferenceError,

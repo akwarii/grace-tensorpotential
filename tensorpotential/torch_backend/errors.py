@@ -1,4 +1,4 @@
-"""Exception types of the spec loader.
+"""Exception types of the torch backend.
 
 Every error is a :class:`SpecError` (a ``ValueError``), so a caller that only wants to know that a ``model.yaml``
 cannot be loaded catches one type, and a test can ask for the kind. The message names the instruction and, where
