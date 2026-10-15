@@ -21,7 +21,7 @@ import pytest
 import yaml
 
 from tensorpotential.torch_backend.spec import options as opt
-from tensorpotential.torch_backend.spec.errors import (
+from tensorpotential.torch_backend.errors import (
     CyclicReferenceError,
     DanglingReferenceError,
     ForwardReferenceError,

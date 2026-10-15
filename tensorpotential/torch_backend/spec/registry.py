@@ -28,7 +28,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Final, Literal, Protocol
 
-from tensorpotential.torch_backend.spec.errors import Problem, UnsupportedModelError
+from tensorpotential.torch_backend.errors import Problem, UnsupportedModelError
 from tensorpotential.torch_backend.spec.model import InstructionRef
 from tensorpotential.torch_backend.spec.options import (
     DEFAULTS,

@@ -420,7 +420,7 @@
    "covered": 0,
    "total": 0
   },
-  "tensorpotential/torch_backend/spec/errors.py": {
+  "tensorpotential/torch_backend/errors.py": {
    "covered": 21,
    "total": 21
   },

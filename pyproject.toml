@@ -147,7 +147,7 @@ unsupported-operator = "ignore"
 [tool.coverage.run]
 branch = true
 source = ["tensorpotential"]
-# fail_under is set per package in CI (M2.1)
+# fail_under is set per package in CI: quality-gates of tests.yaml holds core/ and torch_backend/ at 90 (TORCH1)
 
 # Import contract (D1, D16, R2): the TensorFlow-free modules never reach tensorflow or keras, directly or through
 # another module of the package. tests/test_import_gates.py runs `lint-imports` and fails when tensorpotential.torch_backend
@@ -281,6 +281,37 @@ ignore_imports = [
     "tensorpotential.data.datasets -> tensorpotential.tensorpot",
     "tensorpotential.instructions.instruction_graph_utils -> tensorpotential.tpmodel",
 ]
+
+# Layers of the torch backend (R2, TORCH1), top to bottom; a layer imports only the layers below it, also indirectly.
+# Siblings joined by | do not import each other: the executor (model) never imports a concrete twin (instructions) and
+# knows them through the protocol only; convert is the one layer that knows both.
+[[tool.importlinter.contracts]]
+name = "Torch backend layers: core, errors, spec, plans and weights, ops and protocol, instructions and model, convert, torchsim"
+type = "layers"
+layers = [
+    "tensorpotential.torch_backend.torchsim",
+    "tensorpotential.torch_backend.convert",
+    "tensorpotential.torch_backend.model | tensorpotential.torch_backend.instructions",
+    "tensorpotential.torch_backend.ops | tensorpotential.torch_backend.protocol",
+    "tensorpotential.torch_backend.plans | tensorpotential.torch_backend.weights",
+    "tensorpotential.torch_backend.spec",
+    "tensorpotential.torch_backend.errors",
+    "tensorpotential.core",
+]
+
+# The layers below the ops are pure numpy (R2): plans are pure functions, weights read files. The protocol is not listed:
+# it imports torch for type checking only, which tests_torch/test_package_structure.py checks at run time.
+[[tool.importlinter.contracts]]
+name = "Torch-free layers of the backend do not import torch"
+type = "forbidden"
+source_modules = [
+    "tensorpotential.core",
+    "tensorpotential.torch_backend.errors",
+    "tensorpotential.torch_backend.spec",
+    "tensorpotential.torch_backend.plans",
+    "tensorpotential.torch_backend.weights",
+]
+forbidden_modules = ["torch", "torch_sim"]
 
 # Declared against imported dependencies (DEPS4): `deptry tensorpotential` must exit 0. Every entry says why it is not a finding.
 [tool.deptry.per_rule_ignores]

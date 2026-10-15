@@ -30,7 +30,7 @@ import scan_options as so  # noqa: E402
 
 from tensorpotential.torch_backend.spec import options as opt  # noqa: E402
 from tensorpotential.torch_backend.spec import registry as reg  # noqa: E402
-from tensorpotential.torch_backend.spec.errors import (  # noqa: E402
+from tensorpotential.torch_backend.errors import (  # noqa: E402
     Problem,
     SpecError,
     UnsupportedModelError,

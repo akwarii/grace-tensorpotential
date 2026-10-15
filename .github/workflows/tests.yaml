@@ -1,9 +1,11 @@
 # The test suites (CI1, D17a), on every pull request, every push to the integration branch and every night:
 #   test-core   tests/core (the TensorFlow-free shared code) in an environment without TensorFlow
-#   test-torch  the TF-free torch-backend tests on pandas 2.3 and 3.0 (runs once tests_torch/ has tests)
+#   test-torch  the torch-backend tests (tests_torch) with the torch extra and without TensorFlow, on pandas 2.3
+#               and 3.0; each writes its coverage data (TORCH1)
 #   test-tf     the TensorFlow suite, in four shards that each write their coverage data
-#   quality-gates  combines the coverage data of the shards and runs the coverage ratchet (every run) and the
-#               touched-unit gate (pull requests only) (CI3)
+#   quality-gates  combines the coverage data of the shards and of test-torch, and runs the coverage ratchet and the
+#               90 percent floor of core/ and torch_backend/ (every run) and the touched-unit gate (pull requests only)
+#               (CI3, TORCH1)
 # GitHub starts scheduled workflows from the default branch only, so the nightly run is live once this file is there.
 # Every action is pinned to a commit; the token has read access only.
 
@@ -57,9 +59,13 @@ jobs:
           extra-args: --noconftest -W always
 
   test-torch:
-    # Defined here, switched on by TORCH1, which creates tests_torch/ (the job is skipped while it has no test file).
+    # The torch-backend tests in an environment with the torch extra and without TensorFlow (TORCH1). The capability
+    # contract of tests_torch/conftest.py: a job that guarantees a capability names it in GRACE_REQUIRE_CAPS (this one
+    # guarantees none of tf, torchsim, vesin, gpu, cueq, hpc; a test that needs one is skipped here).
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      COVERAGE_FILE: .coverage.torch-${{ matrix.pandas }}
     strategy:
       fail-fast: false
       matrix:
@@ -68,32 +74,34 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - id: has-tests
-        name: Look for tests_torch/ tests
-        run: |
-          if compgen -G "tests_torch/test_*.py" > /dev/null; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.has-tests.outputs.found == 'true'
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: ${{ env.UV_VERSION }}
           python-version: "3.12"
           enable-cache: true
-      - if: steps.has-tests.outputs.found == 'true'
-        name: Install the torch extra without TensorFlow, then pin pandas
+      - name: Install the torch extra without TensorFlow, then pin pandas
         run: |
           uv venv .venv-torch
-          uv pip install --python .venv-torch/bin/python ".[torch]" pytest pytest-timeout
+          uv pip install --python .venv-torch/bin/python ".[torch]" pytest pytest-timeout pytest-cov
           uv pip install --python .venv-torch/bin/python "pandas==${{ matrix.pandas }}"
-      - if: steps.has-tests.outputs.found == 'true'
-        name: Check that TensorFlow is absent
+      - name: Check that TensorFlow is absent
         run: .venv-torch/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
-      - if: steps.has-tests.outputs.found == 'true'
-        name: Run tests_torch without TensorFlow
+      - name: Run tests_torch without TensorFlow
         uses: ./.github/actions/run-pytest
         with:
           python: .venv-torch/bin/python
           tests: tests_torch
-          extra-args: -W always
+          # tests_torch imports tensorpotential from the checkout (the rootdir is on sys.path), so the coverage paths
+          # are those of the test-tf shards and quality-gates combines them
+          extra-args: -W always --strict-markers --cov=tensorpotential --cov-branch --cov-report=
+      - name: Upload the coverage data of this run
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-torch-${{ matrix.pandas }}
+          path: .coverage.torch-${{ matrix.pandas }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
   test-tf:
     # The TensorFlow suite of the repository (tests/ with the two usual ignores), in groups of about equal duration
@@ -159,7 +167,7 @@ jobs:
   quality-gates:
     # The coverage gates of CLAUDE.md, run on the data of the four shards (CI3): the per-file ratchet against
     # baselines/coverage_baseline.json on every run and, on a pull request, the 90% rule for the units it touches.
-    needs: test-tf
+    needs: [test-tf, test-torch]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -177,10 +185,10 @@ jobs:
         run: |
           uv venv .venv-gates
           uv pip install --python .venv-gates/bin/python coverage==7.16.2
-      - name: Download the coverage data of the shards
+      - name: Download the coverage data of the shards and of test-torch
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: coverage-group-*
+          pattern: coverage-*
           path: coverage-data
           merge-multiple: true
       - name: Combine the shards into one report
@@ -190,6 +198,11 @@ jobs:
           .venv-gates/bin/python -m coverage report --skip-empty | tail -n 3
       - name: Coverage ratchet (no file may lose share and gain uncovered code)
         run: .venv-gates/bin/python tools/coverage_ratchet.py check cov.json
+      - name: Coverage floor of the new packages (90 percent, lines and branches, each package on its own; TORCH1)
+        run: |
+          for package in core torch_backend; do
+            .venv-gates/bin/python -m coverage report --include="tensorpotential/$package/*" --fail-under=90
+          done
       - name: Touched units at 90 percent (pull requests)
         if: github.event_name == 'pull_request'
         env:

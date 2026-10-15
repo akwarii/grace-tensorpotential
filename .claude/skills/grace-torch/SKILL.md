@@ -30,8 +30,8 @@ The decisions taken so far (D1-D19: packaging, fixtures, periodic-boundary polic
 - **R1 - The TF classes are the oracle.** They change only when a milestone says so, and then the change is behaviour-preserving, covered at 90%,
   and compared with `baselines/`. The torch twins own their copy of the index-table ("plan") logic, guarded by table-equality tests against
   tables dumped from TF. Do not import TF from torch code.
-- **R2 - Layering and import direction.** `core/` (pure numpy, no TF, no torch) -> plans (pure numpy tables) -> ops (torch maths) -> instructions ->
-  model -> torch-sim wrapper. `weights` and `convert` are separate; the TF-side extractor lives outside `torch_backend/` (under `scripts/`), so
+- **R2 - Layering and import direction.** `core/` (pure numpy, no TF, no torch) -> `errors` -> `spec` -> plans (pure numpy tables) and `weights` -> ops (torch maths) and
+  the twin `protocol` -> instructions and model (siblings: the executor never imports a twin) -> `convert` (the one layer that knows both) -> torch-sim wrapper (layers contract of TORCH1 in `pyproject.toml`). `weights` and `convert` are separate; the TF-side extractor lives outside `torch_backend/` (under `scripts/`), so
   `torch_backend/` and `core/` have a zero-TF rule without exceptions. An import-linter contract and a `sys.meta_path` blocker test enforce it.
 - **R3 - Unsupported means an error.** A class, or a class option value, without a twin stops the load with an actionable message naming it.
   Nothing is skipped or approximated silently. Every option of the in-scope classes (including `dense_nbr` and `lm_first`) is ported; an option
