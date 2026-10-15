@@ -517,7 +517,7 @@ def render_summary(config: Config, rows: dict[str, list[dict[str, Any]]]) -> str
         "|---|---|---|---|---|---|---|---|",
     ]
     lines.extend(
-        f"| {r['step']} | {_fmt(r['base_ms'], '.1f')} | {_fmt(r['head_ms'], '.1f')} | "
+        f"| {r['step']} | {_fmt(r['base_ms'], '.3g')} | {_fmt(r['head_ms'], '.3g')} | "
         f"{_pct(r['change'])} | "
         f"{_fmt(r['base_peak_mb'], '.0f')} | {_fmt(r['head_peak_mb'], '.0f')} | "
         f"{r['base_n']}/{r['head_n']} | {'WORSE' if r['worse'] else ''} |"
@@ -531,8 +531,8 @@ def render_summary(config: Config, rows: dict[str, list[dict[str, Any]]]) -> str
     for r in rows["scans"]:
         lines.append(
             f"| {r['step']} | {r.get('base_largest_cell') or 'n/a'} | {r.get('head_largest_cell') or 'n/a'} | "
-            f"{r.get('common_cell', 'n/a')} | {_fmt(r.get('base_ms'), '.1f')} | "
-            f"{_fmt(r.get('head_ms'), '.1f')} | {_fmt(r.get('base_kb_per_bond'), '.1f')} | "
+            f"{r.get('common_cell', 'n/a')} | {_fmt(r.get('base_ms'), '.3g')} | "
+            f"{_fmt(r.get('head_ms'), '.3g')} | {_fmt(r.get('base_kb_per_bond'), '.1f')} | "
             f"{_fmt(r.get('head_kb_per_bond'), '.1f')} | "
             f"{_pct(r.get('change'))} | "
             f"{'WORSE' if r.get('worse') else ''} |"
