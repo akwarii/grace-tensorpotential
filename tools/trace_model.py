@@ -18,7 +18,9 @@ Usage (from the repository root)::
     python tools/trace_model.py model_grace_2L_omat.yaml --supercell 1 --json out.json
     python tools/trace_model.py GRACE-3L-OMAT-large.yaml --top-ops 20
 
-CPU only: the per-operation events are an option of the XLA CPU backend.
+CPU only: the per-operation events are an option of the XLA CPU backend. The trace is read with the
+protobuf module that TensorFlow ships (``tensorflow.tsl.profiler.protobuf.xplane_pb2``, TensorFlow
+2.20); another TensorFlow version may move it.
 """
 
 from __future__ import annotations
@@ -149,10 +151,9 @@ def largest_optimized_hlo(directory: Path) -> str:
 
 def instruction_names(model) -> list[str]:
     """Names of the model's instructions (a list or a dict of them), in order."""
-    instructions = model.instructions
-    if isinstance(instructions, dict):
-        instructions = instructions.values()
-    return [ins.name for ins in instructions]
+    import oracle_snapshot as osn
+
+    return [ins.name for ins in osn._as_list(model.instructions)]
 
 
 def trace_model(args: argparse.Namespace, tf, work: Path) -> dict[str, Any]:

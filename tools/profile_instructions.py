@@ -153,29 +153,27 @@ def instruction_functions(
     """
     floats = {k: v for k, v in snapshot.items() if v.dtype.is_floating}
     rest = {k: v for k, v in snapshot.items() if not v.dtype.is_floating}
+    input_keys = set(snapshot)
 
-    def outputs(data: dict, inputs: dict, others: dict) -> list:
-        return [data[k] for k in sorted(set(data) - set(inputs) - set(others))]
+    def outputs(data: dict) -> list:
+        return [data[k] for k in sorted(set(data) - input_keys)]
 
-    def float_outputs(data: dict, inputs: dict, others: dict) -> list:
-        flat = tf.nest.flatten(outputs(data, inputs, others))
-        return [o for o in flat if o.dtype.is_floating]
+    def float_outputs(data: dict) -> list:
+        return [o for o in tf.nest.flatten(outputs(data)) if o.dtype.is_floating]
 
     def forward(inputs: dict, others: dict) -> list:
         data = {**inputs, **others}
         ins(data, training=False, local=False)
-        return outputs(data, inputs, others)
+        return outputs(data)
 
     def forward_backward(inputs: dict, others: dict, seeds: list) -> list:
         with tf.GradientTape() as tape:
             tape.watch(list(inputs.values()))
             data = {**inputs, **others}
             ins(data, training=False, local=False)
-            outs = float_outputs(data, inputs, others)
+            outs = float_outputs(data)
         sources = [*inputs.values(), *(ins.variables if with_variables else [])]
-        if not outs:
-            return [tf.constant(0.0)]
-        grads = tape.gradient(outs, sources, output_gradients=seeds)
+        grads = tape.gradient(outs, sources, output_gradients=seeds) if outs else []
         return [tf.convert_to_tensor(g) for g in grads if g is not None] or [
             tf.constant(0.0)
         ]
@@ -184,8 +182,7 @@ def instruction_functions(
     ins(data, training=False, local=False)
     rng = np.random.default_rng(SEED)
     seeds = [
-        tf.constant(rng.standard_normal(o.shape), o.dtype)
-        for o in float_outputs(data, floats, rest)
+        tf.constant(rng.standard_normal(o.shape), o.dtype) for o in float_outputs(data)
     ]
     return forward, forward_backward, (floats, rest), (floats, rest, seeds)
 
