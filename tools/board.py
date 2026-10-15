@@ -8,7 +8,7 @@ usage (from anywhere inside the repository):
     python tools/board.py context ID                the issue, its comments, and the comments of its hard dependencies
     python tools/board.py start ID [--force]        Status -> In Progress, plus a comment; refuses if a hard dependency is not Done
     python tools/board.py finding ID "text" [--also ID ...]   comment an UNEXPECTED finding on ID (and on later issues it affects)
-    python tools/board.py status ID STATUS          STATUS = Todo | In Progress | PR Open | Done | Dropped
+    python tools/board.py status ID STATUS          STATUS = Todo | In Progress | PR Open (Done: use `done`; Dropped: use `drop`)
     python tools/board.py dod ID                    show the Definition of Done checklist of the issue, numbered
     python tools/board.py check ID N [N ...] [--note "evidence"]   tick DoD boxes (every time you finish a task of the issue)
     python tools/board.py na ID N "reason"          mark a DoD box not applicable, with the reason (never leave an inapplicable box blank)
@@ -64,6 +64,7 @@ OWNER = REPO.split("/")[0]
 PROJECT_TITLE = "GRACE torch backend"
 DROPPED = "Dropped"
 STATUSES = ["Todo", "In Progress", "PR Open", "Done", DROPPED]
+FINISHED = ("Done", DROPPED)  # statuses that wait for nothing and block nothing
 DOD_HEADING = "## Definition of Done"
 BLOCKED_FIELD = "Blocked by"  # text columns of the project table, written by `refresh`
 PR_FIELD = "PR"
@@ -698,7 +699,7 @@ def cmd_status(a) -> None:
             "An issue is resolved only when a pull request is merged into the integration branch: use `done`, which checks it."
         )
     if a.status == DROPPED:
-        refuse_if_blocking(info, statuses(), i)
+        sys.exit("An issue is dropped by closing it as not planned: use `drop`, which checks that it blocks nothing.")
     if a.status == "PR Open":
         open_prs = [
             p
@@ -805,11 +806,13 @@ def native_blocking(number: int) -> list[int]:
 
 
 def open_dependents(info: dict, statuses_: dict[str, str], item_id: str, native: list[int]) -> list[str]:
-    """Issues that depend on ``item_id`` (Depends on line or native relation) and are neither Done nor Dropped."""
+    """Issues that depend on ``item_id`` (Depends on line or native relation), are open and are neither Done nor Dropped."""
     by_number = {v["number"]: k for k, v in info.items()}
     dependents = {k for k, v in info.items() if item_id in v["needs"]}
     dependents |= {by_number[n] for n in native if n in by_number}
-    return sorted(d for d in dependents if statuses_.get(d) not in ("Done", DROPPED))
+    return sorted(
+        d for d in dependents if statuses_.get(d) not in FINISHED and info[d]["state"] != "CLOSED"
+    )
 
 
 def refuse_if_blocking(info: dict, statuses_: dict[str, str], item_id: str) -> None:
@@ -817,7 +820,7 @@ def refuse_if_blocking(info: dict, statuses_: dict[str, str], item_id: str) -> N
     blocking = open_dependents(info, statuses_, item_id, native_blocking(info[item_id]["number"]))
     if blocking:
         sys.exit(
-            f"{item_id} cannot be dropped: {', '.join(blocking)} depend on it and are neither Done nor Dropped. "
+            f"{item_id} cannot be dropped: these issues depend on it and are neither Done nor Dropped: {', '.join(blocking)}. "
             "Only an issue that blocks nothing can be dropped (owner decision, 2026-10-15)."
         )
 
@@ -825,10 +828,10 @@ def refuse_if_blocking(info: dict, statuses_: dict[str, str], item_id: str) -> N
 def cmd_drop(a) -> None:
     info, sts = issues(), statuses()
     i = resolve(a.id, info)
-    refuse_if_blocking(info, sts, i)
     if sts.get(i) == DROPPED and info[i]["state"] == "CLOSED":
         print(f"{i} is already closed and {DROPPED}")
         return
+    refuse_if_blocking(info, sts, i)
     number = info[i]["number"]
     comment(info, i, f"**Dropped** (closed as not planned). Reason:\n\n{a.reason}")
     set_status(i, DROPPED)
@@ -1084,7 +1087,7 @@ def cmd_lint(_a) -> None:
                     )
         if DOD_HEADING in body and "merged into `torch-backend`" not in body:
             hard.append(f"{head}: Definition of Done lacks the merged-PR box")
-        if sts.get(k) not in ("Done", DROPPED):
+        if sts.get(k) not in FINISHED:
             hard.extend(
                 f"{head}: depends on {dep}, which is {DROPPED}"
                 for dep in v["needs"]
