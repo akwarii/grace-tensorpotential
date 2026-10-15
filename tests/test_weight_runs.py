@@ -27,9 +27,12 @@ from tensorpotential.instructions import (
     FunctionReduceN,
     ProductFunction,
     SphericalHarmonic,
+    compute,
 )
 from tensorpotential.instructions.compute import (
+    _contract_expanded_weights,
     _contract_weight_runs,
+    _per_block_contraction,
     _tile_runs,
 )
 
@@ -213,3 +216,49 @@ def test_function_reduce_n_equals_the_expanded_weights_oracle(per_type):
     np.testing.assert_allclose(
         got.numpy(), _reduce_oracle(red, data), rtol=1e-12, atol=1e-13
     )
+
+
+@pytest.mark.parametrize("lm_first", [False, True])
+@pytest.mark.parametrize("per_type", [False, True])
+def test_the_expanded_weights_contraction_equals_the_oracle(lm_first, per_type):
+    tile = [0, 1, 1, 1, 2, 2, 2, 2, 2]
+    w = RNG.standard_normal([2, 3, 4, 3] if per_type else [3, 4, 3])
+    x = RNG.standard_normal((5, 4, len(tile)))
+    mu = RNG.integers(0, 2, 5) if per_type else None
+    x_in = np.transpose(x, (2, 0, 1)) if lm_first else x
+
+    got = _contract_expanded_weights(
+        tf.constant(w),
+        tf.constant(x_in),
+        tf.constant(tile),
+        lm_first,
+        None if mu is None else tf.constant(mu),
+    )
+
+    np.testing.assert_allclose(
+        got.numpy(), _oracle(w, x_in, tile, lm_first, mu), rtol=1e-13, atol=1e-13
+    )
+
+
+@pytest.mark.parametrize("per_type", [False, True])
+def test_function_reduce_n_on_the_gpu_path_equals_the_oracle_and_the_cpu_path(
+    monkeypatch, per_type
+):
+    red, data = _reduce_inputs(4, per_type)
+    cpu = red.frwrd(dict(data)).numpy()
+
+    monkeypatch.setattr(compute, "_per_block_contraction", lambda: False)
+    gpu = red.frwrd(dict(data)).numpy()
+
+    np.testing.assert_allclose(gpu, _reduce_oracle(red, data), rtol=1e-12, atol=1e-13)
+    np.testing.assert_allclose(gpu, cpu, rtol=1e-12, atol=1e-13)
+
+
+def test_the_per_block_contraction_runs_only_without_a_gpu(monkeypatch):
+    monkeypatch.setattr(tf.config, "list_logical_devices", lambda _kind=None: [])
+    assert _per_block_contraction()
+
+    monkeypatch.setattr(
+        tf.config, "list_logical_devices", lambda _kind=None: ["/device:GPU:0"]
+    )
+    assert not _per_block_contraction()

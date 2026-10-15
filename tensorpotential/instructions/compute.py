@@ -175,6 +175,37 @@ def _contract_weight_runs(w, x, runs, lm_first, atomic_mu_i=None):
     return tf.concat(parts, axis=0)
 
 
+def _contract_expanded_weights(w, x, tile, lm_first, atomic_mu_i=None):
+    """The contraction of ``_contract_weight_runs`` in one einsum, the weights expanded to every channel.
+
+    The formulation before QUAL10, kept for the GPU: there the per-run contractions make
+    hundreds of small kernels (slower, and a CUDA graph the driver could not instantiate
+    for the 2-layer model), while one einsum over the expanded weights is one kernel.
+    """
+    w = tf.gather(w, tile, axis=-1)
+    if atomic_mu_i is None:
+        eq = "knw,wan->wak" if lm_first else "knw,anw->wak"
+    else:
+        w = tf.gather(w, atomic_mu_i, axis=0)
+        eq = "aknw,wan->wak" if lm_first else "aknw,anw->wak"
+    return tf.einsum(eq, w, x)
+
+
+def _per_block_contraction() -> bool:
+    """Whether reductions contract their weights per l block: on the CPU only (QUAL10).
+
+    Decided when the model is traced, from the devices TensorFlow sees.
+    """
+    return not tf.config.list_logical_devices("GPU")
+
+
+def _reduce_contraction(w, x, tile, lm_first, atomic_mu_i=None):
+    """Contract the weights of a reduction with its channels, per l block on the CPU, expanded on a GPU."""
+    if _per_block_contraction():
+        return _contract_weight_runs(w, x, _tile_runs(tile), lm_first, atomic_mu_i)
+    return _contract_expanded_weights(w, x, tile, lm_first, atomic_mu_i)
+
+
 def _lmp_lookup(coupling_meta_data):
     """Map ``(l, m, parity)`` to the row labels of ``coupling_meta_data`` having it, in row order."""
     lookup = {}
@@ -3345,16 +3376,8 @@ class FunctionReduceN(
                     A_r = A_r[:, : tf.shape(atomic_mu_i)[0], :]
 
             norm = getattr(self, f"norm_{instr.name}")
-            pr = (
-                _contract_weight_runs(
-                    w,
-                    A_r,
-                    _tile_runs(instruction_collection["w_l_tile"]),
-                    self.lm_first,
-                    mu,
-                )
-                * norm
-            )
+            tile = instruction_collection["w_l_tile"]
+            pr = _reduce_contraction(w, A_r, tile, self.lm_first, mu) * norm
 
             if self.only_invar:
                 collection += tf.reduce_sum(pr, axis=0, keepdims=True)
