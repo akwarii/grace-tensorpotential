@@ -7,6 +7,7 @@ every instruction with work in it is found, against the instruction list of the 
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -188,3 +189,65 @@ def test_the_tool_attributes_the_whole_model_to_its_instructions(tmp_path):
     assert len(result["ops"]) == 5
     assert sum(r["backward_ms"] for r in result["rows"]) > 0
     assert "| instruction | forward ms |" in done.stdout
+
+
+def test_trace_model_builds_traces_and_attributes_in_process(monkeypatch, tmp_path):
+    tf = pytest.importorskip("tensorflow")
+    xplane_pb2 = pytest.importorskip("tensorflow.tsl.profiler.protobuf.xplane_pb2")
+    space = xplane_pb2.XSpace()
+    plane = space.planes.add()
+    plane.event_metadata[1].name = "dot.3"
+    event = plane.lines.add().events.add()
+    event.metadata_id = 1
+    event.duration_ps = 6_000_000_000
+    monkeypatch.setattr(tm, "read_xspace", lambda _directory: space)
+    monkeypatch.setattr(tm, "largest_optimized_hlo", lambda _directory: HLO)
+    args = argparse.Namespace(
+        yaml="model_grace.yaml",
+        dtype="float64",
+        option="none",
+        supercell=1,
+        repeats=1,
+        calls=2,
+        top_ops=3,
+    )
+
+    result = tm.trace_model(args, tf, tmp_path)
+
+    assert result["n_atoms"] == 54
+    assert result["wall_ms"] > 0
+    assert result["rows"] == [
+        {"instruction": tm.MODEL, "forward_ms": 3.0, "backward_ms": 0.0}
+    ]  # "AA1" is not an instruction of model_grace.yaml
+    assert result["ops"][0]["hlo"] == "dot.3"
+
+
+def test_main_sets_the_xla_flags_prints_and_writes_the_json(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setenv("XLA_FLAGS", "--xla_existing=1")
+    seen = {}
+
+    def fake_trace(args, _tf, work):
+        seen["flags"] = tm.os.environ["XLA_FLAGS"]
+        seen["work"] = work
+        return {
+            "yaml": args.yaml,
+            "n_atoms": 2,
+            "n_bonds": 2,
+            "wall_ms": 1.0,
+            "rows": [{"instruction": "A", "forward_ms": 1.0, "backward_ms": 0.5}],
+            "ops": [],
+        }
+
+    monkeypatch.setattr(tm, "trace_model", fake_trace)
+    out = tmp_path / "t.json"
+
+    assert tm.main(["m.yaml", "--json", str(out)]) == 0
+
+    assert seen["flags"].startswith(
+        "--xla_existing=1 --xla_cpu_enable_xprof_traceme=true"
+    )
+    assert f"--xla_dump_to={seen['work'] / 'hlo'}" in seen["flags"]
+    assert "| A | 1.0 | 0.5 | 100.0 |" in capsys.readouterr().out
+    assert json.loads(out.read_text())["trace"]["rows"][0]["instruction"] == "A"
