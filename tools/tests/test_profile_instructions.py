@@ -153,6 +153,7 @@ def test_timed_or_error_passes_the_arguments_to_the_jitted_function():
     ms, error = pi.timed_or_error(tf, double, repeats=2, args=(tf.constant(3.0),))
 
     assert error is None
+    assert ms is not None
     assert ms > 0
     assert len(seen) == 1  # traced once, with the argument as a symbolic input
 
@@ -268,7 +269,7 @@ def test_an_instruction_without_float_outputs_has_a_zero_backward(setup):
     class NoOutput:
         variables = ()
 
-        def __call__(self, data, training=False, local=False):
+        def __call__(self, data, **_flags):
             return data
 
     _, forward_backward, _, args = pi.instruction_functions(tf, NoOutput(), snapshot)

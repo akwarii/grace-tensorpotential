@@ -91,7 +91,11 @@ def test_idle_problem_names_the_reason(monkeypatch, load, ps, expected):
 
     problem = bc.idle_problem()
 
-    assert (problem is None) if expected is None else (expected in problem)
+    if expected is None:
+        assert problem is None
+    else:
+        assert problem is not None
+        assert expected in problem
 
 
 def test_idle_problem_ignores_the_load_when_asked_not_to_read_it(monkeypatch):
@@ -101,7 +105,7 @@ def test_idle_problem_ignores_the_load_when_asked_not_to_read_it(monkeypatch):
     )
 
     assert bc.idle_problem(check_load=False) is None
-    assert "load" in bc.idle_problem()
+    assert "load" in (bc.idle_problem() or "")
 
 
 def test_only_the_first_check_of_a_run_reads_the_load(monkeypatch):

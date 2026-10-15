@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -137,16 +138,13 @@ def test_the_newest_trace_and_the_largest_dump_are_read(tmp_path):
 
 
 def test_instruction_names_of_a_list_or_a_dict_of_instructions():
-    class Ins:
-        def __init__(self, name):
-            self.name = name
+    a, b = SimpleNamespace(name="a"), SimpleNamespace(name="b")
 
-    class Model:
-        instructions = [Ins("a"), Ins("b")]
-
-    assert tm.instruction_names(Model()) == ["a", "b"]
-    Model.instructions = {"a": Ins("a"), "b": Ins("b")}
-    assert tm.instruction_names(Model()) == ["a", "b"]
+    assert tm.instruction_names(SimpleNamespace(instructions=[a, b])) == ["a", "b"]
+    assert tm.instruction_names(SimpleNamespace(instructions={"a": a, "b": b})) == [
+        "a",
+        "b",
+    ]
 
 
 # ------------------------------------------------------------------ values
