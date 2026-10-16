@@ -51,7 +51,8 @@ class SphericalHarmonicsPlan:
         ``[lmax + 1]`` float64: ``Q[m, m] = (2 m - 1)!!``.
     step_z, step_back
         ``[lmax + 1, lmax + 1]`` float64, indexed ``[l, m]``: ``Q[l, m] = step_z[l, m] z Q[l-1, m] - step_back[l, m]
-        Q[l-2, m]``, defined for ``l >= m + 1`` (``step_back`` is 0 for ``l = m + 1``) and 0 elsewhere.
+        Q[l-2, m]``; ``step_z`` is set for ``l >= m + 1``, ``step_back`` for ``l >= m + 2`` (the term is absent for
+        ``l = m + 1``), both 0 elsewhere.
     """
 
     lmax: int
@@ -61,11 +62,6 @@ class SphericalHarmonicsPlan:
     diagonal: np.ndarray
     step_z: np.ndarray
     step_back: np.ndarray
-
-    @property
-    def n_columns(self) -> int:
-        """Number of output columns, ``(lmax + 1)**2``."""
-        return (self.lmax + 1) ** 2
 
 
 def _scale(l: int, m: int) -> float:
@@ -100,5 +96,6 @@ def spherical_harmonics_plan(lmax: int) -> SphericalHarmonicsPlan:
     for o in range(lmax + 1):
         for d in range(o + 1, lmax + 1):
             step_z[d, o] = (2 * d - 1) / (d - o)
-            step_back[d, o] = (d + o - 1) / (d - o) if d >= o + 2 else 0.0
+        for d in range(o + 2, lmax + 1):
+            step_back[d, o] = (d + o - 1) / (d - o)
     return SphericalHarmonicsPlan(lmax, l, m, scale, diagonal, step_z, step_back)

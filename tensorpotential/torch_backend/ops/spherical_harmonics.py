@@ -20,7 +20,6 @@ from tensorpotential.torch_backend.errors import ShapeError
 from tensorpotential.torch_backend.ops.precision import check_floating
 from tensorpotential.torch_backend.plans.spherical_harmonics import (
     SphericalHarmonicsPlan,
-    spherical_harmonics_plan,
 )
 
 
@@ -49,27 +48,30 @@ def _legendre(
     return q
 
 
-def real_spherical_harmonics(unit_vectors: torch.Tensor, lmax: int) -> torch.Tensor:
-    """Return the real spherical harmonics of ``unit_vectors`` up to degree ``lmax``, scaled so that ``Y_00 = 1``.
+def real_spherical_harmonics(
+    unit_vectors: torch.Tensor, plan: SphericalHarmonicsPlan
+) -> torch.Tensor:
+    """Return the real spherical harmonics of ``unit_vectors`` up to degree ``plan.lmax``, scaled so that ``Y_00 = 1``.
 
     Parameters
     ----------
     unit_vectors
         ``[..., 3]``: unit directions ``(x, y, z)`` (bond directions, ``ScaledBondVector``), any floating dtype.
-    lmax
-        Highest degree, at least 0.
+    plan
+        The columns and coefficients (``plans.spherical_harmonics.spherical_harmonics_plan``), built once by the
+        caller rather than per call.
 
     Returns
     -------
     torch.Tensor
-        ``[..., (lmax + 1)**2]``, column ``l*l + l + m`` for ``m = -l .. l``, with the dtype and device of the input;
+        ``[..., (plan.lmax + 1)**2]``, column ``l*l + l + m`` for ``m = -l .. l``, with the dtype and device of the input;
         differentiable with respect to it. ``mean over the sphere of Y[l, m] Y[l', m'] = delta``: orthonormal up to
         the factor ``4 pi`` of TensorFlow's default (``norm = False``).
 
     Raises
     ------
     ShapeError
-        When the last axis is not of size 3, or ``lmax`` is negative.
+        When the last axis is not of size 3.
     DtypeError
         When the input is not floating.
     """
@@ -77,9 +79,8 @@ def real_spherical_harmonics(unit_vectors: torch.Tensor, lmax: int) -> torch.Ten
     if unit_vectors.dim() == 0 or unit_vectors.shape[-1] != 3:
         msg = f"unit_vectors must have a last axis of size 3 (x, y, z), got shape {tuple(unit_vectors.shape)}"
         raise ShapeError(msg)
-    plan = spherical_harmonics_plan(lmax)
     x, y, z = unit_vectors.unbind(-1)
-    re, im = _powers(x, y, lmax)
+    re, im = _powers(x, y, plan.lmax)
     q = _legendre(z, plan)
     columns = []
     for l, m, scale in zip(

@@ -29,6 +29,7 @@ from tests_torch.golden.tolerances import FEATURE_F32, FEATURE_F64, assert_close
 RNG_SEED = 20261016
 LMAX = 4
 """The degree of both shipped 2L models."""
+PLAN = spherical_harmonics_plan(LMAX)
 SQ3, SQ5, SQ15 = math.sqrt(3.0), math.sqrt(5.0), math.sqrt(15.0)
 
 
@@ -46,7 +47,7 @@ def _directions(n: int) -> np.ndarray:
 
 def _sh(v: np.ndarray, lmax: int = LMAX) -> np.ndarray:
     return real_spherical_harmonics(
-        torch.as_tensor(v, dtype=torch.float64), lmax
+        torch.as_tensor(v, dtype=torch.float64), spherical_harmonics_plan(lmax)
     ).numpy()
 
 
@@ -55,7 +56,6 @@ def _sh(v: np.ndarray, lmax: int = LMAX) -> np.ndarray:
 
 def test_columns_are_l_major_with_m_from_minus_l_to_l():
     plan = spherical_harmonics_plan(2)
-    assert plan.n_columns == 9
     assert plan.l.tolist() == [0, 1, 1, 1, 2, 2, 2, 2, 2]
     assert plan.m.tolist() == [0, -1, 0, 1, -2, -1, 0, 1, 2]
     assert np.array_equal(plan.l * plan.l + plan.l + plan.m, np.arange(9))
@@ -106,21 +106,24 @@ def test_y00_is_one_and_l1_is_sqrt3_y_z_x():
 
 def test_shape_follows_the_leading_axes_and_lmax():
     v = torch.as_tensor(_directions(6), dtype=torch.float64)
-    assert real_spherical_harmonics(v, LMAX).shape == (10, 25)
-    assert real_spherical_harmonics(v.reshape(2, 5, 3), LMAX).shape == (2, 5, 25)
-    assert real_spherical_harmonics(v, 0).tolist() == [[1.0]] * 10
-    assert real_spherical_harmonics(v[0], 1).shape == (4,)
+    assert real_spherical_harmonics(v, PLAN).shape == (10, 25)
+    assert real_spherical_harmonics(v.reshape(2, 5, 3), PLAN).shape == (2, 5, 25)
+    assert (
+        real_spherical_harmonics(v, spherical_harmonics_plan(0)).tolist()
+        == [[1.0]] * 10
+    )
+    assert real_spherical_harmonics(v[0], spherical_harmonics_plan(1)).shape == (4,)
 
 
 def test_no_bonds_give_an_empty_result():
-    out = real_spherical_harmonics(torch.zeros((0, 3), dtype=torch.float64), LMAX)
+    out = real_spherical_harmonics(torch.zeros((0, 3), dtype=torch.float64), PLAN)
     assert out.shape == (0, 25) and out.dtype == torch.float64
 
 
 def test_float32_input_stays_float32_and_mixes_no_dtype():
     v = _directions(30)
     with DtypeAudit() as audit:
-        out = real_spherical_harmonics(torch.as_tensor(v, dtype=torch.float32), LMAX)
+        out = real_spherical_harmonics(torch.as_tensor(v, dtype=torch.float32), PLAN)
     audit.assert_clean()
     assert out.dtype == torch.float32
     assert_close(out, _sh(v), FEATURE_F32)
@@ -129,26 +132,26 @@ def test_float32_input_stays_float32_and_mixes_no_dtype():
 def test_float64_mixes_no_dtype_and_reads_no_value_on_the_host_in_either_pass():
     v = torch.as_tensor(_directions(8), dtype=torch.float64).requires_grad_()
     with DtypeAudit() as audit:
-        (grad,) = torch.autograd.grad(real_spherical_harmonics(v, LMAX).sum(), v)
+        (grad,) = torch.autograd.grad(real_spherical_harmonics(v, PLAN).sum(), v)
     audit.assert_clean()
     assert grad.dtype == torch.float64
 
 
 def test_the_gradient_passes_gradcheck():
     v = torch.as_tensor(_directions(5), dtype=torch.float64).requires_grad_()
-    assert torch.autograd.gradcheck(lambda d: real_spherical_harmonics(d, LMAX), (v,))
+    assert torch.autograd.gradcheck(lambda d: real_spherical_harmonics(d, PLAN), (v,))
 
 
 @pytest.mark.parametrize("dtype", [torch.int64, torch.bool, torch.complex128], ids=str)
 def test_a_tensor_that_is_not_floating_is_refused(dtype):
     with pytest.raises(DtypeError, match="floating"):
-        real_spherical_harmonics(torch.zeros((2, 3), dtype=dtype), LMAX)
+        real_spherical_harmonics(torch.zeros((2, 3), dtype=dtype), PLAN)
 
 
 @pytest.mark.parametrize("shape", [(), (3, 2), (4,)])
 def test_a_last_axis_other_than_xyz_is_refused(shape):
     with pytest.raises(ShapeError, match="last axis of size 3"):
-        real_spherical_harmonics(torch.zeros(shape, dtype=torch.float64), LMAX)
+        real_spherical_harmonics(torch.zeros(shape, dtype=torch.float64), PLAN)
 
 
 # ------------------------------------------------------------------ physical values
@@ -204,8 +207,7 @@ def test_orthonormal_over_the_sphere():
 
 def test_parity_is_minus_one_to_the_l():
     v = _directions(50)
-    plan = spherical_harmonics_plan(LMAX)
-    assert_close(_sh(-v), _sh(v) * (-1.0) ** plan.l, FEATURE_F64)
+    assert_close(_sh(-v), _sh(v) * (-1.0) ** PLAN.l, FEATURE_F64)
 
 
 @pytest.mark.golden
