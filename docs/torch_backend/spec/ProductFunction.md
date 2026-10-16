@@ -119,6 +119,10 @@ No cast: `lft * rght * cg` follows the promotion of its three operands. In a rea
 (**Measured**: float32 for `AA` ... `BBBB` with float32 parameters). A mixed pair (float64 operand, float32 `cg`) would
 promote to float64 under G2; the twin must do the same if it ever sees one.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `promote_like_tf(lft, rght, cg)`
+before the product (a mixed pair promotes to float64, as under G2); `cg` is a `param_constant`. The features are
+`[atoms, lm, n]`.
+
 ## 7. Options rejected
 
 - `local = True`: not applicable (no such mode).

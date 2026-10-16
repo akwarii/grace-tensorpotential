@@ -116,6 +116,9 @@ Gate-less case, the shipped one: a plain MLP, `silu` on both hidden layers, no b
 - Constructor-supplied LoRA is initialised twice (the layers' `build`, then the instruction's); harmless
   (finding 12).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the first `Linear` applies
+`to_dtype_of(basis, weight)`; the embedding and the gate stay in the parameter dtype (no `to_geometry`, unlike v1).
+
 ## 7. Options rejected
 
 - `lora_config` not `None`: as for v1. **Proposal**: reject with a message that tells to merge first

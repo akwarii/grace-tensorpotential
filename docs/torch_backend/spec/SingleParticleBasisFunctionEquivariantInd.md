@@ -162,6 +162,10 @@ tensor and float32 parameters the result is float64); `cg` and `inv_avg_n_neigh`
 never change it. The twin has to keep `Y` cast to the radial dtype and let the product follow its inputs. The CG
 values enter float32 models as float32 numbers (`cg` is created in `float_dtype`).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `Y` goes through `to_dtype_of(Y, R)`;
+the product follows its inputs with `promote_like_tf`; `cg` (a `param_constant`) and `inv_avg_n_neigh` go through
+`to_dtype_of(..., prod)`, so they never change its dtype. The feature is `[atoms, lm, n]`.
+
 ## 7. Options rejected
 
 - `chemical_embedding.is_per_atom` true (`compute.py:1478-1479`): never true for a shipped embedding; rejected.

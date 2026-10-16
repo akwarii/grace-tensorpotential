@@ -56,6 +56,10 @@ overwrites `atomic_energy`, so a dump of the dictionary shows only the last valu
 `tests/test_output.py:351` (TEST6 finding 18). A second `build` in another dtype is a silent no-op (`is_built`). The result
 of the chain is float32 for float32 parameters (**Measured**).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `value` is a `param_constant`; the
+chain of output instructions keeps the parameter dtype, and the model sums the atomic energies per structure in
+float64 (`structure_energy`).
+
 ## 7. Options rejected
 
 - `l != 0` for the energy chain: **rejected** (owner, 2026-10-04, after a check). `CreateOutputTarget` only stores `l`, and

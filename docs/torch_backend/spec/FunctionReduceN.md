@@ -131,6 +131,9 @@ the first cast source, so the output has the parameter dtype whatever the input 
 **Measured** float32 for all instances of a float32 model). `norm_<s>` and `norm_map` are in `float_dtype`. The twin casts each
 source to the weight dtype before the contraction, as TF does.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: each source goes through
+`to_dtype_of(A_r, w)` before the contraction; `norm_<s>` and `norm_map` are `param_constant`s.
+
 ## 7. Options rejected
 
 - `lora_config` not `None`: **Proposal**, rejected (`compute.py:3226-3227`, `3231-3251`).

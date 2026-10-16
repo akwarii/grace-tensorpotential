@@ -171,6 +171,10 @@ Behaviours that shape the twin (all **Measured** on the pinned commit unless a t
   against a float32 `r`; **Measured**, not pinned by a test). This does not occur with the default data dtype
   (G1).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the basis is in the geometry dtype;
+`rc` is a `param_constant` and widened with `promote_like_tf` where the basis meets it (TF promotes the float32 `rc`
+of a float32 model), and the strict `r > rcut` test keeps the Python float `rcut`.
+
 ## 7. Options rejected
 
 - Unknown `basis_type`: `ValueError` already in TF; same in the twin.

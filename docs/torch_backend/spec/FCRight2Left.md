@@ -118,6 +118,9 @@ and float32 operands (a real float32 model: **Measured** float32 outputs for all
 float64 operand and float32 weights TF raises `InvalidArgumentError` (pinned at `tests/test_compute.py:4741`). The twin
 does not need to reproduce the failure, but must not silently promote a mixed input either: it raises.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `same_dtype(operand, weight)` before
+the einsums: a mixed input raises `DtypeError` instead of promoting.
+
 ## 7. Options rejected
 
 - `lora_config` not `None`: **Proposal**, rejected (`compute.py:3657-3658`, `3662-3692`).

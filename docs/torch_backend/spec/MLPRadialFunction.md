@@ -109,6 +109,10 @@ out = gather(y, l_tile, axis=-1)                                              # 
 The twin follows the same chain of casts, because the downstream class (`SingleParticleBasisFunction*`) also
 casts, and the sum over neighbours in float32 versus float64 changes the last digits of the energy.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the first layer applies
+`to_dtype_of(basis, weight)`; `epsilon` and `gamma` are `param_constant`s applied with `to_dtype_of(..., y)`; with the
+embedding, `z` goes up with `to_geometry` for the concatenation and down again through the first layer.
+
 ## 7. Options rejected
 
 - `lora_config` not `None`. The state belongs to a fine-tune in progress: the instruction then holds extra LoRA

@@ -11,6 +11,7 @@ paths:
 *Loaded when you read or edit a matching file (`paths` above); the rules that always apply are in `CLAUDE.md`.*
 
 - Golden fixtures: the library imported is the one on `PYTHONPATH` (read the `library:` line the generator prints); commit the generator before writing fixtures (the tests fail on a modified tree); never write the manifest with sorted keys. Other pitfalls: `tests_torch/golden/README.md`.
+- The tolerance table `tests_torch/golden/tolerances.py` and every committed golden file are edit-locked (`LOCK.sha256`): after a regeneration or a row change, `python -m tests_torch.golden.lock record` in a commit of its own that says why; never widen a row to make a test pass.
 
 ```bash
 # tests_torch/structures/structures.json/.xyz are written by python -m tests_torch.structures.build_structures (test_build_structures.py fails on a difference).

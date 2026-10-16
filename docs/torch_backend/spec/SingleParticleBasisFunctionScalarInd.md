@@ -115,6 +115,10 @@ The twin therefore rounds `Y` to float32 before the product in a float32 model; 
 and rounding afterwards would differ at the float32 ulp level (a golden for the float32 variant has to be taken
 from TF, not derived from the float64 one).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `Y` and `z` go through
+`to_dtype_of(..., R)` and `a` through `to_dtype_of(a, weight)`, so a float32 model rounds `Y` to float32 before the
+product, as TF does.
+
 ## 7. Options rejected
 
 - `lora_config` not `None`: **Proposal**, rejected as for the radial MLPs; `enable_lora_adaptation` and
