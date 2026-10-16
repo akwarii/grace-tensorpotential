@@ -99,6 +99,14 @@ def test_an_integer_tensor_is_not_cast():
         p.DtypePolicy(torch.float64).to_param(torch.ones(2, dtype=torch.int64))
 
 
+@pytest.mark.parametrize("dtype", [torch.int32, torch.bool, torch.complex64], ids=str)
+def test_check_floating_refuses_other_tensors_and_passes_floats(dtype):
+    for floating in (torch.float32, torch.float64):
+        p.check_floating(torch.ones(2, dtype=floating))
+    with pytest.raises(DtypeError, match="a floating tensor is needed"):
+        p.check_floating(torch.ones(2, dtype=dtype))
+
+
 @pytest.mark.usefixtures("default_dtype")
 @pytest.mark.parametrize("param", [torch.float32, torch.float64])
 def test_constants_have_an_explicit_dtype_under_either_default(param):
