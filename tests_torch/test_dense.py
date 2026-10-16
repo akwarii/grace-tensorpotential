@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import itertools
 import json
-import re
 
 import numpy as np
 import pytest
@@ -19,8 +18,8 @@ import torch
 
 from tensorpotential.torch_backend.errors import (
     DtypeError,
+    OpArgumentError,
     ShapeError,
-    UnsupportedModelError,
 )
 from tensorpotential.torch_backend.ops import dense
 from tensorpotential.torch_backend.ops.precision import DtypePolicy, precision_scope
@@ -58,8 +57,13 @@ NP_ACTIVATIONS = {
 }
 
 
+def _dtype_name(policy):
+    """``"float32"`` or ``"float64"``: the numpy dtype and the dtype of the tolerance rows."""
+    return str(policy.param).removeprefix("torch.")
+
+
 def _np_dtype(policy):
-    return np.float32 if policy.param == torch.float32 else np.float64
+    return np.dtype(_dtype_name(policy)).type
 
 
 def _np_mlp(x, weights, activations, *, normalize=True):
@@ -86,10 +90,10 @@ def _load(mlp, weights):
     return mlp
 
 
-def _rows_with_small_values(rng, shape):
-    """Draw normal rows, then set one row to 1e-9 and one to zeros, where the epsilon decides the result."""
+def _rows_with_small_values(rng, shape, tiny=1e-9):
+    """Draw normal rows, then set one row to ``tiny`` and one to zeros, where the epsilon decides the result."""
     x = rng.normal(size=shape)
-    x[0] = 1e-9
+    x[0] = tiny
     x[1] = 0.0
     return x
 
@@ -199,7 +203,7 @@ def test_the_weights_of_the_mlp_have_the_keys_of_the_checkpoint():
 
 
 def test_an_unknown_activation_is_refused_with_its_name():
-    with pytest.raises(UnsupportedModelError, match=r"'relu'.*tanh, silu, sigmoid"):
+    with pytest.raises(OpArgumentError, match=r"'relu'.*tanh, silu, sigmoid"):
         dense.MLP.fully_connected([2, 3, 1], "relu", F64)
 
 
@@ -232,10 +236,8 @@ def test_the_variance_norm_rescales_by_the_row_variance_without_centring(policy,
 def test_the_scalar_rms_norm_is_scalar_rms_ln(policy, row):
     rng = np.random.default_rng(RNG_SEED)
     dt = _np_dtype(policy)
-    x = _rows_with_small_values(rng, (7, 12)).astype(dt)
-    x[0] = (
-        1e-12  # with the epsilon 1e-16, rms is 1e-12 / sqrt(1e-24 + 1e-16) = 1e-4, not 1
-    )
+    # with the epsilon 1e-16, a row of 1e-12 is rescaled to 1e-12 / sqrt(1e-24 + 1e-16) = 1e-4, not 1
+    x = _rows_with_small_values(rng, (7, 12), tiny=1e-12).astype(dt)
     scale = rng.normal(size=(1, 12)).astype(dt)
     out = dense.scalar_rms_norm(torch.as_tensor(x), torch.as_tensor(scale))
     mean_square = (x**2).mean(axis=-1, keepdims=True)
@@ -319,25 +321,24 @@ def test_the_blocks_mix_no_dtypes_and_read_nothing_on_the_host():
 # ------------------------------------------------------------------ physical values: TF goldens
 
 ANCHORS = TINY_F64 + TINY_F32
-LAYER = re.compile(r"^(?:mlp/layer|layers/)(\d+)/w$")
+MLP_PREFIXES = ("mlp/layer", "layers/")
+"""Where the checkpoint keeps the weights of a ``FullyConnectedMLP`` and of the ``Linear`` list of the v2 radial MLP."""
 
 
 def _setting(name):
     manifest = json.loads((GOLDEN / f"{name}.json").read_text())
     weights = load(f"{name}.weights")
     policy = DtypePolicy.from_weights(w.dtype for w in weights.values())
-    dtype = "float32" if policy.param == torch.float32 else "float64"
-    return manifest["instructions"], weights, policy, dtype
+    return manifest["instructions"], weights, policy
 
 
 def _mlp_weights(weights, instruction):
-    found = {}
-    for key, value in weights.items():
-        head, _, rest = key.partition("/")
-        match = LAYER.match(rest)
-        if head == instruction and match:
-            found[int(match.group(1))] = value
-    return [found[i] for i in sorted(found)]
+    """Return the layer weights of an MLP, in order, and its widths ``[n_in, ..., n_out]``."""
+    (prefix,) = [p for p in MLP_PREFIXES if f"{instruction}/{p}0/w" in weights]
+    ws = []
+    while f"{instruction}/{prefix}{len(ws)}/w" in weights:
+        ws.append(weights[f"{instruction}/{prefix}{len(ws)}/w"])
+    return ws, [ws[0].shape[0]] + [w.shape[1] for w in ws]
 
 
 def _instances(instructions, cls):
@@ -347,7 +348,8 @@ def _instances(instructions, cls):
 @pytest.mark.golden
 @pytest.mark.parametrize("name", ANCHORS)
 def test_the_radial_mlps_of_tf_are_rebuilt(name):
-    instructions, weights, policy, dtype = _setting(name)
+    instructions, weights, policy = _setting(name)
+    dtype = _dtype_name(policy)
     arrays = load(name)
     radial = _instances(instructions, "MLPRadialFunction") + _instances(
         instructions, "MLPRadialFunction_v2"
@@ -355,8 +357,7 @@ def test_the_radial_mlps_of_tf_are_rebuilt(name):
     assert radial
     for instruction in radial:
         args = instructions[instruction]["init_args"]
-        ws = _mlp_weights(weights, instruction)
-        sizes = [ws[0].shape[0]] + [w.shape[1] for w in ws]
+        ws, sizes = _mlp_weights(weights, instruction)
         if instructions[instruction]["class"] == "MLPRadialFunction":
             assert not args["norm"]
             mlp = dense.MLP.fully_connected(sizes, args["activation"], policy)
@@ -381,7 +382,8 @@ def test_the_radial_mlps_of_tf_are_rebuilt(name):
 @pytest.mark.golden
 @pytest.mark.parametrize("name", ["large_tiny_f64", "large_tiny_f32"])
 def test_the_invariant_rms_norms_of_tf_are_rebuilt(name):
-    instructions, weights, _, dtype = _setting(name)
+    instructions, weights, policy = _setting(name)
+    dtype = _dtype_name(policy)
     arrays = load(name)
     norms = _instances(instructions, "InvariantLayerRMSNorm")
     assert {instructions[n]["init_args"]["type"] for n in norms} == {
@@ -410,12 +412,12 @@ def test_the_invariant_rms_norms_of_tf_are_rebuilt(name):
 @pytest.mark.golden
 @pytest.mark.parametrize("name", ANCHORS)
 def test_the_energy_readouts_of_tf_are_rebuilt(name):
-    instructions, weights, policy, dtype = _setting(name)
+    instructions, weights, policy = _setting(name)
+    dtype = _dtype_name(policy)
     arrays = load(name)
     (instruction,) = _instances(instructions, "LinMLPOut2ScalarTarget")
     args = instructions[instruction]["init_args"]
-    ws = _mlp_weights(weights, instruction)
-    sizes = [ws[0].shape[0]] + [w.shape[1] for w in ws]
+    ws, sizes = _mlp_weights(weights, instruction)
     mlp = _load(dense.MLP.fully_connected(sizes, args["activation"], policy), ws)
     for case in cases(arrays):
         scalars = [arrays[f"{case}/ins/{o['name']}"][:, :, 0] for o in args["origin"]]

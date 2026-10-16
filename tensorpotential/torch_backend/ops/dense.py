@@ -24,8 +24,12 @@ from typing import TYPE_CHECKING, Final
 
 import torch
 
-from tensorpotential.torch_backend.errors import ShapeError, UnsupportedModelError
-from tensorpotential.torch_backend.ops.precision import same_dtype, to_dtype_of
+from tensorpotential.torch_backend.errors import OpArgumentError, ShapeError
+from tensorpotential.torch_backend.ops.precision import (
+    constant_like,
+    same_dtype,
+    to_dtype_of,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -53,13 +57,13 @@ ACTIVATIONS: Final[Mapping[str, Callable[[torch.Tensor], torch.Tensor]]] = {
     "sigmoid": torch.sigmoid,
     "silu_n2norm": silu_n2norm,
 }
-"""The activations by name: TF's ``ACTIVATION_DICT`` and the default of ``FullyConnectedMLP``."""
+"""The activations by name: TF's ``ACTIVATION_DICT`` and, by a name of its own, the default of ``FullyConnectedMLP``."""
 
 
 def _activation(name: str) -> Callable[[torch.Tensor], torch.Tensor]:
     if name not in ACTIVATIONS:
         msg = f"unknown activation {name!r}: the twins have {', '.join(ACTIVATIONS)}"
-        raise UnsupportedModelError(msg)
+        raise OpArgumentError(msg)
     return ACTIVATIONS[name]
 
 
@@ -140,7 +144,7 @@ class MLP(torch.nn.Module):
     ------
     ShapeError
         When ``sizes`` has fewer than two widths or ``activations`` does not have one name per hidden layer.
-    UnsupportedModelError
+    OpArgumentError
         When an activation name is unknown.
     """
 
@@ -200,6 +204,11 @@ def _inverse_rms(x: torch.Tensor, epsilon: torch.Tensor | float) -> torch.Tensor
     return torch.rsqrt(x.square().mean(dim=-1, keepdim=True) + epsilon)
 
 
+def _param_epsilon(value: float, param: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """Make the epsilon in the parameter dtype (that of ``param``), as TF does, and cast it to the dtype of ``x``."""
+    return to_dtype_of(constant_like(value, param), x)
+
+
 def variance_norm(y: torch.Tensor, gamma: torch.Tensor) -> torch.Tensor:
     """``y * rsqrt(var(y) + 1e-5) * gamma`` over the last axis: the ``norm`` of ``MLPRadialFunction``.
 
@@ -207,13 +216,8 @@ def variance_norm(y: torch.Tensor, gamma: torch.Tensor) -> torch.Tensor:
     not centred. The epsilon is made in the dtype of ``gamma`` (the parameter dtype) and, with ``gamma``, cast to the
     dtype of ``y``.
     """
-    epsilon = torch.as_tensor(
-        VARIANCE_NORM_EPSILON, dtype=gamma.dtype, device=gamma.device
-    )
-    centred = y - y.mean(dim=-1, keepdim=True)
-    inverse = torch.rsqrt(
-        centred.square().mean(dim=-1, keepdim=True) + to_dtype_of(epsilon, y)
-    )
+    epsilon = _param_epsilon(VARIANCE_NORM_EPSILON, gamma, y)
+    inverse = _inverse_rms(y - y.mean(dim=-1, keepdim=True), epsilon)
     return y * inverse * to_dtype_of(gamma, y)
 
 
@@ -236,7 +240,5 @@ def channel_rms_norm(x: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     ``1 ..`` (``only_nonlin``, ``sep_lin_gate``); ``scale`` is ``[1, 1, n]``. The epsilon is made in the dtype of
     ``scale`` (the parameter dtype) and, with ``scale``, cast to the dtype of ``x``.
     """
-    epsilon = torch.as_tensor(
-        CHANNEL_RMS_EPSILON, dtype=scale.dtype, device=scale.device
-    )
-    return x * _inverse_rms(x, to_dtype_of(epsilon, x)) * to_dtype_of(scale, x)
+    epsilon = _param_epsilon(CHANNEL_RMS_EPSILON, scale, x)
+    return x * _inverse_rms(x, epsilon) * to_dtype_of(scale, x)

@@ -10,7 +10,7 @@ The policy every twin follows (section 6 of each spec sheet applies it to its cl
   ``tf.cast(x, y.dtype)``), :func:`promote_like_tf` where TensorFlow promotes silently (below), and :func:`same_dtype`
   where TF refuses mixed operands. A twin never calls ``Tensor.to(dtype)`` itself.
 * **Constants** are created with an explicit dtype and the device of the tensor they meet
-  (:meth:`DtypePolicy.param_constant`, :meth:`DtypePolicy.geometry_constant`); the backend never reads
+  (:meth:`DtypePolicy.param_constant`, :meth:`DtypePolicy.geometry_constant`, :func:`constant_like`); the backend never reads
   ``torch.get_default_dtype()`` and never moves a tensor to another device (a test scans the package for both).
 * **Energy**: atomic energies are summed per structure in float64 (``ops.scatter.structure_energy`` through :func:`to_energy`), as TF casts them to the
   dtype of the pair forces before its segment sum (``tpmodel.py:332-335``); a float32 sum would depend on the order of
@@ -178,6 +178,14 @@ def to_dtype_of(tensor: torch.Tensor, reference: torch.Tensor) -> torch.Tensor:
         When ``tensor`` is not floating.
     """
     return _cast(tensor, reference.dtype)
+
+
+def constant_like(value: float, reference: torch.Tensor) -> torch.Tensor:
+    """Make a 0-d constant in the dtype and on the device of ``reference``: TF's ``tf.constant(value, w.dtype)``.
+
+    An epsilon that TF makes in the parameter dtype is made like a parameter, then cast where it is used.
+    """
+    return torch.as_tensor(value, dtype=reference.dtype, device=reference.device)
 
 
 def same_dtype(*tensors: torch.Tensor) -> torch.dtype:
