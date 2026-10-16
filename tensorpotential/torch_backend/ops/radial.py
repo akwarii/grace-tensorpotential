@@ -298,8 +298,12 @@ def simplified_bessel_recursion(
 
 
 def _sinc(x: torch.Tensor) -> torch.Tensor:
-    """``sin(x) / x`` with 1 at 0 (TF's ``sinc``; ``torch.sinc`` is the normalised one, ``sin(pi x) / (pi x)``)."""
-    return torch.where(x != 0, torch.sin(x) / x, torch.ones_like(x))
+    """``sin(x) / x`` (``torch.sinc`` is the normalised ``sin(pi x) / (pi x)``).
+
+    TF's ``sinc`` also returns 1 at ``x = 0``; that branch is never taken, because a zero length is replaced by
+    ``epsilon`` before a basis is evaluated, so it is left out.
+    """
+    return torch.sin(x) / x
 
 
 @dataclass(frozen=True)
