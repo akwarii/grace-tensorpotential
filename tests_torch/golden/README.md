@@ -79,8 +79,10 @@ inputs (the dense batch has its own layout). Their manifest records the comparis
   `BondLength`, `R`, `Y`, `pair_f`, ...) is equal when every atom has the same number of neighbours (all the tiny structures);
   for `icosahedron_satellite` (12, 13 or 4 neighbours) the dense batch adds 18 padding bonds to the 164 real ones (each
   `ind_i = ind_j = 0`, with a bond vector beyond the cutoff and an exactly zero pair force; `n_neigh_real` is 164 in both layouts), so those
-  tensors have 182 rows and the manifest lists them as `differs`. A twin of the
-  dense layout has to reproduce that padding (issue DENSE1), and the energy, forces and stress are unaffected;
+  tensors have 182 rows and the manifest lists them as `differs`. The energy, forces and stress are unaffected. The
+  twins do not reproduce the dense layout (decided: `dense_nbr` `true` and `false` accepted, same sum; spec README): the
+  twin of `SingleParticleBasisFunctionEquivariantInd`, the one class that reads the flag (issue TWIN5), computes the regular
+  per-bond sum and is checked against the `*_f64_dense` fixtures, padding bonds included;
 * `lm_first`: every tensor that has an angular axis is the default with that axis moved to the front (shape `[lm, ...]` for
   `[..., lm]`), and so is every Clebsch-Gordan table; all other tensors are equal.
 
