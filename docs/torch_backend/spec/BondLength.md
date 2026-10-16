@@ -55,6 +55,9 @@ Consequences, all pinned by `tests/test_compute.py:251-376`:
 The output has the dtype of the input (float64 by G1). There is no parameter, so the parameter dtype plays no
 role. The twin keeps the dtype of its input.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: geometry dtype throughout, no cast;
+`1e-10` stays a Python float, which takes float64 from the input.
+
 ## 7. Options rejected
 
 None are needed: the only branch is the `TypeError` for an `instruction_with_bonds` that is neither `None`, a

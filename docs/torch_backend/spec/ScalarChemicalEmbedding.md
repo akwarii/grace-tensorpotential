@@ -67,6 +67,9 @@ No gather, no input. The instruction writes the table under its name; the depend
 The output has the parameter dtype (`float32` or `float64`). Consumers cast it to the dtype of the radial
 function before use (`SingleParticleBasisFunctionScalarInd`: `tf.cast(z, r.dtype)`, `compute.py:1239`).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the table is in the parameter dtype;
+the consumers cast it (`to_dtype_of`).
+
 ## 7. Options rejected
 
 - `lora_config` not `None`, as for the radial MLPs (`compute.py:1062-1063`, `1115-1123`): **Proposal** the twin

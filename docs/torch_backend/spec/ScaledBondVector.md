@@ -55,6 +55,8 @@ harmonics of the zero vector (see its sheet), not an error.
 The output follows the promotion of the two inputs; both are float64 in every shipped use (G1), so the
 output is float64. TF performs no cast of its own.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: geometry dtype throughout, no cast.
+
 ## 7. Options rejected
 
 None.

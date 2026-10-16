@@ -88,6 +88,9 @@ model, **Measured**). A float32 target with an instruction **built in float64** 
 instruction must be built in the dtype of the model. The twin builds every constant in the parameter dtype, as TF does for
 a consistent model.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `scale` and the shifts are
+`param_constant`s applied with `to_dtype_of(..., target)`.
+
 ## 7. Options rejected
 
 - `atomic_shift_map` whose keys are not exactly `0 .. n-1`: rejected with a message (decided, owner, 2026-10-04) (TF's sorted-position

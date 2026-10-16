@@ -49,8 +49,8 @@
   upstream: never
 
 - path: pyproject.toml
-  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract, the Python 3.12 floor and the deptry whitelist; moves TensorFlow into the tf extra, adds the torch, torch-sim and all extras and the setuptools package discovery that replaces setup.py; drops tf_keras from the tf extra and forbids keras in the TensorFlow-free modules'
-  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3, CLI1, DEPS4]
+  reason: 'adds the dev group, the single ruff and ty configuration, the coverage and ty settings, the import contract, the Python 3.12 floor and the deptry whitelist; moves TensorFlow into the tf extra, adds the torch (torch>=2.9: the fp32_precision API), torch-sim and all extras and the setuptools package discovery that replaces setup.py; drops tf_keras from the tf extra and forbids keras in the TensorFlow-free modules'
+  milestone: [TOOL1, QUAL1, CORE1, CI1, DEPS3, CLI1, DEPS4, TORCH2]
   upstream: never
 
 - path: pytest.ini

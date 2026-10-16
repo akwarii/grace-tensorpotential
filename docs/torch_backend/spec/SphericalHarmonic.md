@@ -106,6 +106,9 @@ A float32 **tensor** input would raise at the conversion; this does not occur (G
 harmonics in float64 whatever the parameter dtype, and downstream classes decide whether to cast them (see
 `SingleParticleBasisFunctionScalarInd` and `...EquivariantInd`).
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the input goes through `to_geometry`
+(a no-op for float64 data) and every constant is a `geometry_constant`: float64 whatever the parameter dtype.
+
 ## 7. Options rejected
 
 - `type = "complex"`. The constructor accepts it, and the forward pass raises `InvalidArgumentError`

@@ -63,6 +63,9 @@ The result has the dtype of the target (float32 in a float32 model, **Measured**
 built in float64, `tf.where(..., tf.zeros_like(target))` raises `InvalidArgumentError` before the cast (TEST6 finding 3,
 pinned at `tests/test_output.py:1323`). A consistent model does not meet it.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the shifts go through
+`to_dtype_of(..., target)`; the result has the dtype of the target.
+
 ## 7. Options rejected
 
 - `upd_init_args_new_elements` changes only `_init_args`, not `number_of_atom_types`, and

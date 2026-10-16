@@ -3,7 +3,8 @@
 Every error is a :class:`TorchBackendError`, which is a
 :class:`~tensorpotential.errors.TensorPotentialError`, so one ``except`` catches every error the library raises on
 purpose. Below it, each family also derives from the builtin type a caller expects: a ``model.yaml`` that cannot be
-loaded is a :class:`SpecError` (a ``ValueError``), and a test can ask for the kind. The message names the object
+loaded is a :class:`SpecError` (a ``ValueError``), a dtype the dtype policy refuses is a :class:`DtypeError`
+(a ``TypeError``), and a test can ask for the kind. The message names the object
 involved (instruction, class, key, weight or atom) and what to do: nothing is skipped or approximated silently
 (rule R3).
 
@@ -69,6 +70,14 @@ class WeightMismatchError(TorchBackendError, ValueError):
 
 class NeighbourListError(TorchBackendError, ValueError):
     """A neighbour list is inconsistent with its structure: an index out of range, a pair beyond the cutoff."""
+
+
+class DtypeError(TorchBackendError, TypeError):
+    """A tensor or a weight has a dtype the dtype policy does not allow (``ops.precision``)."""
+
+
+class ShapeError(TorchBackendError, ValueError):
+    """Tensors given to an op have shapes that do not fit together (for example one segment index per row)."""
 
 
 class MalformedModelError(SpecError):

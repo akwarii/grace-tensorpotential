@@ -126,6 +126,18 @@ differs from the float64 one by `1.6e-7` eV and `5.3e-9` eV (omat, large_base; s
 for that structure (16 atoms, 928 bonds): `R` `[928, 32, 25]` (omat) and `[928, 42, 25]` (large_base); the sheets give
 the others.
 
+## Dtype policy of the twins (TORCH2)
+
+`tensorpotential/torch_backend/ops/precision.py` is the one module that decides dtypes and casts (rule R5); its docstring
+states the policy and the closing paragraph of section 6 of each sheet ("Twin (dtype policy, TORCH2)") applies it to the
+class. In short: parameters in the parameter dtype read from the stored weights (`DtypePolicy.from_weights`), geometry in
+float64, every cast through `to_param`, `to_geometry`, `to_dtype_of` (TF's `tf.cast(x, y.dtype)`), `promote_like_tf`
+(where G2 promotes and torch would not: a float32 tensor with a 0-d float64 tensor stays float32 in torch) or
+`same_dtype` (where TF refuses mixed operands), constants made with an explicit dtype and device, atomic energies summed
+per structure in float64 (`structure_energy`), equivariant features as `[atoms, lm, n]`, and TF32 switched off inside
+`precision_scope` only. `tests_torch/test_precision.py` scans the backend for tensors created without a dtype, reads of the
+default dtype and casts outside the policy, and audits the ops with a dispatch mode (`tests_torch/dtype_audit.py`).
+
 ## Existing TF characterisation
 
 `tests/test_compute.py` and `tests/test_output.py` (issue TEST6) pin the behaviour of the 17 classes with

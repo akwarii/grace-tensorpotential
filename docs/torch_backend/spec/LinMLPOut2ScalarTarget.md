@@ -84,6 +84,9 @@ The origin features, the MLP and `scale` are all in the parameter dtype in a rea
 parameter dtype (**Measured** float32 for float32 parameters). The Python scalar `1e-16` of `scalar_rms_ln` takes the dtype of the tensor it is added to; the twin uses the same
 constant in the dtype of the features.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: every tensor is in the parameter
+dtype; `1e-16` stays a Python float.
+
 ## 7. Options rejected
 
 - `lora_config` not `None`: **Proposal**, rejected (`output.py:379-380`, `384-399`).

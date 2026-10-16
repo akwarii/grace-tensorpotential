@@ -88,6 +88,9 @@ The output has the dtype of `x` (the cast of `epsilon`, `scale` and `lin_scale` 
 pass): **Measured** float32 for float32 parameters (the input of the layer is float32 in that model). The twin casts the
 three constants to the dtype of `x`.
 
+**Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: `epsilon`, `scale` and `lin_scale` go
+through `to_dtype_of(..., x)`.
+
 ## 7. Options rejected
 
 - `type` outside the three values: rejected at load time (TF rejects it in the constructor).

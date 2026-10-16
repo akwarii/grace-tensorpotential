@@ -17,6 +17,7 @@ FAMILIES = (
     errors.UnsupportedModelError,
     errors.WeightMismatchError,
     errors.NeighbourListError,
+    errors.ShapeError,
 )
 
 
@@ -38,7 +39,7 @@ def test_the_list_names_every_error_of_the_module():
         and issubclass(obj, BaseException)
         and obj.__module__ == errors.__name__
     }
-    assert defined == {errors.TorchBackendError, *FAMILIES}
+    assert defined == {errors.TorchBackendError, errors.DtypeError, *FAMILIES}
 
 
 @pytest.mark.parametrize(
@@ -56,6 +57,14 @@ def test_the_spec_errors_keep_their_families(child, parent):
     assert issubclass(child, parent)
 
 
-@pytest.mark.parametrize("cls", [errors.WeightMismatchError, errors.NeighbourListError])
-def test_the_weight_and_neighbour_errors_are_not_spec_errors(cls):
+@pytest.mark.parametrize(
+    "cls", [errors.WeightMismatchError, errors.NeighbourListError, errors.ShapeError]
+)
+def test_the_weight_neighbour_and_shape_errors_are_not_spec_errors(cls):
     assert not issubclass(cls, errors.SpecError)
+
+
+def test_a_dtype_error_is_a_type_error_and_no_value_error():
+    assert issubclass(errors.DtypeError, errors.TorchBackendError)
+    assert issubclass(errors.DtypeError, TypeError)
+    assert not issubclass(errors.DtypeError, ValueError)

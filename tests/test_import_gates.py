@@ -14,6 +14,7 @@ directory and writes nothing into the source tree.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import os
 import re
@@ -42,6 +43,17 @@ KNOWN_ABSENT_PACKAGES = ("tensorpotential.experimental",)
 BASELINED_IMPORT_FAILURES: dict[str, str] = {
     "tensorpotential.scripts.grace_dashboard": "flask",
 }
+
+# Layers of the torch backend that import torch at module level (the ``torch`` extra; the torch-free layers are listed
+# in the import contracts of ``pyproject.toml``). Where torch is installed they must import; where it is not (the
+# ``test-tf`` jobs of CI), each module must import anyway or fail with exactly ``No module named 'torch'``, and the
+# names imported from them are not resolved. Unlike ``BASELINED_IMPORT_FAILURES`` this is not a baseline: it names
+# the layers, so a new module of them needs no entry.
+TORCH_LAYERS = tuple(
+    f"tensorpotential.torch_backend.{layer}"
+    for layer in ("ops", "instructions", "model", "convert", "torchsim")
+)
+TORCH_INSTALLED = importlib.util.find_spec("torch") is not None
 
 IMPORT_TIMEOUT_S = 300
 
@@ -165,12 +177,22 @@ def collected_imports() -> dict[tuple[str, str], list[str]]:
 
 
 def checked_imports() -> dict[tuple[str, str], list[str]]:
-    """``collected_imports`` without the absent package, and the baselined modules."""
+    """``collected_imports`` without the absent package, the baselined modules, and the torch layers without torch."""
     checked = {}
     for (module_name, name), sources in collected_imports().items():
-        if not _is_absent(module_name) and module_name not in BASELINED_IMPORT_FAILURES:
-            checked[module_name, name] = sources
+        if _is_absent(module_name) or module_name in BASELINED_IMPORT_FAILURES:
+            continue
+        if needs_torch(module_name) and not TORCH_INSTALLED:
+            continue
+        checked[module_name, name] = sources
     return checked
+
+
+def needs_torch(module_name: str) -> bool:
+    """Tell whether ``module_name`` belongs to a layer of the backend that imports torch (``TORCH_LAYERS``)."""
+    return any(
+        module_name == p or module_name.startswith(p + ".") for p in TORCH_LAYERS
+    )
 
 
 def _is_absent(module_name: str) -> bool:
@@ -292,10 +314,22 @@ def test_module_imports_in_fresh_subprocess(module_name, import_results):
     returncode = import_results[module_name]["returncode"]
     stderr = import_results[module_name]["stderr"]
     missing = BASELINED_IMPORT_FAILURES.get(module_name)
+    if needs_torch(module_name) and not TORCH_INSTALLED:
+        missing = "torch"
     if returncode != 0 and missing is not None:
         assert f"No module named '{missing}'" in stderr, stderr[-2000:]
         return
     assert returncode == 0, f"import {module_name} failed:\n{stderr[-2000:]}"
+
+
+def test_the_torch_layers_exist_and_only_they_may_lack_torch():
+    for prefix in TORCH_LAYERS:
+        assert (REPO_ROOT / prefix.replace(".", "/") / "__init__.py").is_file(), prefix
+    assert needs_torch("tensorpotential.torch_backend.ops.scatter")
+    assert needs_torch("tensorpotential.torch_backend.ops")
+    assert not needs_torch("tensorpotential.torch_backend.opsx")
+    assert not needs_torch("tensorpotential.torch_backend.spec.loader")
+    assert not needs_torch("tensorpotential.torch_backend.protocol")
 
 
 def test_fork_import_reports_missing_modules_and_foreign_files(tmp_path):

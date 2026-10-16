@@ -2896,7 +2896,7 @@ requires-dist = [
     { name = "tensorflow", extras = ["and-cuda"], marker = "sys_platform == 'linux' and extra == 'tf'", specifier = "<=2.20" },
     { name = "tensorpotential", extras = ["tf", "torch", "torch-sim", "dashboard"], marker = "extra == 'all'" },
     { name = "tensorpotential", extras = ["torch"], marker = "extra == 'torch-sim'" },
-    { name = "torch", marker = "extra == 'torch'" },
+    { name = "torch", marker = "extra == 'torch'", specifier = ">=2.9" },
     { name = "torch-sim-atomistic", marker = "extra == 'torch-sim'" },
     { name = "tqdm" },
     { name = "vesin", marker = "extra == 'torch-sim'" },

@@ -118,7 +118,27 @@ arrays = np.load("tests_torch/golden/omat_tiny_f64.npz", allow_pickle=False)
 weights = np.load("tests_torch/golden/omat_tiny_f64.weights.npz", allow_pickle=False)
 manifest = json.load(open("tests_torch/golden/omat_tiny_f64.json"))
 energy = arrays["dimer/res/energy"]
-a = arrays["self_image_cell/ins/A"]        # output of instruction A, shape [n_atoms, n_rad_max, (lmax+1)**2]
+a = arrays[
+    "self_image_cell/ins/A"
+]  # output of instruction A, shape [n_atoms, n_rad_max, (lmax+1)**2]
+```
+
+`tests_torch/golden/__init__.py` has the same reader (`load`, `cases`); `tests_torch/layout.py` permutes a feature to the
+backend's `[atoms, lm, n]` (`to_internal(a, "default")`), the one place a TF layout is converted.
+
+## The tolerance table and the edit-lock
+
+Every comparison of a torch output with a golden or another oracle takes a named row of `tolerances.py` (here): `numpy.isclose`
+semantics, rows per dtype and quantity, derived from floors measured on these anchors (the module docstring and the comments
+on issue TORCH2 give the numbers); `deviations()` measures, `assert_close()` asserts. The numpy-only checks of the anchors
+themselves (`test_golden_fixtures.py`) keep their rows of `tests/tolerances.py`.
+
+`LOCK.sha256` holds the sha256 of the table and of every committed golden file (both tiers; the faithful `.npz` files are local
+and not locked), and `tests_torch/test_tolerances.py` fails on a changed, added or removed one, so CI (`test-torch`) checks it on
+every run. After a deliberate change, record the lock in a commit of its own that says why:
+
+```bash
+python -m tests_torch.golden.lock record    # check: the same comparison as the test, exit status 1 on a difference
 ```
 
 ## Sizes (megabytes)
