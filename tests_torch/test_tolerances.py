@@ -41,7 +41,7 @@ def test_the_rows_are_named_after_their_constant_and_explain_themselves():
 
 def test_the_rows_are_in_units_of_the_float_epsilon():
     assert {r.rtol for r in tol.ROWS if r.dtype == "float64"} == {tol.F64_RTOL}
-    assert pytest.approx(100 * 2 * tol.EPS64, rel=0.15) == tol.F64_RTOL
+    assert pytest.approx(100 * 2 * tol.EPS64, rel=0.15, abs=0.0) == tol.F64_RTOL
     assert {r.rtol for r in tol.ROWS if r.dtype == "float32"} == {
         tol.F32_RTOL,
         tol.CROSS_CPU_RTOL,
