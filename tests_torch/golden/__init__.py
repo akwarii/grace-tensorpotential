@@ -9,11 +9,13 @@ import numpy as np
 
 GOLDEN: Final = Path(__file__).resolve().parent
 TINY_F64: Final = ("large_tiny_f64", "omat_tiny_f64")
-"""The float64 anchors of the default layout; ``*_f32`` has the same weights in float32."""
+"""The float64 anchors of the default layout."""
+TINY_F32: Final = ("large_tiny_f32", "omat_tiny_f32")
+"""The same weights in float32, in the order of :data:`TINY_F64`."""
 
 
 def load(name: str) -> dict[str, np.ndarray]:
-    """Return every array of the anchor ``name`` (``omat_tiny_f64``, ...), read without pickle."""
+    """Return every array of the file ``<name>.npz`` (``omat_tiny_f64``, ``omat_tiny_f64.weights``), read without pickle."""
     with np.load(GOLDEN / f"{name}.npz", allow_pickle=False) as arrays:
         return {key: arrays[key] for key in arrays.files}
 

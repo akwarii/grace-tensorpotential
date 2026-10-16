@@ -61,14 +61,17 @@ class Row:
 class Deviation:
     """How far ``actual`` is from ``expected`` under a row.
 
-    ``ratio`` is the largest ``|actual - expected| / (atol + rtol * |expected|)``: the comparison passes when it is at
-    most 1, and ``headroom`` (its inverse) says how many times the error could grow before it fails.
+    ``ratio`` is the largest ``|actual - expected| / (atol + rtol * |expected|)``, at ``index``, where the two values are
+    ``actual_at`` and ``expected_at``: the comparison passes when it is at most 1, and ``headroom`` (its inverse) says
+    how many times the error could grow before it fails.
     """
 
     max_abs: float
     max_rel: float
     ratio: float
     index: tuple[int, ...]
+    actual_at: float = 0.0
+    expected_at: float = 0.0
 
     @property
     def headroom(self) -> float:
@@ -159,21 +162,23 @@ ROWS: Final = (
 """Every row of the table."""
 
 
+_BY_DTYPE_AND_QUANTITY: Final = {(r.dtype, r.quantity): r for r in ROWS}
+
+
 def row_for(dtype: Dtype, quantity: Quantity) -> Row:
     """Return the row of ``quantity`` for a model whose parameter dtype is ``dtype``.
 
     Raises
     ------
-    StopIteration
+    KeyError
         When the table has no such row.
     """
-    return next(r for r in ROWS if (r.dtype, r.quantity) == (dtype, quantity))
+    return _BY_DTYPE_AND_QUANTITY[dtype, quantity]
 
 
 def _as_float64(values: ArrayLike) -> np.ndarray:
-    as_numpy = getattr(
-        values, "numpy", None
-    )  # a torch tensor: detached and on the CPU first
+    # a torch tensor: detached and on the CPU first
+    as_numpy = getattr(values, "numpy", None)
     array = as_numpy(force=True) if callable(as_numpy) else values
     return np.asarray(array, dtype=np.float64)
 
@@ -215,11 +220,13 @@ def deviations(actual: ArrayLike, expected: ArrayLike, row: Row) -> Deviation:
         float(_ratio(diff, np.abs(b)).max()),
         float(ratio[worst]),
         tuple(map(int, worst)),
+        float(a[worst]),
+        float(b[worst]),
     )
 
 
 def assert_close(
-    actual: ArrayLike, expected: ArrayLike, row: Row, what: str = ""
+    actual: ArrayLike, expected: ArrayLike, row: Row, what: str = "value"
 ) -> Deviation:
     """Assert that ``actual`` is within ``row`` of ``expected`` and return the deviation.
 
@@ -227,10 +234,9 @@ def assert_close(
     """
     found = deviations(actual, expected, row)
     if found.ratio > 1.0:
-        a, b = _as_float64(actual)[found.index], _as_float64(expected)[found.index]
         msg = (
-            f"{what or 'value'} not within {row.name} (rtol {row.rtol:.1e}, atol {row.atol:.1e} {row.unit}): "
-            f"at {found.index} {float(a):.17g} against {float(b):.17g}, {found.ratio:.3g} times the bound"
+            f"{what} not within {row.name} (rtol {row.rtol:.1e}, atol {row.atol:.1e} {row.unit}): at "
+            f"{found.index} {found.actual_at:.17g} against {found.expected_at:.17g}, {found.ratio:.3g} times the bound"
         )
         raise AssertionError(msg)
     return found

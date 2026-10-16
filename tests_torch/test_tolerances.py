@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import torch
 
-from tests_torch.golden import TINY_F64, cases, load
+from tests_torch.golden import TINY_F32, TINY_F64, cases, load
 from tests_torch.golden import lock as lk
 from tests_torch.golden import tolerances as tol
 
@@ -70,7 +70,9 @@ def test_the_bound_is_atol_plus_rtol_times_the_reference():
     assert found.ratio == 1.0 and found.headroom == 1.0
     # the largest relative error is the 0.25 off a zero
     assert found.max_abs == 1.25 and found.max_rel == float("inf")
-    with pytest.raises(AssertionError, match=r"HAND .* at \(2,\) -3\.5 against -2, 1\.2 times"):
+    with pytest.raises(
+        AssertionError, match=r"HAND .* at \(2,\) -3\.5 against -2, 1\.2 times"
+    ):
         tol.assert_close(np.array([1.0, 0.0, -3.5]), expected, HAND, "hand")
 
 
@@ -124,9 +126,11 @@ def test_the_float64_rows_leave_fifty_times_the_summation_order_floor(name):
 
 
 @pytest.mark.golden
-@pytest.mark.parametrize("name", TINY_F64)
-def test_the_float32_rows_hold_the_float32_spread_of_tf(name):
-    f64, f32 = load(name), load(name.replace("f64", "f32"))
+@pytest.mark.parametrize(
+    ("name", "name_f32"), list(zip(TINY_F64, TINY_F32, strict=True))
+)
+def test_the_float32_rows_hold_the_float32_spread_of_tf(name, name_f32):
+    f64, f32 = load(name), load(name_f32)
     quantities = ("energy", "forces", "virial", "stress")
     for case in cases(f64):
         for quantity in quantities:
