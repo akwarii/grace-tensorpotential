@@ -151,6 +151,8 @@ Behaviours that shape the twin (all **Measured** on the pinned commit unless a t
   `SBessel`, which has no envelope, only the strict `r > rcut` test zeroes the value.
 - `Cheb`: the second derivative with respect to `r` is `NaN` exactly at `r == rc` and finite just inside; the first
   derivative at `rc` is 0 (TEST6 finding 4, pinned at `tests/test_compute.py:890`).
+  The twin (`ops/radial.py`, RAD1) leaves out the power `** 1` and its second derivative at `rc` is finite; values and
+  first derivatives are the same.
 - `Cheb` at `r = 0` (replaced by `1e-10`): `T_k(-1) = (-1)**k`, so the row is `(-1, 1, -1, ...)`.
 
 ## 6. Dtype and promotion
@@ -173,7 +175,10 @@ Behaviours that shape the twin (all **Measured** on the pinned commit unless a t
 
 **Twin (dtype policy, TORCH2).** Casts and constants through `ops/precision.py`: the basis is in the geometry dtype;
 `rc` is a `param_constant` and widened with `promote_like_tf` where the basis meets it (TF promotes the float32 `rc`
-of a float32 model), and the strict `r > rcut` test keeps the Python float `rcut`.
+of a float32 model), and the strict `r > rcut` test keeps the Python float `rcut`. The four bases are in `tensorpotential/torch_backend/ops/radial.py`
+(RAD1): `Chebyshev`, `SineBessel`, `SimplifiedBessel`, `Gaussian`, the envelope `cutoff_envelope`, and `basis_class` for a
+`basis_type`. A sub-expression of a weight alone keeps the parameter dtype, as in TF: `sqrt(2 / rc)` of `RadSinBessel` and
+`rc**1.5` of `SBessel` are float32 for a float32 model, then widened.
 
 ## 7. Options rejected
 
