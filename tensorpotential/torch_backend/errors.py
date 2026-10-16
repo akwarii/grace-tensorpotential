@@ -80,6 +80,10 @@ class ShapeError(TorchBackendError, ValueError):
     """Tensors given to an op have shapes that do not fit together (for example one segment index per row)."""
 
 
+class OptionValueError(TorchBackendError, ValueError):
+    """An op is given an option value outside its domain (a radial basis without functions, an unknown polynomial kind)."""
+
+
 class MalformedModelError(SpecError):
     """The yaml is not a model description: wrong container, missing ``__cls__`` or ``name``, duplicate names."""
 
