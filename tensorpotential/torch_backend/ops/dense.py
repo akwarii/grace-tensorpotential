@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Final
 
 import torch
 
-from tensorpotential.torch_backend.errors import OpArgumentError, ShapeError
+from tensorpotential.torch_backend.errors import OptionValueError, ShapeError
 from tensorpotential.torch_backend.ops.precision import (
     constant_like,
     same_dtype,
@@ -63,7 +63,7 @@ ACTIVATIONS: Final[Mapping[str, Callable[[torch.Tensor], torch.Tensor]]] = {
 def _activation(name: str) -> Callable[[torch.Tensor], torch.Tensor]:
     if name not in ACTIVATIONS:
         msg = f"unknown activation {name!r}: the twins have {', '.join(ACTIVATIONS)}"
-        raise OpArgumentError(msg)
+        raise OptionValueError(msg)
     return ACTIVATIONS[name]
 
 
@@ -144,7 +144,7 @@ class MLP(torch.nn.Module):
     ------
     ShapeError
         When ``sizes`` has fewer than two widths or ``activations`` does not have one name per hidden layer.
-    OpArgumentError
+    OptionValueError
         When an activation name is unknown.
     """
 

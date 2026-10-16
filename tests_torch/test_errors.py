@@ -18,7 +18,7 @@ FAMILIES = (
     errors.WeightMismatchError,
     errors.NeighbourListError,
     errors.ShapeError,
-    errors.OpArgumentError,
+    errors.OptionValueError,
 )
 
 
@@ -64,10 +64,10 @@ def test_the_spec_errors_keep_their_families(child, parent):
         errors.WeightMismatchError,
         errors.NeighbourListError,
         errors.ShapeError,
-        errors.OpArgumentError,
+        errors.OptionValueError,
     ],
 )
-def test_the_weight_neighbour_and_shape_errors_are_not_spec_errors(cls):
+def test_the_weight_neighbour_and_op_errors_are_not_spec_errors(cls):
     assert not issubclass(cls, errors.SpecError)
 
 

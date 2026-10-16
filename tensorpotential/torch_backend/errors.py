@@ -80,8 +80,8 @@ class ShapeError(TorchBackendError, ValueError):
     """Tensors given to an op have shapes that do not fit together (for example one segment index per row)."""
 
 
-class OpArgumentError(TorchBackendError, ValueError):
-    """An op is given a value it does not have (for example an activation name); the yaml check stops models earlier."""
+class OptionValueError(TorchBackendError, ValueError):
+    """An op is given an option value outside its domain (a radial basis without functions, an unknown activation)."""
 
 
 class MalformedModelError(SpecError):

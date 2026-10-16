@@ -18,7 +18,7 @@ import torch
 
 from tensorpotential.torch_backend.errors import (
     DtypeError,
-    OpArgumentError,
+    OptionValueError,
     ShapeError,
 )
 from tensorpotential.torch_backend.ops import dense
@@ -203,7 +203,7 @@ def test_the_weights_of_the_mlp_have_the_keys_of_the_checkpoint():
 
 
 def test_an_unknown_activation_is_refused_with_its_name():
-    with pytest.raises(OpArgumentError, match=r"'relu'.*tanh, silu, sigmoid"):
+    with pytest.raises(OptionValueError, match=r"'relu'.*tanh, silu, sigmoid"):
         dense.MLP.fully_connected([2, 3, 1], "relu", F64)
 
 
