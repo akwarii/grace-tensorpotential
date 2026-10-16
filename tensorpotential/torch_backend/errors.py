@@ -81,7 +81,7 @@ class ShapeError(TorchBackendError, ValueError):
 
 
 class OptionValueError(TorchBackendError, ValueError):
-    """An op is given an option value outside its domain (a radial basis without functions, an unknown polynomial kind)."""
+    """An op is given an option value outside its domain (a radial basis without functions, an unknown activation)."""
 
 
 class MalformedModelError(SpecError):

@@ -161,6 +161,14 @@ def test_a_cast_to_the_dtype_of_a_reference_narrows_and_widens(dtype):
         p.to_dtype_of(torch.ones(3, dtype=torch.int32), reference)
 
 
+@pytest.mark.usefixtures("default_dtype")
+@pytest.mark.parametrize("param", [torch.float32, torch.float64])
+def test_a_constant_like_a_parameter_is_rounded_to_its_dtype(param):
+    eps = p.constant_like(1e-10, torch.ones((2, 3), dtype=param))
+    assert eps.dtype == param and eps.shape == () and eps.device == CPU
+    assert eps.item() == float(np.array(1e-10, dtype=str(param).removeprefix("torch.")))
+
+
 def test_operands_of_one_dtype_pass_and_mixed_operands_are_named():
     f32, f64 = torch.ones(2, dtype=torch.float32), torch.ones(2, dtype=torch.float64)
     assert p.same_dtype(f32, f32) == torch.float32
