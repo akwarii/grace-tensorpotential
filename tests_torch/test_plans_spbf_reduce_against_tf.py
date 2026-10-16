@@ -156,25 +156,22 @@ def test_tables_equal_the_fixture(anchor):
 @pytest.mark.parametrize("anchor", ANCHORS)
 def test_weight_shapes_equal_the_manifest(anchor):
     manifest = _manifest(anchor)
-    rows = {r["key"]: r for r in manifest["variables"]}
+    recorded = {
+        r["key"]: tfstub.VariableInfo(tuple(r["shape"]), r["dtype"], r["trainable"])
+        for r in manifest["variables"]
+    }
     for name, plan in _plans(_model_of(anchor)).items():
+        expected = {}
         if isinstance(plan, FunctionReduceNPlan):
             expected = {
-                f"{name}/reducing_{c.name}": c.weight_shape for c in plan.collectors
+                f"{name}/reducing_{c.name}": tfstub.VariableInfo(
+                    c.weight_shape, manifest["dtype"], True
+                )
+                for c in plan.collectors
             }
-            assert {k for k in rows if k.startswith(f"{name}/")} == set(expected), name
-            for key, shape in expected.items():
-                assert (
-                    tuple(rows[key]["shape"]),
-                    rows[key]["dtype"],
-                    rows[key]["trainable"],
-                ) == (
-                    shape,
-                    manifest["dtype"],
-                    True,
-                ), key
-        else:
-            assert not [k for k in rows if k.startswith(f"{name}/")], name
+        assert {
+            k: v for k, v in recorded.items() if k.startswith(f"{name}/")
+        } == expected, name
 
 
 def _frame_without_symbols(frame: pd.DataFrame) -> pd.DataFrame:

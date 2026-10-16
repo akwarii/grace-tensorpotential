@@ -159,7 +159,10 @@ def test_numpy_backed_operations():
     assert tfstub.zeros([2], np.int32).dtype == np.int32
     assert tfstub.ones([1]).dtype == np.float32
     assert isinstance(tfstub.sqrt(4.0), np.ndarray)
-    w = tfstub.Variable(tfstub._random([2, 3], stddev=1.0, dtype=np.float64), name="w")
+    with tfstub.stand_in() as tf:
+        w = tf.Variable(
+            tf.random.normal([2, 3], stddev=1.0, dtype=tf.float64), name="w"
+        )
     assert (w.shape, w.dtype, w.trainable, w.name) == ((2, 3), np.float64, True, "w")
     assert not w.numpy().any()
     assert tfstub.Variable(lambda: [1, 2], trainable=False).dtype == np.int32
