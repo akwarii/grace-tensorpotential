@@ -213,6 +213,19 @@ def check_index(index: torch.Tensor) -> None:
         raise DtypeError(msg)
 
 
+def check_floating(tensor: torch.Tensor) -> None:
+    """Refuse a tensor that is not floating, for an op that keeps the dtype of its input (reads no value).
+
+    Raises
+    ------
+    DtypeError
+        For an integer, boolean or complex tensor.
+    """
+    if not tensor.is_floating_point():
+        msg = f"a floating tensor is needed, got {tensor.dtype}"
+        raise DtypeError(msg)
+
+
 def _knob(path: str) -> object:
     return functools.reduce(getattr, filter(None, path.split(".")), torch.backends)
 
