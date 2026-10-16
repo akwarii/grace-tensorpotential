@@ -40,7 +40,7 @@ tf = [
     # for linux
     "tensorflow[and-cuda]<=2.20; sys_platform == 'linux'",
 ]
-torch = ["torch"]
+torch = ["torch>=2.9"]
 torch-sim = ["tensorpotential[torch]", "torch-sim-atomistic", "vesin"]
 dashboard = ["flask"]  # grace_dashboard
 all = ["tensorpotential[tf,torch,torch-sim,dashboard]"]
