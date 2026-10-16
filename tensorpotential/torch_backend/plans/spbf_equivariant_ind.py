@@ -15,7 +15,7 @@ the arguments of the TF constructor (the shared TF-free generator, decision D1);
 per-row lists in row order. ``cg`` stays flat in float64: the layout ``[n_cg, 1, 1]`` and the cast to the parameter
 dtype belong to the op. ``keep_parity = None`` means natural parity up to ``Lmax``, as in TensorFlow.
 
-Layer: plans; imports numpy, pandas, the shared coupling generator and the errors.
+Layer: plans; imports numpy, the shared coupling generator, the errors and the pinned defaults of the spec.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import numpy as np
 
 from tensorpotential.functions.couplings import real_coupling_metainformation
 from tensorpotential.torch_backend.errors import OptionValueError, ShapeError
+from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -64,21 +65,25 @@ class EquivariantIndOptions:
 
     @classmethod
     def from_options(cls, options: Mapping[str, Any]) -> EquivariantIndOptions:
-        """Read the fields from the constructor arguments of a yaml (TF defaults for missing keys; others ignored)."""
+        """Read the fields from the constructor arguments of a yaml; missing keys take the pinned defaults of the spec."""
+        merged = {
+            **DEFAULTS[COMPUTE + "SingleParticleBasisFunctionEquivariantInd"],
+            **options,
+        }
 
         def pairs(key: str) -> tuple[tuple[Any, ...], ...] | None:
-            value = options.get(key)
+            value = merged[key]
             return None if value is None else tuple(tuple(p) for p in value)
 
         return cls(
-            lmax=int(options["lmax"]),
-            Lmax=int(options["Lmax"]),
+            lmax=int(merged["lmax"]),
+            Lmax=int(merged["Lmax"]),
             keep_parity=pairs("keep_parity"),
             history_drop_list=pairs("history_drop_list"),
-            l_max_ind=options.get("l_max_ind"),
-            max_sum_l=options.get("max_sum_l"),
-            normalize=bool(options.get("normalize", False)),
-            avg_n_neigh=float(options.get("avg_n_neigh", 1.0)),
+            l_max_ind=merged["l_max_ind"],
+            max_sum_l=merged["max_sum_l"],
+            normalize=bool(merged["normalize"]),
+            avg_n_neigh=float(merged["avg_n_neigh"]),
         )
 
 

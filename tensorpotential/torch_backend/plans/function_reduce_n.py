@@ -22,7 +22,7 @@ sheet ``FunctionReduceN.md``, sections 2 to 4) reduces several sources to one te
 ``only_invar`` (every ``ls_max`` is 0) makes TensorFlow sum all collected entries into a single row, whatever the
 layout says. Plans keep floats in float64; the cast to the parameter dtype belongs to the op.
 
-Layer: plans; imports numpy, pandas and the errors only.
+Layer: plans; imports numpy, pandas, the errors and the pinned defaults of the spec.
 """
 
 from __future__ import annotations
@@ -35,8 +35,9 @@ import numpy as np
 import pandas as pd
 
 from tensorpotential.torch_backend.errors import OptionValueError, ShapeError
+from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
 
-GroupKey = tuple[int, int, str]
+_GroupKey = tuple[int, int, str]
 """``(parity, l, hist)`` of a row of a coupling table."""
 
 
@@ -90,22 +91,24 @@ class FunctionReduceNOptions:
 
     @classmethod
     def from_options(cls, options: Mapping[str, Any]) -> FunctionReduceNOptions:
-        """Read the fields from the constructor arguments of a yaml (TF defaults for missing keys; others ignored).
+        """Read the fields from the constructor arguments of a yaml; missing keys take the pinned defaults of the spec.
 
-        ``ls_max`` given as an int is repeated for every entry of ``instructions``.
+        ``ls_max`` given as an int is repeated for every entry of ``instructions``; keys that do not fix a table are
+        ignored.
         """
-        n_atom_types = options.get("number_of_atom_types")
+        merged = {**DEFAULTS[COMPUTE + "FunctionReduceN"], **options}
+        n_atom_types = merged["number_of_atom_types"]
         return cls(
-            ls_max=per_source(options["ls_max"], len(options["instructions"])),
-            allowed_l_p=tuple((int(l), int(p)) for l, p in options["allowed_l_p"]),
-            n_out=int(options["n_out"]),
+            ls_max=per_source(merged["ls_max"], len(merged["instructions"])),
+            allowed_l_p=tuple((int(l), int(p)) for l, p in merged["allowed_l_p"]),
+            n_out=int(merged["n_out"]),
             is_central_atom_type_dependent=bool(
-                options.get("is_central_atom_type_dependent", False)
+                merged["is_central_atom_type_dependent"]
             ),
             number_of_atom_types=None if n_atom_types is None else int(n_atom_types),
-            normalize=bool(options.get("normalize", True)),
-            scale=float(options.get("scale", 1.0)),
-            out_norm=bool(options.get("out_norm", False)),
+            normalize=bool(merged["normalize"]),
+            scale=float(merged["scale"]),
+            out_norm=bool(merged["out_norm"]),
         )
 
 
@@ -199,9 +202,9 @@ def output_layout(lmax: int, allowed_l_p: Sequence[Sequence[int]]) -> pd.DataFra
     )
 
 
-def _groups(meta: pd.DataFrame) -> dict[GroupKey, list[int]]:
+def _groups(meta: pd.DataFrame) -> dict[_GroupKey, list[int]]:
     keys = zip(meta["parity"], meta["l"], meta["hist"], strict=True)
-    groups: dict[GroupKey, list[int]] = {}
+    groups: dict[_GroupKey, list[int]] = {}
     for row, (p, l, hist) in enumerate(keys):
         groups.setdefault((int(p), int(l), str(hist)), []).append(row)
     return dict(sorted(groups.items()))
@@ -299,10 +302,8 @@ def function_reduce_n_plan(
         _collector(source, max_l, options, out_rows)
         for source, max_l in zip(sources, options.ls_max, strict=True)
     )
-    counts = np.zeros(len(layout))
-    for collector in collectors:
-        np.add.at(counts, collector.total_sum_ind.ravel(), 1)
-    counts[counts == 0] = 1
+    destinations = np.concatenate([c.total_sum_ind.ravel() for c in collectors])
+    counts = np.maximum(np.bincount(destinations, minlength=len(layout)), 1)
     return FunctionReduceNPlan(
         coupling_meta_data=layout,
         lmax=lmax,
