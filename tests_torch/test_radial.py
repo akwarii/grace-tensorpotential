@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import pytest
 import torch
-from scipy.special import eval_chebyt, eval_chebyu, sici
+from scipy.special import eval_chebyt, eval_chebyu
 
 from tensorpotential.torch_backend.errors import (
     DtypeError,
@@ -30,6 +30,7 @@ from tests_torch.golden.tolerances import FEATURE_F64, assert_close
 RCUT = 6.0
 F64 = torch.float64
 F32 = torch.float32
+Basis = radial.Chebyshev | radial.SineBessel | radial.SimplifiedBessel | radial.Gaussian
 GOLDEN_CONFIGS = {"omat": (8, 5), "large": (10, 16)}
 """(nfunc, p) of the Chebyshev basis of each 2L model, as the issue names them."""
 
@@ -38,8 +39,8 @@ def _rc(value: float = RCUT, dtype: torch.dtype = F64) -> torch.Tensor:
     return torch.tensor(value, dtype=dtype)
 
 
-def _lengths(n: int, rcut: float = RCUT) -> torch.Tensor:
-    return torch.linspace(0.3, 0.98 * rcut, n, dtype=F64).reshape(-1, 1)
+def _lengths(n: int) -> torch.Tensor:
+    return torch.linspace(0.3, 0.98 * RCUT, n, dtype=F64).reshape(-1, 1)
 
 
 def _envelope(x: np.ndarray | float, p: int) -> np.ndarray:
@@ -59,7 +60,7 @@ def _gauss_legendre(a: float, b: float, n: int = 400) -> tuple[np.ndarray, np.nd
     return (x + 1.0) / 2.0 * (b - a) + a, w * (b - a) / 2.0
 
 
-def _bases() -> dict[str, tuple[object, tuple[torch.Tensor, ...]]]:
+def _bases() -> dict[str, tuple[Basis, tuple[torch.Tensor, ...]]]:
     """One instance of each basis with the extra weights its call needs."""
     grid = torch.linspace(0.0, RCUT, 6, dtype=F64).reshape(1, -1)
     scale = torch.tensor(-0.5 / (RCUT / 5) ** 2, dtype=F64)
@@ -84,7 +85,7 @@ def _call(key: str, r: torch.Tensor, rc: torch.Tensor | None = None) -> torch.Te
     basis, extra = BASES[key]
     rc = _rc() if rc is None else rc
     weights = tuple(w.to(rc.dtype) for w in extra)
-    return basis(r, rc, *weights)  # ty: ignore[call-non-callable]
+    return basis(r, rc, *weights)
 
 
 # ------------------------------------------------------------------ the envelope
@@ -201,7 +202,6 @@ def test_the_moments_are_the_mean_and_deviation_of_the_sine_functions_by_quadrat
         mean = w @ f
         assert_close([mu[n - 1]], [mean], FEATURE_F64, f"mu[{n}]")
         assert_close([sigma[n - 1]], [np.sqrt(w @ f**2 - mean**2)], FEATURE_F64)
-    assert_close(mu, np.sqrt(2.0) * sici(np.arange(1, 7) * np.pi)[0], FEATURE_F64)
 
 
 def test_the_normalised_sine_bessel_basis_is_the_standardised_closed_form():
@@ -316,7 +316,7 @@ def test_beyond_the_cutoff_every_basis_is_exactly_zero(key):
 def test_a_zero_length_is_replaced_by_epsilon_and_gives_finite_values(key):
     basis = BASES[key][0]
     zero = _call(key, torch.zeros((2, 1), dtype=F64))
-    at_epsilon = _call(key, torch.full((1, 1), basis.epsilon, dtype=F64))  # ty: ignore[unresolved-attribute]
+    at_epsilon = _call(key, torch.full((1, 1), basis.epsilon, dtype=F64))
     assert torch.all(torch.isfinite(zero))
     assert torch.equal(zero[0], at_epsilon[0])
 

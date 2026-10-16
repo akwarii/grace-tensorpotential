@@ -104,9 +104,7 @@ def chebyshev_polynomials(u: torch.Tensor, degree: int, kind: int) -> torch.Tens
     OptionValueError
         When ``kind`` is not 1 or 2, or ``degree`` is below 1.
     """
-    if kind not in (1, 2):
-        msg = f"the Chebyshev kind must be 1 or 2, got {kind!r}"
-        raise OptionValueError(msg)
+    _check_kind(kind)
     if degree < 1:
         msg = f"the number of Chebyshev polynomials must be at least 1, got {degree}"
         raise OptionValueError(msg)
@@ -117,6 +115,12 @@ def chebyshev_polynomials(u: torch.Tensor, degree: int, kind: int) -> torch.Tens
     for k in range(2, degree):
         columns.append(columns[k - 1] * u2 - columns[k - 2])
     return torch.cat(columns, dim=1)
+
+
+def _check_kind(kind: int) -> None:
+    if kind not in (1, 2):
+        msg = f"the Chebyshev kind must be 1 or 2, got {kind!r}"
+        raise OptionValueError(msg)
 
 
 def _check_lengths(r: torch.Tensor) -> None:
@@ -187,9 +191,7 @@ class Chebyshev:
     def __post_init__(self) -> None:
         """Refuse values TF refuses."""
         _check_common(self.nfunc, self.rcut)
-        if self.kind not in (1, 2):
-            msg = f"the Chebyshev kind must be 1 or 2, got {self.kind!r}"
-            raise OptionValueError(msg)
+        _check_kind(self.kind)
 
     def __call__(self, r: torch.Tensor, rc: torch.Tensor) -> torch.Tensor:
         """Return the basis ``[n_bonds, nfunc]`` at the lengths ``r`` ``[n_bonds, 1]``, ``rc`` the stored cutoff."""
@@ -260,17 +262,17 @@ class SineBessel:
         return _on_lengths(r, rc, self.epsilon, self.rcut, lambda s: self._basis(s, rc))
 
     def _basis(self, r: torch.Tensor, rc: torch.Tensor) -> torch.Tensor:
-        policy = DtypePolicy(rc.dtype)
         n = torch.arange(1, 1 + self.nfunc, dtype=r.dtype, device=r.device)
+        rc64 = to_dtype_of(rc, r)
         if self.normalized:
+            policy = DtypePolicy(rc.dtype)
             mu, sigma = sine_bessel_moments(self.nfunc)
-            s = r / promote_like_tf(rc, r)[0]
+            s = r / rc64
             f = (
                 _SQRT2 * torch.sin(n * s * np.pi) / s
                 - policy.geometry_constant(mu, r.device)
             ) / policy.geometry_constant(sigma, r.device)
             return f * cutoff_envelope(s, self.p)
-        rc64 = promote_like_tf(rc, r)[0]
         # sqrt(2 / rc) in the dtype of rc, as in TF
         prefactor = promote_like_tf(torch.sqrt(2 / rc), r)[0]
         return (
@@ -440,7 +442,9 @@ BASES: Final = {
     "SBessel": SimplifiedBessel,
     "Gaussian": Gaussian,
 }
-"""The class of each ``basis_type`` that ``RadialBasis`` accepts (``compute.py:384-393``)."""
+"""The class behind each ``basis_type`` of TF's ``RadialBasis`` (``compute.py:384-393``).
+
+Which of them a ``model.yaml`` may use is decided by the option rules of the spec (``spec/options.py``), not here."""
 
 
 def basis_class(
