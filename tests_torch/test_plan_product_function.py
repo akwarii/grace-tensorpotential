@@ -17,7 +17,6 @@ import pytest
 import torch
 from scipy.spatial.transform import Rotation
 
-from tensorpotential.functions.couplings import real_coupling_metainformation
 from tensorpotential.torch_backend.errors import ShapeError
 from tensorpotential.torch_backend.ops.spherical_harmonics import (
     real_spherical_harmonics,
@@ -29,6 +28,7 @@ from tensorpotential.torch_backend.plans.product_function import (
 from tensorpotential.torch_backend.plans.spherical_harmonics import (
     spherical_harmonics_plan,
 )
+from tests_torch.coupling_frames import coupled
 
 RNG_SEED = 20261016
 LMAX = 2
@@ -36,36 +36,6 @@ LMAX = 2
 
 def _frame(left, right, cg) -> pd.DataFrame:
     return pd.DataFrame({"left_inds": left, "right_inds": right, "cg_list": cg})
-
-
-def uncoupled(lmax: int) -> pd.DataFrame:
-    """The metadata of the real harmonics up to ``lmax``, as ``SphericalHarmonic`` builds it (``l*l + l + m`` order)."""
-    l = np.repeat(np.arange(lmax + 1), 2 * np.arange(lmax + 1) + 1)
-    m = np.concatenate([np.arange(-d, d + 1) for d in range(lmax + 1)])
-    columns = {
-        "l": l,
-        "m": m,
-        "hist": [""] * len(l),
-        "parity": (-1) ** l,
-        "sum_of_ls": l,
-    }
-    return pd.DataFrame(columns)
-
-
-def coupled(lmax: int, Lmax: int) -> pd.DataFrame:
-    """The metadata of the product of two sets of harmonics, as ``ProductFunction`` builds it."""
-    harmonics = uncoupled(lmax)
-    keep = [[l, 1 if l % 2 == 0 else -1] for l in range(Lmax + 1)]
-    return real_coupling_metainformation(
-        A=harmonics,
-        B=harmonics,
-        lmax=lmax,
-        Lmax=Lmax,
-        is_A_B_equal=False,
-        keep_parity=keep,
-        normalize=True,
-        legacy_format=True,
-    )
 
 
 # ------------------------------------------------------------------ logic

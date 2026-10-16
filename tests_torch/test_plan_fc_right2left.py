@@ -19,7 +19,7 @@ from tensorpotential.torch_backend.plans.fc_right2left import (
     FCRight2LeftWidths,
     fc_right2left_plan,
 )
-from tests_torch.test_plan_product_function import coupled, uncoupled
+from tests_torch.coupling_frames import coupled, uncoupled
 
 WIDTHS = FCRight2LeftWidths(n_out=3, n_left=4, n_right=9)
 

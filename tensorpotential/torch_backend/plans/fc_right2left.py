@@ -31,7 +31,7 @@ from tensorpotential.torch_backend.errors import OptionValueError, ShapeError
 if TYPE_CHECKING:
     import pandas as pd
 
-GroupKey = tuple[int, int, str]
+_GroupKey = tuple[int, int, str]
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ class FCRight2LeftPlan:
     norm_right: float
 
 
-def _groups(coupling_meta_data: pd.DataFrame) -> dict[GroupKey, np.ndarray]:
+def _groups(coupling_meta_data: pd.DataFrame) -> dict[_GroupKey, np.ndarray]:
     """Return the row positions of each ``(l, parity, hist)`` group, groups sorted by key, rows in order."""
     keys = list(
         zip(
@@ -114,12 +114,16 @@ def _groups(coupling_meta_data: pd.DataFrame) -> dict[GroupKey, np.ndarray]:
             strict=True,
         )
     )
-    positions: dict[GroupKey, list[int]] = {}
+    positions: dict[_GroupKey, list[int]] = {}
     for position, key in enumerate(keys):
         positions.setdefault(key, []).append(position)
     return {
         key: np.asarray(positions[key], dtype=np.int32) for key in sorted(positions)
     }
+
+
+def _norm(n_in: int, normalize: bool) -> float:
+    return 1 / n_in**0.5 if normalize else 1.0
 
 
 def _weight_shapes(
@@ -201,8 +205,6 @@ def fc_right2left_plan(
         norm_map=1 / counts[w_tile_left] ** 0.5,
         w_left_shape=w_left_shape,
         w_right_shape=w_right_shape,
-        norm_left=(1 / widths.n_left**0.5 if widths.normalize else 1.0)
-        if widths.left_coefs
-        else None,
-        norm_right=1 / widths.n_right**0.5 if widths.normalize else 1.0,
+        norm_left=_norm(widths.n_left, widths.normalize) if widths.left_coefs else None,
+        norm_right=_norm(widths.n_right, widths.normalize),
     )
