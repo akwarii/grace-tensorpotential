@@ -12,7 +12,7 @@ The policy every twin follows (section 6 of each spec sheet applies it to its cl
 * **Constants** are created with an explicit dtype and the device of the tensor they meet
   (:meth:`DtypePolicy.param_constant`, :meth:`DtypePolicy.geometry_constant`); the backend never reads
   ``torch.get_default_dtype()`` and never moves a tensor to another device (a test scans the package for both).
-* **Energy**: atomic energies are summed per structure in float64 (:func:`structure_energy`), as TF casts them to the
+* **Energy**: atomic energies are summed per structure in float64 (``ops.scatter.structure_energy`` through :func:`to_energy`), as TF casts them to the
   dtype of the pair forces before its segment sum (``tpmodel.py:332-335``); a float32 sum would depend on the order of
   the terms, hence on the batch layout.
 * **Layout**: every equivariant feature is ``[atoms, lm, n]`` (:data:`FEATURE_LAYOUT`), the flat ``ir_mul`` layout of
@@ -28,7 +28,7 @@ when the float64 operand is 0-d or a numpy scalar, and float64 only for a float6
 (measured on TF 2.20 and torch 2.14). A Python ``float`` takes the dtype of the tensor in both. A twin whose sheet says
 TF promotes there calls :func:`promote_like_tf` on the operands first.
 
-Layer: ops; imports torch, numpy, the errors and :mod:`.scatter`.
+Layer: ops, the leaf of it: imports torch, numpy and the errors; the other ops import it.
 """
 
 from __future__ import annotations
@@ -41,8 +41,7 @@ from typing import TYPE_CHECKING, Final
 import numpy as np
 import torch
 
-from tensorpotential.torch_backend.errors import DtypeError
-from tensorpotential.torch_backend.ops.scatter import segment_sum
+from tensorpotential.torch_backend.errors import DtypeError, TorchBackendError
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
@@ -55,6 +54,8 @@ GEOMETRY_DTYPE: Final = torch.float64
 """The dtype of bond vectors and of everything computed from them alone (G1)."""
 ENERGY_DTYPE: Final = torch.float64
 """The dtype in which atomic energies are summed per structure."""
+INDEX_DTYPES: Final = (torch.int32, torch.int64)
+"""The dtypes of index tensors (TF's are int32, torch's own int64)."""
 FEATURE_LAYOUT: Final = ("atoms", "lm", "n")
 """Axes of every equivariant feature inside the backend: atom, angular index ``l*l + l + m`` (G7), channel."""
 
@@ -131,11 +132,6 @@ class DtypePolicy:
             raise DtypeError(msg)
         return cls(_TORCH_DTYPE[floating[0]])
 
-    @property
-    def geometry(self) -> torch.dtype:
-        """The geometry dtype, float64 for every model."""
-        return GEOMETRY_DTYPE
-
     def to_param(self, tensor: torch.Tensor) -> torch.Tensor:
         """Cast a floating tensor to the parameter dtype (no copy when it has it already)."""
         return _cast(tensor, self.param)
@@ -146,17 +142,13 @@ class DtypePolicy:
 
     def param_constant(self, values: ArrayLike, device: torch.device) -> torch.Tensor:
         """Make a constant (a coupling table, an epsilon) in the parameter dtype on ``device``."""
-        return torch.as_tensor(
-            np.asarray(values, dtype=np.float64), dtype=self.param, device=device
-        )
+        return torch.as_tensor(values, dtype=self.param, device=device)
 
     def geometry_constant(
         self, values: ArrayLike, device: torch.device
     ) -> torch.Tensor:
         """Make a constant in the geometry dtype on ``device``."""
-        return torch.as_tensor(
-            np.asarray(values, dtype=np.float64), dtype=GEOMETRY_DTYPE, device=device
-        )
+        return torch.as_tensor(values, dtype=GEOMETRY_DTYPE, device=device)
 
 
 def promote_like_tf(*tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -203,28 +195,22 @@ def same_dtype(*tensors: torch.Tensor) -> torch.dtype:
     return tensors[0].dtype
 
 
-def structure_energy(
-    atomic_energy: torch.Tensor, atom_to_structure: torch.Tensor, n_structures: int
-) -> torch.Tensor:
-    """Sum atomic energies per structure in float64.
+def to_energy(atomic_energy: torch.Tensor) -> torch.Tensor:
+    """Cast atomic energies to the dtype they are summed in, float64."""
+    return _cast(atomic_energy, ENERGY_DTYPE)
 
-    Parameters
-    ----------
-    atomic_energy
-        ``[n_atoms, 1]`` (or ``[n_atoms]``), in the parameter dtype.
-    atom_to_structure
-        ``[n_atoms]``: the structure of each atom (``map_atoms_to_structure``).
-    n_structures
-        Number of structures of the batch.
 
-    Returns
-    -------
-    torch.Tensor
-        ``[n_structures, 1]`` (or ``[n_structures]``) in float64, eV.
+def check_index(index: torch.Tensor) -> None:
+    """Refuse an index tensor whose dtype is not ``int32`` or ``int64`` (reads no value).
+
+    Raises
+    ------
+    DtypeError
+        For any other dtype.
     """
-    return segment_sum(
-        _cast(atomic_energy, ENERGY_DTYPE), atom_to_structure, n_structures
-    )
+    if index.dtype not in INDEX_DTYPES:
+        msg = f"an index must be int32 or int64, got {index.dtype}"
+        raise DtypeError(msg)
 
 
 def _knob(path: str) -> object:
@@ -241,12 +227,14 @@ def set_fp32_precision(state: Mapping[str, str]) -> None:
 
     Raises
     ------
-    KeyError
-        When a key is not in :data:`PRECISION_KNOBS`.
+    TorchBackendError
+        When a key is not in :data:`PRECISION_KNOBS` (nothing is set then).
     """
+    unknown = sorted(state.keys() - set(PRECISION_KNOBS))
+    if unknown:
+        msg = f"not fp32_precision attributes of the policy: {', '.join(unknown)}"
+        raise TorchBackendError(msg)
     for path, value in state.items():
-        if path not in PRECISION_KNOBS:
-            raise KeyError(path)
         setattr(_knob(path), "fp32_precision", value)  # noqa: B010  (a property of torch, set by name)
 
 

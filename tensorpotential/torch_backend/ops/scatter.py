@@ -9,17 +9,18 @@ The function reads no tensor value on the host (no ``.item()``, no ``max()`` of 
 synchronises a device: an index outside ``[0, num_segments)`` raises the error of torch on the CPU and a device
 assertion on a GPU. Indices are checked once, where they are made (the neighbour-list contract of NBR1).
 
-Layer: ops; imports torch and the errors of the backend only.
+:func:`structure_energy` sums atomic energies per structure in float64, as TF casts them to the dtype of the pair forces
+before its segment sum (``tpmodel.py:332-335``); a float32 sum would depend on the order of the terms.
+
+Layer: ops; imports torch, the errors and the dtype policy (:mod:`.precision`).
 """
 
 from __future__ import annotations
 
 import torch
 
-from tensorpotential.torch_backend.errors import DtypeError, ShapeError
-
-INDEX_DTYPES = (torch.int32, torch.int64)
-"""The integer dtypes ``segment_ids`` may have (TF's index tensors are int32, torch's own are int64)."""
+from tensorpotential.torch_backend.errors import ShapeError
+from tensorpotential.torch_backend.ops.precision import check_index, to_energy
 
 
 def segment_sum(
@@ -50,9 +51,7 @@ def segment_sum(
     DtypeError
         When ``segment_ids`` is not an ``int32`` or ``int64`` tensor.
     """
-    if segment_ids.dtype not in INDEX_DTYPES:
-        msg = f"segment_ids must be int32 or int64, got {segment_ids.dtype}"
-        raise DtypeError(msg)
+    check_index(segment_ids)
     if (
         segment_ids.dim() != 1
         or data.dim() == 0
@@ -70,3 +69,25 @@ def segment_sum(
         (num_segments, *data.shape[1:]), dtype=data.dtype, device=data.device
     )
     return out.index_add_(0, segment_ids, data)
+
+
+def structure_energy(
+    atomic_energy: torch.Tensor, atom_to_structure: torch.Tensor, n_structures: int
+) -> torch.Tensor:
+    """Sum atomic energies per structure in float64.
+
+    Parameters
+    ----------
+    atomic_energy
+        ``[n_atoms, 1]`` (or ``[n_atoms]``), in the parameter dtype.
+    atom_to_structure
+        ``[n_atoms]``: the structure of each atom (``map_atoms_to_structure``).
+    n_structures
+        Number of structures of the batch.
+
+    Returns
+    -------
+    torch.Tensor
+        ``[n_structures, 1]`` (or ``[n_structures]``) in float64, eV.
+    """
+    return segment_sum(to_energy(atomic_energy), atom_to_structure, n_structures)

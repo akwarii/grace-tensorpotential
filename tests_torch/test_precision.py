@@ -17,12 +17,12 @@ import numpy as np
 import pytest
 import torch
 
-from tensorpotential.torch_backend.errors import DtypeError
+from tensorpotential.torch_backend.errors import DtypeError, TorchBackendError
 from tensorpotential.torch_backend.ops import precision as p
-from tensorpotential.torch_backend.ops.scatter import segment_sum
+from tensorpotential.torch_backend.ops.scatter import segment_sum, structure_energy
 from tests.fresh_python import run_fresh_python
 from tests_torch.dtype_audit import DtypeAudit
-from tests_torch.golden import GOLDEN, TINY_F64, cases, load
+from tests_torch.golden import TINY_F32, TINY_F64, cases, load
 from tests_torch.golden.tolerances import ENERGY_F64, assert_close
 
 BACKEND = Path(p.__file__).resolve().parents[1]
@@ -53,7 +53,7 @@ def restore_precision():
 def test_a_policy_has_its_parameter_dtype_and_float64_geometry(dtype):
     policy = p.DtypePolicy(dtype)
     assert policy.param is dtype
-    assert policy.geometry is torch.float64 is p.GEOMETRY_DTYPE is p.ENERGY_DTYPE
+    assert p.GEOMETRY_DTYPE is p.ENERGY_DTYPE is torch.float64
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.int64])
@@ -68,11 +68,9 @@ def test_another_parameter_dtype_is_refused(dtype):
 )
 @pytest.mark.parametrize("model", ["omat", "large"])
 def test_the_parameter_dtype_is_read_from_the_stored_weights(model, suffix, dtype):
-    with np.load(
-        GOLDEN / f"{model}_tiny_{suffix}.weights.npz", allow_pickle=False
-    ) as weights:
-        kinds = {weights[k].dtype.kind for k in weights.files}
-        policy = p.DtypePolicy.from_weights(weights[k].dtype for k in weights.files)
+    weights = load(f"{model}_tiny_{suffix}.weights")
+    kinds = {w.dtype.kind for w in weights.values()}
+    policy = p.DtypePolicy.from_weights(w.dtype for w in weights.values())
     assert kinds >= {"f", "U"}  # the element symbols are text and are ignored
     assert policy.param is dtype
 
@@ -109,42 +107,33 @@ def test_constants_have_an_explicit_dtype_under_either_default(param):
     eps = policy.geometry_constant(1e-10, CPU)
     assert (cg.dtype, eps.dtype) == (param, torch.float64)
     assert cg.device == eps.device == CPU
-    assert (
-        eps.item() == 1e-10
-    )  # built from a float64 value: no detour through the default dtype
+    # converted straight from the Python float: no detour through the default dtype
+    assert eps.item() == 1e-10
     assert cg[1].item() == float(torch.tensor(-1.0 / 3.0, dtype=param))
 
 
 # ------------------------------------------------------------------ TF promotion and the energy sum
 
 
+F32, F64 = torch.float32, torch.float64
+
+
+# measured on TF 2.20 with numpy behaviour: float32 with a 0-d float64 tensor gives float64; torch keeps float32
 @pytest.mark.parametrize(
-    ("left", "right", "expected"),
+    ("right", "torch_gives", "tf_gives"),
     [
-        (
-            torch.ones(3, dtype=torch.float32),
-            torch.tensor(2.0, dtype=torch.float64),
-            torch.float64,
-        ),
-        (
-            torch.ones(3, dtype=torch.float32),
-            torch.ones(3, dtype=torch.float64),
-            torch.float64,
-        ),
-        (
-            torch.ones(3, dtype=torch.float32),
-            torch.ones(3, dtype=torch.float32),
-            torch.float32,
-        ),
+        (torch.tensor(2.0, dtype=F64), F32, F64),
+        (torch.ones(3, dtype=F64), F64, F64),
+        (torch.ones(3, dtype=F32), F32, F32),
     ],
     ids=["0d_float64", "float64_vector", "float32_only"],
 )
-def test_promotion_follows_tf_where_torch_would_not(left, right, expected):
-    # measured on TF 2.20 with numpy behaviour: float32 with a 0-d float64 tensor gives float64; torch keeps float32
-    assert (left * right).dtype == (torch.float32 if right.dim() == 0 else expected)
+def test_promotion_follows_tf_where_torch_would_not(right, torch_gives, tf_gives):
+    left = torch.ones(3, dtype=F32)
+    assert (left * right).dtype == torch_gives
     promoted = p.promote_like_tf(left, right)
-    assert [t.dtype for t in promoted] == [expected, expected]
-    assert (promoted[0] * promoted[1]).dtype == expected
+    assert [t.dtype for t in promoted] == [tf_gives, tf_gives]
+    assert (promoted[0] * promoted[1]).dtype == tf_gives
 
 
 def test_promotion_leaves_index_tensors_alone_and_needs_a_float():
@@ -178,27 +167,24 @@ def test_float32_atomic_energies_are_summed_in_float64():
     rng = np.random.default_rng(7)
     atomic = rng.normal(size=(9, 1)).astype(np.float32)
     structure = np.array([0, 0, 2, 2, 2, 0, 3, 3, 3])
-    energy = p.structure_energy(torch.as_tensor(atomic), torch.as_tensor(structure), 4)
+    energy = structure_energy(torch.as_tensor(atomic), torch.as_tensor(structure), 4)
     expected = np.zeros((4, 1))
     np.add.at(expected, structure, atomic.astype(np.float64))
     assert energy.dtype == torch.float64
     assert energy.shape == (4, 1)
-    assert np.array_equal(
-        energy.numpy(), expected
-    )  # float64 sums of float32 values: exact here
+    # float64 sums of float32 values: exact here
+    assert np.array_equal(energy.numpy(), expected)
     assert energy[1].item() == 0.0
 
 
 @pytest.mark.golden
-@pytest.mark.parametrize(
-    "name", [*TINY_F64, *(n.replace("f64", "f32") for n in TINY_F64)]
-)
+@pytest.mark.parametrize("name", [*TINY_F64, *TINY_F32])
 def test_the_energies_of_tf_are_the_float64_sums_of_its_atomic_energies(name):
     arrays = load(name)
     for case in cases(arrays):
         atomic = torch.as_tensor(arrays[f"{case}/res/atomic_energy"])
         to_structure = torch.as_tensor(arrays[f"{case}/in/map_atoms_to_structure"])
-        energy = p.structure_energy(
+        energy = structure_energy(
             atomic, to_structure, int(arrays[f"{case}/in/n_struct_total"])
         )
         assert_close(energy, arrays[f"{case}/res/energy"], ENERGY_F64, f"{name} {case}")
@@ -211,13 +197,13 @@ def test_the_energies_of_tf_are_the_float64_sums_of_its_atomic_energies(name):
 def test_the_scope_sets_full_precision_and_restores_the_caller():
     p.set_fp32_precision({"cuda.matmul": "tf32", "mkldnn.matmul": "bf16"})
     before = p.fp32_precision_state()
+    assert before["cuda.matmul"] == "tf32" and before["mkldnn.matmul"] == "bf16"
     with p.precision_scope():
         assert set(p.fp32_precision_state().values()) == {"ieee"}
         with p.precision_scope():
             assert set(p.fp32_precision_state().values()) == {"ieee"}
         assert set(p.fp32_precision_state().values()) == {"ieee"}
     assert p.fp32_precision_state() == before
-    assert before["cuda.matmul"] == "tf32" and before["mkldnn.matmul"] == "bf16"
 
 
 @pytest.mark.usefixtures("restore_precision")
@@ -228,9 +214,12 @@ def test_the_scope_restores_the_caller_after_an_error():
     assert p.fp32_precision_state() == before
 
 
-def test_only_the_known_attributes_are_set():
-    with pytest.raises(KeyError, match=r"cudnn\.attention"):
-        p.set_fp32_precision({"cudnn.attention": "ieee"})
+@pytest.mark.usefixtures("restore_precision")
+def test_only_the_known_attributes_are_set_and_nothing_is_set_otherwise():
+    before = p.fp32_precision_state()
+    with pytest.raises(TorchBackendError, match=r"policy: cudnn\.attention"):
+        p.set_fp32_precision({"cuda.matmul": "tf32", "cudnn.attention": "ieee"})
+    assert p.fp32_precision_state() == before
 
 
 _LEGACY_CALLER = """
@@ -326,7 +315,7 @@ def test_the_policy_and_the_scatter_sum_mix_no_dtypes_and_read_nothing_on_the_ho
     with p.precision_scope(), DtypeAudit() as audit:
         features = policy.to_param(bonds) * policy.param_constant(2.0, CPU)
         atomic = segment_sum(features, ind_j, 3).sum(dim=1, keepdim=True)
-        energy = p.structure_energy(atomic, torch.zeros(3, dtype=torch.int64), 1)
+        energy = structure_energy(atomic, torch.zeros(3, dtype=torch.int64), 1)
         (grad,) = torch.autograd.grad(energy.sum(), bonds)
     audit.assert_clean()
     assert grad.dtype == torch.float64
