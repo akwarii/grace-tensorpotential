@@ -98,6 +98,12 @@ harmonics of the point `z = 0`, not an error.
 
 Cost note for the twin: the TF graph is Python-unrolled over `(l, m)`; there are no data-dependent shapes.
 
+**Twin maths (SH1).** `ops/spherical_harmonics.py` (`real_spherical_harmonics`) evaluates the same harmonics as real
+polynomials of `(x, y, z)` (Legendre recursion without the Condon-Shortley phase times `Re`/`Im (x + i y)**m`), with the
+coefficients from `plans/spherical_harmonics.py`; it uses other coefficients than TF's `alm`, `blm`, so it is checked
+against TF's outputs `Y` of the anchors (within `FEATURE_F64`, measured 1.9e-15) and against sympy's `Ynm`, not against
+tables. `norm = True` is a factor `1/sqrt(4 pi)` left to the instruction twin.
+
 ## 6. Dtype and promotion
 
 Always float64: the input is converted with `convert_to_tensor(..., dtype=float64)` and every constant is
