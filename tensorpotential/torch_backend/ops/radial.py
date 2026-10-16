@@ -271,9 +271,8 @@ class SineBessel:
             ) / policy.geometry_constant(sigma, r.device)
             return f * cutoff_envelope(s, self.p)
         rc64 = promote_like_tf(rc, r)[0]
-        prefactor = promote_like_tf(torch.sqrt(2 / rc), r)[
-            0
-        ]  # sqrt(2 / rc) in the dtype of rc, as in TF
+        # sqrt(2 / rc) in the dtype of rc, as in TF
+        prefactor = promote_like_tf(torch.sqrt(2 / rc), r)[0]
         return (
             prefactor
             * torch.sin(n * r * np.pi / rc64)
@@ -335,9 +334,8 @@ class SimplifiedBessel:
         return _on_lengths(r, rc, self.epsilon, self.rcut, lambda s: self._basis(s, rc))
 
     def _basis(self, r: torch.Tensor, rc: torch.Tensor) -> torch.Tensor:
-        rc64, rc_power = promote_like_tf(rc, rc**1.5, r)[
-            :2
-        ]  # rc**1.5 in the dtype of rc, as in TF
+        # rc**1.5 in the dtype of rc, as in TF
+        rc64, rc_power = promote_like_tf(rc, rc**1.5, r)[:2]
 
         def f(n: int) -> torch.Tensor:
             prefactor = (
