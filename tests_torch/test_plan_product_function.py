@@ -1,6 +1,7 @@
 """The ``ProductFunction`` plan (``plans.product_function``): logic on hand-made frames, physics on a real coupling.
 
-Logic: the flattening of the per-row lists, the dtypes, ``nfunc`` as TensorFlow computes it, the errors. Physical
+Logic: the flattening of the per-row lists, the dtypes, ``nfunc`` as TensorFlow computes it, the errors; the options
+read from a yaml and passed to the coupling generator as the TF constructor passes them. Physical
 values: the tables built from ``real_coupling_metainformation`` of two sets of real spherical harmonics give a
 product whose ``L = 0`` functions are rotation invariant and whose ``(l1, l2) = (1, 1)`` scalar is proportional to
 the dot product of the two directions (an oracle that does not use the plan). The equality with TensorFlow's tables
@@ -22,13 +23,16 @@ from tensorpotential.torch_backend.ops.spherical_harmonics import (
     real_spherical_harmonics,
 )
 from tensorpotential.torch_backend.plans.product_function import (
+    ProductFunctionOptions,
     ProductFunctionPlan,
+    product_coupling_meta_data,
     product_function_plan,
 )
 from tensorpotential.torch_backend.plans.spherical_harmonics import (
     spherical_harmonics_plan,
 )
-from tests_torch.coupling_frames import coupled
+from tensorpotential.torch_backend.spec.model import InstructionRef
+from tests_torch.coupling_frames import coupled, uncoupled
 
 RNG_SEED = 20261016
 LMAX = 2
@@ -103,6 +107,113 @@ def test_a_frame_without_pairs_is_refused():
 def test_lists_of_unequal_length_in_a_row_are_refused(left, right, cg):
     with pytest.raises(ShapeError, match="row 0 of the coupling metadata"):
         product_function_plan(_frame(left, right, cg))
+
+
+def _options(**given: object) -> ProductFunctionOptions:
+    return ProductFunctionOptions.from_options({
+        "left": InstructionRef("A"),
+        "right": InstructionRef("B"),
+        "lmax": 2,
+        "Lmax": 1,
+        **given,
+    })
+
+
+def test_missing_options_take_the_pinned_defaults():
+    options = _options()
+    assert options == ProductFunctionOptions(lmax=2, Lmax=1, is_left_right_equal=False)
+
+
+@pytest.mark.parametrize(
+    ("right", "given", "equal"),
+    [("A", None, True), ("B", None, False), ("B", True, True), ("A", False, False)],
+)
+def test_a_null_is_left_right_equal_compares_the_operands(right, given, equal):
+    options = _options(right=InstructionRef(right), is_left_right_equal=given)
+    assert options.is_left_right_equal is equal
+
+
+def test_lists_of_pairs_become_tuples_and_limits_pass_through():
+    options = _options(
+        keep_parity=[[0, 1], [1, -1]],
+        history_drop_list=[["(1,1)", 0]],
+        lmax_left=1,
+        lmax_right=2,
+        lmax_hist=3,
+        lmax_hist_left=4,
+        lmax_hist_right=5,
+        max_sum_l=6,
+        normalize=True,
+    )
+    assert options.keep_parity == ((0, 1), (1, -1))
+    assert options.history_drop_list == (("(1,1)", 0),)
+    limits = (
+        options.lmax_left,
+        options.lmax_right,
+        options.lmax_hist,
+        options.lmax_hist_left,
+        options.lmax_hist_right,
+        options.max_sum_l,
+    )
+    assert limits == (1, 2, 3, 4, 5, 6)
+    assert options.normalize is True
+
+
+def _same(a: pd.DataFrame, b: pd.DataFrame) -> bool:
+    columns = ["l", "m", "hist", "parity", "left_inds", "right_inds", "cg_list"]
+    return a[columns].astype(str).equals(b[columns].astype(str))
+
+
+def test_natural_parity_and_the_legacy_history_are_the_defaults():
+    harmonics = uncoupled(LMAX)
+    meta = product_coupling_meta_data(
+        harmonics, harmonics, _options(lmax=LMAX, Lmax=LMAX, normalize=True)
+    )
+    assert _same(meta, coupled(LMAX, LMAX))
+    assert "(1,1)" in set(meta["hist"])  # no parity signs
+
+
+@pytest.mark.parametrize(
+    ("given", "check"),
+    [
+        (
+            {"keep_parity": [[1, 1]]},
+            lambda m: set(zip(m["l"], m["parity"], strict=True)) == {(1, 1)},
+        ),
+        ({"is_left_right_equal": True}, lambda m: (m["l1"] >= m["l2"]).all()),
+        ({"lmax_left": 1}, lambda m: m["l1"].max() == 1),
+        ({"lmax_right": 0}, lambda m: m["l2"].max() == 0),
+        ({"max_sum_l": 2}, lambda m: m["sum_of_ls"].max() <= 2),
+        (
+            {"history_drop_list": [["(1,1)", 0]]},
+            lambda m: "(1,1)" not in set(m["hist"][m["l"] == 0]),
+        ),
+    ],
+)
+def test_each_option_reaches_the_generator(given, check):
+    harmonics = uncoupled(LMAX)
+    meta = product_coupling_meta_data(
+        harmonics, harmonics, _options(lmax=LMAX, Lmax=LMAX, **given)
+    )
+    default = product_coupling_meta_data(
+        harmonics, harmonics, _options(lmax=LMAX, Lmax=LMAX)
+    )
+    assert check(meta)
+    assert len(meta) < len(default)
+
+
+@pytest.mark.parametrize(
+    ("key", "trims"),
+    [("lmax_hist", True), ("lmax_hist_left", True), ("lmax_hist_right", False)],
+)
+def test_the_history_limits_reach_the_generator(key, trims):
+    # histories up to l = 2 on the left; the bare harmonics on the right have none (l = 0 for the limit)
+    pairs, harmonics = coupled(LMAX, LMAX), uncoupled(LMAX)
+    full = product_coupling_meta_data(pairs, harmonics, _options(lmax=LMAX, Lmax=1))
+    capped = product_coupling_meta_data(
+        pairs, harmonics, _options(lmax=LMAX, Lmax=1, **{key: 1})
+    )
+    assert 0 < len(capped) < len(full) if trims else len(capped) == len(full)
 
 
 # ------------------------------------------------------------------ physical values

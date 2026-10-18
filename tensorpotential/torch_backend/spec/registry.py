@@ -47,12 +47,15 @@ SHEET_DIRECTORY: Final = "docs/torch_backend/spec"
 # of the TF class. Each TWIN issue adds the classes it builds, and removes them from ``EXPECTED_WITHOUT_GOLDEN`` in
 # ``tests/test_registry.py`` in the same pull request (which fails otherwise).
 GOLDEN_TESTS: Final[Mapping[str, str]] = {
+    COMPUTE + "FCRight2Left": "tests_torch/test_fc_right2left_golden.py",
+    COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
     COMPUTE
     + "SingleParticleBasisFunctionEquivariantInd": "tests_torch/test_spbf_equivariant_ind_golden.py",
     COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
     COMPUTE + "ScalarChemicalEmbedding": "tests_torch/test_spbf_scalar_ind_golden.py",
     COMPUTE
     + "SingleParticleBasisFunctionScalarInd": "tests_torch/test_spbf_scalar_ind_golden.py",
+    COMPUTE + "ProductFunction": "tests_torch/test_product_function_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85
