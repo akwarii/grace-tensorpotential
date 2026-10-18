@@ -12,7 +12,9 @@ Spec sheet ``MLPRadialFunction.md``, section 5. With ``b`` the basis ``[bonds, n
 TF writes ``R`` as ``[bonds, n_rad_max, (lmax + 1)**2]``; the twin returns it in the backend layout
 ``[bonds, (lmax + 1)**2, n_rad_max]``, the radial input of ``SingleParticleBasisFunction*``. The first layer casts the
 basis to the parameter dtype, so a float32 model gives a float32 ``R`` from a float64 basis, as in TF. The weights are
-``mlp.layer<i>.w`` (and ``gamma`` with ``norm``), as in the checkpoint.
+``mlp.layer<i>.w`` (and ``gamma`` with ``norm``), as in the checkpoint. The embeddings are gathered by the element
+indices ``mu_i`` / ``mu_j``: TF's per-atom branch (``is_per_atom``, rejected by the sheet) cannot be reached, since no
+embedding option sets the flag.
 
 Layer: instructions; imports torch, the dense ops, the dtype helpers, the errors, the column table of the spherical
 harmonics and the input keys of ``constants``.
@@ -101,7 +103,7 @@ class MLPRadialFunction(torch.nn.Module):
         self.gamma = None
         if options["norm"]:
             self.gamma = torch.nn.Parameter(torch.zeros((1, n_out), dtype=policy.param))
-        l_tile = torch.as_tensor(column_degrees(self.lmax), dtype=torch.int64)
+        l_tile = torch.from_numpy(column_degrees(self.lmax))
         self.register_buffer("l_tile", l_tile, persistent=False)
 
     def _input(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
@@ -113,7 +115,7 @@ class MLPRadialFunction(torch.nn.Module):
             check_index(index)
             table = to_dtype_of(inputs[name], basis)
             columns.append(table.index_select(0, index))
-        return torch.cat(columns, dim=1) if len(columns) > 1 else basis
+        return torch.cat(columns, dim=1)
 
     def forward(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """Return ``R [bonds, (lmax + 1)**2, n_rad_max]`` in the parameter dtype.
@@ -139,6 +141,8 @@ def _embedding(
     if (ref is None) != (size is None):
         msg = f"instruction {spec.name!r} (MLPRadialFunction): its chemical_embedding_{side} is {ref!r}, but an embedding size of {size!r} was given"
         raise OptionValueError(msg)
-    if ref is None or size is None:
+    if (
+        ref is None or size is None
+    ):  # one is None only if both are; both tests narrow the types
         return None
     return ref.name, BOND_MU_I if side == "i" else BOND_MU_J, size

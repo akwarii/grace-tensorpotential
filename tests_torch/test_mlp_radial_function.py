@@ -167,7 +167,7 @@ def test_a_float32_model_casts_the_float64_basis_and_embedding_down():
     twin = _twin(F32, sizes=(2, None), chemical_embedding_i=InstructionRef("Zi"))
     rng = np.random.default_rng(RNG_SEED)
     data = _inputs(rng)
-    table = rng.normal(size=(N_ELEMENTS, 2)).astype(np.float32)
+    table = rng.normal(size=(N_ELEMENTS, 2))
     data["Zi"] = torch.as_tensor(table)
     out = twin(data)
     assert out.dtype == torch.float32
@@ -198,7 +198,9 @@ def test_a_bad_option_is_refused(options, message):
 def test_an_embedding_and_its_size_go_together():
     with pytest.raises(OptionValueError, match="chemical_embedding_i is None"):
         _twin(sizes=(2, None))
-    with pytest.raises(OptionValueError, match="chemical_embedding_j is"):
+    with pytest.raises(
+        OptionValueError, match=r"chemical_embedding_j is .*embedding size of None"
+    ):
         _twin(chemical_embedding_j=InstructionRef("Zj"))
 
 
