@@ -58,9 +58,6 @@ EXPECTED_WITHOUT_GOLDEN = {
     "ProductFunction",
     "FCRight2Left",
     "InvariantLayerRMSNorm",
-    "CreateOutputTarget",
-    "LinMLPOut2ScalarTarget",
-    "ConstantScaleShiftTarget",
     "TrainableShiftTarget",
 }
 
