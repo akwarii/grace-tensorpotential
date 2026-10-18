@@ -38,6 +38,8 @@ CLS = COMPUTE + "FunctionReduceN"
 F64, F32 = DtypePolicy(torch.float64), DtypePolicy(torch.float32)
 N_TYPES = 3
 NATURAL = ((0, 1), (1, -1), (2, 1))
+ONLY_INVAR = {"ls_max": 0, "allowed_l_p": [[0, 1], [0, -1]]}
+"""Every ``ls_max`` 0, with a table of two ``l = 0`` rows."""
 
 
 def _table(blocks: list[tuple[int, str, int]]) -> pd.DataFrame:
@@ -137,7 +139,7 @@ OPTION_CASES = {
     "no_normalize": {"normalize": False},
     "scale": {"scale": 2.5},
     "ones": {"init_target_value": "ones"},
-    "only_invar": {"ls_max": 0, "allowed_l_p": [[0, 1], [0, -1]]},
+    "only_invar": ONLY_INVAR,
     "lm_first_is_a_tf_layout": {"lm_first": True},
 }
 
@@ -153,7 +155,7 @@ def test_the_forward_pass_is_the_formula_of_the_sheet(policy, row, options):
 
 
 def test_only_invar_sums_every_collected_entry_into_one_row():
-    twin = _twin(ls_max=0, allowed_l_p=[[0, 1], [0, -1]])
+    twin = _twin(**ONLY_INVAR)
     assert (
         len(twin.plan.coupling_meta_data) == 2
     )  # the table has two rows, the output one, as in TF
@@ -162,7 +164,7 @@ def test_only_invar_sums_every_collected_entry_into_one_row():
 
 
 def test_only_invar_with_out_norm_broadcasts_to_the_rows_of_the_table_as_tf():
-    twin = _twin(ls_max=0, allowed_l_p=[[0, 1], [0, -1]], out_norm=True)
+    twin = _twin(**ONLY_INVAR, out_norm=True)
     inputs = _inputs(np.random.default_rng(RNG_SEED))
     out = twin(inputs)
     assert out.shape == (5, 2, 4)

@@ -35,6 +35,7 @@ VARIANTS = ("f64", "f32", "f64_dense", "f64_lm_first")
 ANCHORS = [f"{m}_{v}" for m in MODELS for v in VARIANTS]
 
 
+@functools.cache
 def _manifest(anchor: str) -> dict[str, Any]:
     return json.loads((GOLDEN / f"{anchor}.json").read_text())
 
@@ -112,5 +113,5 @@ def test_the_twin_reproduces_tf_on_every_structure(anchor, name):
         with torch.no_grad():
             out = twin(inputs)
         expected = to_internal(arrays[f"{case}/ins/{name}"], layout)
-        assert out.dtype == twin.get_parameter(next(iter(twin.state_dict()))).dtype
+        assert out.dtype == twin.get_buffer("norm_map").dtype  # the parameter dtype
         assert_close(out, expected, row, f"{anchor} {case} {name}")

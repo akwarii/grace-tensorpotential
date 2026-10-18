@@ -16,7 +16,7 @@ weights the sources are cut to the length of ``atomic_mu_i``. The weights ``redu
 (``state_dict``); the index tables and norms are not saved. Memory: the gathered per-atom weight is
 ``[atoms, n_out, n_in, n_collected]``, as in TF; a leaner contraction is issue PERF2.
 
-Layer: instructions; imports torch, the plans, the ops and the spec.
+Layer: instructions; imports torch, the plans, the ops, the spec, the errors and the input keys of ``constants``.
 """
 
 from __future__ import annotations
@@ -88,8 +88,8 @@ class FunctionReduceN(torch.nn.Module):
     SpecError
         When ``sources`` does not name the instructions of the spec, in order.
     OptionValueError
-        For ``simplify = True`` or an unknown ``init_target_value``, and from the plan (distinct sources, one ``ls_max`` per source,
-        ``number_of_atom_types`` with per-element weights).
+        For ``simplify = True`` or an unknown ``init_target_value``, and from the plan (distinct sources, one
+        ``ls_max`` per source, ``number_of_atom_types`` with per-element weights).
     ShapeError
         From the plan, when a source has no entry to collect.
     """
@@ -102,10 +102,10 @@ class FunctionReduceN(torch.nn.Module):
     ) -> None:
         """Build the plan, the zero weights and the index tables of the instruction."""
         super().__init__()
-        given = tuple(s.name for s in sources)
-        if given != _source_names(spec):
+        given, expected = tuple(s.name for s in sources), _source_names(spec)
+        if given != expected:
             msg = (
-                f"instruction {spec.name!r} (FunctionReduceN) collects {list(_source_names(spec))}, "
+                f"instruction {spec.name!r} (FunctionReduceN) collects {list(expected)}, "
                 f"but the sources given are {list(given)}"
             )
             raise SpecError(msg)
@@ -114,7 +114,8 @@ class FunctionReduceN(torch.nn.Module):
         self.plan = function_reduce_n_plan(sources, options)
         self.n_out = options.n_out
         self.init_value = _init_value(spec)
-        self.per_element = bool(spec.options["is_central_atom_type_dependent"])
+        self.per_element = options.is_central_atom_type_dependent
+        self.rows = 1 if self.plan.only_invar else len(self.plan.coupling_meta_data)
         self._n_lm = {s.name: len(s.coupling_meta_data) for s in sources}
         for c in self.plan.collectors:
             self.register_parameter(
@@ -145,12 +146,13 @@ class FunctionReduceN(torch.nn.Module):
                 f"[atoms, {self._n_lm[c.name]}, n], got {tuple(source.shape)}"
             )
             raise ShapeError(msg)
+        if self.per_element:
+            source = source[: atomic_mu_i.shape[0]]
         w = self.get_parameter(f"reducing_{c.name}")
         a = to_dtype_of(source.index_select(1, self.get_buffer(f"collect_{c.name}")), w)
         w = w.index_select(-1, self.get_buffer(f"tile_{c.name}"))
         if self.per_element:
-            w = w.index_select(0, atomic_mu_i)
-            pr = torch.einsum("aknw,awn->awk", w, a[: atomic_mu_i.shape[0]])
+            pr = torch.einsum("aknw,awn->awk", w.index_select(0, atomic_mu_i), a)
         else:
             pr = torch.einsum("knw,awn->awk", w, a)
         return pr * c.norm
@@ -171,13 +173,12 @@ class FunctionReduceN(torch.nn.Module):
             with ``only_invar`` (times the rows of ``norm_map`` with ``out_norm``, as TF broadcasts).
         """
         atomic_mu_i = inputs[ATOMIC_MU_I]
-        rows = 1 if self.plan.only_invar else len(self.plan.coupling_meta_data)
-        first = self.get_parameter(f"reducing_{self.plan.collectors[0].name}")
+        norm_map = self.get_buffer("norm_map")
         acc = torch.full(
-            (atomic_mu_i.shape[0], rows, self.n_out),
+            (atomic_mu_i.shape[0], self.rows, self.n_out),
             self.init_value,
-            dtype=first.dtype,
-            device=first.device,
+            dtype=norm_map.dtype,
+            device=norm_map.device,
         )
         for c in self.plan.collectors:
             pr = self._contribution(c, inputs[c.name], atomic_mu_i)
@@ -185,4 +186,4 @@ class FunctionReduceN(torch.nn.Module):
                 acc = acc + pr.sum(dim=1, keepdim=True)
             else:
                 acc = acc.index_add(1, self.get_buffer(f"sum_{c.name}"), pr)
-        return acc * self.get_buffer("norm_map")
+        return acc * norm_map if self.plan.out_norm else acc
