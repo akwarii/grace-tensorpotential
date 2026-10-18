@@ -158,7 +158,7 @@ def test_dependent_cell_vectors_of_periodic_axes_raise():
 
 
 def test_the_honoured_open_axis_gives_the_open_space_pairs_of_the_oracle():
-    found = neighbours.canonical(
+    found = neighbours.canonical_order(
         _pairs(cell=SLAB_CELL, pbc=[True, True, False], enforce_pbc=False)
     )
     expected = brute_force_pairs(
@@ -213,7 +213,7 @@ def test_pair_cutoffs_keep_what_the_oracle_keeps_with_the_same_cutoffs():
     expected = brute_force_pairs(
         positions, np.eye(3) * 6.0, symbols, lambda a, b: table[a, b]
     )
-    assert _rows(neighbours.canonical(found)) == [
+    assert _rows(neighbours.canonical_order(found)) == [
         (p.i, p.j, *p.shift) for p in expected
     ]
     assert len(found.i) < len(_pairs(positions=positions, cutoff=3.5).i)
@@ -250,7 +250,7 @@ def test_pair_cutoffs_that_do_not_fit_the_list_raise(
 
 def test_canonical_sorts_by_centre_neighbour_and_shift_and_keeps_every_pair():
     found = _pairs(cell=np.eye(3) * 2.5)
-    ordered = neighbours.canonical(found)
+    ordered = neighbours.canonical_order(found)
     rows = _rows(ordered)
     assert rows == sorted(rows)
     assert sorted(_rows(found)) == rows

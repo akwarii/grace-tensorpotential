@@ -20,27 +20,22 @@ The contract
     the periodic rows; a non-periodic axis has the shift 0, so the replacement does not change any pair.
 
 * The order of the pairs is the backend's own: matscipy's order is that of the TF path, which this module therefore
-  reproduces bit for bit. :func:`canonical` sorts by ``(i, j, S)`` for comparisons.
+  reproduces bit for bit. :func:`canonical_order` sorts by ``(i, j, S)`` for comparisons.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, get_args
 
 import numpy as np
 
 from tensorpotential.core.backends import backend_not_installed
 from tensorpotential.errors import NeighbourListError
 
-Backend = Literal["matscipy", "vesin"]
-BACKENDS: Final[tuple[Backend, ...]] = ("matscipy", "vesin")
-
-
-def _read_only(array: np.ndarray) -> np.ndarray:
-    array.setflags(write=False)
-    return array
+NeighbourBackend = Literal["matscipy", "vesin"]
+NEIGHBOUR_BACKENDS: Final[tuple[NeighbourBackend, ...]] = get_args(NeighbourBackend)
 
 
 @dataclass(frozen=True)
@@ -54,7 +49,7 @@ class Geometry:
     def __post_init__(self) -> None:
         """Make the arrays read-only."""
         for array in (self.positions, self.cell, self.pbc):
-            _read_only(array)
+            array.setflags(write=False)
 
 
 @dataclass(frozen=True)
@@ -76,15 +71,16 @@ class NeighbourList:
     def __post_init__(self) -> None:
         """Make the arrays read-only."""
         for array in (self.i, self.j, self.shifts, self.vectors):
-            _read_only(array)
+            array.setflags(write=False)
 
     def subset(self, keep: np.ndarray) -> NeighbourList:
         """Return the pairs selected by ``keep`` (a boolean mask or an index array), in that order."""
+        # indexing with a mask or an index array copies, so the result owns its arrays
         return NeighbourList(
-            self.i[keep].copy(),
-            self.j[keep].copy(),
-            self.shifts[keep].copy(),
-            self.vectors[keep].copy(),
+            self.i[keep],
+            self.j[keep],
+            self.shifts[keep],
+            self.vectors[keep],
             self.cutoff,
             self.geometry,
         )
@@ -124,25 +120,20 @@ def _complete_cell(geometry: Geometry) -> Geometry:
     if np.linalg.matrix_rank(cell) == 3:
         return geometry
     rows = cell[periodic]
-    if np.linalg.matrix_rank(rows) < len(rows) or periodic.all():
+    if np.linalg.matrix_rank(rows) < len(
+        rows
+    ):  # every singular cell with all axes periodic ends here
+        hint = ", or pass enforce_pbc=False to keep the axes that are not periodic in the input open"
         msg = (
             f"the cell vectors of the periodic axes {np.flatnonzero(periodic).tolist()} are zero or linearly "
-            f"dependent: {cell.tolist()}. Give independent lattice vectors for them"
-            + (
-                ", or pass enforce_pbc=False to keep the axes that are not periodic in the input open"
-                if periodic.all()
-                else ""
-            )
+            f"dependent: {cell.tolist()}. Give independent lattice vectors for them{hint if periodic.all() else ''}"
         )
         raise NeighbourListError(msg)
-    complement = (
-        np.linalg.svd(rows, full_matrices=True)[2][len(rows) :]
-        if len(rows)
-        else np.eye(3)
-    )
     completed = cell.copy()
-    completed[~periodic] = complement
-    return Geometry(geometry.positions.copy(), completed, periodic.copy())
+    # the right singular vectors beyond the rank of the periodic rows span their orthogonal complement
+    # (all three of them, the identity, when no axis is periodic)
+    completed[~periodic] = np.linalg.svd(rows, full_matrices=True)[2][len(rows) :]
+    return Geometry(geometry.positions, completed, periodic)
 
 
 def effective_geometry(
@@ -221,7 +212,7 @@ def neighbour_pairs(
     pbc: bool | Sequence[bool],
     cutoff: float,
     *,
-    backend: Backend = "matscipy",
+    backend: NeighbourBackend = "matscipy",
     enforce_pbc: bool = True,
 ) -> NeighbourList:
     """Every directed pair closer than ``cutoff``, under the contract of the module docstring.
@@ -244,7 +235,7 @@ def neighbour_pairs(
         The backend package is not installed.
     """
     if backend not in _SEARCHES:
-        msg = f"unknown neighbour-list backend {backend!r}; use one of {list(BACKENDS)}"
+        msg = f"unknown neighbour-list backend {backend!r}; use one of {list(NEIGHBOUR_BACKENDS)}"
         raise NeighbourListError(msg)
     if not (np.isfinite(cutoff) and cutoff > 0):
         msg = f"the cutoff must be positive and finite, got {cutoff!r}"
@@ -282,8 +273,8 @@ def pair_cutoff_matrix(
         [[table.get((a, b), cutoff) for b in elements] for a in elements],
         dtype=np.float64,
     )
-    if not np.array_equal(matrix, matrix.T):
-        rows, cols = np.nonzero(matrix != matrix.T)
+    rows, cols = np.nonzero(matrix != matrix.T)
+    if rows.size:
         pairs = sorted({
             tuple(sorted((elements[r], elements[c])))
             for r, c in zip(rows, cols, strict=True)
@@ -319,8 +310,7 @@ def apply_pair_cutoffs(
         raise NeighbourListError(msg)
     if (
         species.shape != (len(pairs.geometry.positions),)
-        or not (species >= 0).all()
-        or not (species < len(cutoff_matrix)).all()
+        or ((species < 0) | (species >= len(cutoff_matrix))).any()
     ):
         msg = f"species must give each of the {len(pairs.geometry.positions)} atoms a row of the cutoff matrix"
         raise NeighbourListError(msg)
@@ -328,7 +318,7 @@ def apply_pair_cutoffs(
     return pairs.subset(lengths < cutoff_matrix[species[pairs.i], species[pairs.j]])
 
 
-def canonical(pairs: NeighbourList) -> NeighbourList:
+def canonical_order(pairs: NeighbourList) -> NeighbourList:
     """Return the pairs sorted by centre, neighbour and shift, the order in which lists of two backends compare."""
     shifts = pairs.shifts
     return pairs.subset(

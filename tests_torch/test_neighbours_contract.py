@@ -114,12 +114,12 @@ def _oracle(case: Case) -> tuple[Rows, np.ndarray]:
     ]).reshape(-1, 3)
 
 
-def _contract(backend: neighbours.Backend) -> Callable[[Case], tuple[Rows, np.ndarray]]:
+def _contract(backend: neighbours.NeighbourBackend) -> Callable[[Case], tuple[Rows, np.ndarray]]:
     def run(case: Case) -> tuple[Rows, np.ndarray]:
         found = neighbours.neighbour_pairs(
             *case[:4], backend=backend, enforce_pbc=case.enforce_pbc
         )
-        result = neighbours.canonical(found)
+        result = neighbours.canonical_order(found)
         return _rows(result.i, result.j, result.shifts), np.asarray(result.vectors)
 
     return run
@@ -169,7 +169,7 @@ TORCH_SIM = (
     "alchemiops_nl_n2",
     "alchemiops_nl_cell_list",
 )
-CONTRACT_BACKENDS: dict[neighbours.Backend, tuple[pytest.MarkDecorator, ...]] = {
+CONTRACT_BACKENDS: dict[neighbours.NeighbourBackend, tuple[pytest.MarkDecorator, ...]] = {
     "matscipy": (),
     "vesin": (pytest.mark.vesin,),
 }
