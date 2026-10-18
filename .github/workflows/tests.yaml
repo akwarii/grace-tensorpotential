@@ -59,15 +59,16 @@ jobs:
           extra-args: --noconftest -W always
 
   test-torch:
-    # The torch-backend tests in an environment with the torch-sim extra (torch, torch-sim, vesin) and without TensorFlow
-    # (TORCH1, NBR1). The capability contract of tests_torch/conftest.py: a job that guarantees a capability names it in
-    # GRACE_REQUIRE_CAPS; this one guarantees torchsim and vesin (the neighbour-list conformance suite runs every backend
-    # here) and none of tf, gpu, cueq, hpc, whose tests are skipped.
+    # The torch-backend tests in an environment with the torch-sim extra (torch, torch-sim, vesin) and the cueq group,
+    # without TensorFlow (TORCH1, NBR1, ORACLE1). The capability contract of tests_torch/conftest.py: a job that
+    # guarantees a capability names it in GRACE_REQUIRE_CAPS; this one guarantees cueq (the numpy-level oracle of ORACLE1
+    # without kernels), torchsim and vesin (the neighbour-list conformance suite runs every backend here), and none of tf,
+    # gpu, hpc, whose tests are skipped.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       COVERAGE_FILE: .coverage.torch-${{ matrix.pandas }}
-      GRACE_REQUIRE_CAPS: torchsim,vesin
+      GRACE_REQUIRE_CAPS: cueq,torchsim,vesin
     strategy:
       fail-fast: false
       matrix:
@@ -81,10 +82,10 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: "3.12"
           enable-cache: true
-      - name: Install the torch-sim extra without TensorFlow, then pin pandas
+      - name: Install the torch-sim extra and the cueq group without TensorFlow, then pin pandas
         run: |
           uv venv .venv-torch
-          uv pip install --python .venv-torch/bin/python ".[torch-sim]" pytest pytest-timeout pytest-cov
+          uv pip install --python .venv-torch/bin/python ".[torch-sim]" --group cueq pytest pytest-timeout pytest-cov
           uv pip install --python .venv-torch/bin/python "pandas==${{ matrix.pandas }}"
       - name: Check that TensorFlow is absent
         run: .venv-torch/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
