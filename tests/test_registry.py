@@ -53,7 +53,6 @@ EXPECTED_WITHOUT_GOLDEN = {
     "SphericalHarmonic",
     "MLPRadialFunction",
     "MLPRadialFunction_v2",
-    "SingleParticleBasisFunctionEquivariantInd",
     "ProductFunction",
     "FCRight2Left",
     "InvariantLayerRMSNorm",
