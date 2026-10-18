@@ -53,8 +53,6 @@ EXPECTED_WITHOUT_GOLDEN = {
     "SphericalHarmonic",
     "MLPRadialFunction",
     "MLPRadialFunction_v2",
-    "ProductFunction",
-    "FCRight2Left",
     "InvariantLayerRMSNorm",
     "CreateOutputTarget",
     "LinMLPOut2ScalarTarget",
