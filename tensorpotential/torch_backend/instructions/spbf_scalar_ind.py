@@ -108,9 +108,8 @@ class SingleParticleBasisFunctionScalarInd(torch.nn.Module):
             width = n_rad_max * (self.plan.lmax + 1) if self.l_depend else n_rad_max
             self.lin_transform = Linear(embedding_size, width, policy)
         cpu = torch.device("cpu")
-        self.register_buffer(
-            "l_tile", torch.as_tensor(self.plan.l_tile), persistent=False
-        )
+        l_tile = torch.as_tensor(self.plan.l_tile, dtype=torch.int64)
+        self.register_buffer("l_tile", l_tile, persistent=False)
         inv_avg = policy.param_constant(self.plan.inv_avg_n_neigh, cpu)
         self.register_buffer("inv_avg_n_neigh", inv_avg, persistent=False)
 
