@@ -31,6 +31,7 @@ from typing import Any, Final, Literal, Protocol
 from tensorpotential.torch_backend.errors import Problem, UnsupportedModelError
 from tensorpotential.torch_backend.spec.model import InstructionRef
 from tensorpotential.torch_backend.spec.options import (
+    COMPUTE,
     DEFAULTS,
     REJECTED_CLASSES,
     REJECTED_OPTIONS,
@@ -43,9 +44,12 @@ ClassStatus = Literal["supported", "rejected"]
 SHEET_DIRECTORY: Final = "docs/torch_backend/spec"
 
 # Class path -> the test file (relative to the repository root) that compares the twin with the golden fixtures
-# of the TF class. Empty until Stage 3: each TWIN issue adds the classes it builds, and removes them from
-# ``EXPECTED_WITHOUT_GOLDEN`` in ``tests/test_registry.py`` in the same pull request (which fails otherwise).
-GOLDEN_TESTS: Final[Mapping[str, str]] = {}
+# of the TF class. Each TWIN issue adds the classes it builds, and removes them from ``EXPECTED_WITHOUT_GOLDEN`` in
+# ``tests/test_registry.py`` in the same pull request (which fails otherwise).
+GOLDEN_TESTS: Final[Mapping[str, str]] = {
+    COMPUTE
+    + "SingleParticleBasisFunctionEquivariantInd": "tests_torch/test_spbf_equivariant_ind_golden.py",
+}
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85
 _VALUE_WIDTH: Final = 60
