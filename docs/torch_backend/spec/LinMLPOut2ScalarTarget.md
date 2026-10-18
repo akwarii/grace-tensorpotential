@@ -114,4 +114,4 @@ the value before the shift instruction (a snapshot of the key before and after e
 
 ## For the reviewer
 
-None open. Decided (owner, 2026-10-04): `return_hidden_target` is ported, not rejected. The option table of SPEC2 (`tensorpotential/torch_backend/spec/options.py`) still accepts only `null` for it: see the README, section "Decisions of the review".
+None open. Decided (owner, 2026-10-04): `return_hidden_target` is ported, not rejected. The option table (`tensorpotential/torch_backend/spec/options.py`) accepts a string for it since TWIN9.

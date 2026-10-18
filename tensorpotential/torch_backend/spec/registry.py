@@ -33,6 +33,7 @@ from tensorpotential.torch_backend.spec.model import InstructionRef
 from tensorpotential.torch_backend.spec.options import (
     COMPUTE,
     DEFAULTS,
+    OUTPUT,
     REJECTED_CLASSES,
     REJECTED_OPTIONS,
     SUPPORTED_OPTIONS,
@@ -47,6 +48,9 @@ SHEET_DIRECTORY: Final = "docs/torch_backend/spec"
 # of the TF class. Each TWIN issue adds the classes it builds, and removes them from ``EXPECTED_WITHOUT_GOLDEN`` in
 # ``tests/test_registry.py`` in the same pull request (which fails otherwise).
 GOLDEN_TESTS: Final[Mapping[str, str]] = {
+    OUTPUT + "ConstantScaleShiftTarget": "tests_torch/test_output_targets_golden.py",
+    OUTPUT + "CreateOutputTarget": "tests_torch/test_output_targets_golden.py",
+    OUTPUT + "LinMLPOut2ScalarTarget": "tests_torch/test_output_targets_golden.py",
     COMPUTE + "FCRight2Left": "tests_torch/test_fc_right2left_golden.py",
     COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
     COMPUTE

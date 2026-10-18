@@ -169,9 +169,10 @@ still open, and the "For the reviewer" list of each sheet states what was decide
 `option_matrix.md`) was written before these decisions and differed in four places, which the issue that builds the twins
 reconciles (the sheets are the specification). Reconciled by TWIN8: `FunctionReduceN.init_target_value` accepts `"zeros"` and
 `"ones"`; `FunctionReduceN.simplify` stays `bool` in the table (a rule rejects by value kind, so it cannot refuse `true` alone)
-and the twin refuses `true` with an `OptionValueError`. Still open: `LinMLPOut2ScalarTarget`
-`return_hidden_target` accepts only `null` (decided: ported); `ConstantScaleShiftTarget.atomic_shift_map` accepts only `null`
-(the sheet ports a map with keys `0 .. n-1`; a dict is seen only in `GRACE-3L-OMAT-large`): for the issues of those twins.
+and the twin refuses `true` with an `OptionValueError`. Reconciled by TWIN9: `LinMLPOut2ScalarTarget.return_hidden_target`
+accepts a string (the twin returns the hidden features as an extra output), and `ConstantScaleShiftTarget.atomic_shift_map`
+accepts a dict (the twin refuses keys other than `0 .. n-1` and a map shorter than the element list), so the per-element map of
+`GRACE-3L-OMAT-large` is no longer a rejected value (that model stays rejected for its classes).
 
 ## Registry and completeness checks (SPEC5)
 

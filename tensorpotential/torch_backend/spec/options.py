@@ -229,7 +229,8 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "activation": _r("null", "str", values=(None, "silu", "tanh")),
         "l": _ZERO,
         "lora_config": _NO_LORA,
-        "return_hidden_target": _NULL,
+        # ported: the twin returns the hidden features as an extra output under that key
+        "return_hidden_target": _r("null", "str"),
         "full_origin_norm": _r("bool", ignored=True),
         "init_norm": _r(
             "str", ignored=True
@@ -239,7 +240,8 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "target": _REF,
         "scale": _REAL,
         "shift": _REAL,
-        "atomic_shift_map": _NULL,
+        # ported: keys 0 .. n - 1, checked by the twin
+        "atomic_shift_map": _r("null", "dict[int,float]"),
         "chemical_embedding": _NULL,
         "l": _ZERO,
     },
@@ -316,9 +318,6 @@ REJECTED_OPTIONS: Final[Mapping[str, Mapping[str, tuple[Rejection, ...]]]] = {
                 "seen only in the legacy list-format model_grace.yaml, which the loader rejects",
             ),
         )
-    },
-    OUTPUT + "ConstantScaleShiftTarget": {
-        "atomic_shift_map": (Rejection("dict[int,float]", _ONLY_3L),)
     },
 }
 

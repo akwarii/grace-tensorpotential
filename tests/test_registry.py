@@ -54,9 +54,6 @@ EXPECTED_WITHOUT_GOLDEN = {
     "MLPRadialFunction",
     "MLPRadialFunction_v2",
     "InvariantLayerRMSNorm",
-    "CreateOutputTarget",
-    "LinMLPOut2ScalarTarget",
-    "ConstantScaleShiftTarget",
     "TrainableShiftTarget",
 }
 
