@@ -59,6 +59,10 @@ GOLDEN_TESTS: Final[Mapping[str, str]] = {
     COMPUTE
     + "SingleParticleBasisFunctionScalarInd": "tests_torch/test_spbf_scalar_ind_golden.py",
     COMPUTE + "ProductFunction": "tests_torch/test_product_function_golden.py",
+    COMPUTE + "BondLength": "tests_torch/test_geometry_golden.py",
+    COMPUTE + "ScaledBondVector": "tests_torch/test_geometry_golden.py",
+    COMPUTE + "SphericalHarmonic": "tests_torch/test_geometry_golden.py",
+    COMPUTE + "RadialBasis": "tests_torch/test_geometry_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85
