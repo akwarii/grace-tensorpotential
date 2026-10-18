@@ -203,8 +203,10 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "number_of_atom_types": _r("int", "null"),
         "init_vars": _r("str", values=("random",)),
         "normalize": _TRUE,
-        "init_target_value": _r("str", values=("zeros",)),
-        "simplify": _BOOL,
+        "init_target_value": _r(
+            "str", values=("zeros", "ones")
+        ),  # "ones" changes the inference result: ported (sheet, decision of the review)
+        "simplify": _BOOL,  # True is refused by the twin (decision of the review); a rule cannot reject one bool
         "scale": _r("float"),
         "lora_config": _NO_LORA,
         "lm_first": _LAYOUT,

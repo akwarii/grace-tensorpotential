@@ -166,12 +166,12 @@ still open, and the "For the reviewer" list of each sheet states what was decide
 | `local` with a `chem_embedding` | rejected explicitly (`NotImplementedError`) | `MLPRadialFunction_v2` |
 
 **Disagreements with the option table of SPEC2.** `tensorpotential/torch_backend/spec/options.py` (and the generated
-`option_matrix.md`) was written before these decisions and differs in four places, which the issue that builds the twins
-has to reconcile (the sheets are the specification): `FunctionReduceN.init_target_value` accepts only `"zeros"` (decided:
-`"ones"` too); `FunctionReduceN.simplify` accepts both booleans (decided: `True` rejected); `LinMLPOut2ScalarTarget`
+`option_matrix.md`) was written before these decisions and differed in four places, which the issue that builds the twins
+reconciles (the sheets are the specification). Reconciled by TWIN8: `FunctionReduceN.init_target_value` accepts `"zeros"` and
+`"ones"`; `FunctionReduceN.simplify` stays `bool` in the table (a rule rejects by value kind, so it cannot refuse `true` alone)
+and the twin refuses `true` with an `OptionValueError`. Still open: `LinMLPOut2ScalarTarget`
 `return_hidden_target` accepts only `null` (decided: ported); `ConstantScaleShiftTarget.atomic_shift_map` accepts only `null`
-(the sheet ports a map with keys `0 .. n-1`; a dict is seen only in `GRACE-3L-OMAT-large`). This PR does not change the
-option table.
+(the sheet ports a map with keys `0 .. n-1`; a dict is seen only in `GRACE-3L-OMAT-large`): for the issues of those twins.
 
 ## Registry and completeness checks (SPEC5)
 
