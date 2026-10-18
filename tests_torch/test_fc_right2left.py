@@ -97,7 +97,11 @@ def _weight(twin, name, mu, per_element):
 
 def _reference(twin: FCRight2Left, inputs) -> np.ndarray:
     """Sheet section 5, atom by atom and row by row, in float64: ``[atoms, lm_left, n_out]``."""
-    plan, (pl, pr) = twin.plan, twin.per_element
+    plan, (pl, pr), options = twin.plan, twin.per_element, twin.spec.options
+    # the norms and norm_out from the options, not from the twin (sheet sections 1 and 4)
+    norm_left, norm_right = (
+        1 / n**0.5 if options["normalize"] else 1.0 for n in (LEFT.n_out, RIGHT.n_out)
+    )
     x_left, x_right = (inputs[n].double().numpy() for n in ("L", "R"))
     mu = inputs["atomic_mu_i"].numpy()
     out = np.zeros((len(mu), x_left.shape[1], twin.n_out))
@@ -107,13 +111,13 @@ def _reference(twin: FCRight2Left, inputs) -> np.ndarray:
                 out[a, row] = x_left[a, row]
             else:
                 w = _weight(twin, "w_left", mu[a], pl)[:, :, plan.w_tile_left[row]]
-                out[a, row] = plan.norm_left * w @ x_left[a, row]
+                out[a, row] = norm_left * w @ x_left[a, row]
         for to, frm, g in zip(
             plan.collect_to, plan.collect_from, plan.w_tile_right, strict=True
         ):
             w = _weight(twin, "w_right", mu[a], pr)[:, :, g]
-            out[a, to] += plan.norm_right * w @ x_right[a, frm]
-    if twin.norm_out:
+            out[a, to] += norm_right * w @ x_right[a, frm]
+    if options["norm_out"]:
         out *= plan.norm_map.reshape(1, -1, 1)
     return out
 
