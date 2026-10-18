@@ -80,7 +80,8 @@ def _twin(
         policy=policy,
     )
     if twin.lin_transform is not None:
-        lmax = options.get("lmax") or angular_lmax
+        lmax = options.get("lmax")
+        lmax = angular_lmax if lmax is None else lmax
         w = _weight(bool(options.get("indicator_l_depend")), lmax)
         twin.load_state_dict(
             {"lin_transform.w": torch.as_tensor(w, dtype=policy.param)}, strict=True
@@ -218,10 +219,13 @@ def test_lm_first_changes_nothing():
 def test_a_float32_model_rounds_the_angular_input_before_the_product():
     rng = np.random.default_rng(RNG_SEED)
     inputs = _inputs(rng, dtype=np.float32, angular_dtype=np.float64)
-    out = _twin(F32)(inputs)
+    twin = _twin(F32)
+    # the bond product is R * float32(Y) exactly, not a float64 product rounded afterwards
+    exact = inputs["R"] * inputs["Y"].float()[:, :, None]
+    torch.testing.assert_close(twin._bond_product(inputs), exact, rtol=0, atol=0)
+    out = twin(inputs)
     assert out.dtype == torch.float32
-    rounded = _reference(inputs, y_dtype=np.float32)
-    assert_close(out, rounded, FEATURE_F32)
+    assert_close(out, _reference(inputs, y_dtype=np.float32), FEATURE_F32)
 
 
 def test_float64_inputs_of_a_float32_model_give_its_parameter_dtype():

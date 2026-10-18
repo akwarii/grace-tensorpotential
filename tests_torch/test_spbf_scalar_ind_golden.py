@@ -120,9 +120,9 @@ def test_the_embedding_returns_the_stored_table_and_matches_the_checkpoint_map(
     assert (
         list(twin.element_map.values()) == weights[f"{name}/element_map_index"].tolist()
     )
+    out = twin({})
+    assert out.dtype == twin.w.dtype
     for case in cases(arrays):
-        out = twin({})
-        assert out.dtype == twin.w.dtype
         np.testing.assert_array_equal(
             out.detach().numpy(), arrays[f"{case}/ins/{name}"]
         )
