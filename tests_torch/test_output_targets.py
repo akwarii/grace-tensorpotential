@@ -11,6 +11,7 @@ TF measured (spec sheet, section 4). The comparison with TensorFlow is ``test_ou
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
 import numpy as np
@@ -154,6 +155,10 @@ def test_two_origins_are_added_channel_by_channel_before_the_mlp():
 def test_any_depth_and_output_width(hidden_layers, n_out):
     rng = np.random.default_rng(RNG_SEED)
     twin = _readout(hidden_layers=hidden_layers, n_out=n_out)
+    # the architecture from the options, not from the twin
+    widths = [N_CH - 1, *hidden_layers, n_out]
+    shapes = [tuple(v.shape) for v in twin.state_dict().values()]
+    assert shapes == list(itertools.pairwise(widths))
     inputs = _features(rng)
     expected, hidden = _readout_reference(twin, inputs)
     out, out_hidden = twin.forward_with_hidden(inputs)
@@ -366,9 +371,8 @@ def test_each_atomic_energy_depends_on_its_own_atom_only_and_relabelling_permute
         _scale(scale=OMAT_SCALE, shift=0.1),
     )
     inputs = _features(rng, origins=("I0", "I1"))
-    inputs["atomic_energy"] = (
-        torch.zeros(())
-    )  # the chain starts from CreateOutputTarget's scalar
+    # the chain starts from CreateOutputTarget's scalar
+    inputs["atomic_energy"] = torch.zeros((), dtype=torch.float64)
 
     def energies(data: dict[str, torch.Tensor]) -> torch.Tensor:
         data = dict(data)

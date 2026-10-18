@@ -39,8 +39,8 @@ if TYPE_CHECKING:
     from tensorpotential.torch_backend.ops.precision import DtypePolicy
     from tensorpotential.torch_backend.spec.model import InstructionSpec
 
-DEFAULT_HIDDEN_LAYERS = (32,)
-"""``hidden_layers`` of a ``LinMLPOut2ScalarTarget`` whose yaml gives null (``output.py``)."""
+# hidden_layers of a LinMLPOut2ScalarTarget whose yaml gives null (output.py)
+_DEFAULT_HIDDEN_LAYERS = (32,)
 
 
 class CreateOutputTarget(torch.nn.Module):
@@ -112,12 +112,13 @@ class LinMLPOut2ScalarTarget(torch.nn.Module):
                 f"channel count of at least 2, got {list(origin_channels)}"
             )
             raise ShapeError(msg)
+        # the option table refuses it too; this guards a hand-made spec
         if options["normalize"] not in (None, "layer"):
             msg = f"instruction {spec.name!r} (LinMLPOut2ScalarTarget): normalize must be null or 'layer', got {options['normalize']!r}"
             raise OptionValueError(msg)
         n_in = origin_channels[0] - 1
         hidden = options["hidden_layers"]
-        hidden = DEFAULT_HIDDEN_LAYERS if hidden is None else tuple(hidden)
+        hidden = _DEFAULT_HIDDEN_LAYERS if hidden is None else tuple(hidden)
         sizes = [n_in, *hidden, int(options["n_out"])]
         self.mlp = MLP.fully_connected(sizes, options["activation"], policy)
         self.scale = None
@@ -125,14 +126,10 @@ class LinMLPOut2ScalarTarget(torch.nn.Module):
             self.scale = torch.nn.Parameter(torch.zeros((1, n_in), dtype=policy.param))
         self.hidden_key: str | None = options["return_hidden_target"] or None
 
-    def forward_with_hidden(
+    def _readout(
         self, inputs: Mapping[str, torch.Tensor]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return the new target ``[atoms, n_out]`` and the hidden features ``[atoms, 1 + width of the last layer]``.
-
-        The hidden features are ``concat([lin, h])`` with ``h`` the input of the last MLP layer: what TF writes under
-        ``return_hidden_target``.
-        """
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return the new target, the summed linear channel and the input of the last MLP layer."""
         # [atoms, n], the l = 0 column of each origin [atoms, lm, n]; summed in TF's order
         first, *others = (inputs[name][:, 0, :] for name in self._origins)
         lin, transformed = first[:, :1], first[:, 1:]
@@ -142,11 +139,22 @@ class LinMLPOut2ScalarTarget(torch.nn.Module):
         if self.scale is not None:
             transformed = scalar_rms_norm(transformed, self.scale)
         out, hidden = self.mlp.forward_with_hidden(transformed)
-        return inputs[self._target] + (out + lin), torch.cat([lin, hidden], dim=1)
+        return inputs[self._target] + (out + lin), lin, hidden
+
+    def forward_with_hidden(
+        self, inputs: Mapping[str, torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the new target ``[atoms, n_out]`` and the hidden features ``[atoms, 1 + width of the last layer]``.
+
+        The hidden features are ``concat([lin, h])`` with ``h`` the input of the last MLP layer: what TF writes under
+        ``return_hidden_target``.
+        """
+        out, lin, hidden = self._readout(inputs)
+        return out, torch.cat([lin, hidden], dim=1)
 
     def forward(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """Return the new target ``[atoms, n_out]``: the old one plus the readout of the origins."""
-        return self.forward_with_hidden(inputs)[0]
+        return self._readout(inputs)[0]
 
 
 def _shift_map(spec: InstructionSpec, n_elements: int | None) -> list[float] | None:
@@ -211,7 +219,7 @@ class ConstantScaleShiftTarget(torch.nn.Module):
             msg = f"instruction {spec.name!r} (ConstantScaleShiftTarget): its chemical_embedding is {embedding!r}, but an embedding size of {embedding_size!r} was given"
             raise OptionValueError(msg)
         cpu = torch.device("cpu")
-        self.shift = shift
+        self._constant = shift
         self.register_buffer(
             "scale",
             policy.param_constant(float(options["scale"]), cpu),
@@ -220,7 +228,7 @@ class ConstantScaleShiftTarget(torch.nn.Module):
         self.register_buffer(
             "constant_shift", policy.param_constant(shift, cpu), persistent=False
         )
-        self.per_element_shift = shift_map is not None
+        self._per_element = shift_map is not None
         values = policy.param_constant(shift_map or [], cpu).reshape(-1, 1)
         self.register_buffer("atomic_shift_map", values, persistent=False)
         self.embedding_shift = None
@@ -230,15 +238,19 @@ class ConstantScaleShiftTarget(torch.nn.Module):
             )
             norm = policy.param_constant(embedding_size, cpu).rsqrt()
             self.register_buffer("embedding_norm", norm, persistent=False)
+        # TF's apply_shift: the shift sum is skipped when there is nothing to add
+        self._apply_shift = bool(
+            shift or self._per_element or self.embedding_shift is not None
+        )
 
     def _shift(
         self, inputs: Mapping[str, torch.Tensor], total: torch.Tensor
     ) -> torch.Tensor:
         """Add the per-element, embedding and constant shifts to ``total`` (TF's ``total_shift``)."""
-        if self.per_element_shift or self.embedding_shift is not None:
+        if self._per_element or self.embedding_shift is not None:
             atomic_mu_i = inputs[ATOMIC_MU_I]
             check_index(atomic_mu_i)
-            if self.per_element_shift:
+            if self._per_element:
                 shift_map = self.get_buffer("atomic_shift_map")
                 per_element = shift_map.index_select(0, atomic_mu_i)
                 total = total + to_dtype_of(per_element, total)
@@ -248,7 +260,7 @@ class ConstantScaleShiftTarget(torch.nn.Module):
                     "embedding_norm"
                 )
                 total = total + to_dtype_of(learned, total)
-        if self.shift != 0:
+        if self._constant != 0:
             constant = self.get_buffer("constant_shift")
             total = total + to_dtype_of(constant, total)
         return total
@@ -257,8 +269,6 @@ class ConstantScaleShiftTarget(torch.nn.Module):
         """Return ``target * scale`` plus the shifts, in the dtype of the target."""
         target = inputs[self._target]
         scaled = target * to_dtype_of(self.get_buffer("scale"), target)
-        if not (
-            self.shift or self.per_element_shift or self.embedding_shift is not None
-        ):
+        if not self._apply_shift:
             return scaled
         return scaled + self._shift(inputs, torch.zeros_like(target))
