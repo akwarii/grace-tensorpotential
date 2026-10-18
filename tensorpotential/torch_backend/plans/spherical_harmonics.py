@@ -64,6 +64,16 @@ class SphericalHarmonicsPlan:
     step_back: np.ndarray
 
 
+def column_degrees(lmax: int) -> np.ndarray:
+    """Return the degree ``l`` of each of the ``(lmax + 1)**2`` columns ``l*l + l + m``: ``[0, 1, 1, 1, 2, ...]`` (int64).
+
+    TF's ``l_tile`` (``MLPRadialFunction``, ``SingleParticleBasisFunctionScalarInd``), which spreads a per-``l`` value
+    over the ``2 l + 1`` orders.
+    """
+    degrees = np.arange(lmax + 1, dtype=np.int64)
+    return np.repeat(degrees, 2 * degrees + 1)
+
+
 def _scale(l: int, m: int) -> float:
     ratio = math.factorial(l - m) / math.factorial(l + m)
     return math.sqrt((2 * l + 1) * ratio * (2 if m else 1))
