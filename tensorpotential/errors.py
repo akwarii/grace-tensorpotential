@@ -26,5 +26,9 @@ class ArchiveError(TensorPotentialError, ValueError):
     """A downloaded archive has an unexpected layout or a member that would be written outside its folder."""
 
 
+class NeighbourListError(TensorPotentialError, ValueError):
+    """A neighbour list cannot be built or is inconsistent with its structure (``core.neighbours``, both backends)."""
+
+
 class KerasVariableUnavailableError(TensorPotentialError, RuntimeError):
     """``keras.Variable`` or its ``__eq__`` is missing, so the comparison fix cannot be installed."""

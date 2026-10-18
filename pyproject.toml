@@ -323,8 +323,9 @@ forbidden_modules = ["torch", "torch_sim"]
 [tool.deptry.per_rule_ignores]
 # pyace is the optional ACE package that compat/pace imports (legacy, out of scope for every issue)
 DEP001 = ["pyace"]
-# extras of the torch backend: torch_backend/ imports them once its instructions land (TORCH issues)
-DEP002 = ["torch", "torch-sim-atomistic", "vesin"]
+# extras of the torch backend: torch_backend/ imports them once its instructions land (TORCH issues); vesin is imported by
+# core/neighbours.py only when its backend is asked for (NBR1)
+DEP002 = ["torch", "torch-sim-atomistic"]
 # matplotlib comes with ase (plots of the utils, the dataset plotter and the UQ thresholds), keras and absl with the tf extra;
 # declaring them would be a new runtime dependency, which is a decision of the owner
 DEP003 = ["matplotlib", "keras", "absl"]

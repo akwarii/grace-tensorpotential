@@ -37,8 +37,8 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: "3.12"
           enable-cache: true
-      - name: Install the development environment (the dev group includes the tf extra; ty needs the torch extra too)
-        run: uv sync --frozen --group dev --extra torch
+      - name: Install the development environment (the dev group includes the tf extra; ty needs the torch-sim extra too, which brings torch)
+        run: uv sync --frozen --group dev --extra torch-sim
       - name: ruff, strict set (new packages)
         run: uv run --frozen --no-sync ruff check tensorpotential/core tensorpotential/torch_backend tests_torch
       - name: ty (new packages)

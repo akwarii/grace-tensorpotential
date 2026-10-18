@@ -9,6 +9,8 @@ from ase import Atoms
 from ase.build import bulk, fcc111
 
 from tensorpotential import constants
+from tensorpotential.core import neighbours
+from tensorpotential.core.cutoffs import process_cutoff_dict
 from tensorpotential.data.databuilder import construct_batches, GeometricalDataBuilder
 from tests.neighbour_oracle import brute_force_pairs, recover_shifts
 from tests.tolerances import NEIGHBOUR_VECTOR_F64 as VECTOR_TOL
@@ -905,6 +907,54 @@ def test_aperiodic_cluster_equals_the_isolated_cluster(seed: int) -> None:
     got = edges_with_vectors(work, data, isolated)
     assert sorted(got) == [(p.i, p.j, p.shift) for p in expected]
     assert len(expected) > 10
+
+
+# --- the neighbour-list contract (tensorpotential.core.neighbours, NBR1) reproduces the builder ---
+
+PARITY = {
+    **STRUCTURES,
+    "rattled_eight_atoms": (rattled_eight_atoms, 5.0),
+    "thin_slab": (thin_slab, 6.0),
+    "isolated_atom_cluster": (isolated_atom_cluster, 4.0),
+}
+
+
+def builder_real_bonds(atoms, cutoff, max_cutoff=None, **kwargs):
+    """The builder's bonds without the fictitious bond beyond the cutoff of an atom with no neighbour."""
+    work, data = run_builder(atoms, cutoff, **kwargs)
+    vectors = data[constants.BOND_VECTOR]
+    real = np.linalg.norm(vectors, axis=1) < (max_cutoff or cutoff)
+    return work, data[constants.BOND_IND_I][real], data[constants.BOND_IND_J][real], vectors[real]
+
+
+def assert_same_list(found, work, ind_i, ind_j, vectors):
+    np.testing.assert_array_equal(found.i, ind_i)
+    np.testing.assert_array_equal(found.j, ind_j)
+    np.testing.assert_array_equal(found.vectors, vectors)  # bit for bit, in the same order
+    np.testing.assert_array_equal(found.geometry.positions, work.positions)
+    np.testing.assert_array_equal(found.geometry.cell, work.cell.array)
+    assert found.geometry.pbc.tolist() == work.pbc.tolist()
+
+
+@pytest.mark.parametrize("name", list(PARITY))
+def test_the_neighbour_contract_reproduces_the_builder_bit_for_bit(name) -> None:
+    make, cutoff = PARITY[name]
+    atoms = make()
+    caller = atoms.copy()
+    found = neighbours.neighbour_pairs(atoms.positions, atoms.cell.array, atoms.pbc, cutoff)
+    assert_same_list(found, *builder_real_bonds(atoms, cutoff))
+    assert atoms == caller  # the contract edited nothing
+
+
+def test_the_pair_cutoffs_of_the_contract_reproduce_the_builder_cutoff_dict() -> None:
+    atoms = rattled_eight_atoms()
+    elements = ["Cu", "Al"]  # the order of ELEMENTS
+    matrix = neighbours.pair_cutoff_matrix(elements, 3.0, process_cutoff_dict(CUTOFF_DICT, ELEMENTS))
+    wide = neighbours.neighbour_pairs(atoms.positions, atoms.cell.array, atoms.pbc, matrix.max())
+    species = np.array([ELEMENTS[s] for s in atoms.get_chemical_symbols()])
+    found = neighbours.apply_pair_cutoffs(wide, species, matrix)
+    assert 0 < len(found.i) < len(wide.i)
+    assert_same_list(found, *builder_real_bonds(atoms, 3.0, matrix.max(), cutoff_dict=CUTOFF_DICT))
 
 
 # --- construct_batches: stage handling, external padding caps, statistics (#177) ---

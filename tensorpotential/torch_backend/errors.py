@@ -68,10 +68,6 @@ class WeightMismatchError(TorchBackendError, ValueError):
     """Stored weights do not fit the model: a key is missing or left over, or a shape or dtype differs."""
 
 
-class NeighbourListError(TorchBackendError, ValueError):
-    """A neighbour list is inconsistent with its structure: an index out of range, a pair beyond the cutoff."""
-
-
 class DtypeError(TorchBackendError, TypeError):
     """A tensor or a weight has a dtype the dtype policy does not allow (``ops.precision``)."""
 

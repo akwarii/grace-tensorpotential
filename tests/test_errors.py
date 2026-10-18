@@ -16,6 +16,7 @@ BUILTIN_PARENT = {
     "ModelFormatError": ValueError,
     "ClassPathError": ValueError,
     "ArchiveError": ValueError,
+    "NeighbourListError": ValueError,
     "KerasVariableUnavailableError": RuntimeError,
 }
 
