@@ -542,6 +542,34 @@ nvtx = [
 ]
 
 [[package]]
+name = "cuequivariance"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "networkx" },
+    { name = "numpy" },
+    { name = "opt-einsum" },
+    { name = "scipy" },
+    { name = "sympy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e6/e8/a133b9b6d0132f237a1c40b0f6dbb8a955b313629323ab060a782477ef25/cuequivariance-0.12.0.tar.gz", hash = "sha256:6e746705817033da8fa3f85d89b5613170f29027dcf85c9ffcf642c9ee377d4f", size = 219500, upload-time = "2026-09-24T00:29:02.954Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/36/e3/98552be936239da279ffb67b9a5b6504832a8850ad39db2eb2938504e8c8/cuequivariance-0.12.0-py3-none-any.whl", hash = "sha256:cdca30e8954fb01ac8f724cc4d59fd6e624e393082fb8a18076602f9ef34d281", size = 250801, upload-time = "2026-09-24T00:29:01.922Z" },
+]
+
+[[package]]
+name = "cuequivariance-torch"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cuequivariance" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/2a/e7fc7aaea570d122b3ba10140051e81d3d81cfffd0a05f90a94aa3cf0690/cuequivariance_torch-0.12.0.tar.gz", hash = "sha256:f6528685f6202c8fa964a335bd1518792dda3a09d08a463547de1a9e08657d0d", size = 170319, upload-time = "2026-09-24T00:29:07.92Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/90/e54c10f51883a397c4f851fc61ef41cf61e97f2ed2e050ed3f456031359b/cuequivariance_torch-0.12.0-py3-none-any.whl", hash = "sha256:32a6661343375ac0034af062eb9c3166a4f78af9fc7fa70e0709d03ef1ee4409", size = 184540, upload-time = "2026-09-24T00:29:06.921Z" },
+]
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2864,7 +2892,11 @@ torch-sim = [
 ]
 
 [package.dev-dependencies]
+cueq = [
+    { name = "cuequivariance-torch" },
+]
 dev = [
+    { name = "cuequivariance-torch" },
     { name = "deptry" },
     { name = "import-linter" },
     { name = "pytest" },
@@ -2904,7 +2936,9 @@ requires-dist = [
 provides-extras = ["tf", "torch", "torch-sim", "dashboard", "all"]
 
 [package.metadata.requires-dev]
+cueq = [{ name = "cuequivariance-torch", specifier = "==0.12.0" }]
 dev = [
+    { name = "cuequivariance-torch", specifier = "==0.12.0" },
     { name = "deptry" },
     { name = "import-linter" },
     { name = "pytest" },
