@@ -526,7 +526,10 @@ def test_a_cls_string_is_looked_up_never_executed():
 
 
 def test_the_3l_model_lists_every_kind_of_finding_in_one_error():
-    """Real yaml, every rejection kind at once: 14 instructions of rejected classes and 7 rejected option values."""
+    """Real yaml, every rejection kind at once: 14 instructions of rejected classes and 6 rejected option values.
+
+    Its per-element ``atomic_shift_map`` is supported since TWIN9 (keys ``0 .. n - 1``), so it is no longer a finding.
+    """
     with pytest.raises(UnsupportedModelError) as caught:
         load_model_spec(YAMLS / "GRACE-3L-OMAT-large.yaml")
     kinds = {}
@@ -534,10 +537,10 @@ def test_the_3l_model_lists_every_kind_of_finding_in_one_error():
         kinds.setdefault(problem.kind, set()).add(problem.cls.rsplit(".", 1)[-1])
     assert kinds == {
         "rejected_class": {"SPBF", "GeneralProductFunction", "EquivariantRMSNorm"},
-        "rejected_value": {"FCRight2Left", "ConstantScaleShiftTarget"},
+        "rejected_value": {"FCRight2Left"},
     }
-    assert len(caught.value.problems) == 21
-    assert str(caught.value).count("\n  instruction ") == 21
+    assert len(caught.value.problems) == 20
+    assert str(caught.value).count("\n  instruction ") == 20
 
 
 def test_an_unknown_option_of_a_supported_class_is_rejected_naming_the_nearest_key():
