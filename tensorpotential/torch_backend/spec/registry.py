@@ -48,6 +48,7 @@ SHEET_DIRECTORY: Final = "docs/torch_backend/spec"
 # ``tests/test_registry.py`` in the same pull request (which fails otherwise).
 GOLDEN_TESTS: Final[Mapping[str, str]] = {
     COMPUTE + "FCRight2Left": "tests_torch/test_fc_right2left_golden.py",
+    COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85

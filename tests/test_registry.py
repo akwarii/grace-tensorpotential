@@ -58,6 +58,7 @@ EXPECTED_WITHOUT_GOLDEN = {
     "SingleParticleBasisFunctionEquivariantInd",
     "ProductFunction",
     "FunctionReduceN",
+    "FCRight2Left",
     "InvariantLayerRMSNorm",
     "CreateOutputTarget",
     "LinMLPOut2ScalarTarget",
