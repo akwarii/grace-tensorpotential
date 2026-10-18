@@ -52,10 +52,8 @@ def _manifest(anchor: str) -> dict[str, Any]:
 
 @functools.cache
 def _stand_in(model: str) -> dict[str, Any]:
-    directory = GOLDEN if model.endswith("_tiny") else FIXTURES
-    return tfstub.load_model(
-        directory / "yamls" / f"{model}.yaml", float_dtype="float64"
-    )
+    yaml = _directory(f"{model}_") / "yamls" / f"{model}.yaml"
+    return tfstub.load_model(yaml, float_dtype="float64")
 
 
 def _load(anchor: str, suffix: str = "") -> dict[str, np.ndarray]:

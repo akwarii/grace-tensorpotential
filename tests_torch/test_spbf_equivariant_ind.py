@@ -75,10 +75,15 @@ def _bonds(rng, n_bonds=10):
     return ind_i, rng.integers(0, N_ATOMS, n_bonds), rng.normal(size=(n_bonds, 3))
 
 
+def _harmonics(vectors: np.ndarray) -> np.ndarray:
+    """Return the real harmonics ``[bonds, 9]`` of the directions of ``vectors`` up to ``l = 2``, from scipy."""
+    unit = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
+    return np.concatenate([real_harmonics(unit, l) for l in range(3)], axis=1)
+
+
 def _inputs(rng, lm_y=9, dtype=np.float64, radial_dtype=None):
     ind_i, ind_j, vectors = _bonds(rng)
-    unit = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
-    y = np.concatenate([real_harmonics(unit, l) for l in range(3)], axis=1)
+    y = _harmonics(vectors)
     return {
         "R": torch.as_tensor(
             rng.normal(size=(len(ind_i), 9, N_RAD)).astype(radial_dtype or dtype)
@@ -266,9 +271,13 @@ def test_rotating_the_bonds_and_the_indicators_rotates_the_output():
     rotation = Rotation.random(random_state=RNG_SEED).as_matrix()
 
     def output(vec: np.ndarray, ind: np.ndarray) -> np.ndarray:
-        unit = vec / np.linalg.norm(vec, axis=1, keepdims=True)
-        y = np.concatenate([real_harmonics(unit, l) for l in range(3)], axis=1)
-        inputs = {"R": radial, "Y": y, "I": ind, "ind_i": ind_i, "ind_j": ind_j}
+        inputs = {
+            "R": radial,
+            "Y": _harmonics(vec),
+            "I": ind,
+            "ind_i": ind_i,
+            "ind_j": ind_j,
+        }
         tensors = {k: torch.as_tensor(v) for k, v in inputs.items()}
         tensors["atomic_mu_i"] = torch.zeros(N_ATOMS, dtype=torch.int64)
         return twin(tensors).numpy()
