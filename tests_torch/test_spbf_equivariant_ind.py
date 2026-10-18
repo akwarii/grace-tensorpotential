@@ -160,6 +160,28 @@ def test_a_float64_radial_input_promotes_a_float32_model_as_tf_does():
     assert_close(out, _reference(twin, inputs), FEATURE_F32)
 
 
+def test_a_float64_indicator_promotes_a_float32_radial_input_as_tf_does():
+    inputs = _inputs(np.random.default_rng(RNG_SEED), dtype=np.float32)
+    inputs["I"] = inputs["I"].double()
+    twin = _twin(F32)
+    out = twin(inputs)
+    assert out.dtype == torch.float64
+    assert_close(out, _reference(twin, inputs), FEATURE_F32)
+
+
+def test_an_atom_without_bonds_gets_a_row_of_zeros():
+    inputs = _inputs(np.random.default_rng(RNG_SEED))
+    lonely = N_ATOMS - 1
+    keep = inputs["ind_i"] != lonely
+    for key in ("R", "Y", "ind_i", "ind_j"):
+        inputs[key] = inputs[key][keep]
+    twin = _twin()
+    out = twin(inputs)
+    assert out.shape[0] == N_ATOMS
+    assert torch.all(out[lonely] == 0.0)
+    assert_close(out, _reference(twin, inputs), FEATURE_F64)
+
+
 def test_the_angular_input_is_cast_to_the_radial_dtype():
     inputs = _inputs(np.random.default_rng(RNG_SEED))
     inputs["Y"] = inputs["Y"].float()
