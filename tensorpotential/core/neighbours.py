@@ -31,7 +31,7 @@ from typing import Final, Literal, get_args
 
 import numpy as np
 
-from tensorpotential.core.backends import backend_not_installed
+from tensorpotential.core.backends import BackendNotInstalledError
 from tensorpotential.errors import NeighbourListError
 
 NeighbourBackend = Literal["matscipy", "vesin"]
@@ -91,9 +91,12 @@ def _as_geometry(
 ) -> Geometry:
     positions = np.array(positions, dtype=np.float64)
     cell = np.array(cell, dtype=np.float64)
-    periodic = np.array(np.broadcast_to(np.asarray(pbc, dtype=bool), (3,)))
+    periodic = np.asarray(pbc, dtype=bool)
     if positions.ndim != 2 or positions.shape[1] != 3 or len(positions) == 0:
         msg = f"positions must have the shape (n_atoms >= 1, 3), got {positions.shape}"
+        raise NeighbourListError(msg)
+    if periodic.shape not in {(), (3,)}:
+        msg = f"pbc must be one flag or one flag per axis, got {pbc!r}"
         raise NeighbourListError(msg)
     if cell.shape != (3, 3):
         msg = f"cell must have the shape (3, 3) with the lattice vectors as rows, got {cell.shape}"
@@ -101,7 +104,7 @@ def _as_geometry(
     if not (np.isfinite(positions).all() and np.isfinite(cell).all()):
         msg = "positions and cell must be finite"
         raise NeighbourListError(msg)
-    return Geometry(positions, cell, periodic)
+    return Geometry(positions, cell, np.array(np.broadcast_to(periodic, (3,))))
 
 
 def _invented_box(positions: np.ndarray, cutoff: float) -> Geometry:
@@ -188,9 +191,11 @@ def _vesin_pairs(geometry: Geometry, cutoff: float) -> tuple[np.ndarray, ...]:
     try:
         import vesin
     except ModuleNotFoundError as error:
-        raise backend_not_installed(
-            "torch-sim", ("vesin",), "The vesin neighbour list"
-        ) from error
+        msg = (
+            "The vesin neighbour list needs the vesin package, which is not installed. Install it with: pip install "
+            "vesin (it also comes with 'tensorpotential[torch-sim]'), or use backend='matscipy'."
+        )
+        raise BackendNotInstalledError("torch-sim", ("vesin",), msg) from error
 
     search = vesin.NeighborList(cutoff=cutoff, full_list=True)
     return tuple(

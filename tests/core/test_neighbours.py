@@ -40,6 +40,7 @@ def _pairs(
         ({"positions": np.zeros((2, 2))}, "shape"),
         ({"positions": np.zeros((0, 3))}, "n_atoms >= 1"),
         ({"cell": np.eye(2)}, "lattice vectors as rows"),
+        ({"pbc": [True, False]}, "one flag per axis"),
         ({"positions": CLUSTER * np.nan}, "finite"),
         ({"cell": np.diag([np.inf, 1.0, 1.0])}, "finite"),
         ({"cutoff": 0.0}, "positive and finite"),
@@ -180,7 +181,7 @@ def test_vesin_that_is_not_installed_raises_the_backend_error(
     )  # stands in for an environment without the package
     with pytest.raises(
         BackendNotInstalledError,
-        match=r"The vesin neighbour list needs torch-sim.*vesin",
+        match=r"needs the vesin package.*pip install vesin.*backend='matscipy'",
     ):
         _pairs(backend="vesin")
 
