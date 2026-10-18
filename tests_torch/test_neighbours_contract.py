@@ -21,7 +21,7 @@ from ase import Atoms
 from ase.build import bulk, fcc111
 
 from tensorpotential.core import neighbours
-from tests.neighbour_oracle import brute_force_pairs
+from tests.neighbour_oracle import brute_force_pairs, edge_rows, pair_rows
 from tests.tolerances import NEIGHBOUR_VECTOR_F64
 from tests_torch.structures.build_structures import load_structures
 
@@ -92,13 +92,6 @@ CASES: dict[str, Case] = {
 }
 
 
-def _rows(i: np.ndarray, j: np.ndarray, shifts: np.ndarray) -> Rows:
-    return [
-        (int(a), int(b), *(int(s) for s in shift))
-        for a, b, shift in zip(i, j, shifts, strict=True)
-    ]
-
-
 def _geometry(case: Case) -> neighbours.Geometry:
     return neighbours.effective_geometry(*case[:4], enforce_pbc=case.enforce_pbc)
 
@@ -109,25 +102,31 @@ def _oracle(case: Case) -> tuple[Rows, np.ndarray]:
     pairs = brute_force_pairs(
         geometry.positions, geometry.cell, symbols, case.cutoff, tuple(geometry.pbc)
     )
-    return [(p.i, p.j, *p.shift) for p in pairs], np.array([
-        p.vector for p in pairs
-    ]).reshape(-1, 3)
+    return pair_rows(pairs), np.array([p.vector for p in pairs]).reshape(-1, 3)
 
 
-def _contract(backend: neighbours.NeighbourBackend) -> Callable[[Case], tuple[Rows, np.ndarray]]:
+def _listed(found: neighbours.NeighbourList) -> tuple[Rows, np.ndarray]:
+    ordered = neighbours.canonical_order(found)
+    return edge_rows(ordered.i, ordered.j, ordered.shifts), np.asarray(ordered.vectors)
+
+
+def _contract(
+    backend: neighbours.NeighbourBackend,
+) -> Callable[[Case], tuple[Rows, np.ndarray]]:
     def run(case: Case) -> tuple[Rows, np.ndarray]:
-        found = neighbours.neighbour_pairs(
-            *case[:4], backend=backend, enforce_pbc=case.enforce_pbc
+        return _listed(
+            neighbours.neighbour_pairs(
+                *case[:4], backend=backend, enforce_pbc=case.enforce_pbc
+            )
         )
-        result = neighbours.canonical_order(found)
-        return _rows(result.i, result.j, result.shifts), np.asarray(result.vectors)
 
     return run
 
 
 def _torch_sim_batch(
-    name: str, cases: list[Case], cells: list[np.ndarray]
+    name: str, cases: list[Case], cells: list[np.ndarray] | None = None
 ) -> list[tuple[Rows, np.ndarray]]:
+    """Search ``cases`` as one torch-sim batch, in the contract's geometry unless ``cells`` replaces the cells."""
     import torch
     import torch_sim.neighbors
 
@@ -135,7 +134,9 @@ def _torch_sim_batch(
     sizes = [len(g.positions) for g in geometries]
     mapping, system, shifts = getattr(torch_sim.neighbors, name)(
         torch.tensor(np.concatenate([g.positions for g in geometries])),
-        torch.tensor(np.stack(cells)),
+        torch.tensor(
+            np.stack([g.cell for g in geometries] if cells is None else cells)
+        ),
         torch.tensor(np.stack([g.pbc for g in geometries])),
         cases[0].cutoff,
         torch.repeat_interleave(torch.arange(len(cases)), torch.tensor(sizes)),
@@ -146,18 +147,15 @@ def _torch_sim_batch(
         mine = system.numpy() == k
         i, j = mapping.numpy()[:, mine] - offsets[k]
         s = shifts.numpy()[mine].round().astype(np.int64)
-        order = np.lexsort((s[:, 2], s[:, 1], s[:, 0], j, i))
-        i, j, s = i[order], j[order], s[order]
-        results.append((
-            _rows(i, j, s),
-            geometry.positions[j] - geometry.positions[i] + s @ geometry.cell,
-        ))
+        vectors = geometry.positions[j] - geometry.positions[i] + s @ geometry.cell
+        found = neighbours.NeighbourList(i, j, s, vectors, cases[0].cutoff, geometry)
+        results.append(_listed(found))
     return results
 
 
 def _torch_sim(name: str) -> Callable[[Case], tuple[Rows, np.ndarray]]:
     def run(case: Case) -> tuple[Rows, np.ndarray]:
-        return _torch_sim_batch(name, [case], [_geometry(case).cell])[0]
+        return _torch_sim_batch(name, [case])[0]
 
     return run
 
@@ -169,7 +167,9 @@ TORCH_SIM = (
     "alchemiops_nl_n2",
     "alchemiops_nl_cell_list",
 )
-CONTRACT_BACKENDS: dict[neighbours.NeighbourBackend, tuple[pytest.MarkDecorator, ...]] = {
+CONTRACT_RUNNERS: dict[
+    neighbours.NeighbourBackend, tuple[pytest.MarkDecorator, ...]
+] = {
     "matscipy": (),
     "vesin": (pytest.mark.vesin,),
 }
@@ -183,26 +183,26 @@ def _marks(name: str) -> tuple[pytest.MarkDecorator, ...]:
     )
 
 
-BACKENDS: dict[
+RUNNERS: dict[
     str,
     tuple[Callable[[Case], tuple[Rows, np.ndarray]], tuple[pytest.MarkDecorator, ...]],
 ] = {
-    **{name: (_contract(name), marks) for name, marks in CONTRACT_BACKENDS.items()},
+    **{name: (_contract(name), marks) for name, marks in CONTRACT_RUNNERS.items()},
     **{f"ts_{name}": (_torch_sim(name), _marks(name)) for name in TORCH_SIM},
 }
 
 
-def _every(names: dict[str, Case]) -> list[object]:
+def _every_case() -> list[object]:
     return [
         pytest.param(backend, name, marks=marks, id=f"{backend}-{name}")
-        for backend, (_, marks) in BACKENDS.items()
-        for name in names
+        for backend, (_, marks) in RUNNERS.items()
+        for name in CASES
     ]
 
 
 def _backends() -> list[object]:
     return [
-        pytest.param(backend, marks=marks) for backend, (_, marks) in BACKENDS.items()
+        pytest.param(backend, marks=marks) for backend, (_, marks) in RUNNERS.items()
     ]
 
 
@@ -213,15 +213,15 @@ def _assert_equal(
     np.testing.assert_allclose(found[1], expected[1], **NEIGHBOUR_VECTOR_F64._asdict())
 
 
-@pytest.mark.parametrize(("backend", "name"), _every(CASES))
+@pytest.mark.parametrize(("backend", "name"), _every_case())
 def test_every_backend_gives_the_oracle_pairs_and_vectors(backend: str, name: str):
-    _assert_equal(BACKENDS[backend][0](CASES[name]), _oracle(CASES[name]))
+    _assert_equal(RUNNERS[backend][0](CASES[name]), _oracle(CASES[name]))
 
 
 @pytest.mark.parametrize("backend", _backends())
 def test_the_slab_has_the_measured_edge_counts(backend: str):
     # TEST7 measured 600 edges with (T, T, F) honoured and 936 once every axis is periodic.
-    run = BACKENDS[backend][0]
+    run = RUNNERS[backend][0]
     assert len(run(CASES["vacuum_slab_honoured"])[0]) == 600
     assert len(run(CASES["vacuum_slab_enforced"])[0]) == 936
 
@@ -229,7 +229,7 @@ def test_the_slab_has_the_measured_edge_counts(backend: str):
 @pytest.mark.parametrize("backend", _backends())
 def test_one_atom_in_a_small_cube_has_its_analytic_self_images(backend: str):
     # In a 2 A cube with a 3 A cutoff: 6 face images at 2 A and 12 edge images at 2.83 A; the corners are at 3.46 A.
-    rows, vectors = BACKENDS[backend][0](
+    rows, vectors = RUNNERS[backend][0](
         Case(np.zeros((1, 3)), np.eye(3) * 2.0, (True,) * 3, 3.0)
     )
     assert len(rows) == 18
@@ -245,7 +245,7 @@ def test_wrapped_and_unwrapped_positions_give_the_same_vectors(backend: str):
     case = CASES["positions_outside_cell"]
     fractional = case.positions @ np.linalg.inv(case.cell)
     wrapped = case._replace(positions=(fractional - np.floor(fractional)) @ case.cell)
-    run = BACKENDS[backend][0]
+    run = RUNNERS[backend][0]
 
     def by_vector(found: tuple[Rows, np.ndarray]) -> list[tuple[object, ...]]:
         return sorted(
@@ -255,11 +255,8 @@ def test_wrapped_and_unwrapped_positions_give_the_same_vectors(backend: str):
     assert by_vector(run(case)) == by_vector(run(wrapped))
 
 
-@pytest.mark.torchsim
-@pytest.mark.parametrize("name", TORCH_SIM)
+@pytest.mark.parametrize("name", [pytest.param(n, marks=_marks(n)) for n in TORCH_SIM])
 def test_a_batch_of_mixed_cells_gives_each_structure_its_own_list(name: str):
-    if name == "vesin_nl":
-        pytest.importorskip("vesin")
     names = [
         "box_below_2rc",
         "triclinic_two_atoms",
@@ -267,7 +264,7 @@ def test_a_batch_of_mixed_cells_gives_each_structure_its_own_list(name: str):
         "isolated_atom",
     ]
     cases = [CASES[n]._replace(cutoff=4.0) for n in names]
-    found = _torch_sim_batch(name, cases, [_geometry(c).cell for c in cases])
+    found = _torch_sim_batch(name, cases)
     for case, result in zip(cases, found, strict=True):
         _assert_equal(result, _oracle(case))
 
@@ -300,8 +297,8 @@ def test_a_raw_zero_cell_row_is_refused_or_searched_right(name: str):
     if name in RAW_ZERO_ROW_REFUSALS:
         with pytest.raises(RuntimeError, match=RAW_ZERO_ROW_REFUSALS[name]):
             _torch_sim_batch(name, [case], [case.cell])
-        return
-    _assert_equal(_torch_sim_batch(name, [case], [case.cell])[0], _oracle(case))
+    else:
+        _assert_equal(_torch_sim_batch(name, [case], [case.cell])[0], _oracle(case))
 
 
 @pytest.mark.torchsim

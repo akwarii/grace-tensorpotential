@@ -126,3 +126,18 @@ def recover_shifts(
     if not np.allclose(frac, shifts, atol=1e-3):
         raise ValueError("an edge vector is not a lattice image of its atom pair")
     return [(int(a), int(b), int(c)) for a, b, c in shifts]
+
+
+def pair_rows(pairs: Sequence[Pair]) -> list[tuple[int, ...]]:
+    """``(i, j, n0, n1, n2)`` of each pair, the form in which lists of different sources compare."""
+    return [(p.i, p.j, *p.shift) for p in pairs]
+
+
+def edge_rows(
+    ind_i: np.ndarray, ind_j: np.ndarray, shifts: np.ndarray
+) -> list[tuple[int, ...]]:
+    """``(i, j, n0, n1, n2)`` of each edge of a list given as arrays, comparable with :func:`pair_rows`."""
+    return [
+        (int(a), int(b), *(int(n) for n in shift))
+        for a, b, shift in zip(ind_i, ind_j, shifts, strict=True)
+    ]

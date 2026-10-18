@@ -17,11 +17,15 @@ from ase import Atoms
 from tensorpotential.core import neighbours
 from tensorpotential.core.backends import BackendNotInstalledError
 from tensorpotential.errors import NeighbourListError
-from tests.neighbour_oracle import brute_force_pairs
+from tests.neighbour_oracle import brute_force_pairs, edge_rows, pair_rows
 
 CLUSTER = np.array([[0.0, 0.0, 0.0], [2.0, 0.5, 0.0], [0.4, 2.2, 1.1], [7.0, 0.0, 0.0]])
 SLAB_CELL = np.diag([5.0, 5.0, 0.0])
 CUBE = np.eye(3) * 6.0
+
+
+def _rows(found: neighbours.NeighbourList) -> list[tuple[int, ...]]:
+    return edge_rows(found.i, found.j, found.shifts)
 
 
 def _pairs(
@@ -169,7 +173,7 @@ def test_the_honoured_open_axis_gives_the_open_space_pairs_of_the_oracle():
         3.0,
         periodic=(True, True, False),
     )
-    assert _rows(found) == [(p.i, p.j, *p.shift) for p in expected]
+    assert _rows(found) == pair_rows(expected)
     assert (found.shifts[:, 2] == 0).all()
 
 
@@ -214,9 +218,7 @@ def test_pair_cutoffs_keep_what_the_oracle_keeps_with_the_same_cutoffs():
     expected = brute_force_pairs(
         positions, np.eye(3) * 6.0, symbols, lambda a, b: table[a, b]
     )
-    assert _rows(neighbours.canonical_order(found)) == [
-        (p.i, p.j, *p.shift) for p in expected
-    ]
+    assert _rows(neighbours.canonical_order(found)) == pair_rows(expected)
     assert len(found.i) < len(_pairs(positions=positions, cutoff=3.5).i)
 
 
@@ -258,10 +260,3 @@ def test_canonical_sorts_by_centre_neighbour_and_shift_and_keeps_every_pair():
     assert ordered.geometry is found.geometry
     lookup = dict(zip(_rows(found), found.vectors, strict=True))
     np.testing.assert_array_equal(ordered.vectors, [lookup[row] for row in rows])
-
-
-def _rows(found: neighbours.NeighbourList) -> list[tuple[int, ...]]:
-    return [
-        (int(a), int(b), *map(int, s))
-        for a, b, s in zip(found.i, found.j, found.shifts, strict=True)
-    ]
