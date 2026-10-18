@@ -95,7 +95,7 @@ def spherical_harmonics_plan(lmax: int) -> SphericalHarmonicsPlan:
     if isinstance(lmax, bool) or not isinstance(lmax, int) or lmax < 0:
         msg = f"lmax must be an integer of at least 0, got {lmax!r}"
         raise ShapeError(msg)
-    l = np.repeat(np.arange(lmax + 1), 2 * np.arange(lmax + 1) + 1)
+    l = column_degrees(lmax)
     m = np.concatenate([np.arange(-d, d + 1) for d in range(lmax + 1)])
     scale = np.array([_scale(int(d), abs(int(o))) for d, o in zip(l, m, strict=True)])
     diagonal = np.array(
