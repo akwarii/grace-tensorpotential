@@ -61,11 +61,13 @@ jobs:
   test-torch:
     # The torch-backend tests in an environment with the torch extra and without TensorFlow (TORCH1). The capability
     # contract of tests_torch/conftest.py: a job that guarantees a capability names it in GRACE_REQUIRE_CAPS (this one
-    # guarantees none of tf, torchsim, vesin, gpu, cueq, hpc; a test that needs one is skipped here).
+    # guarantees cueq, the numpy-level oracle of ORACLE1 without kernels, and none of tf, torchsim, vesin, gpu, hpc; a
+    # test that needs one of those is skipped here).
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       COVERAGE_FILE: .coverage.torch-${{ matrix.pandas }}
+      GRACE_REQUIRE_CAPS: cueq
     strategy:
       fail-fast: false
       matrix:
@@ -79,10 +81,10 @@ jobs:
           version: ${{ env.UV_VERSION }}
           python-version: "3.12"
           enable-cache: true
-      - name: Install the torch extra without TensorFlow, then pin pandas
+      - name: Install the torch extra and the cueq group without TensorFlow, then pin pandas
         run: |
           uv venv .venv-torch
-          uv pip install --python .venv-torch/bin/python ".[torch]" pytest pytest-timeout pytest-cov
+          uv pip install --python .venv-torch/bin/python ".[torch]" --group cueq pytest pytest-timeout pytest-cov
           uv pip install --python .venv-torch/bin/python "pandas==${{ matrix.pandas }}"
       - name: Check that TensorFlow is absent
         run: .venv-torch/bin/python -c "import importlib.util as u, sys; sys.exit(u.find_spec('tensorflow') is not None)"
