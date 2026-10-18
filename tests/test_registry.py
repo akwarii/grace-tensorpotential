@@ -56,6 +56,7 @@ EXPECTED_WITHOUT_GOLDEN = {
     "ScalarChemicalEmbedding",
     "SingleParticleBasisFunctionScalarInd",
     "ProductFunction",
+    "FCRight2Left",
     "InvariantLayerRMSNorm",
     "CreateOutputTarget",
     "LinMLPOut2ScalarTarget",

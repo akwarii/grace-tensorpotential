@@ -51,6 +51,8 @@ GOLDEN_TESTS: Final[Mapping[str, str]] = {
     COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
     COMPUTE
     + "SingleParticleBasisFunctionEquivariantInd": "tests_torch/test_spbf_equivariant_ind_golden.py",
+    COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
+    COMPUTE + "ProductFunction": "tests_torch/test_product_function_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85
