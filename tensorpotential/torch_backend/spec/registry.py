@@ -48,6 +48,9 @@ SHEET_DIRECTORY: Final = "docs/torch_backend/spec"
 # ``tests/test_registry.py`` in the same pull request (which fails otherwise).
 GOLDEN_TESTS: Final[Mapping[str, str]] = {
     COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
+    COMPUTE + "ScalarChemicalEmbedding": "tests_torch/test_spbf_scalar_ind_golden.py",
+    COMPUTE
+    + "SingleParticleBasisFunctionScalarInd": "tests_torch/test_spbf_scalar_ind_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85
