@@ -11,7 +11,8 @@ Spec sheets of the three classes, section 5. With ``v`` the bond vectors ``[bond
 
 The three have no weights. They keep the geometry dtype: the lengths and directions have the dtype of the bond
 vectors (float64, G1), and the harmonics are computed in float64 whatever the parameter dtype, as TF converts its
-input to float64.
+input to float64. ``norm`` and ``type`` of ``SphericalHarmonic`` are ported for a hand-made spec: the option table
+(``spec/options.py``) refuses both, since no shipped yaml sets them.
 
 Layer: instructions; imports torch, the spherical-harmonics op and plan, the dtype policy, the errors and the input keys
 of ``constants``.
@@ -150,7 +151,6 @@ class SphericalHarmonic(torch.nn.Module):
             raise OptionValueError(msg)
         self._directions = options["vhat"].name
         self.plan = spherical_harmonics_plan(options["lmax"])
-        self.lmax = self.plan.lmax
         self.coupling_meta_data: pd.DataFrame = uncoupled_meta_data(self.plan)
         # norm = True leaves the orthonormal harmonics, Y_00 = 1 / sqrt(4 pi)
         self._factor = 1 / math.sqrt(4 * math.pi) if options.get("norm") else None

@@ -41,6 +41,7 @@ pytestmark = pytest.mark.golden
 MODELS = ("omat_tiny", "large_tiny")
 VARIANTS = ("f64", "f32", "f64_dense", "f64_lm_first")
 ANCHORS = [f"{m}_{v}" for m in MODELS for v in VARIANTS]
+# in the order of their data dependencies: the chain test runs them in this order
 CLASSES = ("BondLength", "ScaledBondVector", "SphericalHarmonic", "RadialBasis")
 
 

@@ -105,12 +105,11 @@ def test_the_zero_vector_has_length_1e_5_and_a_zero_gradient():
     assert torch.count_nonzero(grad) == 0
 
 
-def test_the_vectors_can_come_from_a_named_entry():
+def test_lengths_and_directions_can_read_the_vectors_from_a_named_entry():
     v = _vectors(np.random.default_rng(RNG_SEED))
-    twin = _length(instruction_with_bonds=InstructionRef("other"))
-    assert torch.equal(twin({"other": v}), _length()({"bond_vector": v}))
+    d = _length(instruction_with_bonds=InstructionRef("other"))({"other": v})
+    assert torch.equal(d, _length()({"bond_vector": v}))
     direction = _direction(bonds=InstructionRef("other"))
-    d = twin({"other": v})
     assert torch.equal(direction({"other": v, "d": d}), v / d)
 
 
@@ -183,7 +182,7 @@ def test_complex_harmonics_a_null_direction_and_a_negative_lmax_are_refused():
         _harmonics(vhat=None)
     with pytest.raises(ShapeError, match="lmax"):
         _harmonics(lmax=-1)
-    assert _harmonics(type="real").lmax == 4
+    assert _harmonics(type="real").plan.lmax == 4
 
 
 # ------------------------------------------------------------------ physical values

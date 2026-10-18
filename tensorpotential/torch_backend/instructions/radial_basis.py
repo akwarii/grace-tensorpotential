@@ -11,11 +11,15 @@ Gaussian basis. A keyword the chosen basis does not read must keep its pinned de
 misspelt or misplaced option is refused rather than ignored. The Gaussian basis also accepts ``rmin``, ``init_gamma``
 and ``trainable``, which only set the stored ``grid`` and ``scale``.
 
+The option table (``spec/options.py``) lets a yaml reach only ``Cheb`` (kind 1) and ``SBessel``; the other bases and
+keywords are ported for a hand-made spec (owner decision, sheet section 7) and unit-tested.
+
 Layer: instructions; imports torch, the radial op, the dtype policy, the errors and the pinned defaults of the spec.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING, Any, Final
 
 import torch
@@ -30,13 +34,6 @@ if TYPE_CHECKING:
     from tensorpotential.torch_backend.ops.precision import DtypePolicy
     from tensorpotential.torch_backend.spec.model import InstructionSpec
 
-_READS: Final[Mapping[str, tuple[str, ...]]] = {
-    "Cheb": ("nfunc", "rcut", "p", "kind", "reversed", "normalized"),
-    "RadSinBessel": ("nfunc", "rcut", "p", "normalized"),
-    "SBessel": ("nfunc", "rcut"),
-    "Gaussian": ("nfunc", "rcut", "p"),
-}
-"""The keywords each basis reads, in the order of its constructor."""
 _IGNORED: Final[Mapping[str, tuple[str, ...]]] = {
     "Gaussian": ("rmin", "init_gamma", "trainable")
 }
@@ -47,7 +44,8 @@ _OWN: Final = ("bonds", "basis_type")
 def _keywords(spec: InstructionSpec, basis_type: str) -> dict[str, Any]:
     """Return the keywords the basis reads; refuse any other one that is not at its pinned default."""
     defaults = DEFAULTS[COMPUTE + "RadialBasis"]
-    reads = _READS[basis_type]
+    # the keywords a basis reads are the fields of its dataclass in ops/radial.py
+    reads = tuple(f.name for f in dataclasses.fields(basis_class(basis_type)))
     allowed = (*reads, *_OWN, *_IGNORED.get(basis_type, ()))
     for key, value in spec.options.items():
         if key not in allowed and (key not in defaults or value != defaults[key]):
@@ -86,8 +84,8 @@ class RadialBasis(torch.nn.Module):
         cls = basis_class(basis_type)
         self.basis = cls(**_keywords(spec, basis_type))
         self._lengths = options["bonds"].name
-        cpu = torch.device("cpu")
-        self.register_buffer("rc", policy.param_constant(float(options["rcut"]), cpu))
+        rc = policy.param_constant(float(options["rcut"]), torch.device("cpu"))
+        self.register_buffer("rc", rc)
         if isinstance(self.basis, Gaussian):
             nfunc = self.basis.nfunc
             self.register_buffer("grid", torch.zeros((1, nfunc), dtype=policy.param))
