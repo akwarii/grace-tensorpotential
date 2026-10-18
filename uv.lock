@@ -559,14 +559,14 @@ wheels = [
 
 [[package]]
 name = "cuequivariance-torch"
-version = "0.12.0"
+version = "0.11.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cuequivariance" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/2a/e7fc7aaea570d122b3ba10140051e81d3d81cfffd0a05f90a94aa3cf0690/cuequivariance_torch-0.12.0.tar.gz", hash = "sha256:f6528685f6202c8fa964a335bd1518792dda3a09d08a463547de1a9e08657d0d", size = 170319, upload-time = "2026-09-24T00:29:07.92Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/1b/3f77dc82eee478b701ecc2ef18e8d63aad62073bef1440879947a4451b1b/cuequivariance_torch-0.11.1.tar.gz", hash = "sha256:8f9f7485bee768ab5f6c004a0110b0f951d1a73cb0d6dd66b8f1ccd818367727", size = 170094, upload-time = "2026-08-07T07:27:30.73Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/90/e54c10f51883a397c4f851fc61ef41cf61e97f2ed2e050ed3f456031359b/cuequivariance_torch-0.12.0-py3-none-any.whl", hash = "sha256:32a6661343375ac0034af062eb9c3166a4f78af9fc7fa70e0709d03ef1ee4409", size = 184540, upload-time = "2026-09-24T00:29:06.921Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/d0/4b9da3d9c5749bf2c93f2818af4dc306f3b3ccc671f68f6820635fd53b74/cuequivariance_torch-0.11.1-py3-none-any.whl", hash = "sha256:7a649eb59e623ef90f4862d84972a9aa12142892814f7a00dd652a1206628391", size = 184379, upload-time = "2026-08-07T07:27:29.597Z" },
 ]
 
 [[package]]
@@ -2936,9 +2936,9 @@ requires-dist = [
 provides-extras = ["tf", "torch", "torch-sim", "dashboard", "all"]
 
 [package.metadata.requires-dev]
-cueq = [{ name = "cuequivariance-torch", specifier = "==0.12.0" }]
+cueq = [{ name = "cuequivariance-torch", specifier = "==0.11.1" }]
 dev = [
-    { name = "cuequivariance-torch", specifier = "==0.12.0" },
+    { name = "cuequivariance-torch", specifier = "==0.11.1" },
     { name = "deptry" },
     { name = "import-linter" },
     { name = "pytest" },

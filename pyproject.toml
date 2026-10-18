@@ -131,7 +131,7 @@ dev = [
 ]
 # The second Clebsch-Gordan oracle of tests_torch/test_cg_oracle.py (ORACLE1; tests marked cueq): the pure-Python
 # frontend only, no CUDA kernels; test-torch installs it with `uv pip install --group cueq`.
-cueq = ["cuequivariance-torch==0.12.0"]
+cueq = ["cuequivariance-torch==0.11.1"]  # below 0.12, as the cueq extra planned by PERF9
 
 # Lint and type ratchet (D13). tools/lint_ratchet.py keeps the legacy ruff and ty counts from rising
 # (baselines/lint_ratchet.json); the new packages must have no finding.
