@@ -24,7 +24,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | GRACE-2L-OMAT-medium-base.yaml | none |
 | GRACE-2L-SMAX-large.yaml | compute.BondSpecificRadialBasisFunction |
 | GRACE-2L-SMAX-medium.yaml | compute.BondSpecificRadialBasisFunction |
-| GRACE-3L-OMAT-large.yaml | compute.EquivariantRMSNorm, compute.FCRight2Left.n_out, compute.GeneralProductFunction, compute.SPBF, output.ConstantScaleShiftTarget.atomic_shift_map |
+| GRACE-3L-OMAT-large.yaml | compute.EquivariantRMSNorm, compute.FCRight2Left.n_out, compute.GeneralProductFunction, compute.SPBF |
 | GRACE-FS-OMAT.yaml | compute.CropProductFunction, compute.FunctionReduceN.n_in, compute.LinearRadialFunction, output.FSOut2ScalarTarget |
 | model_grace.yaml | compute.FunctionReduce, compute.MLPRadialFunction.hidden_layers, output.LinearOut2Target, output.MLPOut2ScalarTarget |
 | model_grace_2L_omat.yaml | none |
@@ -179,7 +179,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | compute.SphericalHarmonic | lmax | int | 2 to 5 | 13 | 13 | supported |
 | compute.SphericalHarmonic | vhat | ref |  | 13 | 13 | supported |
 | output.ConstantScaleShiftTarget | __cls__ | str | `"tensorpotential.instructions.output.ConstantScaleShiftTarget"` | 5 | 5 | supported |
-| output.ConstantScaleShiftTarget | atomic_shift_map | dict[int,float] |  | 1 | 1 | rejected: seen only in GRACE-3L-OMAT-large, which needs classes outside the first twin set |
+| output.ConstantScaleShiftTarget | atomic_shift_map | dict[int,float] |  | 1 | 1 | supported |
 | output.ConstantScaleShiftTarget | atomic_shift_map | null | `null` | 3 | 3 | supported |
 | output.ConstantScaleShiftTarget | chemical_embedding | null | `null` | 4 | 4 | supported |
 | output.ConstantScaleShiftTarget | l | int | 0 | 4 | 4 | supported |

@@ -112,4 +112,4 @@ shift, padding atoms).
 
 ## For the reviewer
 
-1. Decided (owner, 2026-10-04): `atomic_shift_map` keys other than `0 .. n-1` are rejected with a message (section 7). The option table of SPEC2 accepts only `null` for `atomic_shift_map` at present (a dict is seen only in `GRACE-3L-OMAT-large`): see the README, section "Decisions of the review".
+1. Decided (owner, 2026-10-04): `atomic_shift_map` keys other than `0 .. n-1` are rejected with a message (section 7). The option table accepts a dict for `atomic_shift_map` since TWIN9; the twin checks the keys.
