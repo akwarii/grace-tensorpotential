@@ -101,5 +101,5 @@ def test_the_twin_reproduces_tf_on_every_structure(anchor, name):
         with torch.no_grad():
             out = twin(inputs)
         expected = to_internal(arrays[f"{case}/ins/{name}"], layout)
-        assert out.dtype == twin.get_buffer("norm_map").dtype  # the parameter dtype
+        assert out.dtype == next(twin.parameters()).dtype
         assert_close(out, np.asarray(expected), row, f"{anchor} {case} {name}")

@@ -16,19 +16,24 @@ gives the weight shapes ``w_left`` ``[n_out, n_left, w_shape_left]`` and ``w_rig
 each with a leading ``number_of_atom_types`` axis when that side depends on the central atom type, and the scalar
 norms ``norm_left`` and ``norm_right``. The instruction's own coupling metadata is a copy of the left input's.
 
-Layer: plans; imports numpy and the errors only.
+:meth:`FCRight2LeftWidths.from_options` reads them from the constructor arguments of a yaml.
+
+Layer: plans; imports numpy, the errors and the pinned defaults of the spec.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from tensorpotential.torch_backend.errors import OptionValueError, ShapeError
+from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import pandas as pd
 
 _GroupKey = tuple[int, int, str]
@@ -61,6 +66,53 @@ class FCRight2LeftWidths:
     per_element: tuple[bool, bool] = (False, False)
     number_of_atom_types: int | None = None
     normalize: bool = True
+
+    @classmethod
+    def from_options(
+        cls, options: Mapping[str, Any], n_left: int, n_right: int
+    ) -> FCRight2LeftWidths:
+        """Read the widths from the constructor arguments of a yaml and the operands' channel counts.
+
+        Missing keys take the pinned defaults of the spec; ``n_out`` null means ``n_left``.
+
+        Raises
+        ------
+        OptionValueError
+            For an ``is_central_atom_type_dependent`` that is not null, a bool or two bools.
+        """
+        merged = {**DEFAULTS[COMPUTE + "FCRight2Left"], **options}
+        n_out, n_types = merged["n_out"], merged["number_of_atom_types"]
+        return cls(
+            n_out=n_left if n_out is None else int(n_out),
+            n_left=n_left,
+            n_right=n_right,
+            left_coefs=bool(merged["left_coefs"]),
+            per_element=per_element_sides(merged["is_central_atom_type_dependent"]),
+            number_of_atom_types=None if n_types is None else int(n_types),
+            normalize=bool(merged["normalize"]),
+        )
+
+
+def per_element_sides(value: object) -> tuple[bool, bool]:
+    """Return ``is_central_atom_type_dependent`` as ``(left, right)``: null is neither, a bool both, two bools each.
+
+    Raises
+    ------
+    OptionValueError
+        For any other value (TF: a ``ValueError``).
+    """
+    if value is None:
+        return (False, False)
+    if isinstance(value, bool):
+        return (value, value)
+    if (
+        isinstance(value, list | tuple)
+        and len(value) == 2
+        and all(isinstance(v, bool) for v in value)
+    ):
+        return (value[0], value[1])
+    msg = f"is_central_atom_type_dependent must be null, a bool or a list of two bools, got {value!r}"
+    raise OptionValueError(msg)
 
 
 @dataclass(frozen=True)

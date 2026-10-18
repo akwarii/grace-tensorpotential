@@ -22,11 +22,9 @@ from tensorpotential.torch_backend.errors import (
     ShapeError,
     SpecError,
 )
-from tensorpotential.torch_backend.instructions.fc_right2left import (
-    FCRight2Left,
-    per_element_sides,
-)
+from tensorpotential.torch_backend.instructions.fc_right2left import FCRight2Left
 from tensorpotential.torch_backend.ops.precision import DtypePolicy
+from tensorpotential.torch_backend.plans.fc_right2left import per_element_sides
 from tensorpotential.torch_backend.plans.function_reduce_n import ReduceSource
 from tensorpotential.torch_backend.spec.model import InstructionRef, InstructionSpec
 from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS

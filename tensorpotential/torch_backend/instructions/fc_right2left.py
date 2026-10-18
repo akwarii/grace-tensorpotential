@@ -26,8 +26,8 @@ from typing import TYPE_CHECKING
 import torch
 
 from tensorpotential.constants import ATOMIC_MU_I
-from tensorpotential.torch_backend.errors import OptionValueError, ShapeError, SpecError
-from tensorpotential.torch_backend.ops.precision import same_dtype
+from tensorpotential.torch_backend.errors import ShapeError, SpecError
+from tensorpotential.torch_backend.ops.precision import check_index, same_dtype
 from tensorpotential.torch_backend.plans.fc_right2left import (
     FCRight2LeftWidths,
     fc_right2left_plan,
@@ -40,45 +40,6 @@ if TYPE_CHECKING:
     from tensorpotential.torch_backend.ops.precision import DtypePolicy
     from tensorpotential.torch_backend.plans.function_reduce_n import ReduceSource
     from tensorpotential.torch_backend.spec.model import InstructionSpec
-
-
-def per_element_sides(value: object) -> tuple[bool, bool]:
-    """``is_central_atom_type_dependent`` as ``(left, right)``: ``None`` is neither, a bool both, a list of two each.
-
-    Raises
-    ------
-    OptionValueError
-        For any other value (TF: a ``ValueError``).
-    """
-    if value is None:
-        return (False, False)
-    if isinstance(value, bool):
-        return (value, value)
-    if (
-        isinstance(value, list | tuple)
-        and len(value) == 2
-        and all(isinstance(v, bool) for v in value)
-    ):
-        return (value[0], value[1])
-    msg = f"is_central_atom_type_dependent must be null, a bool or a list of two bools, got {value!r}"
-    raise OptionValueError(msg)
-
-
-def _widths(
-    spec: InstructionSpec, left: ReduceSource, right: ReduceSource
-) -> FCRight2LeftWidths:
-    options = spec.options
-    n_out = options["n_out"]
-    n_types = options["number_of_atom_types"]
-    return FCRight2LeftWidths(
-        n_out=left.n_out if n_out is None else int(n_out),
-        n_left=left.n_out,
-        n_right=right.n_out,
-        left_coefs=bool(options["left_coefs"]),
-        per_element=per_element_sides(options["is_central_atom_type_dependent"]),
-        number_of_atom_types=None if n_types is None else int(n_types),
-        normalize=bool(options["normalize"]),
-    )
 
 
 def _check_operands(
@@ -127,7 +88,7 @@ class FCRight2Left(torch.nn.Module):
         """Build the plan, the zero weights and the index tables of the instruction."""
         super().__init__()
         _check_operands(spec, left, right)
-        widths = _widths(spec, left, right)
+        widths = FCRight2LeftWidths.from_options(spec.options, left.n_out, right.n_out)
         self.spec = spec
         self.plan = fc_right2left_plan(
             left.coupling_meta_data, right.coupling_meta_data, widths
@@ -136,8 +97,13 @@ class FCRight2Left(torch.nn.Module):
         self.n_out = widths.n_out
         self.per_element = widths.per_element
         self.norm_out = bool(spec.options["norm_out"])
-        # norm_left is None only without a left weight, and then the left side is never mixed
-        self._norms = (self.plan.norm_left or 1.0, self.plan.norm_right)
+        sides = (("left", self.plan.norm_left, 0), ("right", self.plan.norm_right, 1))
+        # side -> (norm, per-element); a side without a weight (no left_coefs) has no entry
+        self._sides = {
+            side: (norm, widths.per_element[i])
+            for side, norm, i in sides
+            if norm is not None
+        }
         self._operands = {
             "left": (left.name, len(left.coupling_meta_data)),
             "right": (right.name, len(right.coupling_meta_data)),
@@ -177,15 +143,18 @@ class FCRight2Left(torch.nn.Module):
         return x
 
     def _mix(
-        self, side: int, x: torch.Tensor, inputs: Mapping[str, torch.Tensor]
+        self, side: str, x: torch.Tensor, inputs: Mapping[str, torch.Tensor]
     ) -> torch.Tensor:
         """``norm * sum_n w[(mu_a,) k, n, j] x[a, j, n]`` of one side: ``[atoms, j, n_out]``; no cast, as in TF."""
-        name, tile = ("w_left", "tile_left") if side == 0 else ("w_right", "tile_right")
-        norm = self._norms[side]
-        w = self.get_parameter(name).index_select(-1, self.get_buffer(tile))
+        norm, per_element = self._sides[side]
+        w = self.get_parameter(f"w_{side}").index_select(
+            -1, self.get_buffer(f"tile_{side}")
+        )
         same_dtype(w, x)
-        if self.per_element[side]:
-            w = w.index_select(0, inputs[ATOMIC_MU_I])
+        if per_element:
+            atomic_mu_i = inputs[ATOMIC_MU_I]
+            check_index(atomic_mu_i)
+            w = w.index_select(0, atomic_mu_i)
             return torch.einsum("aknw,awn->awk", w, x) * norm
         return torch.einsum("knw,awn->awk", w, x) * norm
 
@@ -204,12 +173,12 @@ class FCRight2Left(torch.nn.Module):
             ``[atoms, lm_left, n_out]``, in the dtype of the weights.
         """
         left = self._operand("left", inputs)
-        if self.plan.w_left_shape is not None:
-            left = self._mix(0, left, inputs)
+        if "left" in self._sides:
+            left = self._mix("left", left, inputs)
         right = self._operand("right", inputs).index_select(
             1, self.get_buffer("collect_from")
         )
-        right = self._mix(1, right, inputs)
+        right = self._mix("right", right, inputs)
         same_dtype(left, right)
         out = left.index_add(1, self.get_buffer("collect_to"), right)
         return out * self.get_buffer("norm_map") if self.norm_out else out
