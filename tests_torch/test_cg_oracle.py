@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from scipy.spatial.transform import Rotation
 
 from tensorpotential.functions.couplings import (
     CG_normalization_dict,
@@ -57,7 +58,7 @@ def _triples_of(yaml: Path) -> frozenset[tuple[int, int, int]]:
     for instruction in tfstub.load_model(yaml).values():
         if type(instruction).__name__ in COUPLING_CLASSES:
             meta = instruction.coupling_meta_data
-            found |= set(
+            found.update(
                 zip(
                     meta.l1.astype(int),
                     meta.l2.astype(int),
@@ -75,6 +76,19 @@ def _grace(l1: int, l2: int, big_l: int) -> np.ndarray:
 def _directions(n: int, rng: np.random.Generator) -> np.ndarray:
     v = rng.normal(size=(n, 3))
     return v / np.linalg.norm(v, axis=1, keepdims=True)
+
+
+def _couple(
+    c: np.ndarray, x: np.ndarray, y: np.ndarray, triple: tuple[int, int, int]
+) -> np.ndarray:
+    """The coupled feature ``[n, 2L + 1]`` of the harmonics of degrees ``l1`` of ``x`` and ``l2`` of ``y``."""
+    l1, l2, _ = triple
+    return np.einsum(
+        "Mab,na,nb->nM",
+        c,
+        cg_oracle.real_harmonics(x, l1),
+        cg_oracle.real_harmonics(y, l2),
+    )
 
 
 # ------------------------------------------------------------------ the oracle itself
@@ -153,8 +167,7 @@ def test_the_oracle_harmonics_are_the_twins_harmonics():
 def test_wigner_matrices_are_orthogonal_and_compose():
     rng = np.random.default_rng(RNG_SEED)
     points = _directions(40, rng)
-    q1, q2 = cg_oracle.random_rotation(rng), cg_oracle.random_rotation(rng)
-    assert np.linalg.det(q1) == pytest.approx(1.0, rel=1e-14)
+    q1, q2 = Rotation.random(2, random_state=rng).as_matrix()
     for degree in range(5):
         d1, d2 = (cg_oracle.wigner_d(q, degree, points) for q in (q1, q2))
         assert_close(
@@ -178,7 +191,9 @@ def test_every_triple_the_yamls_couple_is_compared():
         _triples_of(y) for y in YAMLS
     )
     assert (len(omat_tiny), len(large_tiny)) == (31, 52)
-    assert omat_tiny == omat_faithful < large_tiny == large_faithful <= set(UP_TO_4)
+    assert (omat_tiny, large_tiny) == (omat_faithful, large_faithful)
+    assert omat_tiny < large_tiny
+    assert large_tiny <= set(UP_TO_4)
 
 
 @pytest.mark.parametrize("triple", UP_TO_4, ids=str)
@@ -195,27 +210,21 @@ def test_grace_couplings_equal_the_oracle(triple):
 def test_the_coupled_product_of_two_harmonics_is_k_times_the_harmonic_of_degree_l(
     triple,
 ):
-    l1, l2, big_l = triple
     v = _directions(30, np.random.default_rng(RNG_SEED))
-    product = np.einsum(
-        "Mab,na,nb->nM",
-        _grace(*triple),
-        cg_oracle.real_harmonics(v, l1),
-        cg_oracle.real_harmonics(v, l2),
-    )
     k = cg_oracle.coupling_constant(*triple)
+    expected = k * cg_oracle.real_harmonics(v, triple[2])
     assert_close(
-        product,
-        k * cg_oracle.real_harmonics(v, big_l),
+        _couple(_grace(*triple), v, v, triple),
+        expected,
         FEATURE_F64,
         f"product of {triple}",
     )
-    if k:
-        key = (l2, l1, big_l) if l1 < l2 else triple
-        assert CG_normalization_dict[key] == pytest.approx(1.0 / abs(k), rel=1e-14)
 
 
 def test_the_normalisation_table_holds_one_over_k_for_every_even_triple():
+    # keyed with l1 >= l2; every even triple up to degree 4 has its entry, and no odd triple has one
+    even = {(max(t[:2]), min(t[:2]), t[2]) for t in UP_TO_4 if sum(t) % 2 == 0}
+    assert even <= CG_normalization_dict.keys()
     for key, value in CG_normalization_dict.items():
         assert sum(key) % 2 == 0, key
         assert value == pytest.approx(
@@ -225,34 +234,21 @@ def test_the_normalisation_table_holds_one_over_k_for_every_even_triple():
 
 @pytest.mark.parametrize("triple", UP_TO_4, ids=str)
 def test_a_coupled_feature_of_two_directions_rotates_with_the_wigner_matrix(triple):
-    l1, l2, big_l = triple
     rng = np.random.default_rng(RNG_SEED)
     x, y, points = _directions(10, rng), _directions(10, rng), _directions(40, rng)
-    q = cg_oracle.random_rotation(rng)
+    q = Rotation.random(random_state=rng).as_matrix()
     c = _grace(*triple)
-
-    def feature(a, b):
-        return np.einsum(
-            "Mab,na,nb->nM",
-            c,
-            cg_oracle.real_harmonics(a, l1),
-            cg_oracle.real_harmonics(b, l2),
-        )
-
-    rotated = feature(x @ q.T, y @ q.T)
-    assert_close(
-        rotated,
-        feature(x, y) @ cg_oracle.wigner_d(q, big_l, points).T,
-        FEATURE_F64,
-        f"{triple}",
-    )
+    rotated = _couple(c, x @ q.T, y @ q.T, triple)
+    expected = _couple(c, x, y, triple) @ cg_oracle.wigner_d(q, triple[2], points).T
+    assert_close(rotated, expected, FEATURE_F64, f"{triple}")
 
 
 # ------------------------------------------------------------------ GRACE against cuEquivariance
 
 
 def _cueq(l1: int, l2: int, big_l: int) -> np.ndarray:
-    cue = pytest.importorskip("cuequivariance")
+    import cuequivariance as cue  # imported here: the cueq marker gates the tests that call this
+
     table = np.asarray(cue.clebsch_gordan(cue.SO3(l1), cue.SO3(l2), cue.SO3(big_l)))
     assert table.shape == (1, 2 * l1 + 1, 2 * l2 + 1, 2 * big_l + 1)
     return table[0].transpose(2, 0, 1)
@@ -261,14 +257,15 @@ def _cueq(l1: int, l2: int, big_l: int) -> np.ndarray:
 @pytest.mark.cueq
 @pytest.mark.parametrize("triple", UP_TO_4, ids=str)
 def test_cuequivariance_equals_grace_and_the_oracle(triple):
+    cueq = _cueq(*triple)
     assert_close(
-        _cueq(*triple),
+        cueq,
         _grace(*triple),
         FEATURE_F64,
         f"cuEquivariance against GRACE {triple}",
     )
     assert_close(
-        _cueq(*triple),
+        cueq,
         cg_oracle.real_cg(*triple),
         FEATURE_F64,
         f"cuEquivariance against the oracle {triple}",

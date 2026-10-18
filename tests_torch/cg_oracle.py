@@ -29,7 +29,9 @@ def clebsch_gordan(j1: int, m1: int, j2: int, m2: int, j: int, m: int) -> float:
     if (
         m != m1 + m2
         or not _triangle(j1, j2, j)
-        or max(abs(m1) - j1, abs(m2) - j2, abs(m) - j) > 0
+        or abs(m1) > j1
+        or abs(m2) > j2
+        or abs(m) > j
     ):
         return 0.0
     f = math.factorial
@@ -70,8 +72,10 @@ def real_basis(degree: int) -> np.ndarray:
     s = 1.0 / math.sqrt(2.0)
     for a in range(1, degree + 1):
         sign = (-1) ** a
-        u[degree + a, degree + a], u[degree + a, degree - a] = sign * s, s
-        u[degree - a, degree + a], u[degree - a, degree - a] = -1j * sign * s, 1j * s
+        u[degree + a, degree + a] = sign * s
+        u[degree + a, degree - a] = s
+        u[degree - a, degree + a] = -1j * sign * s
+        u[degree - a, degree - a] = 1j * s
     return u
 
 
@@ -125,10 +129,3 @@ def wigner_d(rotation: np.ndarray, degree: int, directions: np.ndarray) -> np.nd
     after = real_harmonics(directions @ rotation.T, degree)
     solution, *_ = np.linalg.lstsq(before, after, rcond=None)
     return solution.T
-
-
-def random_rotation(rng: np.random.Generator) -> np.ndarray:
-    """A proper rotation matrix from the QR decomposition of a Gaussian matrix."""
-    q, r = np.linalg.qr(rng.normal(size=(3, 3)))
-    q *= np.sign(np.diag(r))
-    return q if np.linalg.det(q) > 0 else -q
