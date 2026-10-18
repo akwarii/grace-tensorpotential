@@ -101,10 +101,12 @@ def test_a_square_uses_the_symmetric_table():
     a = _features(rng, len(A))
     out = square({"A": a})
     assert_close(out, _reference(square, a, a), FEATURE_F64)
-    # the symmetric table spans the same functions: every distinct-operand row of l1 >= l2 appears once
-    assert set(square.coupling_meta_data["hist"]) <= set(
-        distinct.coupling_meta_data["hist"]
-    )
+    # the symmetric table keeps l1 >= l2, each (l, m, hist) once, all of them in the distinct-operand table
+    table, full = square.coupling_meta_data, distinct.coupling_meta_data
+    assert (table["l1"] >= table["l2"]).all()
+    keys = list(zip(table["l"], table["m"], table["hist"], strict=True))
+    assert len(set(keys)) == len(keys)
+    assert set(keys) <= set(zip(full["l"], full["m"], full["hist"], strict=True))
 
 
 def test_lm_first_changes_nothing():

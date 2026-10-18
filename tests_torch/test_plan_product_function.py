@@ -202,14 +202,18 @@ def test_each_option_reaches_the_generator(given, check):
     assert len(meta) < len(default)
 
 
-@pytest.mark.parametrize("key", ["lmax_hist", "lmax_hist_left", "lmax_hist_right"])
-def test_the_history_limits_reach_the_generator(key):
-    pairs = coupled(LMAX, LMAX)  # histories up to l = 2 on both sides
-    full = product_coupling_meta_data(pairs, pairs, _options(lmax=LMAX, Lmax=1))
+@pytest.mark.parametrize(
+    ("key", "trims"),
+    [("lmax_hist", True), ("lmax_hist_left", True), ("lmax_hist_right", False)],
+)
+def test_the_history_limits_reach_the_generator(key, trims):
+    # histories up to l = 2 on the left; the bare harmonics on the right have none (l = 0 for the limit)
+    pairs, harmonics = coupled(LMAX, LMAX), uncoupled(LMAX)
+    full = product_coupling_meta_data(pairs, harmonics, _options(lmax=LMAX, Lmax=1))
     capped = product_coupling_meta_data(
-        pairs, pairs, _options(lmax=LMAX, Lmax=1, **{key: 1})
+        pairs, harmonics, _options(lmax=LMAX, Lmax=1, **{key: 1})
     )
-    assert 0 < len(capped) < len(full)
+    assert 0 < len(capped) < len(full) if trims else len(capped) == len(full)
 
 
 # ------------------------------------------------------------------ physical values

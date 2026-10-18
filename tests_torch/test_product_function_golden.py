@@ -35,6 +35,9 @@ CLASS = "ProductFunction"
 MODELS = ("omat_tiny", "large_tiny")
 VARIANTS = ("f64", "f32", "f64_dense", "f64_lm_first")
 ANCHORS = [f"{m}_{v}" for m in MODELS for v in VARIANTS]
+PRODUCTS_PER_MODEL = (
+    6  # AA, AAA, AAAA, BB, BBB, BBBB in both yamls (spec sheet, "Used in")
+)
 TABLE_COLUMNS = ("l", "m", "hist", "parity", "l1", "l2", "sum_of_ls")
 
 
@@ -82,7 +85,9 @@ INSTANCES = [
 
 def test_every_instance_of_both_models_is_compared():
     per_anchor = {a: sorted(n for b, n in INSTANCES if b == a) for a in ANCHORS}
-    assert all(len(names) == 6 for names in per_anchor.values()), per_anchor
+    assert all(len(names) == PRODUCTS_PER_MODEL for names in per_anchor.values()), (
+        per_anchor
+    )
     lm_first = [_specs(a)["AA"].options["lm_first"] for a in ANCHORS]
     assert lm_first == [a.endswith("lm_first") for a in ANCHORS]
 

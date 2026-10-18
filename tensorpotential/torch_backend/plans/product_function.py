@@ -21,7 +21,7 @@ Layer: plans; imports numpy, the shared coupling generator, the errors and the p
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
 
@@ -34,6 +34,16 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     import pandas as pd
+
+
+_LIMITS: Final = (
+    "lmax_left",
+    "lmax_right",
+    "lmax_hist",
+    "lmax_hist_left",
+    "lmax_hist_right",
+    "max_sum_l",
+)
 
 
 def _pairs(value: Any) -> tuple[tuple[Any, ...], ...] | None:
@@ -88,21 +98,13 @@ class ProductFunctionOptions:
         """
         merged = {**DEFAULTS[COMPUTE + "ProductFunction"], **options}
         equal = merged["is_left_right_equal"]
-        limits = (
-            "lmax_left",
-            "lmax_right",
-            "lmax_hist",
-            "lmax_hist_left",
-            "lmax_hist_right",
-            "max_sum_l",
-        )
         return cls(
             lmax=int(merged["lmax"]),
             Lmax=int(merged["Lmax"]),
             is_left_right_equal=bool(
                 merged["left"] == merged["right"] if equal is None else equal
             ),
-            **{key: merged[key] for key in limits},
+            **{key: merged[key] for key in _LIMITS},
             history_drop_list=_pairs(merged["history_drop_list"]),
             keep_parity=_pairs(merged["keep_parity"]),
             normalize=bool(merged["normalize"]),

@@ -128,4 +128,4 @@ class ProductFunction(torch.nn.Module):
         lft, rght, cg = promote_like_tf(lft, rght, self.get_buffer("cg"))
         prod = lft * rght * cg[None, :, None]
         out = prod.new_zeros((prod.shape[0], self.nfunc, prod.shape[2]))
-        return out.index_add(1, self.get_buffer("m_sum_ind"), prod)
+        return out.index_add_(1, self.get_buffer("m_sum_ind"), prod)
