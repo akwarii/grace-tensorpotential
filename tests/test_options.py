@@ -474,3 +474,116 @@ def test_scanned_metadata_param_dtype_is_float32_where_present(rows):
     assert (
         len(row.files) == 8
     )  # the other five yamls have no metadata block: they are read as float64
+
+
+# The class whose source reads each initialisation-only option, and the attribute it keeps it in: the instruction
+# itself, except MLPRadialFunction_v2, which hands init_type to every functions/nn.Linear it creates.
+INIT_ONLY_HOLDERS = {
+    ("MLPRadialFunction_v2", "init_type"): ("functions/nn.py", "Linear", "init_type"),
+    ("ScalarChemicalEmbedding", "init"): (
+        "instructions/compute.py",
+        "ScalarChemicalEmbedding",
+        "init",
+    ),
+    ("FCRight2Left", "init_vars"): (
+        "instructions/compute.py",
+        "FCRight2Left",
+        "init_vars",
+    ),
+    ("FunctionReduceN", "init_vars"): (
+        "instructions/compute.py",
+        "FunctionReduceN",
+        "init_vars",
+    ),
+    ("InvariantLayerRMSNorm", "init"): (
+        "instructions/compute.py",
+        "InvariantLayerRMSNorm",
+        "init",
+    ),
+}
+
+
+def _class_node(path: str, name: str) -> ast.ClassDef:
+    tree = ast.parse((ROOT / "tensorpotential" / path).read_text())
+    (node,) = [
+        n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == name
+    ]
+    return node
+
+
+def _uses(node: ast.ClassDef, name: str) -> list[tuple[str, ast.expr]]:
+    """Every load of the parameter ``name`` or of ``self.name`` in the class, with the method it is in."""
+    found = []
+    for method in node.body:
+        if not isinstance(method, ast.FunctionDef):
+            continue
+        for n in ast.walk(method):
+            is_param = isinstance(n, ast.Name) and n.id == name
+            is_attr = (
+                isinstance(n, ast.Attribute)
+                and n.attr == name
+                and isinstance(n.value, ast.Name)
+                and n.value.id == "self"
+            )
+            if (is_param or is_attr) and isinstance(n.ctx, ast.Load):
+                found.append((method.name, n))
+    return found
+
+
+def test_the_initialisation_only_options_are_the_documented_ones():
+    marked = {
+        (short(cls), name)
+        for cls, rules in opt.SUPPORTED_OPTIONS.items()
+        for name, rule in rules.items()
+        if rule.init_only
+    }
+    assert marked == set(INIT_ONLY_HOLDERS)
+    assert all(
+        not rule.ignored and rule.kinds == ("str",)
+        for rules in opt.SUPPORTED_OPTIONS.values()
+        for rule in rules.values()
+        if rule.init_only
+    )
+
+
+@pytest.mark.parametrize(("option", "holder"), sorted(INIT_ONLY_HOLDERS.items()))
+def test_an_initialisation_only_option_is_read_only_in_build(option, holder):
+    """Oracle: the TF source. The parameter is used in ``__init__`` only, its attribute in ``build`` only."""
+    cls, name = option
+    path, holder_cls, attr = holder
+    uses = _uses(_class_node(path, holder_cls), attr)
+    assert uses, f"{holder_cls} never reads {attr}"
+    for method, n in uses:
+        expected = "__init__" if isinstance(n, ast.Name) else "build"
+        assert method == expected, (
+            f"{holder_cls}.{method} reads {attr} (line {n.lineno})"
+        )
+    if (
+        holder_cls != cls
+    ):  # forwarded: the instruction itself only passes it on in __init__
+        forwarded = _uses(_class_node("instructions/compute.py", cls), name)
+        assert forwarded and {m for m, _ in forwarded} == {"__init__"}
+        assert all(isinstance(n, ast.Name) for _, n in forwarded)
+
+
+@pytest.mark.parametrize(("option", "holder"), sorted(INIT_ONLY_HOLDERS.items()))
+def test_an_initialisation_only_option_accepts_every_value_tf_tells_apart(
+    option, holder
+):
+    """Oracle: the TF source. The accepted values are the strings the holder compares the option with."""
+    path, holder_cls, attr = holder
+    node = _class_node(path, holder_cls)
+    used = {id(n) for _, n in _uses(node, attr)}
+    compared = {
+        c.value
+        for n in ast.walk(node)
+        if isinstance(n, ast.Compare) and id(n.left) in used
+        for side in n.comparators
+        for c in ast.walk(side)
+        if isinstance(c, ast.Constant) and isinstance(c.value, str)
+    }
+    cls, name = option
+    rule = opt.SUPPORTED_OPTIONS[
+        next(c for c in opt.SUPPORTED_OPTIONS if short(c) == cls)
+    ][name]
+    assert set(rule.values or ()) == compared
