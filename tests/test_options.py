@@ -6,13 +6,15 @@ Two layers:
   stale, the module is TF-free, the rules are well formed, and planted changes to the decisions are caught;
 - physical values: the rules and defaults are compared with things the module does not call: the constructor
   signatures of the TF classes (``tests/data/instruction_constructor_defaults.json`` and ``inspect``), the
-  source of the TF classes (an AST check that the keys listed as ignored are never read), and
+  source of the TF classes (an AST check that the keys listed as ignored are never read, and that the
+  initialisation-only options are read only in ``build``, with the values TF compares them with), and
   ``metadata_utils.resolve_param_dtype``, which decides the dtype of a yaml without metadata.
 """
 
 from __future__ import annotations
 
 import ast
+import functools
 import inspect
 import json
 import subprocess
@@ -476,39 +478,35 @@ def test_scanned_metadata_param_dtype_is_float32_where_present(rows):
     )  # the other five yamls have no metadata block: they are read as float64
 
 
-# The class whose source reads each initialisation-only option, and the attribute it keeps it in: the instruction
-# itself, except MLPRadialFunction_v2, which hands init_type to every functions/nn.Linear it creates.
-INIT_ONLY_HOLDERS = {
-    ("MLPRadialFunction_v2", "init_type"): ("functions/nn.py", "Linear", "init_type"),
-    ("ScalarChemicalEmbedding", "init"): (
-        "instructions/compute.py",
-        "ScalarChemicalEmbedding",
-        "init",
-    ),
-    ("FCRight2Left", "init_vars"): (
-        "instructions/compute.py",
-        "FCRight2Left",
-        "init_vars",
-    ),
-    ("FunctionReduceN", "init_vars"): (
-        "instructions/compute.py",
-        "FunctionReduceN",
-        "init_vars",
-    ),
-    ("InvariantLayerRMSNorm", "init"): (
-        "instructions/compute.py",
-        "InvariantLayerRMSNorm",
-        "init",
-    ),
+# The initialisation-only options. TF keeps each in an attribute of the same name on the instruction itself, except
+# MLPRadialFunction_v2, which hands init_type to every functions/nn.Linear it creates.
+INIT_ONLY = {
+    ("MLPRadialFunction_v2", "init_type"),
+    ("ScalarChemicalEmbedding", "init"),
+    ("FCRight2Left", "init_vars"),
+    ("FunctionReduceN", "init_vars"),
+    ("InvariantLayerRMSNorm", "init"),
 }
+FORWARDED = {"MLPRadialFunction_v2": ("functions/nn.py", "Linear")}
+
+
+@functools.cache
+def _tree(path: str) -> ast.Module:
+    return ast.parse((ROOT / "tensorpotential" / path).read_text())
 
 
 def _class_node(path: str, name: str) -> ast.ClassDef:
-    tree = ast.parse((ROOT / "tensorpotential" / path).read_text())
     (node,) = [
-        n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == name
+        n
+        for n in ast.walk(_tree(path))
+        if isinstance(n, ast.ClassDef) and n.name == name
     ]
     return node
+
+
+def _holder(cls: str) -> ast.ClassDef:
+    """The class whose source keeps and reads the option of the instruction ``cls``."""
+    return _class_node(*FORWARDED.get(cls, ("instructions/compute.py", cls)))
 
 
 def _uses(node: ast.ClassDef, name: str) -> list[tuple[str, ast.expr]]:
@@ -537,7 +535,7 @@ def test_the_initialisation_only_options_are_the_documented_ones():
         for name, rule in rules.items()
         if rule.init_only
     }
-    assert marked == set(INIT_ONLY_HOLDERS)
+    assert marked == INIT_ONLY
     assert all(
         not rule.ignored and rule.kinds == ("str",)
         for rules in opt.SUPPORTED_OPTIONS.values()
@@ -546,34 +544,27 @@ def test_the_initialisation_only_options_are_the_documented_ones():
     )
 
 
-@pytest.mark.parametrize(("option", "holder"), sorted(INIT_ONLY_HOLDERS.items()))
-def test_an_initialisation_only_option_is_read_only_in_build(option, holder):
+@pytest.mark.parametrize(("cls", "name"), sorted(INIT_ONLY))
+def test_an_initialisation_only_option_is_read_only_in_build(cls, name):
     """Oracle: the TF source. The parameter is used in ``__init__`` only, its attribute in ``build`` only."""
-    cls, name = option
-    path, holder_cls, attr = holder
-    uses = _uses(_class_node(path, holder_cls), attr)
-    assert uses, f"{holder_cls} never reads {attr}"
+    uses = _uses(_holder(cls), name)
+    assert uses, f"{cls}: {name} is never read"
     for method, n in uses:
         expected = "__init__" if isinstance(n, ast.Name) else "build"
-        assert method == expected, (
-            f"{holder_cls}.{method} reads {attr} (line {n.lineno})"
+        assert method == expected, f"{cls}: {method} reads {name} (line {n.lineno})"
+    if cls in FORWARDED:
+        # the instruction itself only passes the parameter on, in __init__
+        passed = _uses(_class_node("instructions/compute.py", cls), name)
+        assert passed and all(
+            m == "__init__" and isinstance(n, ast.Name) for m, n in passed
         )
-    if (
-        holder_cls != cls
-    ):  # forwarded: the instruction itself only passes it on in __init__
-        forwarded = _uses(_class_node("instructions/compute.py", cls), name)
-        assert forwarded and {m for m, _ in forwarded} == {"__init__"}
-        assert all(isinstance(n, ast.Name) for _, n in forwarded)
 
 
-@pytest.mark.parametrize(("option", "holder"), sorted(INIT_ONLY_HOLDERS.items()))
-def test_an_initialisation_only_option_accepts_every_value_tf_tells_apart(
-    option, holder
-):
+@pytest.mark.parametrize(("cls", "name"), sorted(INIT_ONLY))
+def test_an_initialisation_only_option_accepts_every_value_tf_tells_apart(cls, name):
     """Oracle: the TF source. The accepted values are the strings the holder compares the option with."""
-    path, holder_cls, attr = holder
-    node = _class_node(path, holder_cls)
-    used = {id(n) for _, n in _uses(node, attr)}
+    node = _holder(cls)
+    used = {id(n) for _, n in _uses(node, name)}
     compared = {
         c.value
         for n in ast.walk(node)
@@ -582,8 +573,5 @@ def test_an_initialisation_only_option_accepts_every_value_tf_tells_apart(
         for c in ast.walk(side)
         if isinstance(c, ast.Constant) and isinstance(c.value, str)
     }
-    cls, name = option
-    rule = opt.SUPPORTED_OPTIONS[
-        next(c for c in opt.SUPPORTED_OPTIONS if short(c) == cls)
-    ][name]
+    rule = opt.SUPPORTED_OPTIONS[opt.COMPUTE + cls][name]
     assert set(rule.values or ()) == compared

@@ -122,9 +122,8 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "hidden_layers": _r("list[int]"),
         "activation": _r("list[str]", values=("silu",)),
         "no_weight_decay": _TRUE,
-        "init_type": _init_only(
-            "normal", "uniform", "zeros"
-        ),  # Linear: assert in __init__, read in build (functions/nn.py)
+        # init_only: handed to every functions/nn.py Linear, which reads it in build
+        "init_type": _init_only("normal", "uniform", "zeros"),
         "normalize": _TRUE,
         "chem_embedding": _NULL,
         "embed_i": _FALSE,
@@ -135,9 +134,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "element_map": _r("dict[str,int]"),
         "embedding_size": _INT,
         "is_trainable": _TRUE,
-        "init": _init_only(
-            "random", "zero", "zeros", "delta"
-        ),  # read in build; another value raises there
+        "init": _init_only("random", "zero", "zeros", "delta"),  # read in build
         "lora_config": _NO_LORA,
     },
     COMPUTE + "SingleParticleBasisFunctionScalarInd": {
@@ -201,9 +198,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "left_coefs": _BOOL,
         "is_central_atom_type_dependent": _r("bool", "null", values=(False, None)),
         "number_of_atom_types": _NULL,
-        "init_vars": _init_only(
-            "random", "uniform", "zeros"
-        ),  # assert in __init__, read in build
+        "init_vars": _init_only("random", "uniform", "zeros"),  # read in build
         "normalize": _TRUE,
         "norm_out": _TRUE,
         "lora_config": _NO_LORA,
@@ -217,9 +212,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "out_norm": _BOOL,
         "is_central_atom_type_dependent": _BOOL,
         "number_of_atom_types": _r("int", "null"),
-        "init_vars": _init_only(
-            "random", "uniform", "zeros"
-        ),  # assert in __init__, read in build
+        "init_vars": _init_only("random", "uniform", "zeros"),  # read in build
         "normalize": _TRUE,
         "init_target_value": _r(
             "str", values=("zeros", "ones")
@@ -235,9 +228,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
     COMPUTE + "InvariantLayerRMSNorm": {
         "inpt": _REF,
         "type": _r("str", values=("full", "only_nonlin")),
-        "init": _init_only(
-            "zeros", "ones", "random", "near_zero"
-        ),  # assert in __init__, read in build
+        "init": _init_only("zeros", "ones", "random", "near_zero"),  # read in build
     },
     OUTPUT + "CreateOutputTarget": {"initial_value": _r("float"), "l": _ZERO},
     OUTPUT + "LinMLPOut2ScalarTarget": {
