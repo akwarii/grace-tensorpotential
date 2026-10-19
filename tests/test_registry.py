@@ -51,7 +51,6 @@ EXPECTED_WITHOUT_GOLDEN = {
     "ScaledBondVector",
     "RadialBasis",
     "SphericalHarmonic",
-    "MLPRadialFunction",
     "MLPRadialFunction_v2",
     "InvariantLayerRMSNorm",
     "TrainableShiftTarget",

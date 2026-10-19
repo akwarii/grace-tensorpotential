@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from tensorpotential.torch_backend.errors import OptionValueError
+from tensorpotential.torch_backend.plans.spherical_harmonics import column_degrees
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -120,11 +121,10 @@ def spbf_scalar_ind_plan(
         msg = f"the radial part (lmax={radial_lmax}) and the instruction (lmax={lmax}) do not match"
         raise OptionValueError(msg)
     cut = angular_lmax > lmax
-    degrees = np.arange(lmax + 1)
     return ScalarIndPlan(
         lmax=lmax,
         slice_angular=(lmax + 1) ** 2 if cut else None,
         coupling_meta_data=angular_meta.query(f"l <= {lmax}") if cut else angular_meta,
-        l_tile=np.repeat(degrees, 2 * degrees + 1).astype(np.int64),
+        l_tile=column_degrees(lmax),
         inv_avg_n_neigh=inverse_avg_n_neigh(avg_n_neigh),
     )
