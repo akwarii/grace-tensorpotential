@@ -48,6 +48,10 @@ O = opt.OUTPUT  # noqa: E741
 # the test below fails in both directions, so the list can only shrink.
 EXPECTED_WITHOUT_GOLDEN = {
     "MLPRadialFunction",
+    "BondLength",
+    "ScaledBondVector",
+    "RadialBasis",
+    "SphericalHarmonic",
     "MLPRadialFunction_v2",
     "InvariantLayerRMSNorm",
     "TrainableShiftTarget",

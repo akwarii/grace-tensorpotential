@@ -63,6 +63,7 @@ GOLDEN_TESTS: Final[Mapping[str, str]] = {
     COMPUTE + "ScaledBondVector": "tests_torch/test_geometry_golden.py",
     COMPUTE + "SphericalHarmonic": "tests_torch/test_geometry_golden.py",
     COMPUTE + "RadialBasis": "tests_torch/test_geometry_golden.py",
+    COMPUTE + "MLPRadialFunction": "tests_torch/test_mlp_radial_function_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85

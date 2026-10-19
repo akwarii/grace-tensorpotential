@@ -68,6 +68,16 @@ class SphericalHarmonicsPlan:
     step_back: np.ndarray
 
 
+def column_degrees(lmax: int) -> np.ndarray:
+    """Return the degree ``l`` of each of the ``(lmax + 1)**2`` columns ``l*l + l + m``: ``[0, 1, 1, 1, 2, ...]`` (int64).
+
+    TF's ``l_tile`` (``MLPRadialFunction``, ``SingleParticleBasisFunctionScalarInd``), which spreads a per-``l`` value
+    over the ``2 l + 1`` orders.
+    """
+    degrees = np.arange(lmax + 1, dtype=np.int64)
+    return np.repeat(degrees, 2 * degrees + 1)
+
+
 def _scale(l: int, m: int) -> float:
     ratio = math.factorial(l - m) / math.factorial(l + m)
     return math.sqrt((2 * l + 1) * ratio * (2 if m else 1))
@@ -89,7 +99,7 @@ def spherical_harmonics_plan(lmax: int) -> SphericalHarmonicsPlan:
     if isinstance(lmax, bool) or not isinstance(lmax, int) or lmax < 0:
         msg = f"lmax must be an integer of at least 0, got {lmax!r}"
         raise ShapeError(msg)
-    l = np.repeat(np.arange(lmax + 1), 2 * np.arange(lmax + 1) + 1)
+    l = column_degrees(lmax)
     m = np.concatenate([np.arange(-d, d + 1) for d in range(lmax + 1)])
     scale = np.array([_scale(int(d), abs(int(o))) for d, o in zip(l, m, strict=True)])
     diagonal = np.array(
