@@ -298,12 +298,12 @@ def test_a_value_of_the_wrong_kind_says_what_kinds_are_supported():
 
 def test_a_value_outside_the_listed_values_says_what_values_are_supported():
     ins = make(
-        "R", C + "RadialBasis", bonds=ref("L"), basis_type="Gaussian", nfunc=4, rcut=5.0
+        "R", C + "RadialBasis", bonds=ref("L"), basis_type="Bessel", nfunc=4, rcut=5.0
     )
     (problem,) = problems_of(ins)
     assert (problem.kind, problem.option) == ("unsupported_value", "basis_type")
-    assert "'Gaussian'" in problem.message
-    assert "'Cheb', 'SBessel'" in problem.message
+    assert "'Bessel'" in problem.message
+    assert "'Cheb', 'SBessel', 'Gaussian', 'RadSinBessel'" in problem.message
 
 
 def test_a_kind_rule_without_values_lists_the_kinds():
@@ -539,6 +539,53 @@ def test_a_changed_default_of_the_basis_function_that_radial_basis_forwards_to_i
 ):
     edit(copy, "functions/radial.py", "p: int = 5,", "p: int = 6,")
     assert "RadialBasis.p: source default 6, pinned 5" in ia.problems(copy)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        pytest.param(
+            "rmin: float = 0.0,",
+            "rmin: float = 0.5,",
+            "RadialBasis.rmin: source default 0.5, pinned 0.0",
+            id="a-default-only-the-second-has",
+        ),
+        pytest.param(
+            "normalized: bool = False,",
+            "normalized: bool = True,",
+            "RadialBasis.normalized: source default True, pinned False",
+            id="the-two-disagree",
+        ),
+    ],
+)
+def test_a_changed_default_of_the_second_forwarded_basis_function_is_reported(
+    copy, old, new, expected
+):
+    edit(copy, "functions/radial.py", old, new, "GaussianRadialBasisFunction")
+    assert ia.problems(copy) == [expected]
+
+
+def test_a_removed_class_that_holds_pinned_defaults_is_reported(copy):
+    edit(
+        copy,
+        "functions/radial.py",
+        "class ChebSqrRadialBasisFunction(",
+        "class ChebRenamed(",
+    )
+    origin = "tensorpotential.functions.radial.ChebSqrRadialBasisFunction"
+    assert (
+        f"{C}RadialBasis: the class {origin} that holds its pinned defaults is not defined any more"
+        in ia.problems(copy)
+    )
+
+
+def test_the_defaults_of_a_class_missing_from_the_source_table_are_not_checked(
+    source_table,
+):
+    """The missing class is reported once, by the completeness check, not again by the default check."""
+    registry, options = ia._import_registry()
+    table = {k: v for k, v in source_table.items() if k != C + "RadialBasis"}
+    assert ia.default_problems(ROOT, table, registry, options) == []
 
 
 SPBF_SCALAR = "SingleParticleBasisFunctionScalarInd"

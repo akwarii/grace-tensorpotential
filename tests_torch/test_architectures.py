@@ -119,10 +119,14 @@ def test_the_gaps_of_the_issue_are_found(committed):
         "TWIN16",
         "TWIN17",
         "TWIN19",
-        "RAD2",
     }
     assert "TWIN18" not in issues  # its classes are in no architecture
     assert expected <= issues
+
+
+def test_every_radial_basis_type_is_accepted(committed):
+    """RAD2 closed gap (h): no row has a ``RadialBasis`` gap, whichever ``basis_type`` its variant sets."""
+    assert not [r for r, gap in _gaps(committed) if gap["class"] == "RadialBasis"]
 
 
 def test_every_foundation_model_maps_to_a_row(committed):

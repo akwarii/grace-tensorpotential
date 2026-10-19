@@ -8,11 +8,12 @@ stored cutoff ``rc``, giving ``[bonds, nfunc]`` in float64 (the op owns the zero
 The weights are buffers loaded from the checkpoint (rule R6), never recomputed: ``rc`` for every basis (in the
 parameter dtype, so a float32 model evaluates the basis at ``float32(rcut)``), and ``grid`` and ``scale`` for the
 Gaussian basis. A keyword the chosen basis does not read must keep its pinned default (owner decision, section 7): a
-misspelt or misplaced option is refused rather than ignored. The Gaussian basis also accepts ``rmin``, ``init_gamma``
-and ``trainable``, which only set the stored ``grid`` and ``scale``.
+misspelt or misplaced option is refused rather than ignored. Two allow-lists of keywords TF accepts and never reads:
+the Gaussian basis accepts ``rmin``, ``init_gamma`` and ``trainable``, which only set the stored ``grid`` and ``scale``;
+the simplified Bessel basis accepts ``p`` and ``normalized`` (it has no envelope and no normalisation; sheet section 7).
 
-The option table (``spec/options.py``) lets a yaml reach only ``Cheb`` (kind 1) and ``SBessel``; the other bases and
-keywords are ported for a hand-made spec (owner decision, sheet section 7) and unit-tested.
+The option table (``spec/options.py``) lets a yaml reach the four bases (``Cheb`` of kind 1 only); each is compared with
+TensorFlow on the golden fixtures (``tests_torch/test_radial_basis_golden.py``).
 
 Layer: instructions; imports torch, the radial op, the dtype policy, the errors and the pinned defaults of the spec.
 """
@@ -35,9 +36,11 @@ if TYPE_CHECKING:
     from tensorpotential.torch_backend.spec.model import InstructionSpec
 
 _IGNORED: Final[Mapping[str, tuple[str, ...]]] = {
-    "Gaussian": ("rmin", "init_gamma", "trainable")
+    "Gaussian": ("rmin", "init_gamma", "trainable"),
+    "SBessel": ("p", "normalized"),
 }
-"""Keywords TF reads but the twin does not need: they only set weights that the checkpoint holds."""
+"""Keywords TF accepts that do not change the twin's output: Gaussian ones only set weights the checkpoint holds, and the
+simplified Bessel basis never reads its own."""
 _OWN: Final = ("bonds", "basis_type")
 
 

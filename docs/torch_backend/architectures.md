@@ -37,8 +37,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | Base | Argument | Classes added | Options changed | Gaps (issue) | Fixture (FAM2) |
 |---|---|---|---|---|---|
 | `preset:LINEAR` | `basis_type="Cheb"` | - | RadialBasis: basis_type | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
-| `preset:LINEAR` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16), RadialBasis.basis_type (RAD2) | yes |
-| `preset:LINEAR` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16), RadialBasis.basis_type (RAD2) | yes |
+| `preset:LINEAR` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
+| `preset:LINEAR` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
 | `preset:LINEAR` | `dense_nbr=true` | - | - | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
 | `preset:LINEAR` | `atomic_shift_map={"0": -1.0, "1": -2.0}` | - | ConstantScaleShiftTarget: atomic_shift_map | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
 | `preset:LINEAR` | `func_init="zeros"` | - | FunctionReduce: init_vars | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
@@ -47,8 +47,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:LINEAR` | `crad_init="delta"` | - | LinearRadialFunction: init | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15), ProductFunction.normalize (TWIN16) | yes |
 | `preset:LINEAR` | `normalize_prod=true` | - | ProductFunction: normalize | FunctionReduce (TWIN16), LinearOut2Target (TWIN16), LinearRadialFunction (TWIN15) | yes |
 | `preset:FS` | `basis_type="Cheb"` | - | RadialBasis: basis_type | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
-| `preset:FS` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15), RadialBasis.basis_type (RAD2) | yes |
-| `preset:FS` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15), RadialBasis.basis_type (RAD2) | yes |
+| `preset:FS` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
+| `preset:FS` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
 | `preset:FS` | `dense_nbr=true` | - | - | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
 | `preset:FS` | `atomic_shift_map={"0": -1.0, "1": -2.0}` | - | ConstantScaleShiftTarget: atomic_shift_map | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
 | `preset:FS` | `func_init="zeros"` | - | FunctionReduceN: init_vars | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
@@ -59,8 +59,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:FS` | `parity="full"` | - | CropProductFunction: keep_parity | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
 | `preset:FS` | `simplify_prod=false` | - | CropProductFunction: history_drop_list; FunctionReduceN: simplify | CropProductFunction (TWIN15), FSOut2ScalarTarget (TWIN15), FunctionReduceN.n_in (TWIN15), LinearRadialFunction (TWIN15) | yes |
 | `preset:GRACE_1LAYER_v1_24` | `basis_type="SBessel"` | - | RadialBasis: basis_type | none | yes |
-| `preset:GRACE_1LAYER_v1_24` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
-| `preset:GRACE_1LAYER_v1_24` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
+| `preset:GRACE_1LAYER_v1_24` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | none | yes |
+| `preset:GRACE_1LAYER_v1_24` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | none | yes |
 | `preset:GRACE_1LAYER_v1_24` | `cutoff_dict={"HH": 4.0, "HO": 4.5, "OO": 5.0}` | BondSpecificRadialBasisFunction | - | BondSpecificRadialBasisFunction (TWIN11) | yes |
 | `preset:GRACE_1LAYER_v1_24` | `zbl_cutoff=1.0` | ZBLPotential, LinearOut2Target | - | LinearOut2Target (TWIN16), ZBLPotential (TWIN17) | yes |
 | `preset:GRACE_1LAYER_v1_24` | `dense_nbr=true` | - | - | none | yes |
@@ -72,8 +72,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:GRACE_1LAYER_v1_24` | `norm_out="layer"` | - | LinMLPOut2ScalarTarget: normalize | none | yes |
 | `preset:GRACE_1LAYER_v1_24` | `full_origin_norm=true` | - | LinMLPOut2ScalarTarget: full_origin_norm | none | yes |
 | `preset:GRACE_2LAYER_v1_24` | `basis_type="SBessel"` | - | RadialBasis: basis_type | none | yes |
-| `preset:GRACE_2LAYER_v1_24` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
-| `preset:GRACE_2LAYER_v1_24` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
+| `preset:GRACE_2LAYER_v1_24` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | none | yes |
+| `preset:GRACE_2LAYER_v1_24` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | none | yes |
 | `preset:GRACE_2LAYER_v1_24` | `cutoff_dict={"HH": 4.0, "HO": 4.5, "OO": 5.0}` | BondSpecificRadialBasisFunction | - | BondSpecificRadialBasisFunction (TWIN11) | yes |
 | `preset:GRACE_2LAYER_v1_24` | `zbl_cutoff=1.0` | ZBLPotential, LinearOut2Target | - | LinearOut2Target (TWIN16), ZBLPotential (TWIN17) | yes |
 | `preset:GRACE_2LAYER_v1_24` | `dense_nbr=true` | - | SingleParticleBasisFunctionEquivariantInd: dense_nbr | none | yes |
@@ -85,8 +85,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:GRACE_2LAYER_v1_24` | `norm_out="layer"` | - | LinMLPOut2ScalarTarget: normalize | none | yes |
 | `preset:GRACE_2LAYER_v1_24` | `full_origin_norm=true` | - | LinMLPOut2ScalarTarget: full_origin_norm | none | yes |
 | `preset:GRACE_2LAYER_scaled` | `basis_type="SBessel"` | - | RadialBasis: basis_type | FunctionReduceN.scale (rejected) | yes |
-| `preset:GRACE_2LAYER_scaled` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | FunctionReduceN.scale (rejected), RadialBasis.basis_type (RAD2) | yes |
-| `preset:GRACE_2LAYER_scaled` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | FunctionReduceN.scale (rejected), RadialBasis.basis_type (RAD2) | yes |
+| `preset:GRACE_2LAYER_scaled` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | FunctionReduceN.scale (rejected) | yes |
+| `preset:GRACE_2LAYER_scaled` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | FunctionReduceN.scale (rejected) | yes |
 | `preset:GRACE_2LAYER_scaled` | `cutoff_dict={"HH": 4.0, "HO": 4.5, "OO": 5.0}` | BondSpecificRadialBasisFunction | - | BondSpecificRadialBasisFunction (TWIN11), FunctionReduceN.scale (rejected) | yes |
 | `preset:GRACE_2LAYER_scaled` | `zbl_cutoff=1.0` | ZBLPotential, LinearOut2Target | - | FunctionReduceN.scale (rejected), LinearOut2Target (TWIN16), ZBLPotential (TWIN17) | yes |
 | `preset:GRACE_2LAYER_scaled` | `dense_nbr=true` | - | SingleParticleBasisFunctionEquivariantInd: dense_nbr | FunctionReduceN.scale (rejected) | yes |
@@ -96,8 +96,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:GRACE_2LAYER_scaled` | `chem_init="zeros"` | - | ScalarChemicalEmbedding: init | FunctionReduceN.scale (rejected) | yes |
 | `preset:GRACE_2LAYER_scaled` | `chem_init="delta"` | - | ScalarChemicalEmbedding: init | FunctionReduceN.scale (rejected) | yes |
 | `preset:GRACE_1LAYER_v2_25` | `basis_type="SBessel"` | - | RadialBasis: basis_type | none | yes |
-| `preset:GRACE_1LAYER_v2_25` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
-| `preset:GRACE_1LAYER_v2_25` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
+| `preset:GRACE_1LAYER_v2_25` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | none | yes |
+| `preset:GRACE_1LAYER_v2_25` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | none | yes |
 | `preset:GRACE_1LAYER_v2_25` | `cutoff_dict={"HH": 4.0, "HO": 4.5, "OO": 5.0}` | BondSpecificRadialBasisFunction | - | BondSpecificRadialBasisFunction (TWIN11) | yes |
 | `preset:GRACE_1LAYER_v2_25` | `zbl_cutoff=1.0` | ZBLPotential, LinearOut2Target | - | LinearOut2Target (TWIN16), ZBLPotential (TWIN17) | yes |
 | `preset:GRACE_1LAYER_v2_25` | `dense_nbr=true` | - | - | none | yes |
@@ -106,8 +106,8 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:GRACE_1LAYER_v2_25` | `chem_init="zeros"` | - | ScalarChemicalEmbedding: init | none | yes |
 | `preset:GRACE_1LAYER_v2_25` | `chem_init="delta"` | - | ScalarChemicalEmbedding: init | none | yes |
 | `preset:GRACE_2LAYER_v2_25` | `basis_type="SBessel"` | - | RadialBasis: basis_type | none | yes |
-| `preset:GRACE_2LAYER_v2_25` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
-| `preset:GRACE_2LAYER_v2_25` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | RadialBasis.basis_type (RAD2) | yes |
+| `preset:GRACE_2LAYER_v2_25` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | none | yes |
+| `preset:GRACE_2LAYER_v2_25` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | none | yes |
 | `preset:GRACE_2LAYER_v2_25` | `cutoff_dict={"HH": 4.0, "HO": 4.5, "OO": 5.0}` | BondSpecificRadialBasisFunction | - | BondSpecificRadialBasisFunction (TWIN11) | yes |
 | `preset:GRACE_2LAYER_v2_25` | `zbl_cutoff=1.0` | ZBLPotential, LinearOut2Target | - | LinearOut2Target (TWIN16), ZBLPotential (TWIN17) | yes |
 | `preset:GRACE_2LAYER_v2_25` | `dense_nbr=true` | - | SingleParticleBasisFunctionEquivariantInd: dense_nbr | none | yes |
@@ -116,15 +116,15 @@ that the strict torch loader rejects today, in either parameter dtype, with the 
 | `preset:GRACE_2LAYER_v2_25` | `chem_init="zeros"` | - | ScalarChemicalEmbedding: init | none | yes |
 | `preset:GRACE_2LAYER_v2_25` | `chem_init="delta"` | - | ScalarChemicalEmbedding: init | none | yes |
 | `tensor:grace_1` | `basis_type="SBessel"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
-| `tensor:grace_1` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19), RadialBasis.basis_type (RAD2) | free (TWIN19) |
-| `tensor:grace_1` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19), RadialBasis.basis_type (RAD2) | free (TWIN19) |
+| `tensor:grace_1` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
+| `tensor:grace_1` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_1` | `atomic_shift_map={"0": -1.0, "1": -2.0}` | - | - | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_1` | `compute_energy=true` | FunctionReduceN, ConstantScaleShiftTarget | LinMLPOut2ScalarTarget: origin | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_1` | `tensor_components=[1]` | - | FunctionReduceParticular: n_out, selected_l, selected_p; ProductFunction: Lmax; CreateOutputTarget: l; LinearOut2EquivarTarget: l, origin | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_1` | `tensor_components=[2]` | - | FunctionReduceParticular: n_out, selected_l, selected_p; CreateOutputTarget: l; LinearOut2EquivarTarget: l, origin | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_2` | `basis_type="SBessel"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
-| `tensor:grace_2` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19), RadialBasis.basis_type (RAD2) | free (TWIN19) |
-| `tensor:grace_2` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19), RadialBasis.basis_type (RAD2) | free (TWIN19) |
+| `tensor:grace_2` | `basis_type="Gaussian"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
+| `tensor:grace_2` | `basis_type="RadSinBessel"` | - | RadialBasis: basis_type | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_2` | `atomic_shift_map={"0": -1.0, "1": -2.0}` | - | - | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_2` | `compute_energy=true` | InvariantLayerRMSNorm, ConstantScaleShiftTarget | FunctionReduceN: allowed_l_p, ls_max, n_out; LinMLPOut2ScalarTarget: origin | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
 | `tensor:grace_2` | `tensor_components=[1]` | - | FunctionReduceParticular: n_out, selected_l, selected_p; ProductFunction: Lmax; CreateOutputTarget: l; LinearOut2EquivarTarget: l, origin | CreateOutputTarget.l (TWIN19), FunctionReduceParticular (TWIN19), LinearOut2EquivarTarget (TWIN19) | free (TWIN19) |
