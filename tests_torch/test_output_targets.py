@@ -398,36 +398,35 @@ def test_each_atomic_energy_depends_on_its_own_atom_only_and_relabelling_permute
 # ------------------------------------------------------------------ TrainableShiftTarget
 
 
-def _trainable(policy=F64, n_types=3) -> TrainableShiftTarget:
-    spec = _spec(
+SHIFTS = np.array([-3.5, 0.25, -11.0])
+
+
+def _trainable_spec(n_types: int) -> InstructionSpec:
+    return _spec(
         "TrainableShiftTarget",
         "TrainableShiftTarget",
         target=InstructionRef("atomic_energy"),
         number_of_atom_types=n_types,
     )
-    twin = TrainableShiftTarget(spec, policy)
-    shifts = np.array([[-3.5], [0.25], [-11.0]][:n_types])
-    twin.load_state_dict({"at_shifts": torch.as_tensor(shifts, dtype=policy.param)})
+
+
+def _trainable(policy=F64) -> TrainableShiftTarget:
+    twin = TrainableShiftTarget(_trainable_spec(len(SHIFTS)), policy)
+    shifts = torch.as_tensor(SHIFTS[:, None], dtype=policy.param)
+    twin.load_state_dict({"at_shifts": shifts})
     return twin
 
 
 def test_the_trainable_shift_adds_the_row_of_each_atoms_element():
     inputs = _energy(np.random.default_rng(RNG_SEED))
     out = _trainable()(inputs)
-    table = np.array([-3.5, 0.25, -11.0])
-    expected = inputs["atomic_energy"].numpy() + table[[0, 2, 1, 2, 0], None]
+    expected = inputs["atomic_energy"].numpy() + SHIFTS[[0, 2, 1, 2, 0], None]
     assert out.dtype == torch.float64
     np.testing.assert_array_equal(out.detach().numpy(), expected)
 
 
 def test_the_shift_table_starts_at_zero_and_is_the_only_weight():
-    spec = _spec(
-        "TrainableShiftTarget",
-        "TrainableShiftTarget",
-        target=InstructionRef("atomic_energy"),
-        number_of_atom_types=4,
-    )
-    twin = TrainableShiftTarget(spec, F32)
+    twin = TrainableShiftTarget(_trainable_spec(4), F32)
     (key,) = twin.state_dict()
     assert key == "at_shifts" and twin.at_shifts.shape == (4, 1)
     assert twin.at_shifts.dtype == torch.float32
@@ -438,18 +437,13 @@ def test_a_float32_model_shifts_a_float32_target():
     inputs = _energy(np.random.default_rng(RNG_SEED), np.float32)
     out = _trainable(F32)(inputs)
     assert out.dtype == torch.float32
-    table = np.array([-3.5, 0.25, -11.0], dtype=np.float32)
+    table = SHIFTS.astype(np.float32)
     expected = inputs["atomic_energy"].numpy() + table[[0, 2, 1, 2, 0], None]
     np.testing.assert_array_equal(out.detach().numpy(), expected)
 
 
 def test_no_atom_type_and_a_floating_element_index_are_refused():
-    spec = _spec(
-        "TrainableShiftTarget",
-        "t",
-        target=InstructionRef("atomic_energy"),
-        number_of_atom_types=0,
-    )
+    spec = _trainable_spec(0)
     with pytest.raises(
         OptionValueError, match="number_of_atom_types must be at least 1"
     ):
@@ -466,9 +460,7 @@ def test_the_learned_shifts_add_one_reference_energy_per_atom_to_the_total():
     twin = _trainable()
     total = float(twin(inputs).detach().sum() - inputs["atomic_energy"].sum())
     counts = np.bincount(inputs["atomic_mu_i"].numpy(), minlength=3)
-    assert total == pytest.approx(
-        float(counts @ np.array([-3.5, 0.25, -11.0])), abs=1e-12
-    )
+    assert total == pytest.approx(float(counts @ SHIFTS), abs=1e-12)
     order = torch.as_tensor(rng.permutation(N_ATOMS))
     relabelled = {k: v[order] for k, v in inputs.items()}
     assert torch.equal(twin(relabelled), twin(inputs)[order])

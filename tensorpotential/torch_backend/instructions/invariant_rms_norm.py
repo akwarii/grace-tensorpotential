@@ -34,8 +34,9 @@ if TYPE_CHECKING:
     from tensorpotential.torch_backend.ops.precision import DtypePolicy
     from tensorpotential.torch_backend.spec.model import InstructionSpec
 
-TYPES: Final = ("full", "only_nonlin", "sep_lin_gate")
-"""The ``type`` values of TF's constructor (an ``assert`` there)."""
+# the type values of TF's constructor (an assert there); the option table lets a yaml reach only full and only_nonlin,
+# sep_lin_gate is ported for a hand-made spec
+_TYPES: Final = ("full", "only_nonlin", "sep_lin_gate")
 
 
 class InvariantLayerRMSNorm(torch.nn.Module):
@@ -53,7 +54,7 @@ class InvariantLayerRMSNorm(torch.nn.Module):
     Raises
     ------
     OptionValueError
-        For a ``type`` outside :data:`TYPES` or a null ``inpt``.
+        For a ``type`` other than ``full``, ``only_nonlin`` and ``sep_lin_gate``, or a null ``inpt``.
     ShapeError
         For fewer than one channel (``full``) or two (the other types, which keep channel 0 apart).
     """
@@ -65,33 +66,32 @@ class InvariantLayerRMSNorm(torch.nn.Module):
         super().__init__()
         options = spec.options
         self.spec = spec
-        self.type = options["type"]
-        if self.type not in TYPES:
-            msg = f"instruction {spec.name!r} (InvariantLayerRMSNorm): type must be one of {', '.join(TYPES)}, got {self.type!r}"
+        self._type = options["type"]
+        if self._type not in _TYPES:
+            msg = f"instruction {spec.name!r} (InvariantLayerRMSNorm): type must be one of {', '.join(_TYPES)}, got {self._type!r}"
             raise OptionValueError(msg)
         # the option table refuses it too; this guards a hand-made spec
         if options["inpt"] is None:
             msg = f"instruction {spec.name!r} (InvariantLayerRMSNorm): inpt is null"
             raise OptionValueError(msg)
         self._inpt = options["inpt"].name
-        normalised = n_channels if self.type == "full" else n_channels - 1
+        normalised = n_channels if self._type == "full" else n_channels - 1
         if normalised < 1:
-            msg = f"instruction {spec.name!r} (InvariantLayerRMSNorm): type {self.type!r} needs more than {n_channels} channel(s)"
+            msg = f"instruction {spec.name!r} (InvariantLayerRMSNorm): type {self._type!r} needs more than {n_channels} channel(s)"
             raise ShapeError(msg)
         self.scale = torch.nn.Parameter(
             torch.zeros((1, normalised, 1), dtype=policy.param)
         )
         self.lin_scale = None
-        if self.type == "sep_lin_gate":
+        if self._type == "sep_lin_gate":
             self.lin_scale = torch.nn.Parameter(torch.zeros((1, 1), dtype=policy.param))
 
     def forward(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """Return the normalised feature ``[atoms, lm, n]`` in the dtype of the input."""
         x = inputs[self._inpt]
-        scale = self.scale.transpose(
-            1, 2
-        )  # the checkpoint's [1, n', 1] on the channel axis, last here
-        if self.type == "full":
+        # the checkpoint's [1, n', 1] on the channel axis, which is the last one here
+        scale = self.scale.transpose(1, 2)
+        if self._type == "full":
             return channel_rms_norm(x, scale)
         lin = x[..., :1]
         if self.lin_scale is not None:

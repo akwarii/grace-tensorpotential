@@ -30,11 +30,9 @@ F64, F32 = DtypePolicy(torch.float64), DtypePolicy(torch.float32)
 N_ATOMS, N_CH = 5, 6
 
 
-def _twin(
-    type_="only_nonlin", policy=F64, n_channels=N_CH, **options: Any
-) -> InvariantLayerRMSNorm:
+def _spec(type_: str, **options: Any) -> InstructionSpec:
     cls = COMPUTE + "InvariantLayerRMSNorm"
-    spec = InstructionSpec(
+    return InstructionSpec(
         name="I_LN",
         cls=cls,
         options={
@@ -46,7 +44,12 @@ def _twin(
         depends_on=(),
         index=0,
     )
-    twin = InvariantLayerRMSNorm(spec, n_channels, policy)
+
+
+def _twin(
+    type_="only_nonlin", policy=F64, n_channels=N_CH, **options: Any
+) -> InvariantLayerRMSNorm:
+    twin = InvariantLayerRMSNorm(_spec(type_, **options), n_channels, policy)
     rng = np.random.default_rng(RNG_SEED + 1)
     state = {
         k: torch.as_tensor(rng.normal(size=v.shape), dtype=policy.param)
@@ -67,7 +70,7 @@ def _oracle(twin: InvariantLayerRMSNorm, x: np.ndarray) -> np.ndarray:
     def norm(y):
         return y / np.sqrt((y**2).mean(axis=-1, keepdims=True) + 1e-10) * scale
 
-    if twin.type == "full":
+    if twin.spec.options["type"] == "full":
         return norm(x)
     lin = x[..., :1]
     if twin.lin_scale is not None:
@@ -97,15 +100,7 @@ def test_each_type_is_the_norm_of_the_sheet(type_, lm):
     ],
 )
 def test_the_weights_have_their_checkpoint_shapes_and_start_at_zero(type_, shapes):
-    cls = COMPUTE + "InvariantLayerRMSNorm"
-    spec = InstructionSpec(
-        name="I_LN",
-        cls=cls,
-        options={**DEFAULTS[cls], "inpt": InstructionRef("I"), "type": type_},
-        depends_on=(),
-        index=0,
-    )
-    state = InvariantLayerRMSNorm(spec, N_CH, F32).state_dict()
+    state = InvariantLayerRMSNorm(_spec(type_), N_CH, F32).state_dict()
     assert {k: tuple(v.shape) for k, v in state.items()} == shapes
     assert all(v.dtype == torch.float32 and not v.any() for v in state.values())
 
@@ -118,9 +113,10 @@ def test_a_float32_model_normalises_float32_features():
     assert_close(out, _oracle(twin, x.double().numpy()), FEATURE_F32, "float32")
 
 
-def test_init_only_sets_the_starting_weights_and_is_ignored():
-    x = _features(np.random.default_rng(RNG_SEED))
-    assert torch.equal(_twin(init="random")({"I": x}), _twin(init="zeros")({"I": x}))
+@pytest.mark.parametrize("init", ["zeros", "ones", "random", "near_zero"])
+def test_init_is_ignored_the_weights_start_at_zero_until_loaded(init):
+    state = InvariantLayerRMSNorm(_spec("full", init=init), N_CH, F64).state_dict()
+    assert not state["scale"].any()
 
 
 @pytest.mark.parametrize(
@@ -156,9 +152,10 @@ def test_the_normalised_channels_ignore_the_scale_of_the_features(type_):
     out = twin({"I": x}).detach().numpy()
     scaled = twin({"I": factor * x}).detach().numpy()
     first = 0 if type_ == "full" else 1
-    # exact up to the epsilon: the ratio is sqrt((ms + 1e-10) / (ms + 1e-10 / factor**2)), ms = mean(x**2)
+    # exact up to the epsilon: the ratio is sqrt((ms + e) / (ms + e / factor**2)) ~ 1 + e (1 - 1/factor**2) / (2 ms),
+    # e = 1e-10, ms = mean(x**2); 1e-14 for the rounding
     ms = (x.numpy()[..., first:] ** 2).mean(axis=-1, keepdims=True)
-    bound = 1e-10 / ms + 1e-14
+    bound = 0.5e-10 * (1 - 1 / factor**2) / ms + 1e-14
     ratio = scaled[..., first:] / out[..., first:]
     assert np.all(np.abs(ratio - 1) <= bound)
     if first:
