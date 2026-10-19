@@ -298,12 +298,12 @@ def test_a_value_of_the_wrong_kind_says_what_kinds_are_supported():
 
 def test_a_value_outside_the_listed_values_says_what_values_are_supported():
     ins = make(
-        "R", C + "RadialBasis", bonds=ref("L"), basis_type="Gaussian", nfunc=4, rcut=5.0
+        "R", C + "RadialBasis", bonds=ref("L"), basis_type="Bessel", nfunc=4, rcut=5.0
     )
     (problem,) = problems_of(ins)
     assert (problem.kind, problem.option) == ("unsupported_value", "basis_type")
-    assert "'Gaussian'" in problem.message
-    assert "'Cheb', 'SBessel'" in problem.message
+    assert "'Bessel'" in problem.message
+    assert "'Cheb', 'SBessel', 'Gaussian', 'RadSinBessel'" in problem.message
 
 
 def test_a_kind_rule_without_values_lists_the_kinds():
@@ -539,6 +539,30 @@ def test_a_changed_default_of_the_basis_function_that_radial_basis_forwards_to_i
 ):
     edit(copy, "functions/radial.py", "p: int = 5,", "p: int = 6,")
     assert "RadialBasis.p: source default 6, pinned 5" in ia.problems(copy)
+
+
+def test_a_changed_default_of_the_second_forwarded_basis_function_is_reported(copy):
+    edit(
+        copy,
+        "functions/radial.py",
+        "rmin: float = 0.0,",
+        "rmin: float = 0.5,",
+        "GaussianRadialBasisFunction",
+    )
+    assert ia.problems(copy) == ["RadialBasis.rmin: source default 0.5, pinned 0.0"]
+
+
+def test_forwarded_basis_functions_that_disagree_on_a_default_are_reported(copy):
+    edit(
+        copy,
+        "functions/radial.py",
+        "normalized: bool = False,",
+        "normalized: bool = True,",
+        "GaussianRadialBasisFunction",
+    )
+    assert ia.problems(copy) == [
+        "RadialBasis.normalized: source default True, pinned False"
+    ]
 
 
 def test_a_removed_class_that_holds_pinned_defaults_is_reported(copy):

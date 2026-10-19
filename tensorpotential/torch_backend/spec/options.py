@@ -82,13 +82,17 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
     COMPUTE + "ScaledBondVector": {"bond_length": _REF, "bonds": _NULL},
     COMPUTE + "RadialBasis": {
         "bonds": _REF,
-        "basis_type": _r("str", values=("Cheb", "SBessel")),
+        "basis_type": _r("str", values=("Cheb", "SBessel", "Gaussian", "RadSinBessel")),
         "nfunc": _INT,
         "rcut": _REAL,
         "p": _INT,
         "normalized": _BOOL,
         "kind": _r("int", values=(1,)),
         "reversed": _FALSE,
+        # Gaussian only: they set the stored grid and scale, which the twin reads from the checkpoint
+        "rmin": _REAL,
+        "init_gamma": _REAL,
+        "trainable": _BOOL,
     },
     COMPUTE + "SphericalHarmonic": {"vhat": _REF, "lmax": _INT},
     COMPUTE + "MLPRadialFunction": {
@@ -337,10 +341,13 @@ MODEL_OPTIONS: Final[Mapping[str, OptionRule]] = {
 MODEL_DEFAULTS: Final[Mapping[str, Any]] = {"param_dtype": "float64"}
 
 # A pinned default that is not the default of the class's own constructor: ``RadialBasis`` forwards ``**kwargs`` to
-# the basis function, and the pinned values are those of the Chebyshev one (the only kind the 2L models use).
-DEFAULTS_ORIGIN: Final[Mapping[str, str]] = {
-    COMPUTE
-    + "RadialBasis": "tensorpotential.functions.radial.ChebSqrRadialBasisFunction",
+# the basis function, and the pinned values are those of the Chebyshev one (the only kind the 2L models use), plus
+# the three keywords only the Gaussian one reads (``GaussianRadialBasisFunction``).
+DEFAULTS_ORIGIN: Final[Mapping[str, tuple[str, ...]]] = {
+    COMPUTE + "RadialBasis": (
+        "tensorpotential.functions.radial.ChebSqrRadialBasisFunction",
+        "tensorpotential.functions.radial.GaussianRadialBasisFunction",
+    ),
 }
 
 _C = COMPUTE
@@ -348,8 +355,17 @@ _O = OUTPUT
 DEFAULTS: Final[Mapping[str, Mapping[str, Any]]] = {
     _C + "BondLength": {"instruction_with_bonds": None},
     _C + "ScaledBondVector": {"bonds": None},
-    # nfunc and rcut have no default; p, normalized, kind and reversed are those of ChebSqrRadialBasisFunction
-    _C + "RadialBasis": {"p": 5, "normalized": False, "kind": 1, "reversed": False},
+    # nfunc and rcut have no default; p, normalized, kind and reversed are those of ChebSqrRadialBasisFunction,
+    # rmin, init_gamma and trainable those of GaussianRadialBasisFunction
+    _C + "RadialBasis": {
+        "p": 5,
+        "normalized": False,
+        "kind": 1,
+        "reversed": False,
+        "rmin": 0.0,
+        "init_gamma": 1.0,
+        "trainable": False,
+    },
     _C + "MLPRadialFunction": {
         "basis": None,
         "input_shape": None,

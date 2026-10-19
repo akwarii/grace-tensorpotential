@@ -371,20 +371,25 @@ def default_problems(
         info = table.get(cls)
         if info is None:
             continue  # reported by completeness_problems
-        origin = options.DEFAULTS_ORIGIN.get(cls)
-        source = constructor_info(root, origin) if origin else info
-        if source is None:
-            found.append(
-                f"{cls}: the class {origin} that holds its pinned defaults is not defined any more"
-            )
-            continue
-        found += _class_problems(cls, info, source, options)
+        origins = options.DEFAULTS_ORIGIN.get(cls, ())
+        sources = [constructor_info(root, origin) for origin in origins] or [info]
+        missing = [o for o, s in zip(origins, sources, strict=False) if s is None]
+        found += [
+            f"{cls}: the class {origin} that holds its pinned defaults is not defined any more"
+            for origin in missing
+        ]
+        if not missing:
+            found += _class_problems(cls, info, [s for s in sources if s], options)
     return found
 
 
 def _class_problems(
-    cls: str, info: ClassInfo, source: ClassInfo, options: ModuleType
+    cls: str, info: ClassInfo, sources: list[ClassInfo], options: ModuleType
 ) -> list[str]:
+    """Compare ``cls`` with its option rules and pinned defaults.
+
+    ``sources`` hold the defaults: ``info`` itself, or the classes of ``DEFAULTS_ORIGIN`` the class forwards to.
+    """
     short = cls.rsplit(".", 1)[-1]
     found: list[str] = []
     if not info.captured:
@@ -392,7 +397,7 @@ def _class_problems(
             f"{short}: capture_init_args was removed (the saved yaml would lose its defaults)"
         )
     rules = options.SUPPORTED_OPTIONS[cls]
-    keys = _plain(info) | (_plain(source) if source is not info else set())
+    keys = _plain(info).union(*(_plain(s) for s in sources if s is not info))
     found += [
         f"{short}: constructor parameter {key!r} has no option rule"
         for key in sorted(keys - rules.keys())
@@ -403,19 +408,30 @@ def _class_problems(
             k for k, r in rules.items() if not r.ignored and k not in keys
         )
     ]
-    pinned = options.DEFAULTS.get(cls, {})
-    literal = source.defaults()
-    for parameter in source.parameters:
+    for parameter in (p for source in sources for p in source.parameters):
         if parameter.has_default and parameter.source is not None:
             found.append(
                 f"{short}.{parameter.name}: the default {parameter.source} is not a literal"
             )
-    for key in sorted((set(pinned) | set(literal)) - {"name"}):
+    found += _pin_problems(short, options.DEFAULTS.get(cls, {}), sources)
+    return found
+
+
+def _pin_problems(
+    short: str, pinned: Mapping[str, Any], sources: list[ClassInfo]
+) -> list[str]:
+    """Compare each pinned default with the literal default of every source that has one (``<absent>`` if none)."""
+    literals = [source.defaults() for source in sources]
+    found: list[str] = []
+    for key in sorted(set(pinned).union(*literals) - {"name"}):
         # repr, so that 1, 1.0 and True (equal in Python) differ
-        was = repr(literal[key]) if key in literal else "<absent>"
         now = repr(pinned[key]) if key in pinned else "<absent>"
-        if was != now:
-            found.append(f"{short}.{key}: source default {was}, pinned {now}")
+        given = {repr(lit[key]) for lit in literals if key in lit} or {"<absent>"}
+        found += [
+            f"{short}.{key}: source default {was}, pinned {now}"
+            for was in sorted(given)
+            if was != now
+        ]
     return found
 
 
