@@ -1,0 +1,3654 @@
+{
+ "format_version": 2,
+ "name": "grace_3l_omat_large_tiny_f64_dense",
+ "model": "grace_3l_omat_large",
+ "row": "file:GRACE-3L-OMAT-large",
+ "source": {
+  "file": "tests/data/model_yamls/GRACE-3L-OMAT-large.yaml"
+ },
+ "tier": "tiny",
+ "dtype": "float64",
+ "option": "dense_nbr",
+ "seed": 20260930,
+ "yaml": "grace_3l_omat_large_tiny.yaml",
+ "yaml_sha256": "cdbb81c6a2090d3ad8d6dafb5a9aa2d80ce90cb322c296be517fd15089e662af",
+ "elements": [
+  "Cu",
+  "H",
+  "Mg",
+  "O"
+ ],
+ "species_aliases": {
+  "Au": "H",
+  "Ca": "Mg",
+  "Si": "Cu"
+ },
+ "structures": {
+  "isolated_atom": {
+   "n_atoms": 1,
+   "formula": "Cu",
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     20.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     20.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     20.0
+    ]
+   ]
+  },
+  "dimer": {
+   "n_atoms": 2,
+   "formula": "Cu2",
+   "pbc": [
+    false,
+    false,
+    false
+   ],
+   "cell": [
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0
+    ]
+   ]
+  },
+  "self_image_cell": {
+   "n_atoms": 2,
+   "formula": "HCu",
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     3.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.8,
+     3.1,
+     0.0
+    ],
+    [
+     0.5,
+     0.9,
+     3.3
+    ]
+   ]
+  },
+  "periodic_triple": {
+   "n_atoms": 3,
+   "formula": "CuMgO",
+   "pbc": [
+    true,
+    true,
+    true
+   ],
+   "cell": [
+    [
+     4.4,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     4.7,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     5.0
+    ]
+   ]
+  }
+ },
+ "library": {
+  "library_git_sha": "5636f3816860923834f5b9a46357d909d2cd79f0",
+  "library_dirty": false,
+  "generator_git_sha": "5636f3816860923834f5b9a46357d909d2cd79f0",
+  "generator_dirty": false,
+  "versions": {
+   "tensorflow": "2.20.0",
+   "numpy": "2.5.3",
+   "pandas": "2.3.3",
+   "ase": "3.29.0",
+   "python": "3.12.3"
+  },
+  "use_gemm_couple": true
+ },
+ "instructions": {
+  "BondLength": {
+   "class": "BondLength",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.BondLength",
+    "instruction_with_bonds": null,
+    "name": "BondLength"
+   }
+  },
+  "ScaledBondVector": {
+   "class": "ScaledBondVector",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.ScaledBondVector",
+    "bonds": null,
+    "name": "ScaledBondVector",
+    "bond_length": {
+     "_instruction_": true,
+     "name": "BondLength"
+    }
+   }
+  },
+  "Y": {
+   "class": "SphericalHarmonic",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.SphericalHarmonic",
+    "vhat": {
+     "_instruction_": true,
+     "name": "ScaledBondVector"
+    },
+    "lmax": 4,
+    "name": "Y"
+   }
+  },
+  "Z": {
+   "class": "ScalarChemicalEmbedding",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.ScalarChemicalEmbedding",
+    "is_trainable": true,
+    "init": "random",
+    "lora_config": null,
+    "element_map": {
+     "Cu": 0,
+     "H": 1,
+     "Mg": 2,
+     "O": 3
+    },
+    "embedding_size": 2,
+    "name": "Z"
+   }
+  },
+  "A1": {
+   "class": "SPBF",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.SPBF",
+    "lmax": null,
+    "p": 5,
+    "hidden_layers": [
+     6,
+     7
+    ],
+    "activation": "silu",
+    "indicator": {
+     "_instruction_": true,
+     "name": "Z"
+    },
+    "Lmax": null,
+    "keep_parity": null,
+    "history_drop_list": null,
+    "l_max_ind": null,
+    "max_sum_l": null,
+    "normalize_cg": false,
+    "avg_n_neigh": 39.26424084623179,
+    "sum_neighbors": true,
+    "lm_first": false,
+    "dense_nbr": false,
+    "name": "A1",
+    "bonds": {
+     "_instruction_": true,
+     "name": "BondLength"
+    },
+    "n_rad_max": 2,
+    "n_rad_basis": 10,
+    "rcut": 6.0,
+    "angular": {
+     "_instruction_": true,
+     "name": "Y"
+    },
+    "chemical_embedding": {
+     "_instruction_": true,
+     "name": "Z"
+    }
+   }
+  },
+  "A1_2": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": true,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A1"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A1"
+    },
+    "name": "A1_2",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A1_2_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A1_2_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A1_2"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 3,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ]
+   }
+  },
+  "A1_2a": {
+   "class": "FCRight2Left",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FCRight2Left",
+    "n_out": null,
+    "left_coefs": false,
+    "is_central_atom_type_dependent": null,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "norm_out": true,
+    "lora_config": null,
+    "lm_first": false,
+    "left": {
+     "_instruction_": true,
+     "name": "A1_2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A1"
+    },
+    "name": "A1_2a"
+   }
+  },
+  "A1_3": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": null,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A1_2a"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A1"
+    },
+    "name": "A1_3",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A1_3_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A1_3_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A1_3"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 3,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ]
+   }
+  },
+  "A1_2b": {
+   "class": "FCRight2Left",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FCRight2Left",
+    "n_out": null,
+    "left_coefs": false,
+    "is_central_atom_type_dependent": null,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "norm_out": true,
+    "lora_config": null,
+    "lm_first": false,
+    "left": {
+     "_instruction_": true,
+     "name": "A1_2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A1"
+    },
+    "name": "A1_2b"
+   }
+  },
+  "A1_4": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": null,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A1_2b"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A1_2b"
+    },
+    "name": "A1_4",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A1_4_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A1_4_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A1_4"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ]
+   }
+  },
+  "eq1": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": true,
+    "number_of_atom_types": 4,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "eq1",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A1"
+     },
+     {
+      "_instruction_": true,
+      "name": "A1_2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A1_3_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A1_4_red"
+     }
+    ],
+    "ls_max": [
+     4,
+     4,
+     4,
+     4
+    ],
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ]
+   }
+  },
+  "eq1_norm": {
+   "class": "EquivariantRMSNorm",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.EquivariantRMSNorm",
+    "center_l0": true,
+    "center_l0_bias": false,
+    "balance_degrees": true,
+    "normalize_l0_only": false,
+    "split_norm": false,
+    "init": "ones",
+    "lm_first": false,
+    "input": {
+     "_instruction_": true,
+     "name": "eq1"
+    },
+    "name": "eq1_norm"
+   }
+  },
+  "rho1": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": true,
+    "number_of_atom_types": 4,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "rho1",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A1"
+     },
+     {
+      "_instruction_": true,
+      "name": "A1_2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A1_3_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A1_4_red"
+     }
+    ],
+    "ls_max": 0,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ]
+    ]
+   }
+  },
+  "rho1_norm": {
+   "class": "InvariantLayerRMSNorm",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.InvariantLayerRMSNorm",
+    "type": "only_nonlin",
+    "init": "zeros",
+    "inpt": {
+     "_instruction_": true,
+     "name": "rho1"
+    },
+    "name": "rho1_norm"
+   }
+  },
+  "A2": {
+   "class": "SPBF",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.SPBF",
+    "lmax": 4,
+    "p": 5,
+    "hidden_layers": [
+     6,
+     7
+    ],
+    "activation": "silu",
+    "indicator": {
+     "_instruction_": true,
+     "name": "eq1_norm"
+    },
+    "Lmax": 4,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ]
+    ],
+    "history_drop_list": null,
+    "l_max_ind": null,
+    "max_sum_l": null,
+    "normalize_cg": false,
+    "avg_n_neigh": 39.26424084623179,
+    "sum_neighbors": true,
+    "lm_first": false,
+    "dense_nbr": true,
+    "name": "A2",
+    "bonds": {
+     "_instruction_": true,
+     "name": "BondLength"
+    },
+    "angular": {
+     "_instruction_": true,
+     "name": "Y"
+    },
+    "n_rad_max": 2,
+    "n_rad_basis": 10,
+    "rcut": 6.0,
+    "chemical_embedding": {
+     "_instruction_": true,
+     "name": "Z"
+    }
+   }
+  },
+  "A2_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A2_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A2"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 3,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ]
+   }
+  },
+  "A2_2": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": true,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A2_red"
+    },
+    "name": "A2_2",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A2_2_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A2_2_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A2_2"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 3,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ]
+   }
+  },
+  "A2_2a": {
+   "class": "FCRight2Left",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FCRight2Left",
+    "n_out": null,
+    "left_coefs": false,
+    "is_central_atom_type_dependent": null,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "norm_out": true,
+    "lora_config": null,
+    "lm_first": false,
+    "left": {
+     "_instruction_": true,
+     "name": "A2_2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A2_red"
+    },
+    "name": "A2_2a"
+   }
+  },
+  "A2_3": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": null,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A2_2a"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A2_red"
+    },
+    "name": "A2_3",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A2_3_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A2_3_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A2_3"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ]
+   }
+  },
+  "A2_2b": {
+   "class": "FCRight2Left",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FCRight2Left",
+    "n_out": null,
+    "left_coefs": false,
+    "is_central_atom_type_dependent": null,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "norm_out": true,
+    "lora_config": null,
+    "lm_first": false,
+    "left": {
+     "_instruction_": true,
+     "name": "A2_2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A2_red"
+    },
+    "name": "A2_2b"
+   }
+  },
+  "A2_4": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": null,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ],
+     [
+      1,
+      1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A2_2b"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A2_2b"
+    },
+    "name": "A2_4",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A2_4_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A2_4_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A2_4"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ],
+     [
+      1,
+      1
+     ]
+    ]
+   }
+  },
+  "eq2": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": true,
+    "number_of_atom_types": 4,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "eq2",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A2_2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A2_3_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A2_4_red"
+     }
+    ],
+    "ls_max": [
+     4,
+     4,
+     4,
+     4
+    ],
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ]
+   }
+  },
+  "eq2_norm": {
+   "class": "EquivariantRMSNorm",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.EquivariantRMSNorm",
+    "center_l0": true,
+    "center_l0_bias": false,
+    "balance_degrees": true,
+    "normalize_l0_only": false,
+    "split_norm": false,
+    "init": "ones",
+    "lm_first": false,
+    "input": {
+     "_instruction_": true,
+     "name": "eq2"
+    },
+    "name": "eq2_norm"
+   }
+  },
+  "rho2": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": true,
+    "number_of_atom_types": 4,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "rho2",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A2_2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A2_3_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A2_4_red"
+     }
+    ],
+    "ls_max": 0,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ]
+    ]
+   }
+  },
+  "rho2_norm": {
+   "class": "InvariantLayerRMSNorm",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.InvariantLayerRMSNorm",
+    "type": "full",
+    "init": "zeros",
+    "inpt": {
+     "_instruction_": true,
+     "name": "rho2"
+    },
+    "name": "rho2_norm"
+   }
+  },
+  "A3": {
+   "class": "SPBF",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.SPBF",
+    "lmax": 4,
+    "p": 5,
+    "hidden_layers": [
+     6,
+     7
+    ],
+    "activation": "silu",
+    "indicator": {
+     "_instruction_": true,
+     "name": "eq2_norm"
+    },
+    "Lmax": 4,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ],
+    "history_drop_list": null,
+    "l_max_ind": null,
+    "max_sum_l": null,
+    "normalize_cg": false,
+    "avg_n_neigh": 39.26424084623179,
+    "sum_neighbors": true,
+    "lm_first": false,
+    "dense_nbr": true,
+    "name": "A3",
+    "bonds": {
+     "_instruction_": true,
+     "name": "BondLength"
+    },
+    "angular": {
+     "_instruction_": true,
+     "name": "Y"
+    },
+    "n_rad_max": 2,
+    "n_rad_basis": 10,
+    "rcut": 6.0,
+    "chemical_embedding": {
+     "_instruction_": true,
+     "name": "Z"
+    }
+   }
+  },
+  "A3_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A3_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A3"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 3,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ]
+   }
+  },
+  "A3_2": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": true,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A3_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A3_red"
+    },
+    "name": "A3_2",
+    "lmax": 4,
+    "Lmax": 4
+   }
+  },
+  "A3_2_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A3_2_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A3_2"
+     }
+    ],
+    "ls_max": 4,
+    "n_out": 3,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ],
+     [
+      1,
+      -1
+     ],
+     [
+      1,
+      1
+     ],
+     [
+      2,
+      -1
+     ],
+     [
+      2,
+      1
+     ],
+     [
+      3,
+      -1
+     ],
+     [
+      3,
+      1
+     ],
+     [
+      4,
+      -1
+     ],
+     [
+      4,
+      1
+     ],
+     [
+      5,
+      -1
+     ],
+     [
+      5,
+      1
+     ],
+     [
+      6,
+      -1
+     ],
+     [
+      6,
+      1
+     ],
+     [
+      0,
+      -1
+     ]
+    ]
+   }
+  },
+  "A3_2a": {
+   "class": "FCRight2Left",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FCRight2Left",
+    "n_out": null,
+    "left_coefs": false,
+    "is_central_atom_type_dependent": null,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "norm_out": true,
+    "lora_config": null,
+    "lm_first": false,
+    "left": {
+     "_instruction_": true,
+     "name": "A3_2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A3_red"
+    },
+    "name": "A3_2a"
+   }
+  },
+  "A3_3": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": null,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A3_2a"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A3_red"
+    },
+    "name": "A3_3",
+    "lmax": 4,
+    "Lmax": 0
+   }
+  },
+  "A3_3_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A3_3_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A3_3"
+     }
+    ],
+    "ls_max": 0,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ]
+    ]
+   }
+  },
+  "A3_2b": {
+   "class": "FCRight2Left",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FCRight2Left",
+    "n_out": null,
+    "left_coefs": false,
+    "is_central_atom_type_dependent": null,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "norm_out": true,
+    "lora_config": null,
+    "lm_first": false,
+    "left": {
+     "_instruction_": true,
+     "name": "A3_2_red"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A3_red"
+    },
+    "name": "A3_2b"
+   }
+  },
+  "A3_4": {
+   "class": "GeneralProductFunction",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.GeneralProductFunction",
+    "mode": "cp_l",
+    "n_out": null,
+    "rank": 2,
+    "use_S": false,
+    "is_left_right_equal": null,
+    "lmax_left": null,
+    "lmax_right": null,
+    "lmax_hist": null,
+    "lmax_hist_left": null,
+    "lmax_hist_right": null,
+    "history_drop_list": null,
+    "max_sum_l": null,
+    "keep_parity": [
+     [
+      0,
+      1
+     ]
+    ],
+    "normalize": false,
+    "lm_first": false,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "left": {
+     "_instruction_": true,
+     "name": "A3_2b"
+    },
+    "right": {
+     "_instruction_": true,
+     "name": "A3_2b"
+    },
+    "name": "A3_4",
+    "lmax": 4,
+    "Lmax": 0
+   }
+  },
+  "A3_4_red": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": false,
+    "number_of_atom_types": null,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "A3_4_red",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A3_4"
+     }
+    ],
+    "ls_max": 0,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ]
+    ]
+   }
+  },
+  "rho3": {
+   "class": "FunctionReduceN",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.FunctionReduceN",
+    "out_norm": true,
+    "is_central_atom_type_dependent": true,
+    "number_of_atom_types": 4,
+    "init_vars": "random",
+    "normalize": true,
+    "init_target_value": "zeros",
+    "simplify": false,
+    "scale": 1.0,
+    "lora_config": null,
+    "lm_first": false,
+    "name": "rho3",
+    "instructions": [
+     {
+      "_instruction_": true,
+      "name": "A3_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A3_2_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A3_3_red"
+     },
+     {
+      "_instruction_": true,
+      "name": "A3_4_red"
+     }
+    ],
+    "ls_max": 0,
+    "n_out": 2,
+    "allowed_l_p": [
+     [
+      0,
+      1
+     ]
+    ]
+   }
+  },
+  "rho3_norm": {
+   "class": "InvariantLayerRMSNorm",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.compute.InvariantLayerRMSNorm",
+    "type": "full",
+    "init": "zeros",
+    "inpt": {
+     "_instruction_": true,
+     "name": "rho3"
+    },
+    "name": "rho3_norm"
+   }
+  },
+  "atomic_energy": {
+   "class": "CreateOutputTarget",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.output.CreateOutputTarget",
+    "initial_value": 0.0,
+    "l": 0,
+    "name": "atomic_energy"
+   }
+  },
+  "out1": {
+   "class": "LinMLPOut2ScalarTarget",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.output.LinMLPOut2ScalarTarget",
+    "hidden_layers": [
+     9
+    ],
+    "name": "out1",
+    "n_out": 1,
+    "normalize": null,
+    "activation": "silu",
+    "l": 0,
+    "lora_config": null,
+    "return_hidden_target": null,
+    "origin": [
+     {
+      "_instruction_": true,
+      "name": "rho1_norm"
+     },
+     {
+      "_instruction_": true,
+      "name": "rho2_norm"
+     },
+     {
+      "_instruction_": true,
+      "name": "rho3_norm"
+     }
+    ],
+    "target": {
+     "_instruction_": true,
+     "name": "atomic_energy"
+    }
+   }
+  },
+  "ConstantScaleShiftTarget": {
+   "class": "ConstantScaleShiftTarget",
+   "init_args": {
+    "__cls__": "tensorpotential.instructions.output.ConstantScaleShiftTarget",
+    "scale": 1.0,
+    "shift": 0.0,
+    "atomic_shift_map": {
+     "0": -3.004356863838466,
+     "1": -2.9682290060324514,
+     "2": -1.3453655678494447,
+     "3": -7.158823296352087
+    },
+    "chemical_embedding": null,
+    "name": "ConstantScaleShiftTarget",
+    "l": 0,
+    "target": {
+     "_instruction_": true,
+     "name": "atomic_energy"
+    }
+   }
+  }
+ },
+ "variables": [
+  {
+   "key": "A1/lin_transform/w",
+   "shape": [
+    2,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1/mlp_layers/0/b",
+   "shape": [
+    1,
+    6
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1/mlp_layers/0/w",
+   "shape": [
+    14,
+    6
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1/mlp_layers/1/b",
+   "shape": [
+    1,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1/mlp_layers/1/w",
+   "shape": [
+    6,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1/mlp_layers/2/w",
+   "shape": [
+    7,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1/rc",
+   "shape": [],
+   "dtype": "float64",
+   "trainable": false
+  },
+  {
+   "key": "A1_2/U",
+   "shape": [
+    5,
+    2,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_2/V",
+   "shape": [
+    5,
+    2,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_2_red/reducing_A1_2",
+   "shape": [
+    3,
+    2,
+    27
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_2a/w_right",
+   "shape": [
+    3,
+    2,
+    5
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_2b/w_right",
+   "shape": [
+    3,
+    2,
+    5
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_3/U",
+   "shape": [
+    5,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_3/V",
+   "shape": [
+    5,
+    2,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_3_red/reducing_A1_3",
+   "shape": [
+    3,
+    2,
+    42
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_4/U",
+   "shape": [
+    5,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_4/V",
+   "shape": [
+    5,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A1_4_red/reducing_A1_4",
+   "shape": [
+    2,
+    2,
+    27
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/chem_linear/w",
+   "shape": [
+    2,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/mlp_layers/0/b",
+   "shape": [
+    1,
+    6
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/mlp_layers/0/w",
+   "shape": [
+    14,
+    6
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/mlp_layers/1/b",
+   "shape": [
+    1,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/mlp_layers/1/w",
+   "shape": [
+    6,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/mlp_layers/2/w",
+   "shape": [
+    7,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2/rc",
+   "shape": [],
+   "dtype": "float64",
+   "trainable": false
+  },
+  {
+   "key": "A2_2/U",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_2/V",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_2_red/reducing_A2_2",
+   "shape": [
+    3,
+    2,
+    149
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_2a/w_right",
+   "shape": [
+    3,
+    3,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_2b/w_right",
+   "shape": [
+    3,
+    3,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_3/U",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_3/V",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_3_red/reducing_A2_3",
+   "shape": [
+    2,
+    2,
+    260
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_4/U",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_4/V",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_4_red/reducing_A2_4",
+   "shape": [
+    2,
+    2,
+    98
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A2_red/reducing_A2",
+   "shape": [
+    3,
+    2,
+    65
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/chem_linear/w",
+   "shape": [
+    2,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/mlp_layers/0/b",
+   "shape": [
+    1,
+    6
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/mlp_layers/0/w",
+   "shape": [
+    14,
+    6
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/mlp_layers/1/b",
+   "shape": [
+    1,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/mlp_layers/1/w",
+   "shape": [
+    6,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/mlp_layers/2/w",
+   "shape": [
+    7,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3/rc",
+   "shape": [],
+   "dtype": "float64",
+   "trainable": false
+  },
+  {
+   "key": "A3_2/U",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_2/V",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_2_red/reducing_A3_2",
+   "shape": [
+    3,
+    2,
+    149
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_2a/w_right",
+   "shape": [
+    3,
+    3,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_2b/w_right",
+   "shape": [
+    3,
+    3,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_3/U",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_3/V",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_3_red/reducing_A3_3",
+   "shape": [
+    2,
+    2,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_4/U",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_4/V",
+   "shape": [
+    10,
+    2,
+    3
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_4_red/reducing_A3_4",
+   "shape": [
+    2,
+    2,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "A3_red/reducing_A3",
+   "shape": [
+    3,
+    2,
+    130
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "Z/element_map_index",
+   "shape": [
+    4
+   ],
+   "dtype": "int32",
+   "trainable": false
+  },
+  {
+   "key": "Z/element_map_symbols",
+   "shape": [
+    4
+   ],
+   "dtype": "string",
+   "trainable": false
+  },
+  {
+   "key": "Z/w",
+   "shape": [
+    4,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq1/reducing_A1",
+   "shape": [
+    4,
+    2,
+    2,
+    5
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq1/reducing_A1_2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    5
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq1/reducing_A1_3_red",
+   "shape": [
+    4,
+    2,
+    3,
+    5
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq1/reducing_A1_4_red",
+   "shape": [
+    4,
+    2,
+    2,
+    5
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq1_norm/affine_weight",
+   "shape": [
+    5,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq2/reducing_A2_2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq2/reducing_A2_3_red",
+   "shape": [
+    4,
+    2,
+    2,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq2/reducing_A2_4_red",
+   "shape": [
+    4,
+    2,
+    2,
+    7
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq2/reducing_A2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    10
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "eq2_norm/affine_weight",
+   "shape": [
+    10,
+    2
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "out1/mlp/layer0/w",
+   "shape": [
+    1,
+    9
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "out1/mlp/layer1/w",
+   "shape": [
+    9,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho1/reducing_A1",
+   "shape": [
+    4,
+    2,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho1/reducing_A1_2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho1/reducing_A1_3_red",
+   "shape": [
+    4,
+    2,
+    3,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho1/reducing_A1_4_red",
+   "shape": [
+    4,
+    2,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho1_norm/scale",
+   "shape": [
+    1,
+    1,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho2/reducing_A2_2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho2/reducing_A2_3_red",
+   "shape": [
+    4,
+    2,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho2/reducing_A2_4_red",
+   "shape": [
+    4,
+    2,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho2/reducing_A2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho2_norm/scale",
+   "shape": [
+    1,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho3/reducing_A3_2_red",
+   "shape": [
+    4,
+    2,
+    3,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho3/reducing_A3_3_red",
+   "shape": [
+    4,
+    2,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho3/reducing_A3_4_red",
+   "shape": [
+    4,
+    2,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho3/reducing_A3_red",
+   "shape": [
+    4,
+    2,
+    3,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  },
+  {
+   "key": "rho3_norm/scale",
+   "shape": [
+    1,
+    2,
+    1
+   ],
+   "dtype": "float64",
+   "trainable": true
+  }
+ ],
+ "layout_options": {
+  "dense_nbr": true,
+  "lm_first": true
+ },
+ "not_made": {},
+ "n_arrays": 493,
+ "weights_from": "grace_3l_omat_large_tiny_f64",
+ "option_pair": {
+  "results_max_abs_diff": {
+   "dimer/res/atomic_energy": 0.0,
+   "dimer/res/energy": 0.0,
+   "dimer/res/forces": 0.0,
+   "dimer/res/pair_f": 0.0,
+   "dimer/res/stress": 0.0,
+   "dimer/res/virial": 0.0,
+   "isolated_atom/res/atomic_energy": 0.0,
+   "isolated_atom/res/energy": 0.0,
+   "isolated_atom/res/forces": 0.0,
+   "isolated_atom/res/pair_f": 0.0,
+   "isolated_atom/res/stress": 0.0,
+   "isolated_atom/res/virial": 0.0,
+   "periodic_triple/res/atomic_energy": 0.0,
+   "periodic_triple/res/energy": 0.0,
+   "periodic_triple/res/forces": 2.220446049250313e-15,
+   "periodic_triple/res/pair_f": 1.2420620087993939e-15,
+   "periodic_triple/res/stress": 1.0148132334464322e-16,
+   "periodic_triple/res/virial": 1.049160758270773e-14,
+   "self_image_cell/res/atomic_energy": 0.0,
+   "self_image_cell/res/energy": 0.0,
+   "self_image_cell/res/forces": 3.89011739487799e-16,
+   "self_image_cell/res/pair_f": 2.0383000842727483e-16,
+   "self_image_cell/res/stress": 7.632783294297951e-17,
+   "self_image_cell/res/virial": 2.3314683517128287e-15
+  },
+  "outputs": {
+   "equal": [
+    "dimer/ins/A1",
+    "dimer/ins/A1_2",
+    "dimer/ins/A1_2_red",
+    "dimer/ins/A1_2a",
+    "dimer/ins/A1_2b",
+    "dimer/ins/A1_3",
+    "dimer/ins/A1_3_red",
+    "dimer/ins/A1_4",
+    "dimer/ins/A1_4_red",
+    "dimer/ins/A2",
+    "dimer/ins/A2_2",
+    "dimer/ins/A2_2_red",
+    "dimer/ins/A2_2a",
+    "dimer/ins/A2_2b",
+    "dimer/ins/A2_3",
+    "dimer/ins/A2_3_red",
+    "dimer/ins/A2_4",
+    "dimer/ins/A2_4_red",
+    "dimer/ins/A2_red",
+    "dimer/ins/A3",
+    "dimer/ins/A3_2",
+    "dimer/ins/A3_2_red",
+    "dimer/ins/A3_2a",
+    "dimer/ins/A3_2b",
+    "dimer/ins/A3_3",
+    "dimer/ins/A3_3_red",
+    "dimer/ins/A3_4",
+    "dimer/ins/A3_4_red",
+    "dimer/ins/A3_red",
+    "dimer/ins/BondLength",
+    "dimer/ins/ScaledBondVector",
+    "dimer/ins/Y",
+    "dimer/ins/Z",
+    "dimer/ins/atomic_energy",
+    "dimer/ins/eq1",
+    "dimer/ins/eq1_norm",
+    "dimer/ins/eq2",
+    "dimer/ins/eq2_norm",
+    "dimer/ins/rho1",
+    "dimer/ins/rho1_norm",
+    "dimer/ins/rho2",
+    "dimer/ins/rho2_norm",
+    "dimer/ins/rho3",
+    "dimer/ins/rho3_norm",
+    "dimer/out_after/ConstantScaleShiftTarget",
+    "dimer/out_after/out1",
+    "dimer/out_before/ConstantScaleShiftTarget",
+    "dimer/out_before/out1",
+    "isolated_atom/ins/A1",
+    "isolated_atom/ins/A1_2",
+    "isolated_atom/ins/A1_2_red",
+    "isolated_atom/ins/A1_2a",
+    "isolated_atom/ins/A1_2b",
+    "isolated_atom/ins/A1_3",
+    "isolated_atom/ins/A1_3_red",
+    "isolated_atom/ins/A1_4",
+    "isolated_atom/ins/A1_4_red",
+    "isolated_atom/ins/A2",
+    "isolated_atom/ins/A2_2",
+    "isolated_atom/ins/A2_2_red",
+    "isolated_atom/ins/A2_2a",
+    "isolated_atom/ins/A2_2b",
+    "isolated_atom/ins/A2_3",
+    "isolated_atom/ins/A2_3_red",
+    "isolated_atom/ins/A2_4",
+    "isolated_atom/ins/A2_4_red",
+    "isolated_atom/ins/A2_red",
+    "isolated_atom/ins/A3",
+    "isolated_atom/ins/A3_2",
+    "isolated_atom/ins/A3_2_red",
+    "isolated_atom/ins/A3_2a",
+    "isolated_atom/ins/A3_2b",
+    "isolated_atom/ins/A3_3",
+    "isolated_atom/ins/A3_3_red",
+    "isolated_atom/ins/A3_4",
+    "isolated_atom/ins/A3_4_red",
+    "isolated_atom/ins/A3_red",
+    "isolated_atom/ins/BondLength",
+    "isolated_atom/ins/ScaledBondVector",
+    "isolated_atom/ins/Y",
+    "isolated_atom/ins/Z",
+    "isolated_atom/ins/atomic_energy",
+    "isolated_atom/ins/eq1",
+    "isolated_atom/ins/eq1_norm",
+    "isolated_atom/ins/eq2",
+    "isolated_atom/ins/eq2_norm",
+    "isolated_atom/ins/rho1",
+    "isolated_atom/ins/rho1_norm",
+    "isolated_atom/ins/rho2",
+    "isolated_atom/ins/rho2_norm",
+    "isolated_atom/ins/rho3",
+    "isolated_atom/ins/rho3_norm",
+    "isolated_atom/out_after/ConstantScaleShiftTarget",
+    "isolated_atom/out_after/out1",
+    "isolated_atom/out_before/ConstantScaleShiftTarget",
+    "isolated_atom/out_before/out1",
+    "periodic_triple/ins/A1",
+    "periodic_triple/ins/A1_2",
+    "periodic_triple/ins/A1_2_red",
+    "periodic_triple/ins/A1_2a",
+    "periodic_triple/ins/A1_2b",
+    "periodic_triple/ins/A1_3",
+    "periodic_triple/ins/A1_3_red",
+    "periodic_triple/ins/A1_4",
+    "periodic_triple/ins/A1_4_red",
+    "periodic_triple/ins/A2",
+    "periodic_triple/ins/A2_2",
+    "periodic_triple/ins/A2_2_red",
+    "periodic_triple/ins/A2_2a",
+    "periodic_triple/ins/A2_2b",
+    "periodic_triple/ins/A2_3",
+    "periodic_triple/ins/A2_3_red",
+    "periodic_triple/ins/A2_4",
+    "periodic_triple/ins/A2_4_red",
+    "periodic_triple/ins/A2_red",
+    "periodic_triple/ins/A3",
+    "periodic_triple/ins/A3_2",
+    "periodic_triple/ins/A3_2_red",
+    "periodic_triple/ins/A3_2a",
+    "periodic_triple/ins/A3_2b",
+    "periodic_triple/ins/A3_3",
+    "periodic_triple/ins/A3_3_red",
+    "periodic_triple/ins/A3_4",
+    "periodic_triple/ins/A3_4_red",
+    "periodic_triple/ins/A3_red",
+    "periodic_triple/ins/BondLength",
+    "periodic_triple/ins/ScaledBondVector",
+    "periodic_triple/ins/Y",
+    "periodic_triple/ins/Z",
+    "periodic_triple/ins/atomic_energy",
+    "periodic_triple/ins/eq1",
+    "periodic_triple/ins/eq1_norm",
+    "periodic_triple/ins/eq2",
+    "periodic_triple/ins/eq2_norm",
+    "periodic_triple/ins/rho1",
+    "periodic_triple/ins/rho1_norm",
+    "periodic_triple/ins/rho2",
+    "periodic_triple/ins/rho2_norm",
+    "periodic_triple/ins/rho3",
+    "periodic_triple/ins/rho3_norm",
+    "periodic_triple/out_after/ConstantScaleShiftTarget",
+    "periodic_triple/out_after/out1",
+    "periodic_triple/out_before/ConstantScaleShiftTarget",
+    "periodic_triple/out_before/out1",
+    "self_image_cell/ins/A1",
+    "self_image_cell/ins/A1_2",
+    "self_image_cell/ins/A1_2_red",
+    "self_image_cell/ins/A1_2a",
+    "self_image_cell/ins/A1_2b",
+    "self_image_cell/ins/A1_3",
+    "self_image_cell/ins/A1_3_red",
+    "self_image_cell/ins/A1_4",
+    "self_image_cell/ins/A1_4_red",
+    "self_image_cell/ins/A2",
+    "self_image_cell/ins/A2_2",
+    "self_image_cell/ins/A2_2_red",
+    "self_image_cell/ins/A2_2a",
+    "self_image_cell/ins/A2_2b",
+    "self_image_cell/ins/A2_3",
+    "self_image_cell/ins/A2_3_red",
+    "self_image_cell/ins/A2_4",
+    "self_image_cell/ins/A2_4_red",
+    "self_image_cell/ins/A2_red",
+    "self_image_cell/ins/A3",
+    "self_image_cell/ins/A3_2",
+    "self_image_cell/ins/A3_2_red",
+    "self_image_cell/ins/A3_2a",
+    "self_image_cell/ins/A3_2b",
+    "self_image_cell/ins/A3_3",
+    "self_image_cell/ins/A3_3_red",
+    "self_image_cell/ins/A3_4",
+    "self_image_cell/ins/A3_4_red",
+    "self_image_cell/ins/A3_red",
+    "self_image_cell/ins/BondLength",
+    "self_image_cell/ins/ScaledBondVector",
+    "self_image_cell/ins/Y",
+    "self_image_cell/ins/Z",
+    "self_image_cell/ins/atomic_energy",
+    "self_image_cell/ins/eq1",
+    "self_image_cell/ins/eq1_norm",
+    "self_image_cell/ins/eq2",
+    "self_image_cell/ins/eq2_norm",
+    "self_image_cell/ins/rho1",
+    "self_image_cell/ins/rho1_norm",
+    "self_image_cell/ins/rho2",
+    "self_image_cell/ins/rho2_norm",
+    "self_image_cell/ins/rho3",
+    "self_image_cell/ins/rho3_norm",
+    "self_image_cell/out_after/ConstantScaleShiftTarget",
+    "self_image_cell/out_after/out1",
+    "self_image_cell/out_before/ConstantScaleShiftTarget",
+    "self_image_cell/out_before/out1",
+    "tables/A1/inv_avg_n_neigh",
+    "tables/A1/l_tile",
+    "tables/A1/lin_transform/norm",
+    "tables/A1/mlp_layers[0]/norm",
+    "tables/A1/mlp_layers[1]/norm",
+    "tables/A1/mlp_layers[2]/norm",
+    "tables/A1_2/cg",
+    "tables/A1_2/group_left",
+    "tables/A1_2/group_right",
+    "tables/A1_2/left_ind",
+    "tables/A1_2/m_sum_ind",
+    "tables/A1_2/nfunc",
+    "tables/A1_2/norm_u",
+    "tables/A1_2/norm_v",
+    "tables/A1_2/right_ind",
+    "tables/A1_2_red/norm_A1_2",
+    "tables/A1_2_red/norm_map",
+    "tables/A1_2a/collect_from",
+    "tables/A1_2a/collect_to",
+    "tables/A1_2a/norm_map",
+    "tables/A1_2a/norm_out_factor",
+    "tables/A1_2a/norm_right",
+    "tables/A1_2a/w_tile_left",
+    "tables/A1_2a/w_tile_right",
+    "tables/A1_2b/collect_from",
+    "tables/A1_2b/collect_to",
+    "tables/A1_2b/norm_map",
+    "tables/A1_2b/norm_out_factor",
+    "tables/A1_2b/norm_right",
+    "tables/A1_2b/w_tile_left",
+    "tables/A1_2b/w_tile_right",
+    "tables/A1_3/cg",
+    "tables/A1_3/group_left",
+    "tables/A1_3/group_right",
+    "tables/A1_3/left_ind",
+    "tables/A1_3/m_sum_ind",
+    "tables/A1_3/nfunc",
+    "tables/A1_3/norm_u",
+    "tables/A1_3/norm_v",
+    "tables/A1_3/right_ind",
+    "tables/A1_3_red/norm_A1_3",
+    "tables/A1_3_red/norm_map",
+    "tables/A1_4/cg",
+    "tables/A1_4/group_left",
+    "tables/A1_4/group_right",
+    "tables/A1_4/left_ind",
+    "tables/A1_4/m_sum_ind",
+    "tables/A1_4/nfunc",
+    "tables/A1_4/norm_u",
+    "tables/A1_4/norm_v",
+    "tables/A1_4/right_ind",
+    "tables/A1_4_red/norm_A1_4",
+    "tables/A1_4_red/norm_map",
+    "tables/A2/cg",
+    "tables/A2/chem_l0_mask",
+    "tables/A2/chem_linear/norm",
+    "tables/A2/inv_avg_n_neigh",
+    "tables/A2/l_tile",
+    "tables/A2/lr_inds",
+    "tables/A2/m_sum_ind",
+    "tables/A2/mlp_layers[0]/norm",
+    "tables/A2/mlp_layers[1]/norm",
+    "tables/A2/mlp_layers[2]/norm",
+    "tables/A2/nfunc",
+    "tables/A2_2/cg",
+    "tables/A2_2/group_left",
+    "tables/A2_2/group_right",
+    "tables/A2_2/left_ind",
+    "tables/A2_2/m_sum_ind",
+    "tables/A2_2/nfunc",
+    "tables/A2_2/norm_u",
+    "tables/A2_2/norm_v",
+    "tables/A2_2/right_ind",
+    "tables/A2_2_red/norm_A2_2",
+    "tables/A2_2_red/norm_map",
+    "tables/A2_2a/collect_from",
+    "tables/A2_2a/collect_to",
+    "tables/A2_2a/norm_map",
+    "tables/A2_2a/norm_out_factor",
+    "tables/A2_2a/norm_right",
+    "tables/A2_2a/w_tile_left",
+    "tables/A2_2a/w_tile_right",
+    "tables/A2_2b/collect_from",
+    "tables/A2_2b/collect_to",
+    "tables/A2_2b/norm_map",
+    "tables/A2_2b/norm_out_factor",
+    "tables/A2_2b/norm_right",
+    "tables/A2_2b/w_tile_left",
+    "tables/A2_2b/w_tile_right",
+    "tables/A2_3/cg",
+    "tables/A2_3/group_left",
+    "tables/A2_3/group_right",
+    "tables/A2_3/left_ind",
+    "tables/A2_3/m_sum_ind",
+    "tables/A2_3/nfunc",
+    "tables/A2_3/norm_u",
+    "tables/A2_3/norm_v",
+    "tables/A2_3/right_ind",
+    "tables/A2_3_red/norm_A2_3",
+    "tables/A2_3_red/norm_map",
+    "tables/A2_4/cg",
+    "tables/A2_4/group_left",
+    "tables/A2_4/group_right",
+    "tables/A2_4/left_ind",
+    "tables/A2_4/m_sum_ind",
+    "tables/A2_4/nfunc",
+    "tables/A2_4/norm_u",
+    "tables/A2_4/norm_v",
+    "tables/A2_4/right_ind",
+    "tables/A2_4_red/norm_A2_4",
+    "tables/A2_4_red/norm_map",
+    "tables/A2_red/norm_A2",
+    "tables/A2_red/norm_map",
+    "tables/A3/cg",
+    "tables/A3/chem_l0_mask",
+    "tables/A3/chem_linear/norm",
+    "tables/A3/inv_avg_n_neigh",
+    "tables/A3/l_tile",
+    "tables/A3/lr_inds",
+    "tables/A3/m_sum_ind",
+    "tables/A3/mlp_layers[0]/norm",
+    "tables/A3/mlp_layers[1]/norm",
+    "tables/A3/mlp_layers[2]/norm",
+    "tables/A3/nfunc",
+    "tables/A3_2/cg",
+    "tables/A3_2/group_left",
+    "tables/A3_2/group_right",
+    "tables/A3_2/left_ind",
+    "tables/A3_2/m_sum_ind",
+    "tables/A3_2/nfunc",
+    "tables/A3_2/norm_u",
+    "tables/A3_2/norm_v",
+    "tables/A3_2/right_ind",
+    "tables/A3_2_red/norm_A3_2",
+    "tables/A3_2_red/norm_map",
+    "tables/A3_2a/collect_from",
+    "tables/A3_2a/collect_to",
+    "tables/A3_2a/norm_map",
+    "tables/A3_2a/norm_out_factor",
+    "tables/A3_2a/norm_right",
+    "tables/A3_2a/w_tile_left",
+    "tables/A3_2a/w_tile_right",
+    "tables/A3_2b/collect_from",
+    "tables/A3_2b/collect_to",
+    "tables/A3_2b/norm_map",
+    "tables/A3_2b/norm_out_factor",
+    "tables/A3_2b/norm_right",
+    "tables/A3_2b/w_tile_left",
+    "tables/A3_2b/w_tile_right",
+    "tables/A3_3/cg",
+    "tables/A3_3/group_left",
+    "tables/A3_3/group_right",
+    "tables/A3_3/left_ind",
+    "tables/A3_3/m_sum_ind",
+    "tables/A3_3/nfunc",
+    "tables/A3_3/norm_u",
+    "tables/A3_3/norm_v",
+    "tables/A3_3/right_ind",
+    "tables/A3_3_red/norm_A3_3",
+    "tables/A3_3_red/norm_map",
+    "tables/A3_4/cg",
+    "tables/A3_4/group_left",
+    "tables/A3_4/group_right",
+    "tables/A3_4/left_ind",
+    "tables/A3_4/m_sum_ind",
+    "tables/A3_4/nfunc",
+    "tables/A3_4/norm_u",
+    "tables/A3_4/norm_v",
+    "tables/A3_4/right_ind",
+    "tables/A3_4_red/norm_A3_4",
+    "tables/A3_4_red/norm_map",
+    "tables/A3_red/norm_A3",
+    "tables/A3_red/norm_map",
+    "tables/ConstantScaleShiftTarget/atomic_shift_map",
+    "tables/ConstantScaleShiftTarget/scale",
+    "tables/Y/sh/PI",
+    "tables/Y/sh/alm",
+    "tables/Y/sh/blm",
+    "tables/Y/sh/factor4pi",
+    "tables/Y/sh/l_tile",
+    "tables/atomic_energy/value",
+    "tables/eq1/norm_A1",
+    "tables/eq1/norm_A1_2_red",
+    "tables/eq1/norm_A1_3_red",
+    "tables/eq1/norm_A1_4_red",
+    "tables/eq1/norm_map",
+    "tables/eq1_norm/_degree_weights_np",
+    "tables/eq1_norm/_expand_index_np",
+    "tables/eq1_norm/_l0_mask_np",
+    "tables/eq1_norm/degree_weights",
+    "tables/eq1_norm/epsilon",
+    "tables/eq1_norm/expand_index",
+    "tables/eq1_norm/l0_mask_f",
+    "tables/eq2/norm_A2_2_red",
+    "tables/eq2/norm_A2_3_red",
+    "tables/eq2/norm_A2_4_red",
+    "tables/eq2/norm_A2_red",
+    "tables/eq2/norm_map",
+    "tables/eq2_norm/_degree_weights_np",
+    "tables/eq2_norm/_expand_index_np",
+    "tables/eq2_norm/_l0_mask_np",
+    "tables/eq2_norm/degree_weights",
+    "tables/eq2_norm/epsilon",
+    "tables/eq2_norm/expand_index",
+    "tables/eq2_norm/l0_mask_f",
+    "tables/out1/mlp/layer0/norm",
+    "tables/out1/mlp/layer1/norm",
+    "tables/rho1/norm_A1",
+    "tables/rho1/norm_A1_2_red",
+    "tables/rho1/norm_A1_3_red",
+    "tables/rho1/norm_A1_4_red",
+    "tables/rho1/norm_map",
+    "tables/rho1_norm/epsilon",
+    "tables/rho2/norm_A2_2_red",
+    "tables/rho2/norm_A2_3_red",
+    "tables/rho2/norm_A2_4_red",
+    "tables/rho2/norm_A2_red",
+    "tables/rho2/norm_map",
+    "tables/rho2_norm/epsilon",
+    "tables/rho3/norm_A3_2_red",
+    "tables/rho3/norm_A3_3_red",
+    "tables/rho3/norm_A3_4_red",
+    "tables/rho3/norm_A3_red",
+    "tables/rho3/norm_map",
+    "tables/rho3_norm/epsilon"
+   ],
+   "lm_axis_first": [],
+   "differs": [],
+   "missing": []
+  },
+  "weights": {
+   "renamed_by_position": 0,
+   "only_in_model": [],
+   "only_in_weights": [],
+   "shape_differs": {},
+   "value_differs": [],
+   "assigned": 86
+  }
+ },
+ "files": {
+  "arrays": {
+   "name": "grace_3l_omat_large_tiny_f64_dense.npz",
+   "bytes": 718758,
+   "sha256": "f3fce12fd505f49ae546ae5ed1e8303aa015a78910bf42eee1cdcb203aa8af4d"
+  }
+ },
+ "total_bytes": 718758
+}

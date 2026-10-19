@@ -253,6 +253,224 @@ def test_requests_cover_both_dtypes_and_both_option_pairs():
     assert all(r.dtype == "f64" for r in mg.requests_for("tiny") if r.option)
 
 
+# ------------------------------------------------------------------ logic: the sources of the architecture rows
+
+
+def test_tiny_width_maps_ints_and_lists_and_leaves_the_rest():
+    assert mg.tiny_width(128) == 6
+    assert mg.tiny_width(64, mg.widths_of_source("grace_3l_omat_large")) == 2
+    assert mg.widths_of_source("omat") == mg.TINY_WIDTHS
+    assert mg.tiny_width([20, 15, 10, 5]) == [7, 6, 5, 3]
+    assert mg.tiny_width(7) == 7  # not a real width of any parent
+    assert mg.tiny_width(True) is True
+    assert mg.tiny_width("x") == "x"
+    assert mg.tiny_width(None) is None
+
+
+def test_remap_elements_keeps_the_tier_elements_by_index_or_symbol():
+    parent = {"Cu": 5, "H": 2, "Xe": 0}
+    new = {"Cu": 0, "H": 1}
+    assert mg.remap_elements({5: 1.0, 2: 2.0, 0: 3.0}, parent, new) == {
+        0: 1.0,
+        1: 2.0,
+    }
+    assert mg.remap_elements({"Cu": 1.0, "Xe": 2.0}, parent, new) == {"Cu": 1.0}
+
+
+def test_derive_maps_shifts_lists_and_the_instructions_format():
+    raw = {
+        "metadata": {"param_dtype": "float32"},
+        "instructions": {
+            "Z": {
+                "__cls__": "a.ScalarChemicalEmbedding",
+                "element_map": {"Ag": 0, "Cu": 1, "O": 2},
+                "embedding_size": 128,
+            },
+            "F": {"__cls__": "a.FunctionReduceN", "n_in": [20, 15], "n_out": 4},
+            "S": {
+                "__cls__": "a.ConstantScaleShiftTarget",
+                "atomic_shift_map": {0: -1.0, 1: -2.0, 2: -3.0},
+            },
+        },
+    }
+    tiny = mg.derive(raw, mg.TIERS["tiny"])
+    entries = tiny["instructions"]
+    assert tiny["metadata"] == raw["metadata"]
+    assert entries["Z"]["element_map"] == {"Cu": 0, "H": 1, "Mg": 2, "O": 3}
+    assert entries["Z"]["embedding_size"] == 6
+    assert entries["F"] == {"__cls__": "a.FunctionReduceN", "n_in": [7, 6], "n_out": 4}
+    # Ag is not a tiny element: its shift goes; Cu and O keep theirs under their new indices
+    assert entries["S"]["atomic_shift_map"] == {0: -2.0, 3: -3.0}
+    assert raw["instructions"]["F"]["n_in"] == [20, 15]  # the parent is not changed
+
+
+def test_derive_keeps_the_list_format_of_the_old_model_file():
+    parent = mg.TESTS / "model_grace.yaml"
+    tiny = mg.derive_yaml(parent, mg.TIERS["tiny"])
+    assert isinstance(tiny, list)
+    assert mg.yaml_text(tiny).startswith("- __cls__")
+    assert [e["name"] for e in tiny] == [
+        e["name"] for e in yaml.safe_load(parent.read_text())
+    ]
+
+
+def test_distinct_widths_merged_names_widths_that_share_a_tiny_width():
+    for parent in mg.MODELS.values():
+        assert (
+            mg.distinct_widths_merged(yaml.safe_load((mg.TESTS / parent).read_text()))
+            == []
+        )
+    raw = {
+        "A": {"__cls__": "a.X", "n_out": 16},
+        "B": {"__cls__": "a.Y", "n_out": 17, "hidden_layers": [64, 128]},
+    }
+    assert mg.distinct_widths_merged(raw) == [(16, 17)]
+
+
+def test_source_labels_are_slugs_of_the_preset_and_its_argument():
+    assert mg.slug("GRACE-2L-OAM") == "grace_2l_oam"
+    assert mg.source_label("GRACE_2LAYER_v2_25", {}) == "grace_2layer_v2_25"
+    assert (
+        mg.source_label("FS", {"basis_type": "Gaussian"}) == "fs__basis_type_gaussian"
+    )
+    assert mg.source_label("LINEAR", {"norm_out": None}) == "linear__norm_out_null"
+    assert (
+        mg.source_label("LINEAR", {"cutoff_dict": {"HH": 4.0}}) == "linear__cutoff_dict"
+    )
+
+
+def test_every_row_that_is_not_fixture_free_has_one_source():
+    import architecture_matrix as am
+
+    rows = json.loads(am.JSON_PATH.read_text())["rows"]
+    every = mg.sources()
+    expected = {r["id"] for r in rows if r["source"] not in am.FIXTURE_FREE}
+    assert sorted(s.row for s in every.values()) == sorted(expected)
+    assert every["omat"].row == "file:model_grace_2L_omat"
+    assert every["large"].row == "file:model_grace_2L_omat_large_base"
+    assert every["grace_2layer_v2_25__basis_type_gaussian"].is_variant
+    assert not every["grace_2l_oam"].is_variant
+    tiny = mg.TIERS["tiny"]
+    assert every["fs__atomic_shift_map"].describe(tiny) == {
+        "preset": "FS",
+        "arguments": {"atomic_shift_map": {0: -1.0, 1: -2.0, 2: -3.0, 3: -4.0}},
+    }
+    assert every["model_grace"].describe(tiny) == {"file": "tests/model_grace.yaml"}
+
+
+def test_tier_arguments_name_every_element_pair_of_the_tier():
+    tier = mg.TIERS["tiny"]
+    arguments = mg.tier_arguments((("cutoff_dict", {"HH": 4.0}), ("lmax", 3)), tier)
+    assert arguments["lmax"] == 3
+    cutoffs = arguments["cutoff_dict"]
+    assert len(cutoffs) == 10  # 4 elements: 4 + 6 pairs
+    assert {"CuCu", "CuH", "HO", "OO"} <= set(cutoffs)
+    assert len(set(cutoffs.values())) == 10
+    assert mg.tier_arguments((("lmax", 3),), tier) == {"lmax": 3}
+    shifts = mg.tier_arguments((("atomic_shift_map", {0: -1.0, 1: -2.0}),), tier)
+    assert shifts == {"atomic_shift_map": {0: -1.0, 1: -2.0, 2: -3.0, 3: -4.0}}
+
+
+def test_a_preset_parent_is_built_for_the_tier_elements(tmp_path):
+    source = mg.sources()["grace_1layer_v2_25__cutoff_dict"]
+    raw = mg.parent_raw(source)
+    entries = mg.scan_options.instruction_dicts(raw)[1]
+    maps = [e["element_map"] for e in entries if "element_map" in e]
+    assert maps and all(m == {"Cu": 0, "H": 1, "Mg": 2, "O": 3} for m in maps)
+    derived = tmp_path / "derived.yaml"
+    derived.write_text(mg.yaml_text(mg.derive(raw, mg.TIERS["tiny"])))
+    assert mg.missing_source_cells(source, raw, derived) == []
+    assert mg.distinct_widths_merged(raw) == []
+
+
+@pytest.fixture(scope="module")
+def linear_dir(tmp_path_factory) -> Path:
+    """The LINEAR preset (takes ``lm_first``, not ``dense_nbr``) and one of its variants."""
+    folder = tmp_path_factory.mktemp("linear")
+    every = mg.sources()
+    mg.write_tier(
+        "tiny", folder, ["linear", "linear__basis_type_gaussian"], every=every
+    )
+    return folder
+
+
+def test_write_tier_makes_the_pairs_a_family_takes_and_none_for_a_variant(linear_dir):
+    assert sorted(p.stem for p in linear_dir.glob("*.json")) == [
+        "linear__basis_type_gaussian_tiny_f32",
+        "linear__basis_type_gaussian_tiny_f64",
+        "linear_tiny_f32",
+        "linear_tiny_f64",
+        "linear_tiny_f64_lm_first",
+    ]
+    base = json.loads((linear_dir / "linear_tiny_f64.json").read_text())
+    assert base["layout_options"] == {"dense_nbr": False, "lm_first": True}
+    assert base["row"] == "preset:LINEAR"
+    assert base["source"] == {"preset": "LINEAR", "arguments": {}}
+    variant = json.loads(
+        (linear_dir / "linear__basis_type_gaussian_tiny_f32.json").read_text()
+    )
+    assert variant["row"] == 'preset:LINEAR[basis_type="Gaussian"]'
+    assert variant["source"]["arguments"] == {"basis_type": "Gaussian"}
+    yamls = sorted(p.name for p in (linear_dir / "yamls").iterdir())
+    assert yamls == ["linear__basis_type_gaussian_tiny.yaml", "linear_tiny.yaml"]
+
+
+def test_by_position_renames_index_keys_to_the_model_names():
+    weights = {"0/w": 1, "1/w": 2, "Z/w": 3, "7/w": 4, "1/other": 5}
+    renamed, count = mg.by_position(weights, ["A", "B"], {"A/w", "B/w", "Z/w"})
+    assert renamed == {"A/w": 1, "B/w": 2, "Z/w": 3, "7/w": 4, "1/other": 5}
+    assert count == 2
+
+
+def test_the_dense_pair_of_the_list_format_model_has_its_weights(tmp_path):
+    base = mg.write_tier("tiny", tmp_path, ["model_grace"], every=mg.sources())[0]
+    assert all(row["key"].split("/")[0].isdigit() for row in base["variables"])
+    pair = json.loads((tmp_path / "model_grace_tiny_f64_dense.json").read_text())[
+        "option_pair"
+    ]
+    assert pair["weights"]["renamed_by_position"] == len(base["variables"])
+    assert pair["weights"]["only_in_model"] == pair["weights"]["only_in_weights"] == []
+    assert max(pair["results_max_abs_diff"].values()) < 1e-12
+    assert mg.report_ok(mg.verify_fixture(tmp_path, "model_grace_tiny_f64_dense"))
+
+
+def test_a_variant_fixture_reproduces_in_tensorflow(linear_dir):
+    report = mg.verify_fixture(linear_dir, "linear__basis_type_gaussian_tiny_f64")
+    assert mg.report_ok(report), report["exceeding"][:5]
+
+
+def test_the_layout_options_of_a_model(omat_model):
+    assert mg.layout_options(omat_model) == {"dense_nbr": True, "lm_first": True}
+
+
+def test_the_faithful_tier_has_the_anchors_only():
+    assert {k: v.row for k, v in mg.tier_sources("faithful").items()} == {
+        "omat": "file:model_grace_2L_omat",
+        "large": "file:model_grace_2L_omat_large_base",
+    }
+
+
+def test_command_line_cells_fails_on_merged_widths_not_accepted(monkeypatch, caplog):
+    monkeypatch.setattr(mg, "MERGED_WIDTHS", {})
+    assert mg.main(["cells"]) == 1
+    assert (
+        "grace_3l_omat_large: the distinct widths (32, 64) get one tiny width"
+        in caplog.text
+    )
+
+
+def test_command_line_write_refuses_an_unknown_label_and_lists_sources(
+    tmp_path, caplog
+):
+    assert (
+        mg.main(["write", "--tier", "tiny", "--out", str(tmp_path), "--models", "nope"])
+        == 2
+    )
+    assert "no tiny source is labelled ['nope']" in caplog.text
+    assert mg.main(["sources"]) == 0
+    assert "grace_2l_oam\tfile:GRACE-2L-OAM" in caplog.text
+
+
 # ------------------------------------------------------------------ logic: seeds, files, comparisons
 
 
@@ -819,6 +1037,18 @@ def test_command_line_cells_and_yamls(capsys):
     capsys.readouterr()
 
 
+def test_command_line_cells_fails_on_a_lost_option_cell(monkeypatch, caplog):
+    lost = (
+        "tensorpotential.instructions.compute.RadialBasis",
+        "basis_type",
+        "str",
+        "Cheb",
+    )
+    monkeypatch.setattr(mg, "missing_cells", lambda parent, derived: [lost])
+    assert mg.main(["cells"]) == 1
+    assert "the tiny yaml lacks" in caplog.text
+
+
 def test_command_line_write_verify_and_compare(tiny_dir, tmp_path):
     out = tmp_path / "cli"
     assert (
@@ -848,6 +1078,15 @@ def test_a_fixture_over_the_size_limit_makes_write_fail(tmp_path, monkeypatch):
 
 
 def test_the_committed_tiny_anchors_reproduce_in_tensorflow():
+    # every fixture of the anchors and the float64 fixture of each family's default row; the others (preset variants,
+    # float32 and option pairs of the other families) are reloaded by ``make_golden.py verify tests_torch/golden``
     for path in sorted(mg.GOLDEN_DIR.glob("*.json")):
-        report = mg.verify_fixture(mg.GOLDEN_DIR, path.stem)
-        assert mg.report_ok(report), (path.stem, report["exceeding"][:5])
+        manifest = json.loads(path.read_text())
+        family_default = (
+            manifest["dtype"] == "float64"
+            and not manifest["option"]
+            and not manifest["source"].get("arguments")
+        )
+        if manifest["model"] in mg.MODELS or family_default:
+            report = mg.verify_fixture(mg.GOLDEN_DIR, path.stem)
+            assert mg.report_ok(report), (path.stem, report["exceeding"][:5])

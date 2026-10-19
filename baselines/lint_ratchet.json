@@ -935,9 +935,6 @@
    "C901": 1,
    "S607": 1
   },
-  "tools/make_golden.py": {
-   "PLR0913": 1
-  },
   "tools/oracle_snapshot.py": {
    "SIM401": 1
   },

@@ -1,12 +1,15 @@
 {
- "format_version": 1,
+ "format_version": 2,
  "name": "omat_tiny_f32",
  "model": "omat",
+ "row": "file:model_grace_2L_omat",
+ "source": {
+  "file": "tests/model_grace_2L_omat.yaml"
+ },
  "tier": "tiny",
  "dtype": "float32",
  "option": null,
  "seed": 20260930,
- "parent_yaml": "model_grace_2L_omat.yaml",
  "yaml": "omat_tiny.yaml",
  "yaml_sha256": "57894e837aadb4074d14a0c8c2df49312abb1851881449344d9285a24ef34345",
  "elements": [
@@ -127,9 +130,9 @@
   }
  },
  "library": {
-  "library_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
+  "library_git_sha": "5636f3816860923834f5b9a46357d909d2cd79f0",
   "library_dirty": false,
-  "generator_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
+  "generator_git_sha": "5636f3816860923834f5b9a46357d909d2cd79f0",
   "generator_dirty": false,
   "versions": {
    "tensorflow": "2.20.0",
@@ -1559,6 +1562,11 @@
    "trainable": true
   }
  ],
+ "layout_options": {
+  "dense_nbr": true,
+  "lm_first": true
+ },
+ "not_made": {},
  "n_arrays": 325,
  "weights_from": null,
  "option_pair": null,

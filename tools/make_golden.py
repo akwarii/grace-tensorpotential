@@ -1,8 +1,9 @@
 """Golden-fixture generator of the TensorFlow GRACE models (the numerical ground truth of the torch twins).
 
-For the two 2L foundation-model yamls (``omat``: ``tests/model_grace_2L_omat.yaml``, ``large``:
-``tests/model_grace_2L_omat_large_base.yaml``) the generator builds the TensorFlow model with float64 or
-float32 parameters, overwrites every trainable floating variable with seeded non-zero values (several layers
+For every architecture row of ``docs/torch_backend/architectures.json`` (a source: a model file of the repository,
+or a preset of ``potentials/presets.py`` with its default arguments or one argument changed; the tensor models are
+fixture-free, ``architecture_matrix.FIXTURE_FREE``) the generator builds the TensorFlow model with float64 or float32
+parameters, overwrites every trainable floating variable with seeded non-zero values (several layers
 are zero-initialised and would make the outputs trivial) and runs the structures of
 ``tests_torch/structures`` through it. A fixture holds
 
@@ -18,21 +19,25 @@ are zero-initialised and would make the outputs trivial) and runs the structures
   module-level switch ``_USE_GEMM_COUPLE``, the resolved constructor arguments of every instruction, the
   shape and dtype of every array, file sizes and sha256).
 
-Two tiers per model: ``tiny`` (3 to 4 elements, small widths; the same option paths as the parent yaml;
-committed under ``tests_torch/golden/``, each fixture under 1 MB) and ``faithful`` (the real widths, 6 elements;
-generated locally into ``tests_torch/fixtures/``, of which only the manifests are committed). An **option pair**
+Two tiers: ``tiny`` for every source (3 to 4 elements, small widths; the same option paths as the parent yaml;
+committed under ``tests_torch/golden/``, each fixture under 1 MB) and ``faithful`` for the two anchor models ``omat``
+(``tests/model_grace_2L_omat.yaml``) and ``large`` (``tests/model_grace_2L_omat_large_base.yaml``) only (the real
+widths, 6 elements; generated locally into ``tests_torch/fixtures/``, of which only the manifests are committed). A
+manifest names the architecture row its fixture belongs to (``row``). An **option pair**
 is a second fixture of the same weights with ``dense_nbr`` or ``lm_first`` switched on in every instruction that
-takes it; its manifest records which outputs equal the default layout and which weights differ in shape.
+takes it (made for the default row of each source family, not for its variants); its manifest records which outputs
+equal the default layout and which weights differ in shape.
 Random weights only, never foundation weights.
 
 Usage (repository root, project ``.venv``, CPU, one thread)::
 
     python tools/make_golden.py yamls                              # write the derived yamls
-    python tools/make_golden.py write --tier tiny                  # tests_torch/golden/
+    python tools/make_golden.py write --tier tiny                  # tests_torch/golden/ (--models LABEL ... for some)
     python tools/make_golden.py write --tier faithful --out tests_torch/fixtures
     python tools/make_golden.py verify tests_torch/golden          # reload every fixture in TF
     python tools/make_golden.py compare DIR_A DIR_B                # two runs (for example pre-cleanup and HEAD)
     python tools/make_golden.py cells                              # the tiny yamls exercise every option cell
+    python tools/make_golden.py sources                            # label and architecture row of every source
 
 The library imported is the one on ``PYTHONPATH`` (the manifest records its location and git sha), which is how
 the generator runs once from a worktree of the ``pre-cleanup`` tag and once from the head.
@@ -41,11 +46,14 @@ the generator runs once from a worktree of the ``pre-cleanup`` tag and once from
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
+import re
 import subprocess
 import sys
+import tempfile
 import zlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -70,14 +78,50 @@ TESTS = ROOT / "tests"
 GOLDEN_DIR = ROOT / "tests_torch" / "golden"
 FIXTURES_DIR = ROOT / "tests_torch" / "fixtures"
 SEED = osn.SEED
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+"""2: the manifest names its architecture ``row`` and its ``source`` (file or preset and arguments)."""
 
-#: model label -> parent yaml (in ``tests/``)
+_ZBL_FLOAT32 = (
+    "ZBLPotential.frwrd compares the float64 bond lengths with a float32 cutoff in a float32 model "
+    "(tf.Less: InvalidArgumentError), so TensorFlow gives no float32 reference (FAM2 finding)"
+)
+_LM_FIRST_OUTPUT = (
+    "the output target reads the per-atom features in the default layout, so the lm_first model fails in "
+    "TensorFlow ({}); no reference to compare with (FAM2 finding)"
+)
+#: label -> {dtype label or option-pair label: why TensorFlow cannot make that fixture}; measured, never guessed.
+#: The manifests of the source record it (``not_made``), and the matrix counts the row as complete without it.
+NOT_MADE: dict[str, dict[str, str]] = {
+    **{
+        f"{preset}__zbl_cutoff_1_0": {"f32": _ZBL_FLOAT32}
+        for preset in (
+            "grace_1layer_v1_24",
+            "grace_2layer_v1_24",
+            "grace_2layer_scaled",
+            "grace_1layer_v2_25",
+            "grace_2layer_v2_25",
+        )
+    },
+    **{
+        label: {
+            "lm_first": _LM_FIRST_OUTPUT.format(
+                "FSOut2ScalarTarget: StridedSlice out of bounds"
+            )
+        }
+        for label in ("fs", "grace_fs_omat")
+    },
+    "model_grace": {
+        "lm_first": _LM_FIRST_OUTPUT.format("MLPOut2ScalarTarget: MatMul size mismatch")
+    },
+}
+
+#: anchor label -> parent yaml (in ``tests/``): the models of the faithful tier, and the labels of their rows
 MODELS = {
     "omat": "model_grace_2L_omat.yaml",
     "large": "model_grace_2L_omat_large_base.yaml",
 }
 DTYPES = {"f64": "float64", "f32": "float32"}
+DTYPE_LABELS = {name: label for label, name in DTYPES.items()}
 #: option pair label -> the constructor option switched on
 OPTIONS = {"dense": "dense_nbr", "lm_first": "lm_first"}
 #: a tiny anchor stays under this many bytes, all its files (arrays, weights, manifest) together
@@ -102,6 +146,11 @@ class Tier:
     structures: tuple[str, ...]
     #: species of the structure set that the model does not have, mapped to ones it has
     aliases: Mapping[str, str]
+
+    @property
+    def element_map(self) -> dict[str, int]:
+        """Return the element map of the tier's models: the symbols in sorted order."""
+        return {symbol: index for index, symbol in enumerate(sorted(self.elements))}
 
 
 TIERS = {
@@ -128,47 +177,153 @@ TIERS = {
     ),
 }
 
-# Widths of the tiny tier: the real widths 128, 64, 42, 32, 17, 16, 13 and 12 map to distinct small numbers
-# where the parent keeps them distinct, so that a twin that mixes two axes up fails instead of passing.
-TINY_WIDTHS = {128: 6, 64: 8, 42: 5, 32: 4, 17: 3, 16: 3, 13: 2, 12: 2}
+# Widths of the tiny tier: the real widths map to distinct small numbers where a parent keeps them distinct, so that
+# a twin that mixes two axes up fails instead of passing (``distinct_widths_merged`` checks it for every source). The
+# entries after 12 serve the sources added for FAM2 (2L v1: 48; LINEAR: 24; FS: 20, 15, 10 and 5) and do not occur
+# in the two anchor yamls, whose derived files stay as they were.
+TINY_WIDTHS = {
+    128: 6,
+    64: 8,
+    42: 5,
+    32: 4,
+    17: 3,
+    16: 3,
+    13: 2,
+    12: 2,
+    48: 7,
+    24: 5,
+    20: 7,
+    15: 6,
+    10: 5,
+    5: 3,
+}
+#: label -> widths that replace those of ``TINY_WIDTHS`` for that source. The 3L model takes 2.3 MB per fixture at the
+#: common tiny widths (8 channels for 64) and still 1.0 MB with three distinct ones (64: 2, 32: 3, 128: 4), over the 1 MB of
+#: the tier; its ranks 32 and 64 (``GeneralProductFunction``, ``FCRight2Left``) share the width 2 (``MERGED_WIDTHS``).
+TINY_WIDTHS_OF: dict[str, dict[int, int]] = {
+    "grace_3l_omat_large": {128: 3, 64: 2, 32: 2},
+}
+#: label -> distinct parent widths that its tiny yaml maps to one width, accepted by the ``cells`` check
+MERGED_WIDTHS: dict[str, set[tuple[int, ...]]] = {"grace_3l_omat_large": {(32, 64)}}
 TINY_HIDDEN = {
     "MLPRadialFunction": [6, 7],
     "MLPRadialFunction_v2": [6, 7],
     "LinMLPOut2ScalarTarget": [9],
+    "SPBF": [6, 7],
 }
-WIDTH_KEYS = ("embedding_size", "n_rad_max", "n_out")
+#: constructor arguments that hold a width (an int, or a list of ints for ``FunctionReduceN.n_in``)
+WIDTH_KEYS = (
+    "embedding_size",
+    "n_rad_max",
+    "n_out",
+    "n_crop",
+    "rank",
+    "n_in",
+)
 
 
 # ------------------------------------------------------------------ yamls
 
 
 def derive_yaml(parent: Path, tier: Tier) -> dict[str, Any]:
-    """The yaml dictionary of ``parent`` for ``tier``: new element map and, for tiny, small widths.
+    """Return the yaml dictionary of the model file ``parent`` for ``tier`` (``derive`` of its content)."""
+    return derive(yaml.safe_load(parent.read_text()), tier)
+
+
+def derive(raw: Any, tier: Tier, widths: Mapping[int, int] = TINY_WIDTHS) -> Any:
+    """Return a copy of the model yaml ``raw`` for ``tier``: new element map and, for tiny, small widths.
 
     Only widths and the element set change; every class, option, ``lmax``, ``Lmax``, parity list and layout
-    option stays as in the parent, which is what keeps every (class, option) pair exercised.
+    option stays as in the parent, which is what keeps every (class, option) pair exercised. Element-keyed
+    values follow the new element map: ``atomic_shift_map`` keeps the shifts of the tier's elements. ``widths``
+    maps a real width to its tiny one (``widths_of_source``).
     """
-    raw = yaml.safe_load(parent.read_text())
-    element_map = {symbol: index for index, symbol in enumerate(sorted(tier.elements))}
-    for entry in raw.values():
+    raw = copy.deepcopy(raw)
+    entries = scan_options.instruction_dicts(raw)[
+        1
+    ]  # the dictionaries of ``raw``, changed in place
+    element_map = tier.element_map
+    parent_map = next(
+        (e["element_map"] for e in entries if isinstance(e.get("element_map"), dict)),
+        {},
+    )
+    for entry in entries:
         cls = entry["__cls__"].rsplit(".", 1)[-1]
         if "element_map" in entry:
             entry["element_map"] = dict(element_map)
         if entry.get("number_of_atom_types"):
             entry["number_of_atom_types"] = len(element_map)
+        if isinstance(entry.get("atomic_shift_map"), dict):
+            entry["atomic_shift_map"] = remap_elements(
+                entry["atomic_shift_map"], parent_map, element_map
+            )
         if not tier.shrink_widths:
             continue
         for key in WIDTH_KEYS:
-            if isinstance(entry.get(key), int) and entry[key] in TINY_WIDTHS:
-                entry[key] = TINY_WIDTHS[entry[key]]
+            if key in entry:
+                entry[key] = tiny_width(entry[key], widths)
         if isinstance(entry.get("hidden_layers"), list):
             entry["hidden_layers"] = list(TINY_HIDDEN[cls])
     return raw
 
 
-def yaml_text(raw: Mapping[str, Any]) -> str:
-    """The text written for a derived yaml (stable across runs)."""
-    return yaml.safe_dump(dict(raw), sort_keys=False)
+def tiny_width(value: Any, widths: Mapping[int, int] = TINY_WIDTHS) -> Any:
+    """``value`` with every width of ``widths`` replaced by its tiny one (an int or a list of ints)."""
+    if isinstance(value, list):
+        return [tiny_width(v, widths) for v in value]
+    if isinstance(value, int) and not isinstance(value, bool):
+        return widths.get(value, value)
+    return value
+
+
+def widths_of_source(label: str) -> dict[int, int]:
+    """Return the tiny widths of the source ``label``: ``TINY_WIDTHS`` with its entry of ``TINY_WIDTHS_OF``."""
+    return {**TINY_WIDTHS, **TINY_WIDTHS_OF.get(label, {})}
+
+
+def remap_elements(
+    values: Mapping[Any, Any],
+    parent_map: Mapping[str, int],
+    element_map: Mapping[str, int],
+) -> dict[Any, Any]:
+    """Keep the entries of ``values`` (keyed by element index or symbol of ``parent_map``) of the elements of ``element_map``.
+
+    A key stays a symbol or an index as it was; an element of ``element_map`` without an entry gets none.
+    """
+    symbol_of = {index: symbol for symbol, index in parent_map.items()}
+    out: dict[Any, Any] = {}
+    for key, value in values.items():
+        symbol = key if key in parent_map else symbol_of.get(key)
+        if symbol is not None and symbol in element_map:
+            out[symbol if key == symbol else element_map[symbol]] = value
+    return dict(sorted(out.items(), key=lambda item: str(item[0])))
+
+
+def widths_of(raw: Any) -> set[int]:
+    """Every width value of a model yaml (``WIDTH_KEYS``; ``hidden_layers`` are replaced as a whole, not mapped)."""
+    found: set[int] = set()
+    for entry in scan_options.instruction_dicts(raw)[1]:
+        for key in WIDTH_KEYS:
+            values = entry.get(key)
+            for value in values if isinstance(values, list) else [values]:
+                if isinstance(value, int) and not isinstance(value, bool):
+                    found.add(value)
+    return found
+
+
+def distinct_widths_merged(
+    parent: Any, widths: Mapping[int, int] = TINY_WIDTHS
+) -> list[tuple[int, ...]]:
+    """Return the groups of distinct widths of ``parent`` that ``widths`` maps to one tiny width (empty: none)."""
+    groups: dict[int, list[int]] = {}
+    for width in sorted(widths_of(parent) & set(widths)):
+        groups.setdefault(widths[width], []).append(width)
+    return [tuple(g) for g in groups.values() if len(g) > 1]
+
+
+def yaml_text(raw: Mapping[str, Any] | list[Any]) -> str:
+    """Return the text written for a derived yaml (stable across runs); the old list format stays a list."""
+    return yaml.safe_dump(raw if isinstance(raw, list) else dict(raw), sort_keys=False)
 
 
 def yaml_path(model: str, tier: str, base: Path | None = None) -> Path:
@@ -183,15 +338,138 @@ def tier_dir(tier: str) -> Path:
 
 
 def write_yamls(tiers: Iterable[str] = TIERS, base: Path | None = None) -> list[Path]:
-    """Write the derived yamls of every model for ``tiers``; returns the paths."""
-    written = []
-    for tier_name in tiers:
-        for model, parent in MODELS.items():
-            path = yaml_path(model, tier_name, base)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(yaml_text(derive_yaml(TESTS / parent, TIERS[tier_name])))
-            written.append(path)
-    return written
+    """Write the derived yamls of the anchors (``MODELS``) for ``tiers``; returns the paths."""
+    return [
+        write_derived_yaml(anchor_source(model), tier_name, base)
+        for tier_name in tiers
+        for model in MODELS
+    ]
+
+
+def write_derived_yaml(source: Source, tier: str, base: Path | None = None) -> Path:
+    """Write the derived yaml of ``source`` in ``tier`` next to the fixtures of ``base``; returns its path."""
+    path = yaml_path(source.label, tier, base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml_text(derived_raw(source, tier)))
+    return path
+
+
+# ------------------------------------------------------------------ sources: the architecture rows
+
+
+@dataclass(frozen=True)
+class Source:
+    """Where the parent model of a fixture comes from: a model file, or a preset built with ``arguments``.
+
+    ``row`` is the id of its row in ``docs/torch_backend/architectures.json``; a variant (``arguments`` not empty)
+    differs from the default build of its preset in that one argument.
+    """
+
+    label: str
+    row: str
+    path: Path | None = None
+    preset: str | None = None
+    arguments: tuple[tuple[str, Any], ...] = ()
+
+    @property
+    def is_variant(self) -> bool:
+        """Whether the source is a preset with one argument changed (no option pairs are made for it)."""
+        return bool(self.arguments)
+
+    def describe(self, tier: Tier) -> dict[str, Any]:
+        """Return the source as the manifest records it: the file, or the preset and the arguments it was built with."""
+        if self.path is not None:
+            return {"file": self.path.relative_to(ROOT).as_posix()}
+        return {
+            "preset": self.preset,
+            "arguments": tier_arguments(self.arguments, tier),
+        }
+
+
+def slug(text: str) -> str:
+    """Lower case, every run of other characters than letters and digits made one ``_``."""
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+def source_label(preset: str, arguments: Mapping[str, Any]) -> str:
+    """``grace_2layer_v2_25``, ``grace_2layer_v2_25__basis_type_gaussian``; a dict value is not spelt out."""
+    label = slug(preset)
+    for argument, value in arguments.items():
+        label += "__" + slug(argument)
+        if not isinstance(value, dict):
+            label += "_" + slug(json.dumps(value))
+    return label
+
+
+def anchor_source(label: str) -> Source:
+    """Return the source of an anchor model (``MODELS``), without TensorFlow."""
+    path = TESTS / MODELS[label]
+    # the id of architecture_matrix.file_row_id, spelt out: this runs without the matrix (from older trees)
+    return Source(label, f"file:{path.stem}", path=path)
+
+
+def sources() -> dict[str, Source]:
+    """Every source with a tiny fixture, by label: the rows of ``architecture_matrix`` that are not fixture-free.
+
+    The presets and their variants come from ``architecture_matrix.variants`` (TensorFlow imports the presets),
+    the files from ``architecture_matrix.model_files``; the two anchors keep their labels ``omat`` and ``large``.
+    """
+    import architecture_matrix as am
+
+    anchors = {anchor_source(label).row: label for label in MODELS}
+    out: dict[str, Source] = {}
+    for name in am.PRESETS:
+        for label, arguments in am.variants("preset", name):
+            row = am.row_id("preset", name, label)
+            one = Source(
+                source_label(name, arguments),
+                row,
+                preset=name,
+                arguments=tuple(arguments.items()),
+            )
+            out[one.label] = one
+    for path in am.model_files():
+        row = am.file_row_id(path)
+        one = Source(anchors.get(row, slug(path.stem)), row, path=path)
+        out[one.label] = one
+    return out
+
+
+def tier_arguments(arguments: Iterable[tuple[str, Any]], tier: Tier) -> dict[str, Any]:
+    """Return the preset arguments for the elements of ``tier``: element-keyed values name every element of the tier.
+
+    The matrix's ``cutoff_dict`` and ``atomic_shift_map`` name its own two elements (a shift map that misses an
+    element of the model fails in TensorFlow); the tier's ones stay dicts of distinct values: cutoffs of 4.0 A plus
+    0.25 A per pair in sorted pair order, shifts of -1 eV minus 1 eV per element index.
+    """
+    out = dict(arguments)
+    symbols = sorted(tier.elements)
+    if isinstance(out.get("cutoff_dict"), dict):
+        pairs = [a + b for i, a in enumerate(symbols) for b in symbols[i:]]
+        out["cutoff_dict"] = {pair: 4.0 + 0.25 * k for k, pair in enumerate(pairs)}
+    if isinstance(out.get("atomic_shift_map"), dict):
+        out["atomic_shift_map"] = {index: -1.0 - index for index in range(len(symbols))}
+    return out
+
+
+def parent_raw(source: Source, tier: Tier = TIERS["tiny"]) -> Any:
+    """Return the parent model yaml of ``source``: the file, or the preset built for the elements of ``tier``.
+
+    A preset is built with the element map of the tier (its element-dependent tables follow it) and its real
+    widths; ``derive`` then shrinks the widths as it does for a file.
+    """
+    if source.path is not None:
+        return yaml.safe_load(source.path.read_text())
+    # the thread and determinism settings must come before the first TensorFlow operation of the process
+    osn.configure_tensorflow()
+    import architecture_matrix as am
+
+    return am.build_instructions(
+        "preset",
+        str(source.preset),
+        tier_arguments(source.arguments, tier),
+        element_map=tier.element_map,
+    )
 
 
 def option_cells(paths: Sequence[Path]) -> set[tuple]:
@@ -205,9 +483,26 @@ def option_cells(paths: Sequence[Path]) -> set[tuple]:
     return cells
 
 
+def derived_raw(source: Source, tier: str) -> Any:
+    """Return the yaml of ``source`` in ``tier``: ``derive`` of its parent with the source's tiny widths."""
+    return derive(
+        parent_raw(source, TIERS[tier]), TIERS[tier], widths_of_source(source.label)
+    )
+
+
 def missing_cells(parent: Path, derived: Path) -> list[tuple]:
     """Cells of the parent yaml that the derived yaml does not exercise (empty: nothing is lost)."""
     return sorted(option_cells([parent]) - option_cells([derived]), key=repr)
+
+
+def missing_source_cells(source: Source, raw: Any, derived: Path) -> list[tuple]:
+    """``missing_cells`` for a source whose parent yaml is ``raw``: a preset's parent goes to a scratch file first."""
+    if source.path is not None:
+        return missing_cells(source.path, derived)
+    with tempfile.TemporaryDirectory() as tmp:
+        parent = Path(tmp) / "parent.yaml"
+        parent.write_text(yaml_text(raw))
+        return missing_cells(parent, derived)
 
 
 # ------------------------------------------------------------------ structures
@@ -345,11 +640,16 @@ def assign_weights(model, weights: Mapping[str, np.ndarray]) -> dict[str, Any]:
     """Assign ``weights`` (by key) to the variables of ``model``; report what could not be matched.
 
     A key present on one side only, or with a different shape, is reported and left alone (the variable keeps
-    its own value); nothing is dropped silently.
+    its own value); nothing is dropped silently. A model of the old list-format yaml keys its checkpoint by the
+    position of the instruction (``11/reducing_YI``); its option pair, rebuilt from a name map, by the name
+    (``B/reducing_YI``): such keys are matched by position (``renamed_by_position`` counts them).
     """
     keys = checkpoint_paths(model)
     by_key = {keys[id(v)]: v for v in model.variables}
+    names = [ins.name for ins in gp._instructions_of(model)]  # noqa: SLF001
+    weights, renamed = by_position(weights, names, set(by_key))
     report: dict[str, Any] = {
+        "renamed_by_position": renamed,
         "only_in_model": sorted(set(by_key) - set(weights)),
         "only_in_weights": sorted(set(weights) - set(by_key)),
         "shape_differs": {},
@@ -374,6 +674,28 @@ def assign_weights(model, weights: Mapping[str, np.ndarray]) -> dict[str, Any]:
             continue
         report["assigned"] += 1
     return report
+
+
+def by_position(
+    weights: Mapping[str, np.ndarray], names: Sequence[str], model_keys: set[str]
+) -> tuple[dict[str, np.ndarray], int]:
+    """Return ``weights`` with ``<position>/<path>`` keys renamed ``<names[position]>/<path>`` where the model has that key.
+
+    The second value is the number of renamed keys; a key that is already the model's, or whose renamed form the model
+    lacks, is kept as it is.
+    """
+    out: dict[str, np.ndarray] = {}
+    renamed = 0
+    for key, value in weights.items():
+        head, _, rest = key.partition("/")
+        if key not in model_keys and head.isdigit() and int(head) < len(names):
+            candidate = f"{names[int(head)]}/{rest}"
+            if candidate in model_keys:
+                out[candidate] = value
+                renamed += 1
+                continue
+        out[key] = value
+    return out, renamed
 
 
 def _own_tables(instruction, others: set[int]) -> Iterable[tuple[str, Any]]:
@@ -607,7 +929,11 @@ class FixtureRequest:
 
 
 def requests_for(tier: str, models: Iterable[str] = MODELS) -> list[FixtureRequest]:
-    """Base fixtures ({model} x {f64, f32}) and, in float64, one option pair per layout option."""
+    """Base fixtures ({model} x {f64, f32}) and, in float64, one option pair per layout option.
+
+    The rule of the anchors, which take both layout options; ``write_tier`` decides per source (``NOT_MADE``,
+    ``layout_options``, variants).
+    """
     out = []
     for model in models:
         out += [FixtureRequest(model, tier, dtype) for dtype in DTYPES]
@@ -727,27 +1053,37 @@ def _file_entry(path: Path) -> dict[str, Any]:
     return {"name": path.name, "bytes": path.stat().st_size, "sha256": _sha256(path)}
 
 
+@dataclass(frozen=True)
+class Written:
+    """What ``make_fixture`` wrote for one request, as the manifest describes it."""
+
+    ypath: Path
+    files: Mapping[str, Path]
+    option_pair: dict[str, Any] | None
+    n_arrays: int
+
+
 def _manifest(
     request: FixtureRequest,
+    source: Source,
     model,
     cases: Mapping[str, Any],
-    ypath: Path,
-    files: Mapping[str, Path],
-    option_pair: dict[str, Any] | None,
-    n_arrays: int,
+    written: Written,
     seed: int,
 ) -> dict[str, Any]:
     """The manifest of a written fixture (no clock, no host name: the same run gives the same text)."""
     tier = TIERS[request.tier]
+    ypath = written.ypath
     manifest: dict[str, Any] = {
         "format_version": FORMAT_VERSION,
         "name": request.name,
         "model": request.model,
+        "row": source.row,
+        "source": source.describe(tier),
         "tier": request.tier,
         "dtype": DTYPES[request.dtype],
         "option": OPTIONS.get(request.option) if request.option else None,
         "seed": seed,
-        "parent_yaml": MODELS[request.model],
         "yaml": ypath.name,
         "yaml_sha256": hashlib.sha256(ypath.read_bytes()).hexdigest(),
         "elements": sorted(tier.elements),
@@ -756,12 +1092,14 @@ def _manifest(
         "library": library_info(),
         "instructions": init_args_of(model),
         "variables": weight_table(model),
-        "n_arrays": n_arrays,
+        "layout_options": layout_options(model),
+        "not_made": NOT_MADE.get(request.model, {}),
+        "n_arrays": written.n_arrays,
         "weights_from": None
         if not request.option
         else fixture_name(request.model, request.tier, request.dtype),
-        "option_pair": option_pair,
-        "files": {kind: _file_entry(path) for kind, path in files.items()},
+        "option_pair": written.option_pair,
+        "files": {kind: _file_entry(path) for kind, path in written.files.items()},
     }
     manifest["total_bytes"] = sum(
         entry["bytes"] for entry in manifest["files"].values()
@@ -769,21 +1107,32 @@ def _manifest(
     return manifest
 
 
+def layout_options(model) -> dict[str, bool]:
+    """Return, per layout option (``dense_nbr``, ``lm_first``), whether one instruction of ``model`` takes it."""
+    instructions = gp._instructions_of(model)  # noqa: SLF001
+    return {
+        option: any(osn._accepts_option(i, option) for i in instructions)  # noqa: SLF001
+        for option in OPTIONS.values()
+    }
+
+
 def make_fixture(
     request: FixtureRequest,
     out: Path,
     base: MadeFixture | None = None,
     seed: int = SEED,
+    source: Source | None = None,
 ) -> MadeFixture:
     """Build, evaluate and write one fixture.
 
     For an option pair ``base`` is what this function returned for the default fixture of the same model,
     tier and dtype: its weights are assigned by key to the option model, and its arrays are what the pair is
-    compared with.
+    compared with. ``source`` defaults to the anchor of ``request.model``.
     """
+    source = source if source is not None else anchor_source(request.model)
     ypath = yaml_path(request.model, request.tier, out)
     if not ypath.exists():
-        write_yamls([request.tier], out)
+        write_derived_yaml(source, request.tier, out)
     option = OPTIONS.get(request.option) if request.option else None
     model = build_model(ypath, DTYPES[request.dtype], option, seed)
     weights_report: dict[str, Any] | None = None
@@ -807,25 +1156,54 @@ def make_fixture(
     pair = None
     if base is not None and weights_report is not None:
         pair = option_pair_report(base.arrays, arrays, weights_report)
-    manifest = _manifest(request, model, cases, ypath, files, pair, len(arrays), seed)
+    written = Written(ypath, files, pair, len(arrays))
+    manifest = _manifest(request, source, model, cases, written, seed)
     stem.with_suffix(".json").write_text(json.dumps(manifest, indent=1) + "\n")
     return MadeFixture(manifest, weights, arrays)
 
 
 def write_tier(
-    tier: str, out: Path | None = None, models: Iterable[str] = MODELS, seed: int = SEED
+    tier: str,
+    out: Path | None = None,
+    models: Iterable[str] = MODELS,
+    seed: int = SEED,
+    every: Mapping[str, Source] | None = None,
 ) -> list[dict[str, Any]]:
-    """Every fixture of ``tier`` into ``out`` (default: the directory of the tier); returns the manifests."""
+    """Every fixture of ``models`` in ``tier`` into ``out`` (default: the directory of the tier); returns the manifests.
+
+    ``every`` maps a label to its source (default: the anchors only). A model gets its two dtypes and, unless it is a
+    preset variant, one float64 option pair per layout option that one of its instructions takes
+    (``layout_options`` of the manifest).
+    """
     folder = out if out is not None else tier_dir(tier)
+    known = every if every is not None else {m: anchor_source(m) for m in models}
     manifests = []
-    bases: dict[tuple[str, str], MadeFixture] = {}
-    for request in requests_for(tier, models):
-        base = bases.get((request.model, request.dtype))
-        made = make_fixture(request, folder, base, seed)
-        if request.option is None:
-            bases[request.model, request.dtype] = made
-        manifests.append(made.manifest)
-        logger.info("%s: %d bytes", request.name, made.manifest["total_bytes"])
+    for label in models:
+        source = known[label]
+        write_derived_yaml(source, tier, folder)
+        skip = NOT_MADE.get(label, {})
+        made = [
+            make_fixture(FixtureRequest(label, tier, dtype), folder, None, seed, source)
+            for dtype in DTYPES
+            if dtype not in skip
+        ]
+        taken = made[0].manifest["layout_options"]
+        pairs = (
+            []
+            if source.is_variant
+            else [o for o in OPTIONS if taken[OPTIONS[o]] and o not in skip]
+        )
+        made += [
+            make_fixture(
+                FixtureRequest(label, tier, "f64", o), folder, made[0], seed, source
+            )
+            for o in pairs
+        ]
+        manifests += [one.manifest for one in made]
+        for one in made:
+            logger.info(
+                "%s: %d bytes", one.manifest["name"], one.manifest["total_bytes"]
+            )
     return manifests
 
 
@@ -855,7 +1233,7 @@ def verify_fixture(
     """
     fixture = load_fixture(folder, name)
     manifest = fixture["manifest"]
-    dtype = "f32" if manifest["dtype"] == "float32" else "f64"
+    dtype = DTYPE_LABELS[manifest["dtype"]]
     ypath = folder / "yamls" / manifest["yaml"]
     other_seed = manifest["seed"] + 1
     model = build_model(ypath, manifest["dtype"], manifest["option"], other_seed)
@@ -891,11 +1269,12 @@ def compare_dirs(first: Path, second: Path) -> dict[str, Any]:
         "fixtures": {},
     }
     for name in sorted(set(names) & set(other)):
-        dtype = "f32" if name.split("_")[2] == "f32" else "f64"
+        manifest = json.loads((first / f"{name}.json").read_text())
+        dtype = DTYPE_LABELS[manifest["dtype"]]
         a = load_npz(first / f"{name}.npz")
         b = load_npz(second / f"{name}.npz")
         report["fixtures"][name] = compare_arrays(a, b, reload_scale_rtol(dtype))
-        owner = json.loads((first / f"{name}.json").read_text())["weights_from"] or name
+        owner = manifest["weights_from"] or name
         wa = load_npz(first / f"{owner}.weights.npz")
         wb = load_npz(second / f"{owner}.weights.npz")
         report["fixtures"][name]["weights"] = compare_arrays(wa, wb, 0.0)
@@ -921,8 +1300,9 @@ def report_ok(report: Mapping[str, Any]) -> bool:
 
 
 def _cmd_yamls(args: argparse.Namespace) -> int:
-    for path in write_yamls(args.tier or TIERS):
-        logger.info("wrote %s", path)
+    for tier in args.tier or TIERS:
+        for source in tier_sources(tier).values():
+            logger.info("wrote %s", write_derived_yaml(source, tier))
     return 0
 
 
@@ -939,11 +1319,23 @@ def size_violations(manifest: Mapping[str, Any], manifest_bytes: int = 0) -> lis
     return [f["name"] for f in files.values() if f["bytes"] >= FAITHFUL_BYTE_TARGET]
 
 
+def tier_sources(tier: str) -> dict[str, Source]:
+    """Return the sources of a tier: every source for tiny, the anchors for faithful."""
+    if tier == "tiny":
+        return sources()
+    return {label: anchor_source(label) for label in MODELS}
+
+
 def _cmd_write(args: argparse.Namespace) -> int:
     folder = args.out if args.out is not None else tier_dir(args.tier)
-    write_yamls([args.tier], folder)
+    every = tier_sources(args.tier)
+    labels = list(every) if args.models is None else args.models
+    unknown = sorted(set(labels) - set(every))
+    if unknown:
+        logger.error("no %s source is labelled %s (see: sources)", args.tier, unknown)
+        return 2
     over: list[str] = []
-    for manifest in write_tier(args.tier, folder, args.models):
+    for manifest in write_tier(args.tier, folder, labels, every=every):
         size = (folder / f"{manifest['name']}.json").stat().st_size
         over += size_violations(manifest, size)
     for name in over:
@@ -979,13 +1371,24 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     return 0 if report_ok(report) else 1
 
 
-def _cmd_cells(args: argparse.Namespace) -> int:
+def _cmd_cells(_: argparse.Namespace) -> int:
     lost = 0
-    for model, parent in MODELS.items():
-        for missing in missing_cells(TESTS / parent, yaml_path(model, "tiny")):
-            logger.error("%s: the tiny yaml lacks %s", model, missing)
+    for label, source in sources().items():
+        raw = parent_raw(source)
+        for missing in missing_source_cells(source, raw, yaml_path(label, "tiny")):
+            logger.error("%s: the tiny yaml lacks %s", label, missing)
+            lost += 1
+        merges = distinct_widths_merged(raw, widths_of_source(label))
+        for merged in set(merges) - MERGED_WIDTHS.get(label, set()):
+            logger.error("%s: the distinct widths %s get one tiny width", label, merged)
             lost += 1
     return 1 if lost else 0
+
+
+def _cmd_sources(_: argparse.Namespace) -> int:
+    for label, source in sources().items():
+        logger.info("%s\t%s", label, source.row)
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -998,7 +1401,12 @@ def build_parser() -> argparse.ArgumentParser:
     one = sub.add_parser("write", help="write the fixtures of a tier")
     one.add_argument("--tier", choices=list(TIERS), required=True)
     one.add_argument("--out", type=Path, default=None)
-    one.add_argument("--models", nargs="*", choices=list(MODELS), default=list(MODELS))
+    one.add_argument(
+        "--models",
+        nargs="*",
+        default=None,
+        help="labels of the sources to write (default: every source of the tier)",
+    )
     one.set_defaults(run=_cmd_write)
     one = sub.add_parser("verify", help="reload every fixture of a folder in TF")
     one.add_argument("folder", type=Path)
@@ -1012,16 +1420,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="check that the tiny yamls exercise every option cell of their parents",
     )
     one.set_defaults(run=_cmd_cells)
+    one = sub.add_parser("sources", help="list the label and row of every source")
+    one.set_defaults(run=_cmd_sources)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Command line entry point."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    if argv is None or argv[0] != "cells":
-        import tensorpotential
+    import tensorpotential
 
-        logger.info("library: %s", tensorpotential.__file__)
+    logger.info("library: %s", tensorpotential.__file__)
     args = build_parser().parse_args(argv)
     run: Callable[[argparse.Namespace], int] = args.run
     return run(args)

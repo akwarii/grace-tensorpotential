@@ -267,6 +267,48 @@ def test_variants_skip_defaults_and_arguments_a_preset_lacks():
     assert 'basis_type="Gaussian"' in labels
 
 
+def test_fixture_dtypes_read_rows_dtypes_and_what_was_not_made(tmp_path, monkeypatch):
+    def manifest(name: str, **fields: Any) -> None:
+        (tmp_path / f"{name}.json").write_text(json.dumps(fields))
+
+    manifest(
+        "a_f64",
+        tier="tiny",
+        row="preset:A",
+        dtype="float64",
+        option=None,
+        not_made={"f32": "why"},
+    )
+    manifest(
+        "a_f64_dense",
+        tier="tiny",
+        row="preset:A",
+        dtype="float64",
+        option="dense_nbr",
+        not_made={},
+    )
+    manifest(
+        "b_f32", tier="tiny", row="preset:B", dtype="float32", option=None, not_made={}
+    )
+    manifest("c_f64", tier="faithful", row="preset:C", dtype="float64", option=None)
+    manifest("d_f64", tier="tiny", dtype="float64", option=None)
+    monkeypatch.setattr(am, "GOLDEN_DIR", tmp_path)
+    am.fixture_dtypes.cache_clear()
+    try:
+        assert am.fixture_dtypes() == {
+            "preset:A": frozenset({"float64", "float32"}),
+            "preset:B": frozenset({"float32"}),
+        }
+        assert am.fixture_present({"id": "preset:A"})
+        assert not am.fixture_present({"id": "preset:B"})
+        assert am.fixture_cell({"id": "preset:B", "source": "preset"}) == "no"
+        assert (
+            am.fixture_cell({"id": "tensor:x", "source": "tensor"}) == "free (TWIN19)"
+        )
+    finally:
+        am.fixture_dtypes.cache_clear()
+
+
 def test_table_command_writes_the_markdown_of_the_json(
     tmp_path, monkeypatch, committed
 ):
