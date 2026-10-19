@@ -122,6 +122,7 @@ A test writes only into `tmp_path` or a scratch directory; `git status` is clean
 - A function or class you **modify** must already be covered at 90% (line and branch). Below that, write characterization tests first, green on the unmodified code, in their own commit, then change the code. Comment-only and annotation-only edits are exempt.
 - Every unit gets a **logic** layer and, where physics applies, a **physical values** layer from an oracle that does not call the unit under test. Never widen a tolerance to make a test pass; real or foundation-model weights are HPC-only.
 - Conventions (file naming, tolerances, markers, shared models, no network) and procedures: `.claude/rules/testing.md` and the `grace-torch-tests` skill.
+- A new preset, preset argument value, instruction class or foundation model needs its row in `docs/torch_backend/architectures.json` (`python tools/architecture_matrix.py write`); `tests_torch/test_architectures.py` fails otherwise.
 
 ## Gotchas that apply everywhere
 
