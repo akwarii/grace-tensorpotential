@@ -1,6 +1,7 @@
-"""Twins of TF's energy chain: ``CreateOutputTarget``, ``LinMLPOut2ScalarTarget`` and ``ConstantScaleShiftTarget``.
+"""Twins of TF's energy chain: the starting value, the readout, the scale and shifts, and the trainable shift.
 
-Spec sheets of the three classes, section 5. The chain starts from the scalar ``initial_value`` of
+Spec sheets of ``CreateOutputTarget``, ``LinMLPOut2ScalarTarget``, ``ConstantScaleShiftTarget`` and ``TrainableShiftTarget``,
+section 5. The chain starts from the scalar ``initial_value`` of
 ``CreateOutputTarget``; every output instruction that follows reads the target, adds or applies its term and returns the
 new value, which the model stores back **under the target's name** (``atomic_energy``):
 
@@ -12,11 +13,12 @@ new value, which the model stores back **under the target's name** (``atomic_ene
                               out = target + (mlp(t) + lin)                             ([atoms, 1])
     ConstantScaleShiftTarget  out = target * scale + shift                              (shift: a constant, a value per
                               element, or Z[mu_i] @ embedding_shift / sqrt(embedding_size))
+    TrainableShiftTarget      out = target + at_shifts[mu_i]                            (a learned energy per element)
 
 Every constant is made in the parameter dtype and cast to the target, as TF builds them in ``float_dtype``: a float32
 model rounds ``scale`` to float32 before the product. The twins have no padding atoms, so TF's masks of the padding
 rows (``batch_tot_nat_real``) are the identity here. The weights are named as in the checkpoint (``mlp.layer<i>.w``,
-``scale``, ``embedding_shift``).
+``scale``, ``embedding_shift``, ``at_shifts``).
 
 Layer: instructions; imports torch, the dense ops, the dtype policy, the errors and the input keys of ``constants``.
 """
@@ -272,3 +274,47 @@ class ConstantScaleShiftTarget(torch.nn.Module):
         if not self._apply_shift:
             return scaled
         return scaled + self._shift(inputs, torch.zeros_like(target))
+
+
+class TrainableShiftTarget(torch.nn.Module):
+    """``TrainableShiftTarget``: ``target + at_shifts[mu_i]``, the learned reference energy of each atom's element.
+
+    Parameters
+    ----------
+    spec
+        The instruction (``target``, ``number_of_atom_types``; ``l`` is 0, the only value the option table accepts).
+    policy
+        Dtype policy of the model: ``at_shifts`` ``[number_of_atom_types, 1]`` has its parameter dtype. It starts at
+        zero, as in TF; the stored weight is loaded into it.
+
+    Raises
+    ------
+    OptionValueError
+        For ``number_of_atom_types`` below 1.
+    """
+
+    def __init__(self, spec: InstructionSpec, policy: DtypePolicy) -> None:
+        """Make the table of shifts."""
+        super().__init__()
+        self.spec = spec
+        self._target = spec.options["target"].name
+        n_types = int(spec.options["number_of_atom_types"])
+        if n_types < 1:
+            msg = f"instruction {spec.name!r} (TrainableShiftTarget): number_of_atom_types must be at least 1, got {n_types}"
+            raise OptionValueError(msg)
+        self.at_shifts = torch.nn.Parameter(
+            torch.zeros((n_types, 1), dtype=policy.param)
+        )
+
+    def forward(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
+        """Return ``target + at_shifts[mu_i]`` ``[atoms, 1]`` in the dtype of the target.
+
+        Raises
+        ------
+        DtypeError
+            When ``atomic_mu_i`` is not an integer tensor.
+        """
+        target, atomic_mu_i = inputs[self._target], inputs[ATOMIC_MU_I]
+        check_index(atomic_mu_i)
+        shift = self.at_shifts.index_select(0, atomic_mu_i)
+        return target + to_dtype_of(shift, target)

@@ -53,8 +53,6 @@ EXPECTED_WITHOUT_GOLDEN = {
     "SphericalHarmonic",
     "MLPRadialFunction",
     "MLPRadialFunction_v2",
-    "InvariantLayerRMSNorm",
-    "TrainableShiftTarget",
 }
 
 SOURCE_COPY_DIRS = ("instructions", "functions", "uq")

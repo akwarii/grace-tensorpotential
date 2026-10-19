@@ -51,6 +51,7 @@ GOLDEN_TESTS: Final[Mapping[str, str]] = {
     OUTPUT + "ConstantScaleShiftTarget": "tests_torch/test_output_targets_golden.py",
     OUTPUT + "CreateOutputTarget": "tests_torch/test_output_targets_golden.py",
     OUTPUT + "LinMLPOut2ScalarTarget": "tests_torch/test_output_targets_golden.py",
+    OUTPUT + "TrainableShiftTarget": "tests_torch/test_output_targets_golden.py",
     COMPUTE + "FCRight2Left": "tests_torch/test_fc_right2left_golden.py",
     COMPUTE + "FunctionReduceN": "tests_torch/test_function_reduce_n_golden.py",
     COMPUTE
@@ -59,6 +60,7 @@ GOLDEN_TESTS: Final[Mapping[str, str]] = {
     COMPUTE
     + "SingleParticleBasisFunctionScalarInd": "tests_torch/test_spbf_scalar_ind_golden.py",
     COMPUTE + "ProductFunction": "tests_torch/test_product_function_golden.py",
+    COMPUTE + "InvariantLayerRMSNorm": "tests_torch/test_invariant_rms_norm_golden.py",
 }
 
 _NEAREST_CLASS_CUTOFF: Final = 0.85
