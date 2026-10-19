@@ -308,7 +308,10 @@ def table_rows(table: Mapping[str, ClassInfo]) -> dict[str, dict[str, Any]]:
 
 def constructor_info(root: str | Path, path: str) -> ClassInfo | None:
     """The constructor of any class of the package (not only an instruction), or ``None`` when it is not defined."""
-    classes = _collect(Path(root)).classes
+    return _info_of(_collect(Path(root)).classes, path)
+
+
+def _info_of(classes: Mapping[str, _Raw], path: str) -> ClassInfo | None:
     raw = classes.get(path)
     if raw is None:
         return None
@@ -367,12 +370,14 @@ def default_problems(
 ) -> list[str]:
     """What differs between the constructors of the supported classes and the option tables."""
     found: list[str] = []
+    # scanned once: every origin is looked up in the same scan
+    classes = _collect(Path(root)).classes
     for cls in sorted(options.SUPPORTED_OPTIONS):
         info = table.get(cls)
         if info is None:
             continue  # reported by completeness_problems
         resolved = {
-            origin: constructor_info(root, origin)
+            origin: _info_of(classes, origin)
             for origin in options.DEFAULTS_ORIGIN.get(cls, ())
         }
         missing = [origin for origin, source in resolved.items() if source is None]
