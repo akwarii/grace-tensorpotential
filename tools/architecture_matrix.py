@@ -50,7 +50,6 @@ from tensorpotential.torch_backend.spec.registry import (  # noqa: E402
 
 JSON_PATH: Final = ROOT / "docs" / "torch_backend" / "architectures.json"
 MD_PATH: Final = ROOT / "docs" / "torch_backend" / "architectures.md"
-GOLDEN_DIR: Final = ROOT / "tests_torch" / "golden"
 FORMAT_VERSION: Final = 1
 
 ELEMENT_MAP: Final = {"H": 0, "O": 1}
@@ -156,8 +155,6 @@ FINE_TUNE_SUFFIX: Final = re.compile(r"-ft-(E|AM)$")
 SHORT_VALUE: Final = 60
 """An option value whose JSON is longer than this many characters is written as its kind."""
 
-Builder = Callable[[], Mapping[str, Any]]
-
 
 # ------------------------------------------------------------------ instruction dicts
 
@@ -168,53 +165,39 @@ def _plain(value: Any) -> Any:
         return {_plain(k): _plain(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [_plain(v) for v in value]
-    if hasattr(value, "item") and not isinstance(value, str | bytes):
+    if hasattr(value, "item"):
         return value.item()
     return value
 
 
 def serialise(instructions: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """Return the ``instructions`` block that ``save_instructions_dict`` would write, in order."""
+    """Return the safe-yaml form of the ``instructions`` block of the saved ``model.yaml``, in order."""
     raw = {name: _plain(ins.to_dict()) for name, ins in instructions.items()}
     return yaml.safe_load(yaml.safe_dump(raw, sort_keys=False))
 
 
-def _preset_builder(name: str, arguments: Mapping[str, Any]) -> Builder:
-    def build() -> Mapping[str, Any]:
-        from tensorpotential.potentials import (
-            presets,
-        )
-
-        manager = getattr(presets, name)(element_map=dict(ELEMENT_MAP), **arguments)
-        return serialise(manager.get_instructions())
-
-    return build
-
-
-def _tensor_builder(name: str, arguments: Mapping[str, Any]) -> Builder:
-    def build() -> Mapping[str, Any]:
-        from tensorpotential.extra.gen_tensor import model
-
-        return serialise(
-            getattr(model, name)(element_map=dict(ELEMENT_MAP), **arguments)
-        )
-
-    return build
-
-
-def _preset_signature(module: str, name: str) -> Mapping[str, inspect.Parameter]:
+def _factory(module: str, name: str) -> Callable[..., Any]:
+    """Return the preset function or tensor-model function (TensorFlow or its stand-in must be importable)."""
     if module == "preset":
         from tensorpotential.potentials import presets
 
-        return inspect.signature(getattr(presets, name)).parameters
+        return getattr(presets, name)
     from tensorpotential.extra.gen_tensor import model
 
-    return inspect.signature(getattr(model, name)).parameters
+    return getattr(model, name)
+
+
+def build_instructions(
+    module: str, name: str, arguments: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Build a preset or tensor model with ``arguments`` and return its serialised instructions."""
+    built = _factory(module, name)(element_map=dict(ELEMENT_MAP), **arguments)
+    return serialise(built.get_instructions() if module == "preset" else built)
 
 
 def variants(module: str, name: str) -> list[tuple[str, dict[str, Any]]]:
     """Return ``(label, arguments)`` of the default build and of each one-argument variant of a preset or tensor model."""
-    parameters = _preset_signature(module, name)
+    parameters = inspect.signature(_factory(module, name)).parameters
     return [("", {})] + [
         (f"{argument}={json.dumps(value, sort_keys=True)}", {argument: value})
         for argument, values in ARGUMENT_VALUES.items()
@@ -258,8 +241,12 @@ def class_options(
     )
 
 
+def _short_name(cls: str) -> str:
+    return cls.rsplit(".", 1)[-1]
+
+
 def _closed_by(cls: str, option: str | None) -> dict[str, str]:
-    short = cls.rsplit(".", 1)[-1]
+    short = _short_name(cls)
     if (short, option) in GAP_REJECTIONS:
         return {"issue": REJECTED, "reason": GAP_REJECTIONS[short, option]}
     return {
@@ -326,12 +313,11 @@ def _diff(
 
 def generated_rows(module: str, name: str) -> list[dict[str, Any]]:
     """Build the base row of a preset or tensor model and its variant rows."""
-    make = _preset_builder if module == "preset" else _tensor_builder
     base_id = f"{module}:{name}"
     rows: list[dict[str, Any]] = []
     base_classes: dict[str, dict[str, list[Any]]] = {}
     for label, arguments in variants(module, name):
-        instructions = make(name, arguments)()
+        instructions = build_instructions(module, name, arguments)
         classes = class_options(instructions)
         row: dict[str, Any] = {
             "id": base_id + (f"[{label}]" if label else ""),
@@ -422,9 +408,7 @@ def unused_classes(rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, str
     }
 
 
-def build_document(
-    names: Iterable[str] = (), aliases: Mapping[str, str] | None = None
-) -> dict[str, Any]:
+def build_document(names: Iterable[str], aliases: Mapping[str, str]) -> dict[str, Any]:
     """Build the whole matrix: rows, foundation-model map, unused classes (needs TensorFlow or its stand-in)."""
     rows: list[dict[str, Any]] = []
     for name in PRESETS:
@@ -437,7 +421,7 @@ def build_document(
         "element_map": dict(ELEMENT_MAP),
         "rows": rows,
         "foundation_models": foundation_rows(
-            names, aliases or {}, (row["id"] for row in rows)
+            names, aliases, (row["id"] for row in rows)
         ),
         "unused_classes": unused_classes(rows),
     }
@@ -458,10 +442,6 @@ def dumps(document: Mapping[str, Any]) -> str:
 # ------------------------------------------------------------------ table
 
 
-def _short_name(cls: str) -> str:
-    return cls.rsplit(".", 1)[-1]
-
-
 def _gap_cell(gaps: Sequence[Mapping[str, Any]]) -> str:
     if not gaps:
         return "none"
@@ -476,15 +456,13 @@ def _gap_cell(gaps: Sequence[Mapping[str, Any]]) -> str:
 
 def fixture_present(row: Mapping[str, Any]) -> bool:
     """Whether a committed tiny golden fixture was made from the row's model file (``tools/make_golden.py`` MODELS)."""
-    from make_golden import MODELS
+    from make_golden import GOLDEN_DIR, MODELS, fixture_name
 
-    for label, parent in MODELS.items():
-        if (
-            row["id"] == f"file:{Path(parent).stem}"
-            and (GOLDEN_DIR / f"{label}_tiny_f64.json").is_file()
-        ):
-            return True
-    return False
+    return any(
+        row["id"] == f"file:{Path(parent).stem}"
+        and (GOLDEN_DIR / f"{fixture_name(label, 'tiny', 'f64')}.json").is_file()
+        for label, parent in MODELS.items()
+    )
 
 
 def twin_tests(row: Mapping[str, Any]) -> str:

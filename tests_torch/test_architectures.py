@@ -152,7 +152,7 @@ def test_classes_in_no_architecture_have_a_decision(committed):
 # ------------------------------------------------------------------ planted changes
 
 
-def test_a_new_preset_argument_value_makes_the_json_stale(committed, monkeypatch):
+def test_a_new_preset_argument_value_adds_a_variant_row(committed, monkeypatch):
     monkeypatch.setitem(am.ARGUMENT_VALUES, "n_rad_base", (4,))
     with tfstub.stand_in():
         rows = am.generated_rows("preset", "GRACE_1LAYER_v1_24")
