@@ -819,6 +819,18 @@ def test_command_line_cells_and_yamls(capsys):
     capsys.readouterr()
 
 
+def test_command_line_cells_fails_on_a_lost_option_cell(monkeypatch, caplog):
+    lost = (
+        "tensorpotential.instructions.compute.RadialBasis",
+        "basis_type",
+        "str",
+        "Cheb",
+    )
+    monkeypatch.setattr(mg, "missing_cells", lambda parent, derived: [lost])
+    assert mg.main(["cells"]) == 1
+    assert "the tiny yaml lacks" in caplog.text
+
+
 def test_command_line_write_verify_and_compare(tiny_dir, tmp_path):
     out = tmp_path / "cli"
     assert (
