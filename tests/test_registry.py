@@ -541,6 +541,29 @@ def test_a_changed_default_of_the_basis_function_that_radial_basis_forwards_to_i
     assert "RadialBasis.p: source default 6, pinned 5" in ia.problems(copy)
 
 
+def test_a_removed_class_that_holds_pinned_defaults_is_reported(copy):
+    edit(
+        copy,
+        "functions/radial.py",
+        "class ChebSqrRadialBasisFunction(",
+        "class ChebRenamed(",
+    )
+    origin = "tensorpotential.functions.radial.ChebSqrRadialBasisFunction"
+    assert (
+        f"{C}RadialBasis: the class {origin} that holds its pinned defaults is not defined any more"
+        in ia.problems(copy)
+    )
+
+
+def test_the_defaults_of_a_class_missing_from_the_source_table_are_not_checked(
+    source_table,
+):
+    """The missing class is reported once, by the completeness check, not again by the default check."""
+    registry, options = ia._import_registry()
+    table = {k: v for k, v in source_table.items() if k != C + "RadialBasis"}
+    assert ia.default_problems(ROOT, table, registry, options) == []
+
+
 SPBF_SCALAR = "SingleParticleBasisFunctionScalarInd"
 CONSTRUCTOR_CHANGES = [
     pytest.param(
