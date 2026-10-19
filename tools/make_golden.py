@@ -647,11 +647,16 @@ def assign_weights(model, weights: Mapping[str, np.ndarray]) -> dict[str, Any]:
     """Assign ``weights`` (by key) to the variables of ``model``; report what could not be matched.
 
     A key present on one side only, or with a different shape, is reported and left alone (the variable keeps
-    its own value); nothing is dropped silently.
+    its own value); nothing is dropped silently. A model of the old list-format yaml keys its checkpoint by the
+    position of the instruction (``11/reducing_YI``); its option pair, rebuilt from a name map, by the name
+    (``B/reducing_YI``): such keys are matched by position (``renamed_by_position`` counts them).
     """
     keys = checkpoint_paths(model)
     by_key = {keys[id(v)]: v for v in model.variables}
+    names = [ins.name for ins in gp._instructions_of(model)]  # noqa: SLF001
+    weights, renamed = by_position(weights, names, set(by_key))
     report: dict[str, Any] = {
+        "renamed_by_position": renamed,
         "only_in_model": sorted(set(by_key) - set(weights)),
         "only_in_weights": sorted(set(weights) - set(by_key)),
         "shape_differs": {},
@@ -676,6 +681,28 @@ def assign_weights(model, weights: Mapping[str, np.ndarray]) -> dict[str, Any]:
             continue
         report["assigned"] += 1
     return report
+
+
+def by_position(
+    weights: Mapping[str, np.ndarray], names: Sequence[str], model_keys: set[str]
+) -> tuple[dict[str, np.ndarray], int]:
+    """Return ``weights`` with ``<position>/<path>`` keys renamed ``<names[position]>/<path>`` where the model has that key.
+
+    The second value is the number of renamed keys; a key that is already the model's, or whose renamed form the model
+    lacks, is kept as it is.
+    """
+    out: dict[str, np.ndarray] = {}
+    renamed = 0
+    for key, value in weights.items():
+        head, _, rest = key.partition("/")
+        if key not in model_keys and head.isdigit() and int(head) < len(names):
+            candidate = f"{names[int(head)]}/{rest}"
+            if candidate in model_keys:
+                out[candidate] = value
+                renamed += 1
+                continue
+        out[key] = value
+    return out, renamed
 
 
 def _own_tables(instruction, others: set[int]) -> Iterable[tuple[str, Any]]:

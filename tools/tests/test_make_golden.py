@@ -415,6 +415,25 @@ def test_write_tier_makes_the_pairs_a_family_takes_and_none_for_a_variant(linear
     assert yamls == ["linear__basis_type_gaussian_tiny.yaml", "linear_tiny.yaml"]
 
 
+def test_by_position_renames_index_keys_to_the_model_names():
+    weights = {"0/w": 1, "1/w": 2, "Z/w": 3, "7/w": 4, "1/other": 5}
+    renamed, count = mg.by_position(weights, ["A", "B"], {"A/w", "B/w", "Z/w"})
+    assert renamed == {"A/w": 1, "B/w": 2, "Z/w": 3, "7/w": 4, "1/other": 5}
+    assert count == 2
+
+
+def test_the_dense_pair_of_the_list_format_model_has_its_weights(tmp_path):
+    base = mg.write_tier("tiny", tmp_path, ["model_grace"], every=mg.sources())[0]
+    assert all(row["key"].split("/")[0].isdigit() for row in base["variables"])
+    pair = json.loads((tmp_path / "model_grace_tiny_f64_dense.json").read_text())[
+        "option_pair"
+    ]
+    assert pair["weights"]["renamed_by_position"] == len(base["variables"])
+    assert pair["weights"]["only_in_model"] == pair["weights"]["only_in_weights"] == []
+    assert max(pair["results_max_abs_diff"].values()) < 1e-12
+    assert mg.report_ok(mg.verify_fixture(tmp_path, "model_grace_tiny_f64_dense"))
+
+
 def test_a_variant_fixture_reproduces_in_tensorflow(linear_dir):
     report = mg.verify_fixture(linear_dir, "linear__basis_type_gaussian_tiny_f64")
     assert mg.report_ok(report), report["exceeding"][:5]
