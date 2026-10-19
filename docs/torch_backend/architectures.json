@@ -586,12 +586,6 @@
           "option": "normalize"
         },
         {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        },
-        {
           "class": "tensorpotential.instructions.output.LinearOut2Target",
           "issue": "TWIN16",
           "kind": "rejected_class",
@@ -634,12 +628,6 @@
           "issue": "TWIN16",
           "kind": "unsupported_value",
           "option": "normalize"
-        },
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
         },
         {
           "class": "tensorpotential.instructions.output.LinearOut2Target",
@@ -1399,12 +1387,6 @@
           "option": null
         },
         {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        },
-        {
           "class": "tensorpotential.instructions.output.FSOut2ScalarTarget",
           "issue": "TWIN15",
           "kind": "rejected_class",
@@ -1447,12 +1429,6 @@
           "issue": "TWIN15",
           "kind": "rejected_class",
           "option": null
-        },
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
         },
         {
           "class": "tensorpotential.instructions.output.FSOut2ScalarTarget",
@@ -2285,14 +2261,7 @@
       "base": "preset:GRACE_1LAYER_v1_24",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_1LAYER_v1_24[basis_type=\"Gaussian\"]",
       "name": "GRACE_1LAYER_v1_24",
       "options_changed": {
@@ -2311,14 +2280,7 @@
       "base": "preset:GRACE_1LAYER_v1_24",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_1LAYER_v1_24[basis_type=\"RadSinBessel\"]",
       "name": "GRACE_1LAYER_v1_24",
       "options_changed": {
@@ -3105,14 +3067,7 @@
       "base": "preset:GRACE_2LAYER_v1_24",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_2LAYER_v1_24[basis_type=\"Gaussian\"]",
       "name": "GRACE_2LAYER_v1_24",
       "options_changed": {
@@ -3131,14 +3086,7 @@
       "base": "preset:GRACE_2LAYER_v1_24",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_2LAYER_v1_24[basis_type=\"RadSinBessel\"]",
       "name": "GRACE_2LAYER_v1_24",
       "options_changed": {
@@ -3951,12 +3899,6 @@
           "kind": "unsupported_value",
           "option": "scale",
           "reason": "used only by GRACE_2LAYER_scaled, a preset function that is not registered, so no training run selects it (owner decision, 2026-10-19)"
-        },
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
         }
       ],
       "id": "preset:GRACE_2LAYER_scaled[basis_type=\"Gaussian\"]",
@@ -3984,12 +3926,6 @@
           "kind": "unsupported_value",
           "option": "scale",
           "reason": "used only by GRACE_2LAYER_scaled, a preset function that is not registered, so no training run selects it (owner decision, 2026-10-19)"
-        },
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
         }
       ],
       "id": "preset:GRACE_2LAYER_scaled[basis_type=\"RadSinBessel\"]",
@@ -4685,14 +4621,7 @@
       "base": "preset:GRACE_1LAYER_v2_25",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_1LAYER_v2_25[basis_type=\"Gaussian\"]",
       "name": "GRACE_1LAYER_v2_25",
       "options_changed": {
@@ -4711,14 +4640,7 @@
       "base": "preset:GRACE_1LAYER_v2_25",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_1LAYER_v2_25[basis_type=\"RadSinBessel\"]",
       "name": "GRACE_1LAYER_v2_25",
       "options_changed": {
@@ -5406,14 +5328,7 @@
       "base": "preset:GRACE_2LAYER_v2_25",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_2LAYER_v2_25[basis_type=\"Gaussian\"]",
       "name": "GRACE_2LAYER_v2_25",
       "options_changed": {
@@ -5432,14 +5347,7 @@
       "base": "preset:GRACE_2LAYER_v2_25",
       "classes_added": [],
       "classes_removed": [],
-      "gaps": [
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        }
-      ],
+      "gaps": [],
       "id": "preset:GRACE_2LAYER_v2_25[basis_type=\"RadSinBessel\"]",
       "name": "GRACE_2LAYER_v2_25",
       "options_changed": {
@@ -11736,12 +11644,6 @@
           "option": null
         },
         {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        },
-        {
           "class": "tensorpotential.instructions.output.CreateOutputTarget",
           "issue": "TWIN19",
           "kind": "unsupported_value",
@@ -11778,12 +11680,6 @@
           "issue": "TWIN19",
           "kind": "rejected_class",
           "option": null
-        },
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
         },
         {
           "class": "tensorpotential.instructions.output.CreateOutputTarget",
@@ -12612,12 +12508,6 @@
           "option": null
         },
         {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
-        },
-        {
           "class": "tensorpotential.instructions.output.CreateOutputTarget",
           "issue": "TWIN19",
           "kind": "unsupported_value",
@@ -12654,12 +12544,6 @@
           "issue": "TWIN19",
           "kind": "rejected_class",
           "option": null
-        },
-        {
-          "class": "tensorpotential.instructions.compute.RadialBasis",
-          "issue": "RAD2",
-          "kind": "unsupported_value",
-          "option": "basis_type"
         },
         {
           "class": "tensorpotential.instructions.output.CreateOutputTarget",
