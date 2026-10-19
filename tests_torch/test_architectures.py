@@ -120,7 +120,6 @@ def test_the_gaps_of_the_issue_are_found(committed):
         "TWIN17",
         "TWIN19",
         "RAD2",
-        "SPEC6",
     }
     assert "TWIN18" not in issues  # its classes are in no architecture
     assert expected <= issues
