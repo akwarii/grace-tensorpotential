@@ -30,6 +30,7 @@ from tensorpotential.torch_backend.ops.precision import DtypePolicy
 from tensorpotential.torch_backend.spec.model import InstructionRef, InstructionSpec
 from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
 from tests_torch.golden.tolerances import FEATURE_F32, FEATURE_F64, assert_close
+from tests_torch.init_only import assert_option_is_ignored
 
 RNG_SEED = 20261019
 F64, F32 = DtypePolicy(torch.float64), DtypePolicy(torch.float32)
@@ -253,3 +254,14 @@ def test_a_vanishing_basis_gives_vanishing_radial_functions(activation):
     data = _inputs(np.random.default_rng(RNG_SEED))
     data["B"] = torch.zeros_like(data["B"])
     assert torch.count_nonzero(_gated(activation=activation)(data)) == 0
+
+
+@pytest.mark.parametrize("normalize", [True, False])
+def test_init_type_changes_neither_the_state_nor_the_output(normalize):
+    inputs = _inputs(np.random.default_rng(RNG_SEED))
+    assert_option_is_ignored(
+        lambda **o: _gated(normalize=normalize, **o),
+        COMPUTE + "MLPRadialFunction_v2",
+        "init_type",
+        inputs,
+    )

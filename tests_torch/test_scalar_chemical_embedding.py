@@ -16,16 +16,18 @@ from tensorpotential.torch_backend.instructions.scalar_chemical_embedding import
 from tensorpotential.torch_backend.ops.precision import DtypePolicy
 from tensorpotential.torch_backend.spec.model import InstructionSpec
 from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
+from tests_torch.init_only import assert_option_is_ignored
 
 CLS = COMPUTE + "ScalarChemicalEmbedding"
 ELEMENTS = {"Cu": 0, "H": 1, "Mg": 2, "O": 3}
 
 
-def _twin(element_map=ELEMENTS, embedding_size=6, dtype=torch.float64):
+def _twin(element_map=ELEMENTS, embedding_size=6, dtype=torch.float64, **given):
     options = {
         **DEFAULTS[CLS],
         "element_map": element_map,
         "embedding_size": embedding_size,
+        **given,
     }
     spec = InstructionSpec(name="Z", cls=CLS, options=options, depends_on=(), index=0)
     return ScalarChemicalEmbedding(spec, DtypePolicy(dtype))
@@ -66,3 +68,7 @@ def test_an_embedding_size_below_one_is_refused():
         OptionValueError, match="embedding_size must be at least 1, got 0"
     ):
         _twin(embedding_size=0)
+
+
+def test_init_changes_neither_the_state_nor_the_output():
+    assert_option_is_ignored(_twin, CLS, "init", {})

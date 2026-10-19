@@ -30,6 +30,7 @@ from tensorpotential.torch_backend.spec.model import InstructionRef, Instruction
 from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
 from tests_torch.cg_oracle import wigner_d
 from tests_torch.golden.tolerances import FEATURE_F32, FEATURE_F64, assert_close
+from tests_torch.init_only import assert_option_is_ignored
 
 RNG_SEED = 20261018
 CLS = COMPUTE + "FCRight2Left"
@@ -317,3 +318,11 @@ def test_rotating_the_operands_rotates_the_output(per_element):
         before, after = twin(inputs).numpy(), twin(rotated).numpy()
     assert_close(after, _rotate(before, LEFT.coupling_meta_data, rotation), FEATURE_F64)
     assert np.abs(before[:, 1:]).max() > 1e-2  # the l > 0 rows are not trivially zero
+
+
+@pytest.mark.parametrize("case", sorted(OPTION_CASES))
+def test_init_vars_changes_neither_the_state_nor_the_output(case):
+    inputs = _inputs(np.random.default_rng(RNG_SEED))
+    assert_option_is_ignored(
+        lambda **o: _twin(**OPTION_CASES[case], **o), CLS, "init_vars", inputs
+    )
