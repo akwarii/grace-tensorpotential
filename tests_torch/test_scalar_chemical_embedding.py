@@ -16,7 +16,7 @@ from tensorpotential.torch_backend.instructions.scalar_chemical_embedding import
 from tensorpotential.torch_backend.ops.precision import DtypePolicy
 from tensorpotential.torch_backend.spec.model import InstructionSpec
 from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
-from tests_torch.init_only import assert_option_is_ignored
+from tests_torch.init_only import assert_option_is_ignored, init_only_values
 
 CLS = COMPUTE + "ScalarChemicalEmbedding"
 ELEMENTS = {"Cu": 0, "H": 1, "Mg": 2, "O": 3}
@@ -72,3 +72,9 @@ def test_an_embedding_size_below_one_is_refused():
 
 def test_init_changes_neither_the_state_nor_the_output():
     assert_option_is_ignored(_twin, CLS, "init", {})
+
+
+@pytest.mark.parametrize("option", ["embedding_size", "is_trainable"])
+def test_the_check_refuses_an_option_that_is_not_initialisation_only(option):
+    with pytest.raises(ValueError, match="is not an initialisation-only option"):
+        init_only_values(CLS, option)
