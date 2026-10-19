@@ -28,7 +28,7 @@ Output layout and shape are those of `MLPRadialFunction`.
 | `hidden_layers` | `None` | list of ints | `None` means `[64, 64]` (v1: `[64, 64, 64]`). |
 | `activation` | `None` | `None`; a `str`; a list of `str` | `None` gives `"silu"` per hidden layer; a string is repeated for every hidden layer; a list must have one entry per hidden layer (`assert`, `compute.py:861-867`). Names are looked up in `ACTIVATION_DICT = {tanh, silu, sigmoid}` (`functions/nn.py:15`) **at the first forward pass**: an unknown name is a bare `KeyError` (finding 11, pinned at `tests/test_compute.py:1571`). `silu` here is the plain `tf.nn.silu`, without the `1.6759` of v1's default. |
 | `no_weight_decay` | `True` | bool | Only the weight names (G8). |
-| `init_type` | `"normal"` | `"normal"`, `"uniform"`, `"zeros"` | Initialiser of every `Linear` (`functions/nn.py:34-35`, an `assert`). No effect on a loaded model **except** through `normalize` below. |
+| `init_type` | `"normal"` | `"normal"`, `"uniform"`, `"zeros"` | Initialiser of every `Linear` (`functions/nn.py:34-35`, an `assert`). Read only in `Linear.build`, so no effect on a loaded model (`normalize` is a separate option). |
 | `normalize` | `True` | bool | Selects where the `1/sqrt(n_in)` lives: see sections 3 and 4. |
 | `chem_embedding` | `None` | a `ScalarChemicalEmbedding` or `None` | Enables the gate. |
 | `embed_i` | `False` | bool | Include the central atom's embedding in the gate. |
@@ -123,7 +123,7 @@ Gate-less case, the shipped one: a plain MLP, `silu` on both hidden layers, no b
 
 - `lora_config` not `None`: as for v1. **Proposal**: reject with a message that tells to merge first
   (`compute.py:932-933`, `937-954`).
-- `init_type`: accepted and irrelevant to a loaded model; `zeros` and `uniform` parse. Not rejected.
+- `init_type`: initialisation-only option (`init_only` rule of `spec/options.py`): every value TF accepts loads (`normal`, `uniform`, `zeros`) and the twin ignores it.
 - `basis = None`: rejected at load time (TF fails at the first forward pass).
 - An activation name outside `{tanh, silu, sigmoid}`: rejected at load time (TF raises `KeyError` at the first
   forward pass).

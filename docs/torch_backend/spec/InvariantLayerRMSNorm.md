@@ -94,7 +94,7 @@ through `to_dtype_of(..., x)`.
 ## 7. Options rejected
 
 - `type` outside the three values: rejected at load time (TF rejects it in the constructor).
-- `init`: accepted and ignored by the twin (no effect on a loaded model). An unknown `init` is not an error in TF
+- `init`: initialisation-only option (`init_only` rule of `spec/options.py`): every value TF accepts loads (`zeros`, `ones`, `random`, `near_zero`) and the twin ignores it (no effect on a loaded model). An unknown `init` is not an error in TF
   after construction; the twin does not need it.
 - `full` and `sep_lin_gate` are **ported** although only `only_nonlin` and `full` occur in a shipped model; `sep_lin_gate`
   needs an option fixture.
