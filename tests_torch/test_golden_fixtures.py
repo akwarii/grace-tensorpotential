@@ -31,13 +31,19 @@ from tests.tolerances import (
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+import architecture_matrix as am  # noqa: E402  # ty: ignore[unresolved-import]  (tools/ is on sys.path at run time)
 import make_golden as mg  # noqa: E402  # ty: ignore[unresolved-import]  (tools/ is on sys.path at run time)
 
 pytestmark = pytest.mark.golden
 
 GOLDEN = ROOT / "tests_torch" / "golden"
 NAMES = tuple(sorted(r.name for r in mg.requests_for("tiny")))
+"""The fixtures of the two anchor models (``omat``, ``large``), which the deeper checks below read."""
 BASE_NAMES = tuple(n for n in NAMES if n.endswith(("_f64", "_f32")))
+ALL_NAMES = tuple(sorted(p.stem for p in GOLDEN.glob("*.json")))
+"""Every committed tiny fixture: one per architecture row and dtype (FAM2), plus the option pairs."""
+ALL_BASE = tuple(n for n in ALL_NAMES if n.endswith(("_f64", "_f32")))
+MATRIX_ROWS = {row["id"]: row for row in json.loads(am.JSON_PATH.read_text())["rows"]}
 CUTOFF = 6.0
 """``RadialBasis.rcut`` of both parent yamls."""
 SOFTENING = 1e-10
@@ -79,14 +85,84 @@ def element_index(name: str) -> dict[str, int]:
 # ------------------------------------------------------------------ logic: the committed files
 
 
-def test_the_committed_set_is_the_eight_tiny_fixtures():
-    on_disk = tuple(sorted(p.stem for p in GOLDEN.glob("*.json")))
-    assert on_disk == NAMES
+def test_the_anchor_fixtures_are_committed_and_every_file_has_a_manifest():
+    assert set(NAMES) <= set(ALL_NAMES)
     assert len(NAMES) == 8
-    assert {n.split("_")[0] for n in NAMES} == {"omat", "large"}
+    described = {
+        entry["name"]
+        for name in ALL_NAMES
+        for entry in manifest_of(name)["files"].values()
+    }
+    assert described == {p.name for p in GOLDEN.glob("*.npz")}
+    yamls = {manifest_of(name)["yaml"] for name in ALL_NAMES}
+    assert yamls == {p.name for p in (GOLDEN / "yamls").glob("*.yaml")}
 
 
-@pytest.mark.parametrize("name", NAMES)
+# ------------------------------------------------------------------ logic: one fixture per architecture row (FAM2)
+
+
+def test_every_row_that_is_not_fixture_free_has_a_fixture_in_each_dtype():
+    covered: dict[str, set[str]] = {}
+    for name in ALL_NAMES:
+        manifest = manifest_of(name)
+        dtypes = covered.setdefault(manifest["row"], set())
+        dtypes |= {mg.DTYPES[k] for k in manifest["not_made"] if k in mg.DTYPES}
+        if not manifest["option"]:
+            dtypes.add(manifest["dtype"])
+    for row_id, row in MATRIX_ROWS.items():
+        if row["source"] in am.FIXTURE_FREE:
+            assert row_id not in covered, row_id
+            continue
+        assert covered.get(row_id) == {"float32", "float64"}, row_id
+        assert am.fixture_present(row), row_id
+    assert set(covered) <= set(MATRIX_ROWS)
+
+
+@pytest.mark.parametrize("name", ALL_NAMES)
+def test_a_fixture_names_its_row_and_the_source_it_was_built_from(name):
+    manifest = manifest_of(name)
+    row = MATRIX_ROWS[manifest["row"]]
+    source = manifest["source"]
+    if row["source"] == "file":
+        assert source == {"file": row["name"]}
+    else:
+        assert source["preset"] == row["name"]
+        assert set(source["arguments"]) == set(row.get("arguments", {}))
+        for argument, value in row.get("arguments", {}).items():
+            if not isinstance(
+                value, dict
+            ):  # element-keyed dicts follow the tier's elements
+                assert source["arguments"][argument] == value, argument
+    label = {"float64": "f64", "float32": "f32"}[manifest["dtype"]]
+    option = {v: k for k, v in mg.OPTIONS.items()}.get(manifest["option"])
+    assert name == mg.fixture_name(manifest["model"], "tiny", label, option)
+    assert manifest["tier"] == "tiny"
+    assert manifest["yaml"] == f"{manifest['model']}_tiny.yaml"
+    assert manifest["yaml_sha256"] == mg._sha256(GOLDEN / "yamls" / manifest["yaml"])
+    assert set(manifest["layout_options"]) == set(mg.OPTIONS.values())
+    assert manifest["not_made"] == mg.NOT_MADE.get(manifest["model"], {})
+
+
+@pytest.mark.parametrize("name", [n for n in ALL_NAMES if n.endswith("_f64")])
+def test_a_family_default_has_the_option_pairs_its_model_takes(name):
+    manifest = manifest_of(name)
+    pairs = {
+        o
+        for o, option in mg.OPTIONS.items()
+        if manifest["layout_options"][option] and o not in manifest["not_made"]
+    }
+    expected = set() if manifest["source"].get("arguments") else pairs
+    present = {o for o in mg.OPTIONS if (GOLDEN / f"{name}_{o}.json").is_file()}
+    assert present == expected
+    for option in present:
+        paired = manifest_of(f"{name}_{option}")
+        assert paired["weights_from"] == name
+        assert paired["row"] == manifest["row"]
+        assert paired["option_pair"]["weights"]["shape_differs"] == {}
+        assert max(paired["option_pair"]["results_max_abs_diff"].values()) < 1e-12
+
+
+@pytest.mark.parametrize("name", ALL_NAMES)
 def test_files_are_the_ones_the_manifest_describes(name):
     manifest = manifest_of(name)
     assert manifest["name"] == name
@@ -102,7 +178,7 @@ def test_files_are_the_ones_the_manifest_describes(name):
     assert manifest["n_arrays"] == len(arrays_of(name))
 
 
-@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("name", ALL_NAMES)
 def test_provenance_is_recorded_and_the_tree_was_clean(name):
     manifest = manifest_of(name)
     library = manifest["library"]
@@ -166,7 +242,7 @@ def test_every_structure_and_instruction_has_a_dump(name):
     } <= set(tables)
 
 
-@pytest.mark.parametrize("name", BASE_NAMES)
+@pytest.mark.parametrize("name", ALL_BASE)
 def test_weights_match_the_variable_table(name):
     weights, manifest = weights_of(name), manifest_of(name)
     table = {row["key"]: row for row in manifest["variables"]}
@@ -272,7 +348,7 @@ def test_bond_functions_follow_their_definitions(name):
 # ------------------------------------------------------------------ physics: results
 
 
-@pytest.mark.parametrize("name", BASE_NAMES)
+@pytest.mark.parametrize("name", ALL_BASE)
 def test_results_are_consistent_with_each_other(name):
     arrays = arrays_of(name)
     for case, atoms in structures_of(name).items():
@@ -318,7 +394,7 @@ def test_results_are_consistent_with_each_other(name):
         ), case
 
 
-@pytest.mark.parametrize("name", BASE_NAMES)
+@pytest.mark.parametrize("name", ALL_BASE)
 def test_an_isolated_atom_has_zero_force_and_the_shift_only_energy(name):
     arrays = arrays_of(name)
     assert np.all(arrays["isolated_atom/res/forces"] == 0)
@@ -363,6 +439,21 @@ def test_the_embedding_output_is_the_stored_weight(name):
     arrays, weights = arrays_of(name), weights_of(name)
     for case in mg.TIERS["tiny"].structures:
         assert np.array_equal(arrays[f"{case}/ins/Z"], weights["Z/w"])
+
+
+@pytest.mark.parametrize(
+    "name", [n.removesuffix("_tiny_f32") for n in ALL_NAMES if n.endswith("_f32")]
+)
+def test_the_float32_fixture_has_the_float64_weights_and_energies(name):
+    w32, w64 = weights_of(f"{name}_tiny_f32"), weights_of(f"{name}_tiny_f64")
+    assert set(w32) == set(w64)
+    for key, value in w64.items():
+        if value.dtype == np.float64:
+            assert np.array_equal(w32[key], value.astype(np.float32)), key
+    a32, a64 = arrays_of(f"{name}_tiny_f32"), arrays_of(f"{name}_tiny_f64")
+    for case in mg.TIERS["tiny"].structures:
+        energy32, energy64 = a32[f"{case}/res/energy"], a64[f"{case}/res/energy"]
+        assert close(energy32, energy64, FLOAT32_NETWORK), case
 
 
 @pytest.mark.parametrize("model", ["omat", "large"])
@@ -477,7 +568,7 @@ def test_a_local_faithful_file_is_the_one_the_manifest_describes(name):
         assert mg._sha256(path) == entry["sha256"]
 
 
-@pytest.mark.parametrize("name", BASE_NAMES)
+@pytest.mark.parametrize("name", ALL_BASE)
 def test_a_periodic_anchor_has_non_zero_forces_and_stress(name):
     # the symmetric cells have zero forces; without this structure a wrong force path through periodic images would pass
     arrays = arrays_of(name)

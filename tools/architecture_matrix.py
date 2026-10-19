@@ -23,6 +23,7 @@ converter and real-weight checks), so it is regenerated whenever one of those ch
 from __future__ import annotations
 
 import argparse
+import functools
 import inspect
 import json
 import re
@@ -135,6 +136,11 @@ GAP_REJECTIONS: Final[Mapping[tuple[str, str | None], str]] = {
     ),
 }
 
+# Row sources without a golden fixture, with the reason (``fixture_cell``); every other row has one (FAM2).
+FIXTURE_FREE: Final[Mapping[str, str]] = {
+    "tensor": "TWIN19",
+}
+
 # Rows whose converter equivalence (EQUIV5) or real-weight check (EQUIV6) exists; those issues add their rows.
 CONVERTER_CHECKED: Final[frozenset[str]] = frozenset()
 REAL_WEIGHT_CHECKED: Final[frozenset[str]] = frozenset()
@@ -188,10 +194,13 @@ def _factory(module: str, name: str) -> Callable[..., Any]:
 
 
 def build_instructions(
-    module: str, name: str, arguments: Mapping[str, Any]
+    module: str,
+    name: str,
+    arguments: Mapping[str, Any],
+    element_map: Mapping[str, int] = ELEMENT_MAP,
 ) -> dict[str, dict[str, Any]]:
     """Build a preset or tensor model with ``arguments`` and return its serialised instructions."""
-    built = _factory(module, name)(element_map=dict(ELEMENT_MAP), **arguments)
+    built = _factory(module, name)(element_map=dict(element_map), **arguments)
     return serialise(built.get_instructions() if module == "preset" else built)
 
 
@@ -454,15 +463,39 @@ def _gap_cell(gaps: Sequence[Mapping[str, Any]]) -> str:
     return ", ".join(sorted(set(cells)))
 
 
-def fixture_present(row: Mapping[str, Any]) -> bool:
-    """Whether a committed tiny golden fixture was made from the row's model file (``tools/make_golden.py`` MODELS)."""
-    from make_golden import GOLDEN_DIR, MODELS, fixture_name
+@functools.cache
+def fixture_dtypes() -> dict[str, frozenset[str]]:
+    """Return, per row, the parameter dtypes its committed tiny fixtures cover, from the manifests' ``row``.
 
-    return any(
-        row["id"] == f"file:{Path(parent).stem}"
-        and (GOLDEN_DIR / f"{fixture_name(label, 'tiny', 'f64')}.json").is_file()
-        for label, parent in MODELS.items()
-    )
+    A dtype that TensorFlow cannot evaluate for the row is covered by the reason its manifests give
+    (``not_made`` of ``tools/make_golden.py``). An option pair (``dense_nbr``, ``lm_first``) is a second layout of
+    its row's float64 fixture and is not counted.
+    """
+    from make_golden import DTYPES as LABELS
+    from make_golden import GOLDEN_DIR
+
+    found: dict[str, set[str]] = {}
+    for path in sorted(GOLDEN_DIR.glob("*.json")):
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        if manifest.get("tier") != "tiny" or not manifest.get("row"):
+            continue
+        dtypes = found.setdefault(manifest["row"], set())
+        dtypes |= {LABELS[k] for k in manifest.get("not_made", {}) if k in LABELS}
+        if not manifest.get("option"):
+            dtypes.add(manifest["dtype"])
+    return {row: frozenset(dtypes) for row, dtypes in found.items()}
+
+
+def fixture_present(row: Mapping[str, Any]) -> bool:
+    """Whether the row has a committed tiny golden fixture in every parameter dtype TensorFlow can evaluate."""
+    return set(DTYPES) <= fixture_dtypes().get(row["id"], frozenset())
+
+
+def fixture_cell(row: Mapping[str, Any]) -> str:
+    """``yes``, ``no``, or ``free (<issue>)`` for a row whose source is fixture-free."""
+    if row["source"] in FIXTURE_FREE:
+        return f"free ({FIXTURE_FREE[row['source']]})"
+    return _yes(fixture_present(row))
 
 
 def twin_tests(row: Mapping[str, Any]) -> str:
@@ -483,7 +516,7 @@ def _row_line(row: Mapping[str, Any]) -> str:
         row["name"] if row["source"] == "file" else row["source"],
         classes,
         _gap_cell(row["gaps"]),
-        _yes(fixture_present(row)),
+        fixture_cell(row),
         twin_tests(row),
         _yes(row["id"] in CONVERTER_CHECKED),
         _yes(row["id"] in REAL_WEIGHT_CHECKED),
@@ -503,7 +536,7 @@ def _variant_line(row: Mapping[str, Any]) -> str:
     argument = ", ".join(
         f"{k}={json.dumps(v, sort_keys=True)}" for k, v in row["arguments"].items()
     )
-    return f"| `{row['base']}` | `{argument}` | {added} | {changed} | {_gap_cell(row['gaps'])} |"
+    return f"| `{row['base']}` | `{argument}` | {added} | {changed} | {_gap_cell(row['gaps'])} | {fixture_cell(row)} |"
 
 
 TABLE_HEADER: Final = """# Architecture matrix
@@ -530,8 +563,8 @@ def to_markdown(document: Mapping[str, Any]) -> str:
         "",
         "## Preset variants (one argument changed)",
         "",
-        "| Base | Argument | Classes added | Options changed | Gaps (issue) |",
-        "|---|---|---|---|---|",
+        "| Base | Argument | Classes added | Options changed | Gaps (issue) | Fixture (FAM2) |",
+        "|---|---|---|---|---|---|",
     ]
     lines += [_variant_line(row) for row in rows if "base" in row]
     rejected = {
