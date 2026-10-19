@@ -43,6 +43,13 @@ BASE_NAMES = tuple(n for n in NAMES if n.endswith(("_f64", "_f32")))
 ALL_NAMES = tuple(sorted(p.stem for p in GOLDEN.glob("*.json")))
 """Every committed tiny fixture: one per architecture row and dtype (FAM2), plus the option pairs."""
 ALL_BASE = tuple(n for n in ALL_NAMES if n.endswith(("_f64", "_f32")))
+DTYPE_DEPENDENT = {
+    "grace_3l_omat_large": (
+        "EquivariantRMSNorm adds epsilon 1e-8 in float32 and 1e-12 in float64 (compute.py, build); the squared norms of "
+        "the tiny random features are about 1e-8, so the two dtypes differ by tens of percent from eq1_norm on"
+    ),
+}
+"""Sources whose float32 and float64 fixtures differ by design of the TensorFlow model, not by rounding."""
 MATRIX_ROWS = {row["id"]: row for row in json.loads(am.JSON_PATH.read_text())["rows"]}
 CUTOFF = 6.0
 """``RadialBasis.rcut`` of both parent yamls."""
@@ -250,12 +257,18 @@ def test_weights_match_the_variable_table(name):
     for key, row in table.items():
         assert list(weights[key].shape) == row["shape"], key
         if row["dtype"] in ("float32", "float64"):
-            assert weights[key].dtype.name == row["dtype"] == manifest["dtype"], key
+            assert weights[key].dtype.name == row["dtype"], key
         if row["trainable"] and row["dtype"] in ("float32", "float64"):
+            # the parameters have the model's dtype (a constant such as SPBF's rc may stay float64)
+            assert row["dtype"] == manifest["dtype"], key
             assert np.any(weights[key] != 0), (
                 key
             )  # seeded: no layer is left at its zero initialisation
-    assert weights["Z/element_map_symbols"].tolist() == manifest["elements"]
+    # Z/element_map_symbols (also ZBL/... with zbl_cutoff), or <position>/... in a list-format model
+    symbols = [k for k in weights if k.endswith("/element_map_symbols")]
+    assert symbols
+    for key in symbols:
+        assert weights[key].tolist() == manifest["elements"], key
 
 
 def test_a_fixture_loads_without_tensorflow(tmp_path):
@@ -450,6 +463,8 @@ def test_the_float32_fixture_has_the_float64_weights_and_energies(name):
     for key, value in w64.items():
         if value.dtype == np.float64:
             assert np.array_equal(w32[key], value.astype(np.float32)), key
+    if name in DTYPE_DEPENDENT:
+        return
     a32, a64 = arrays_of(f"{name}_tiny_f32"), arrays_of(f"{name}_tiny_f64")
     for case in mg.TIERS["tiny"].structures:
         energy32, energy64 = a32[f"{case}/res/energy"], a64[f"{case}/res/energy"]
@@ -569,6 +584,16 @@ def test_a_local_faithful_file_is_the_one_the_manifest_describes(name):
 
 
 @pytest.mark.parametrize("name", ALL_BASE)
+def test_every_fixture_has_forces_and_stress_above_rounding(name):
+    # the symmetric cells give forces of 1e-15 at most; the old 1L model (two channels) has stresses of 8e-7 eV/A^3
+    arrays = arrays_of(name)
+    assert np.abs(arrays["periodic_triple/res/forces"]).max() > 1e-9
+    assert np.abs(arrays["periodic_triple/res/stress"]).max() > 1e-9
+    assert np.abs(arrays["dimer/res/forces"]).max() > 1e-9
+    assert np.abs(arrays["self_image_cell/res/stress"]).max() > 1e-9
+
+
+@pytest.mark.parametrize("name", BASE_NAMES)
 def test_a_periodic_anchor_has_non_zero_forces_and_stress(name):
     # the symmetric cells have zero forces; without this structure a wrong force path through periodic images would pass
     arrays = arrays_of(name)
