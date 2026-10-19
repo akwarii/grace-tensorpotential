@@ -102,15 +102,13 @@ NOT_MADE: dict[str, dict[str, str]] = {
             "grace_2layer_v2_25",
         )
     },
-    "fs": {
-        "lm_first": _LM_FIRST_OUTPUT.format(
-            "FSOut2ScalarTarget: StridedSlice out of bounds"
-        )
-    },
-    "grace_fs_omat": {
-        "lm_first": _LM_FIRST_OUTPUT.format(
-            "FSOut2ScalarTarget: StridedSlice out of bounds"
-        )
+    **{
+        label: {
+            "lm_first": _LM_FIRST_OUTPUT.format(
+                "FSOut2ScalarTarget: StridedSlice out of bounds"
+            )
+        }
+        for label in ("fs", "grace_fs_omat")
     },
     "model_grace": {
         "lm_first": _LM_FIRST_OUTPUT.format("MLPOut2ScalarTarget: MatMul size mismatch")
@@ -123,6 +121,7 @@ MODELS = {
     "large": "model_grace_2L_omat_large_base.yaml",
 }
 DTYPES = {"f64": "float64", "f32": "float32"}
+DTYPE_LABELS = {name: label for label, name in DTYPES.items()}
 #: option pair label -> the constructor option switched on
 OPTIONS = {"dense": "dense_nbr", "lm_first": "lm_first"}
 #: a tiny anchor stays under this many bytes, all its files (arrays, weights, manifest) together
@@ -147,6 +146,11 @@ class Tier:
     structures: tuple[str, ...]
     #: species of the structure set that the model does not have, mapped to ones it has
     aliases: Mapping[str, str]
+
+    @property
+    def element_map(self) -> dict[str, int]:
+        """Return the element map of the tier's models: the symbols in sorted order."""
+        return {symbol: index for index, symbol in enumerate(sorted(self.elements))}
 
 
 TIERS = {
@@ -226,16 +230,6 @@ def derive_yaml(parent: Path, tier: Tier) -> dict[str, Any]:
     return derive(yaml.safe_load(parent.read_text()), tier)
 
 
-def instruction_entries(raw: Any) -> list[dict[str, Any]]:
-    """Return the instruction dictionaries of a model yaml: a name map, a list, or either under ``instructions``."""
-    collection = (
-        raw["instructions"] if isinstance(raw, dict) and "instructions" in raw else raw
-    )
-    return (
-        list(collection.values()) if isinstance(collection, dict) else list(collection)
-    )
-
-
 def derive(raw: Any, tier: Tier, widths: Mapping[int, int] = TINY_WIDTHS) -> Any:
     """Return a copy of the model yaml ``raw`` for ``tier``: new element map and, for tiny, small widths.
 
@@ -245,8 +239,10 @@ def derive(raw: Any, tier: Tier, widths: Mapping[int, int] = TINY_WIDTHS) -> Any
     maps a real width to its tiny one (``widths_of_source``).
     """
     raw = copy.deepcopy(raw)
-    entries = instruction_entries(raw)
-    element_map = {symbol: index for index, symbol in enumerate(sorted(tier.elements))}
+    entries = scan_options.instruction_dicts(raw)[
+        1
+    ]  # the dictionaries of ``raw``, changed in place
+    element_map = tier.element_map
     parent_map = next(
         (e["element_map"] for e in entries if isinstance(e.get("element_map"), dict)),
         {},
@@ -306,7 +302,7 @@ def remap_elements(
 def widths_of(raw: Any) -> set[int]:
     """Every width value of a model yaml (``WIDTH_KEYS``; ``hidden_layers`` are replaced as a whole, not mapped)."""
     found: set[int] = set()
-    for entry in instruction_entries(raw):
+    for entry in scan_options.instruction_dicts(raw)[1]:
         for key in WIDTH_KEYS:
             values = entry.get(key)
             for value in values if isinstance(values, list) else [values]:
@@ -341,26 +337,21 @@ def tier_dir(tier: str) -> Path:
     return GOLDEN_DIR if tier == "tiny" else FIXTURES_DIR
 
 
-def write_yamls(
-    tiers: Iterable[str] = TIERS,
-    base: Path | None = None,
-    models: Iterable[str] | None = None,
-) -> list[Path]:
-    """Write the derived yamls of ``models`` (default: the anchors ``MODELS``) for ``tiers``; returns the paths.
+def write_yamls(tiers: Iterable[str] = TIERS, base: Path | None = None) -> list[Path]:
+    """Write the derived yamls of the anchors (``MODELS``) for ``tiers``; returns the paths."""
+    return [
+        write_derived_yaml(anchor_source(model), tier_name, base)
+        for tier_name in tiers
+        for model in MODELS
+    ]
 
-    A label that is not an anchor is a source of ``sources()`` (TensorFlow builds its preset).
-    """
-    labels = list(MODELS if models is None else models)
-    every = None if set(labels) <= set(MODELS) else sources()
-    written = []
-    for tier_name in tiers:
-        for model in labels:
-            source = anchor_source(model) if every is None else every[model]
-            path = yaml_path(model, tier_name, base)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(yaml_text(derived_raw(source, tier_name)))
-            written.append(path)
-    return written
+
+def write_derived_yaml(source: Source, tier: str, base: Path | None = None) -> Path:
+    """Write the derived yaml of ``source`` in ``tier`` next to the fixtures of ``base``; returns its path."""
+    path = yaml_path(source.label, tier, base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml_text(derived_raw(source, tier)))
+    return path
 
 
 # ------------------------------------------------------------------ sources: the architecture rows
@@ -413,6 +404,7 @@ def source_label(preset: str, arguments: Mapping[str, Any]) -> str:
 def anchor_source(label: str) -> Source:
     """Return the source of an anchor model (``MODELS``), without TensorFlow."""
     path = TESTS / MODELS[label]
+    # the id of architecture_matrix.file_row_id, spelt out: this runs without the matrix (from older trees)
     return Source(label, f"file:{path.stem}", path=path)
 
 
@@ -428,7 +420,7 @@ def sources() -> dict[str, Source]:
     out: dict[str, Source] = {}
     for name in am.PRESETS:
         for label, arguments in am.variants("preset", name):
-            row = f"preset:{name}" + (f"[{label}]" if label else "")
+            row = am.row_id("preset", name, label)
             one = Source(
                 source_label(name, arguments),
                 row,
@@ -437,7 +429,7 @@ def sources() -> dict[str, Source]:
             )
             out[one.label] = one
     for path in am.model_files():
-        row = f"file:{path.stem}"
+        row = am.file_row_id(path)
         one = Source(anchors.get(row, slug(path.stem)), row, path=path)
         out[one.label] = one
     return out
@@ -472,12 +464,11 @@ def parent_raw(source: Source, tier: Tier = TIERS["tiny"]) -> Any:
     osn.configure_tensorflow()
     import architecture_matrix as am
 
-    element_map = {symbol: index for index, symbol in enumerate(sorted(tier.elements))}
     return am.build_instructions(
         "preset",
         str(source.preset),
         tier_arguments(source.arguments, tier),
-        element_map=element_map,
+        element_map=tier.element_map,
     )
 
 
@@ -494,7 +485,9 @@ def option_cells(paths: Sequence[Path]) -> set[tuple]:
 
 def derived_raw(source: Source, tier: str) -> Any:
     """Return the yaml of ``source`` in ``tier``: ``derive`` of its parent with the source's tiny widths."""
-    return derive(parent_raw(source), TIERS[tier], widths_of_source(source.label))
+    return derive(
+        parent_raw(source, TIERS[tier]), TIERS[tier], widths_of_source(source.label)
+    )
 
 
 def missing_cells(parent: Path, derived: Path) -> list[tuple]:
@@ -502,13 +495,13 @@ def missing_cells(parent: Path, derived: Path) -> list[tuple]:
     return sorted(option_cells([parent]) - option_cells([derived]), key=repr)
 
 
-def missing_source_cells(source: Source, derived: Path) -> list[tuple]:
-    """``missing_cells`` for a source: a preset's parent is written to a scratch file first."""
+def missing_source_cells(source: Source, raw: Any, derived: Path) -> list[tuple]:
+    """``missing_cells`` for a source whose parent yaml is ``raw``: a preset's parent goes to a scratch file first."""
     if source.path is not None:
         return missing_cells(source.path, derived)
     with tempfile.TemporaryDirectory() as tmp:
         parent = Path(tmp) / "parent.yaml"
-        parent.write_text(yaml_text(parent_raw(source)))
+        parent.write_text(yaml_text(raw))
         return missing_cells(parent, derived)
 
 
@@ -936,7 +929,11 @@ class FixtureRequest:
 
 
 def requests_for(tier: str, models: Iterable[str] = MODELS) -> list[FixtureRequest]:
-    """Base fixtures ({model} x {f64, f32}) and, in float64, one option pair per layout option."""
+    """Base fixtures ({model} x {f64, f32}) and, in float64, one option pair per layout option.
+
+    The rule of the anchors, which take both layout options; ``write_tier`` decides per source (``NOT_MADE``,
+    ``layout_options``, variants).
+    """
     out = []
     for model in models:
         out += [FixtureRequest(model, tier, dtype) for dtype in DTYPES]
@@ -1135,8 +1132,7 @@ def make_fixture(
     source = source if source is not None else anchor_source(request.model)
     ypath = yaml_path(request.model, request.tier, out)
     if not ypath.exists():
-        ypath.parent.mkdir(parents=True, exist_ok=True)
-        ypath.write_text(yaml_text(derived_raw(source, request.tier)))
+        write_derived_yaml(source, request.tier, out)
     option = OPTIONS.get(request.option) if request.option else None
     model = build_model(ypath, DTYPES[request.dtype], option, seed)
     weights_report: dict[str, Any] | None = None
@@ -1184,9 +1180,7 @@ def write_tier(
     manifests = []
     for label in models:
         source = known[label]
-        ypath = yaml_path(label, tier, folder)
-        ypath.parent.mkdir(parents=True, exist_ok=True)
-        ypath.write_text(yaml_text(derived_raw(source, tier)))
+        write_derived_yaml(source, tier, folder)
         skip = NOT_MADE.get(label, {})
         made = [
             make_fixture(FixtureRequest(label, tier, dtype), folder, None, seed, source)
@@ -1194,19 +1188,19 @@ def write_tier(
             if dtype not in skip
         ]
         taken = made[0].manifest["layout_options"]
-        pairs = [
-            o
-            for o in OPTIONS
-            if not source.is_variant and taken[OPTIONS[o]] and o not in skip
-        ]
+        pairs = (
+            []
+            if source.is_variant
+            else [o for o in OPTIONS if taken[OPTIONS[o]] and o not in skip]
+        )
         made += [
             make_fixture(
                 FixtureRequest(label, tier, "f64", o), folder, made[0], seed, source
             )
             for o in pairs
         ]
+        manifests += [one.manifest for one in made]
         for one in made:
-            manifests.append(one.manifest)
             logger.info(
                 "%s: %d bytes", one.manifest["name"], one.manifest["total_bytes"]
             )
@@ -1239,7 +1233,7 @@ def verify_fixture(
     """
     fixture = load_fixture(folder, name)
     manifest = fixture["manifest"]
-    dtype = "f32" if manifest["dtype"] == "float32" else "f64"
+    dtype = DTYPE_LABELS[manifest["dtype"]]
     ypath = folder / "yamls" / manifest["yaml"]
     other_seed = manifest["seed"] + 1
     model = build_model(ypath, manifest["dtype"], manifest["option"], other_seed)
@@ -1276,7 +1270,7 @@ def compare_dirs(first: Path, second: Path) -> dict[str, Any]:
     }
     for name in sorted(set(names) & set(other)):
         manifest = json.loads((first / f"{name}.json").read_text())
-        dtype = "f32" if manifest["dtype"] == "float32" else "f64"
+        dtype = DTYPE_LABELS[manifest["dtype"]]
         a = load_npz(first / f"{name}.npz")
         b = load_npz(second / f"{name}.npz")
         report["fixtures"][name] = compare_arrays(a, b, reload_scale_rtol(dtype))
@@ -1306,8 +1300,9 @@ def report_ok(report: Mapping[str, Any]) -> bool:
 
 
 def _cmd_yamls(args: argparse.Namespace) -> int:
-    for path in write_yamls(args.tier or TIERS):
-        logger.info("wrote %s", path)
+    for tier in args.tier or TIERS:
+        for source in tier_sources(tier).values():
+            logger.info("wrote %s", write_derived_yaml(source, tier))
     return 0
 
 
@@ -1379,11 +1374,11 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 def _cmd_cells(_: argparse.Namespace) -> int:
     lost = 0
     for label, source in sources().items():
-        for missing in missing_source_cells(source, yaml_path(label, "tiny")):
+        raw = parent_raw(source)
+        for missing in missing_source_cells(source, raw, yaml_path(label, "tiny")):
             logger.error("%s: the tiny yaml lacks %s", label, missing)
             lost += 1
-        widths = widths_of_source(label)
-        merges = distinct_widths_merged(parent_raw(source), widths)
+        merges = distinct_widths_merged(raw, widths_of_source(label))
         for merged in set(merges) - MERGED_WIDTHS.get(label, set()):
             logger.error("%s: the distinct widths %s get one tiny width", label, merged)
             lost += 1

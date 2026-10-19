@@ -109,6 +109,9 @@ def test_the_anchor_fixtures_are_committed_and_every_file_has_a_manifest():
 
 
 def test_every_row_that_is_not_fixture_free_has_a_fixture_in_each_dtype():
+    # rebuilt from the manifests here, independently of architecture_matrix.fixture_dtypes, which it also checks
+    assert am.GOLDEN_DIR == mg.GOLDEN_DIR
+    assert am.DTYPE_OF_LABEL == mg.DTYPES
     covered: dict[str, set[str]] = {}
     for name in ALL_NAMES:
         manifest = manifest_of(name)
@@ -136,11 +139,10 @@ def test_a_fixture_names_its_row_and_the_source_it_was_built_from(name):
         assert source["preset"] == row["name"]
         assert set(source["arguments"]) == set(row.get("arguments", {}))
         for argument, value in row.get("arguments", {}).items():
-            if not isinstance(
-                value, dict
-            ):  # element-keyed dicts follow the tier's elements
+            # element-keyed dicts follow the tier's elements
+            if not isinstance(value, dict):
                 assert source["arguments"][argument] == value, argument
-    label = {"float64": "f64", "float32": "f32"}[manifest["dtype"]]
+    label = mg.DTYPE_LABELS[manifest["dtype"]]
     option = {v: k for k, v in mg.OPTIONS.items()}.get(manifest["option"])
     assert name == mg.fixture_name(manifest["model"], "tiny", label, option)
     assert manifest["tier"] == "tiny"

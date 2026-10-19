@@ -374,12 +374,12 @@ def test_tier_arguments_name_every_element_pair_of_the_tier():
 def test_a_preset_parent_is_built_for_the_tier_elements(tmp_path):
     source = mg.sources()["grace_1layer_v2_25__cutoff_dict"]
     raw = mg.parent_raw(source)
-    entries = mg.instruction_entries(raw)
+    entries = mg.scan_options.instruction_dicts(raw)[1]
     maps = [e["element_map"] for e in entries if "element_map" in e]
     assert maps and all(m == {"Cu": 0, "H": 1, "Mg": 2, "O": 3} for m in maps)
     derived = tmp_path / "derived.yaml"
     derived.write_text(mg.yaml_text(mg.derive(raw, mg.TIERS["tiny"])))
-    assert mg.missing_source_cells(source, derived) == []
+    assert mg.missing_source_cells(source, raw, derived) == []
     assert mg.distinct_widths_merged(raw) == []
 
 

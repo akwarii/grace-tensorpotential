@@ -136,6 +136,11 @@ GAP_REJECTIONS: Final[Mapping[tuple[str, str | None], str]] = {
     ),
 }
 
+GOLDEN_DIR: Final = ROOT / "tests_torch" / "golden"
+"""The committed tiny fixtures of ``tools/make_golden.py`` (its ``GOLDEN_DIR``)."""
+DTYPE_OF_LABEL: Final = {"f64": "float64", "f32": "float32"}
+"""The dtype labels of the fixture names (``make_golden.DTYPES``), as a manifest's ``not_made`` uses them."""
+
 # Row sources without a golden fixture, with the reason (``fixture_cell``); every other row has one (FAM2).
 FIXTURE_FREE: Final[Mapping[str, str]] = {
     "tensor": "TWIN19",
@@ -320,16 +325,26 @@ def _diff(
     }
 
 
+def row_id(module: str, name: str, label: str = "") -> str:
+    """Return the id of a preset or tensor-model row: ``preset:FS``, ``preset:FS[basis_type="Gaussian"]`` for a variant."""
+    return f"{module}:{name}" + (f"[{label}]" if label else "")
+
+
+def file_row_id(path: Path) -> str:
+    """Return the id of the row of a model file: ``file:<stem>``."""
+    return f"file:{path.stem}"
+
+
 def generated_rows(module: str, name: str) -> list[dict[str, Any]]:
     """Build the base row of a preset or tensor model and its variant rows."""
-    base_id = f"{module}:{name}"
+    base_id = row_id(module, name)
     rows: list[dict[str, Any]] = []
     base_classes: dict[str, dict[str, list[Any]]] = {}
     for label, arguments in variants(module, name):
         instructions = build_instructions(module, name, arguments)
         classes = class_options(instructions)
         row: dict[str, Any] = {
-            "id": base_id + (f"[{label}]" if label else ""),
+            "id": row_id(module, name, label),
             "source": module,
             "name": name,
         }
@@ -359,7 +374,7 @@ def file_row(path: Path) -> dict[str, Any]:
         str(entry.get("name", index)): entry for index, entry in enumerate(entries)
     }
     return {
-        "id": f"file:{path.stem}",
+        "id": file_row_id(path),
         "source": "file",
         "name": path.relative_to(ROOT).as_posix(),
         "param_dtypes": [metadata.get("param_dtype", "float64")],
@@ -471,16 +486,17 @@ def fixture_dtypes() -> dict[str, frozenset[str]]:
     (``not_made`` of ``tools/make_golden.py``). An option pair (``dense_nbr``, ``lm_first``) is a second layout of
     its row's float64 fixture and is not counted.
     """
-    from make_golden import DTYPES as LABELS
-    from make_golden import GOLDEN_DIR
-
     found: dict[str, set[str]] = {}
     for path in sorted(GOLDEN_DIR.glob("*.json")):
         manifest = json.loads(path.read_text(encoding="utf-8"))
         if manifest.get("tier") != "tiny" or not manifest.get("row"):
             continue
         dtypes = found.setdefault(manifest["row"], set())
-        dtypes |= {LABELS[k] for k in manifest.get("not_made", {}) if k in LABELS}
+        dtypes |= {
+            DTYPE_OF_LABEL[k]
+            for k in manifest.get("not_made", {})
+            if k in DTYPE_OF_LABEL
+        }
         if not manifest.get("option"):
             dtypes.add(manifest["dtype"])
     return {row: frozenset(dtypes) for row, dtypes in found.items()}
