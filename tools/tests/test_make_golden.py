@@ -443,6 +443,22 @@ def test_the_layout_options_of_a_model(omat_model):
     assert mg.layout_options(omat_model) == {"dense_nbr": True, "lm_first": True}
 
 
+def test_the_faithful_tier_has_the_anchors_only():
+    assert {k: v.row for k, v in mg.tier_sources("faithful").items()} == {
+        "omat": "file:model_grace_2L_omat",
+        "large": "file:model_grace_2L_omat_large_base",
+    }
+
+
+def test_command_line_cells_fails_on_merged_widths_not_accepted(monkeypatch, caplog):
+    monkeypatch.setattr(mg, "MERGED_WIDTHS", {})
+    assert mg.main(["cells"]) == 1
+    assert (
+        "grace_3l_omat_large: the distinct widths (32, 64) get one tiny width"
+        in caplog.text
+    )
+
+
 def test_command_line_write_refuses_an_unknown_label_and_lists_sources(
     tmp_path, caplog
 ):
