@@ -541,28 +541,28 @@ def test_a_changed_default_of_the_basis_function_that_radial_basis_forwards_to_i
     assert "RadialBasis.p: source default 6, pinned 5" in ia.problems(copy)
 
 
-def test_a_changed_default_of_the_second_forwarded_basis_function_is_reported(copy):
-    edit(
-        copy,
-        "functions/radial.py",
-        "rmin: float = 0.0,",
-        "rmin: float = 0.5,",
-        "GaussianRadialBasisFunction",
-    )
-    assert ia.problems(copy) == ["RadialBasis.rmin: source default 0.5, pinned 0.0"]
-
-
-def test_forwarded_basis_functions_that_disagree_on_a_default_are_reported(copy):
-    edit(
-        copy,
-        "functions/radial.py",
-        "normalized: bool = False,",
-        "normalized: bool = True,",
-        "GaussianRadialBasisFunction",
-    )
-    assert ia.problems(copy) == [
-        "RadialBasis.normalized: source default True, pinned False"
-    ]
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        pytest.param(
+            "rmin: float = 0.0,",
+            "rmin: float = 0.5,",
+            "RadialBasis.rmin: source default 0.5, pinned 0.0",
+            id="a-default-only-the-second-has",
+        ),
+        pytest.param(
+            "normalized: bool = False,",
+            "normalized: bool = True,",
+            "RadialBasis.normalized: source default True, pinned False",
+            id="the-two-disagree",
+        ),
+    ],
+)
+def test_a_changed_default_of_the_second_forwarded_basis_function_is_reported(
+    copy, old, new, expected
+):
+    edit(copy, "functions/radial.py", old, new, "GaussianRadialBasisFunction")
+    assert ia.problems(copy) == [expected]
 
 
 def test_a_removed_class_that_holds_pinned_defaults_is_reported(copy):
