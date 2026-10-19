@@ -47,11 +47,11 @@ O = opt.OUTPUT  # noqa: E741
 # Stage 3). A twin issue that adds a golden test sets ``GOLDEN_TESTS`` in registry.py and removes the class here:
 # the test below fails in both directions, so the list can only shrink.
 EXPECTED_WITHOUT_GOLDEN = {
+    "MLPRadialFunction",
     "BondLength",
     "ScaledBondVector",
     "RadialBasis",
     "SphericalHarmonic",
-    "MLPRadialFunction",
     "MLPRadialFunction_v2",
 }
 
