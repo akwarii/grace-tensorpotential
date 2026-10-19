@@ -248,8 +248,8 @@ MUTANTS = [
         id="drop-a-rule",
     ),
     pytest.param(
-        '"basis_type": _r("str", values=("Cheb", "SBessel"))',
-        '"basis_type": _r("str", values=("Cheb",))',
+        '"basis_type": _r("str", values=("Cheb", "SBessel", "Gaussian", "RadSinBessel"))',
+        '"basis_type": _r("str", values=("Cheb", "Gaussian", "RadSinBessel"))',
         id="narrow-a-value-set",
     ),
     pytest.param(
@@ -303,7 +303,10 @@ def test_a_planted_change_of_a_default_is_caught_by_the_signature_comparison(tmp
 
 def _default_differences(defaults: Any) -> list[str]:
     """Differences between ``defaults`` and the constructor defaults recorded from the TF classes."""
-    from tensorpotential.functions.radial import ChebSqrRadialBasisFunction
+    from tensorpotential.functions.radial import (
+        ChebSqrRadialBasisFunction,
+        GaussianRadialBasisFunction,
+    )
 
     found: list[str] = []
     for cls, expected in defaults.items():
@@ -311,9 +314,10 @@ def _default_differences(defaults: Any) -> list[str]:
             short(cls) == "RadialBasis"
         ):  # nfunc, rcut and the rest go to the basis function through **kwargs
             cheb = inspect.signature(ChebSqrRadialBasisFunction.__init__).parameters
+            gauss = inspect.signature(GaussianRadialBasisFunction.__init__).parameters
             reference = {
                 n: cheb[n].default for n in ("p", "normalized", "kind", "reversed")
-            }
+            } | {n: gauss[n].default for n in ("rmin", "init_gamma", "trainable")}
         else:
             reference = {
                 n: ast.literal_eval(p["default_repr"])
@@ -345,7 +349,19 @@ def test_every_supported_class_has_its_defaults_pinned():
 
 
 def test_every_option_of_a_rule_is_a_parameter_a_consumed_keyword_or_an_ignored_key():
-    consumed = {"RadialBasis": {"nfunc", "rcut", "p", "normalized", "kind", "reversed"}}
+    consumed = {
+        "RadialBasis": {
+            "nfunc",
+            "rcut",
+            "p",
+            "normalized",
+            "kind",
+            "reversed",
+            "rmin",
+            "init_gamma",
+            "trainable",
+        }
+    }
     for cls, options in opt.SUPPORTED_OPTIONS.items():
         parameters = set(params(cls)) - {"name", "kwargs"}
         extra = {name for name, rule in options.items() if name not in parameters}

@@ -107,7 +107,6 @@ GAP_ISSUES: Final[Mapping[tuple[str, str | None], str]] = {
     ("LinearOut2Target", None): "TWIN16",
     ("MLPOut2ScalarTarget", None): "TWIN16",
     ("ZBLPotential", None): "TWIN17",
-    ("RadialBasis", "basis_type"): "RAD2",
     ("FunctionReduceN", "init_vars"): "SPEC6",
     ("ScalarChemicalEmbedding", "init"): "SPEC6",
     ("FunctionReduce", None): "TWIN16",

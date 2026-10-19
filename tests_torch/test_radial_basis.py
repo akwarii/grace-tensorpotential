@@ -3,9 +3,9 @@
 Logic: each ``basis_type`` evaluates its basis with the keywords the yaml gives, on the stored ``rc`` (rule R6: a loaded
 ``rc`` that differs from ``rcut`` is the one used, and it keeps the parameter dtype), the Gaussian basis on its stored
 ``grid`` and ``scale``; the weights are named as in the checkpoint; a keyword the basis does not read is refused unless
-it is at its pinned default (owner decision, sheet section 7), with the Gaussian allow-list; an unknown ``basis_type``
+it is at its pinned default (owner decision, sheet section 7), with the Gaussian and SBessel allow-lists; an unknown ``basis_type``
 is refused. Physical values: the basis is a function of the bond length only (invariant under a rotation of the bonds)
-and vanishes beyond the cutoff. The comparison with TensorFlow is ``test_geometry_golden.py``.
+and vanishes beyond the cutoff. The comparison with TensorFlow is ``test_radial_basis_golden.py`` (and ``test_geometry_golden.py``).
 """
 
 from __future__ import annotations
@@ -106,8 +106,8 @@ def test_the_stored_cutoff_is_used_not_the_yaml_one():
 @pytest.mark.parametrize(
     ("basis_type", "options"),
     [
-        ("SBessel", {"p": 7}),
-        ("SBessel", {"normalized": True}),
+        ("SBessel", {"rmin": 1.0}),
+        ("SBessel", {"reversed": True}),
         ("RadSinBessel", {"kind": 2}),
         ("Gaussian", {"normalized": True}),
         ("Cheb", {"rmin": 1.0}),
@@ -122,8 +122,10 @@ def test_a_keyword_the_basis_does_not_read_is_refused_away_from_its_default(
         _twin(basis_type=basis_type, **options)
 
 
-def test_pinned_defaults_and_the_gaussian_allow_list_are_accepted():
+def test_pinned_defaults_and_the_allow_lists_are_accepted():
     assert isinstance(_twin(basis_type="SBessel", p=5).basis, radial.SimplifiedBessel)
+    sbessel = _twin(basis_type="SBessel", p=16, normalized=True)
+    assert sbessel.basis == radial.SimplifiedBessel(6, RCUT)
     gaussian = _twin(basis_type="Gaussian", rmin=0.5, init_gamma=2.0, trainable=True)
     assert isinstance(gaussian.basis, radial.Gaussian)
 

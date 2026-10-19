@@ -5,7 +5,7 @@
 | Source | `instructions/compute.py:347-416` (class at 347); the maths is in `functions/radial.py:11-358` |
 | Family | geometry and radial |
 | Base | `TPInstruction` (`instructions/base.py:328`) |
-| Used in | both 2L yamls, name `RadialBasis`, `bonds` = `BondLength`, `basis_type: Cheb` (omat: `nfunc 8, p 5, rcut 6.0`; large_base: `nfunc 10, p 16, rcut 6.0`) |
+| Used in | both 2L yamls, name `RadialBasis`, `bonds` = `BondLength`, `basis_type: Cheb` (omat: `nfunc 8, p 5, rcut 6.0`; large_base: `nfunc 10, p 16, rcut 6.0`); `SBessel` in `model_grace` and the 1L/2L presets; every preset takes `basis_type` = any of the four (architecture matrix) |
 | Reads | the bond-length entry, `[n_bonds, 1]` |
 | Writes | `RadialBasis` `[n_bonds, nfunc]` |
 | Variables | `rc` (non-trainable scalar); `grid` and `scale` for the Gaussian basis only |
@@ -41,7 +41,7 @@ misspelt `normalised` is stored in the yaml and has no effect). Measured: `Radia
 | | `init_gamma` | `1.0` | Width factor. |
 | | `trainable` | `False` | Whether `grid` and `scale` are trainable (no effect at inference). |
 | | `normalized` | `False` | Accepted and **ignored** (the code using it is commented out, `radial.py:99-101`). |
-| `SBessel` (`radial.py:257-268`) | none | | No `p`: this basis has no envelope. |
+| `SBessel` (`radial.py:257-268`) | none | | No `p`: this basis has no envelope. The `GRACE_*_v2` presets still write `p` (`16`) and `model_grace` writes `normalized: true`; both are swallowed by `**kwargs`. |
 
 `Gaussian` with `nfunc = 1` raises `IndexError` in the constructor (`grid[0, 1]`, `radial.py:95-96`; **Measured**).
 
@@ -65,13 +65,15 @@ sigma[n]  = sqrt(sigma2[n])                   (urcut = 1.0)
 All non-trainable; none is a learned weight of a shipped model. `rc` is **[V]** against the three probe files (SBessel in
 `model_grace`, Cheb in the two 2L models; both parameter dtypes: `RadialBasis/cutoff:0`, shape `[]`, `float32` for a float32
 model and `float64` for a float64 one, `trainable = False`, saved under `model/instructions/RadialBasis/rc/...`). `grid` and
-`scale` are **[I]**: no probed yaml uses the Gaussian basis.
+`scale` are **[V]** on the FAM2 fixtures of the `basis_type="Gaussian"` preset variants (both parameter dtypes, `trainable =
+False`, checkpoint keys `RadialBasis/basis_function/grid` and `RadialBasis/basis_function/scale`; `rc` stays
+`RadialBasis/rc`). The old list-format `model_grace` keys its checkpoint by instruction position (`2/rc`).
 
 | Attribute | TF name | Shape | dtype | Notes |
 |---|---|---|---|---|
 | `basis_function.rc` (alias `RadialBasis.rc`, `compute.py:409`) | `RadialBasis/cutoff:0` | `[]` | `float_dtype` (the model's parameter dtype) | `Variable(rcut)` (`radial.py:52-54`, `225-227`). Present for all four bases. |
-| `basis_function.grid` | `RadialBasis/Variable:0` | `[1, nfunc]` | `float_dtype` | Gaussian only; `trainable` as given. |
-| `basis_function.scale` | `RadialBasis/Variable:0` | `[]` | `float_dtype` | Gaussian only; negative. |
+| `basis_function.grid` | `RadialBasis/Variable:0` (checkpoint `RadialBasis/basis_function/grid`) | `[1, nfunc]` | `float_dtype` | Gaussian only; `trainable` as given. |
+| `basis_function.scale` | `RadialBasis/Variable:0` (checkpoint `RadialBasis/basis_function/scale`) | `[]` | `float_dtype` | Gaussian only; negative. |
 
 The checkpoint therefore holds `rc` for every model: it is data, not a derived value, and the twin has to read it
 (rule R6) rather than recompute it from `rcut`; see section 6 for why the two differ for a float32 model.
@@ -187,16 +189,24 @@ of a float32 model), and the strict `r > rcut` test keeps the Python float `rcut
 - Unknown extra keywords: TF ignores them. **Proposal**: the twin raises on a keyword that the chosen basis does
   not read, naming it, because a silent no-op in a saved model (a misspelt `normalized`) would otherwise
   produce a wrong energy without a message (rule R3). A keyword that is read but has no effect (`Gaussian`
-  `normalized`) is accepted only at its default.
+  `normalized`) is accepted only at its default. Allow-lists of keys TF accepts and never reads in the forward pass,
+  accepted at any value: `rmin`, `init_gamma`, `trainable` for `Gaussian` (they only set the stored `grid` and `scale`);
+  `p` and `normalized` for `SBessel` (no envelope, no normalisation; written by the `GRACE_*_v2` presets and
+  `model_grace`; owner, 2026-10-20, RAD2).
+- The option table (`spec/options.py`) accepts the four `basis_type` values (RAD2, after the golden comparison below)
+  and `Cheb` of `kind = 1` only.
 - The commented-out normalisation of the Gaussian basis is not part of the contract.
 
 ## 8. Golden-fixture keys
 
-Fixture key `RadialBasis`, `[n_bonds, nfunc]` (`8` for omat, `10` for large_base). Both shipped yamls use `Cheb`,
-so the other three bases have no yaml fixture: they are tested against the closed forms of
-`tests/test_compute.py:722-1111` (sine Bessel and its normalisation by `scipy.integrate.quad`, Chebyshev
-polynomials of both kinds, Gaussians, orthonormality of the simplified spherical Bessel functions against
-`r**2 dr`, envelope values at 0 and at the cutoff). FIX2 produces the fixtures; no achieved error exists yet.
+Fixture key `RadialBasis`, `[n_bonds, nfunc]`. The architecture fixtures (FAM2) hold every basis in both parameter
+dtypes: `Cheb` and `SBessel` from the preset defaults and model files, `Gaussian` and `RadSinBessel` from the preset
+variants with that `basis_type`. `tests_torch/test_radial_basis_golden.py` compares the twin with every one of them
+(RAD2) within the `FEATURE` row of the parameter dtype. Not covered by a fixture: `RadSinBessel` with `normalized =
+True`, `Cheb` with `kind = 2`, `reversed` or `normalized`, and a Gaussian `rmin` or `init_gamma` away from its default;
+they are tested against the closed forms of `tests/test_compute.py:722-1111` (sine Bessel and its normalisation by
+`scipy.integrate.quad`, Chebyshev polynomials of both kinds, Gaussians, orthonormality of the simplified spherical
+Bessel functions against `r**2 dr`, envelope values at 0 and at the cutoff) and in `tests_torch/test_radial.py`.
 
 ## For the reviewer
 

@@ -94,7 +94,8 @@ KEPT_WHEN_STRIPPING = {
 # ``RadialBasis`` forwards ``**kwargs`` to, not of its own constructor (``tests/test_options.py`` pins them against
 # that signature).
 FORWARDED_TO_THE_BASIS = {
-    ("RadialBasis", k) for k in ("p", "normalized", "kind", "reversed")
+    ("RadialBasis", k)
+    for k in ("p", "normalized", "kind", "reversed", "rmin", "init_gamma", "trainable")
 }
 # The value TF reports for an option the yaml leaves as None: the constructor resolves ``dense_nbr=None`` to the
 # default of the active InstructionManager (False outside one) while the pinned default stays None; the twin accepts
