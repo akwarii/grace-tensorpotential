@@ -1,8 +1,8 @@
-"""The ``MLPRadialFunction`` twin against TensorFlow.
+"""The ``MLPRadialFunction`` and ``MLPRadialFunction_v2`` twins against TensorFlow.
 
-For each omat tiny anchor (float64, float32 and the ``lm_first`` and ``dense_nbr`` option pairs; the large model uses
-``MLPRadialFunction_v2``), every ``MLPRadialFunction`` instance (``R``, ``R1``), given the stored TF radial basis and
-the stored weights, reproduces the stored TF output on every structure within the ``FEATURE`` row of the parameter
+For each tiny anchor (float64, float32 and the ``lm_first`` and ``dense_nbr`` option pairs), every
+``MLPRadialFunction`` instance (``R``, ``R1`` of the omat model) and every ``MLPRadialFunction_v2`` instance (``R``,
+``R1`` of the large model), given the stored TF radial basis and the stored weights, reproduces the stored TF output on every structure within the ``FEATURE`` row of the parameter
 dtype. TF writes ``R`` as ``[bonds, n_rad_max, lm]`` in both layouts; the twin returns ``[bonds, lm, n_rad_max]``.
 
 The width of the basis comes from the TF stand-in (``tests_torch/tools/tfstub.py``), so no TensorFlow is needed.
@@ -21,6 +21,7 @@ import torch
 
 from tensorpotential.torch_backend.instructions.mlp_radial_function import (
     MLPRadialFunction,
+    MLPRadialFunction_v2,
 )
 from tensorpotential.torch_backend.ops.precision import DtypePolicy
 from tensorpotential.torch_backend.spec.loader import parse_model_spec
@@ -79,18 +80,23 @@ def _instances(cls: str) -> list[tuple[str, str]]:
     ]
 
 
-RADIALS = _instances("MLPRadialFunction")
+RADIALS = _instances("MLPRadialFunction") + _instances("MLPRadialFunction_v2")
 
 
-def test_every_instance_is_compared():
-    expected = [(a, n) for a in ANCHORS if a.startswith("omat") for n in ("R", "R1")]
+def test_every_instance_of_both_versions_is_compared():
+    expected = [(a, n) for a in ANCHORS for n in ("R", "R1")]
     assert sorted(RADIALS) == sorted(expected)
+    assert {a for a, _ in _instances("MLPRadialFunction_v2")} == {
+        a for a in ANCHORS if a.startswith("large")
+    }
 
 
-def _radial(anchor: str, name: str) -> MLPRadialFunction:
+def _radial(anchor: str, name: str) -> MLPRadialFunction | MLPRadialFunction_v2:
     spec = _specs(anchor)[name]
-    basis = _tf_model(anchor)[spec.options["basis"].name]
-    twin = MLPRadialFunction(spec, basis.basis_function.nfunc, _policy(anchor))
+    nfunc = _tf_model(anchor)[spec.options["basis"].name].basis_function.nfunc
+    v2 = spec.cls.endswith("_v2")
+    cls = MLPRadialFunction_v2 if v2 else MLPRadialFunction
+    twin = cls(spec, nfunc, _policy(anchor))
     weights = _weights(anchor)
     state = {
         k: torch.as_tensor(weights[f"{name}/{k.replace('.', '/')}"])

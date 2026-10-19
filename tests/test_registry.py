@@ -43,17 +43,9 @@ from tensorpotential.torch_backend.spec.model import (  # noqa: E402
 C = opt.COMPUTE
 O = opt.OUTPUT  # noqa: E741
 
-# The supported classes that have no golden test yet (their golden fixtures come from FIX2, the twin tests from
-# Stage 3). A twin issue that adds a golden test sets ``GOLDEN_TESTS`` in registry.py and removes the class here:
-# the test below fails in both directions, so the list can only shrink.
-EXPECTED_WITHOUT_GOLDEN = {
-    "MLPRadialFunction",
-    "BondLength",
-    "ScaledBondVector",
-    "RadialBasis",
-    "SphericalHarmonic",
-    "MLPRadialFunction_v2",
-}
+# The supported classes that have no golden test yet. Empty since TWIN3: every supported class has one, so a class
+# that becomes supported needs its golden test in ``GOLDEN_TESTS`` (registry.py), or the test below fails.
+EXPECTED_WITHOUT_GOLDEN: set[str] = set()
 
 SOURCE_COPY_DIRS = ("instructions", "functions", "uq")
 
