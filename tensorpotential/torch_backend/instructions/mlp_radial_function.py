@@ -182,9 +182,11 @@ def _embedding(
     return ref.name, BOND_MU_I if side == "i" else BOND_MU_J, size
 
 
-# hidden_layers and activation of an MLPRadialFunction_v2 whose yaml gives null (compute.py)
+# hidden_layers and activation of an MLPRadialFunction_v2 whose yaml gives null, and the activations it knows (TF's
+# ACTIVATION_DICT; its silu is the plain one)
 _DEFAULT_HIDDEN_LAYERS_V2 = (64, 64)
 _DEFAULT_ACTIVATION_V2 = "silu"
+_ACTIVATIONS_V2 = ("tanh", "silu", "sigmoid")
 
 
 def _activations_v2(spec: InstructionSpec, n_hidden: int) -> tuple[str, ...]:
@@ -194,13 +196,27 @@ def _activations_v2(spec: InstructionSpec, n_hidden: int) -> tuple[str, ...]:
         names = (given or _DEFAULT_ACTIVATION_V2,) * n_hidden
     else:
         names = tuple(given)
-    if len(names) != n_hidden or not set(names) <= set(ACTIVATIONS) - {"silu_n2norm"}:
+    if len(names) != n_hidden or not set(names) <= set(_ACTIVATIONS_V2):
         msg = (
-            f"instruction {spec.name!r} (MLPRadialFunction_v2): activation needs one of tanh, silu, sigmoid per hidden "
-            f"layer ({n_hidden}), got {given!r}"
+            f"instruction {spec.name!r} (MLPRadialFunction_v2): activation needs one of {', '.join(_ACTIVATIONS_V2)} "
+            f"per hidden layer ({n_hidden}), got {given!r}"
         )
         raise OptionValueError(msg)
     return names
+
+
+def _embed_transform(
+    spec: InstructionSpec, embedding_size: int | None, n_out: int, policy: DtypePolicy
+) -> Linear | None:
+    """Return the ``Linear`` of the ``chem_embedding`` gate, ``None`` without an embedding."""
+    embedding = spec.options["chem_embedding"]
+    if (embedding is None) != (embedding_size is None):
+        msg = f"instruction {spec.name!r} (MLPRadialFunction_v2): its chem_embedding is {embedding!r}, but an embedding size of {embedding_size!r} was given"
+        raise OptionValueError(msg)
+    if embedding_size is None:
+        return None
+    # always normalised, whatever the option (compute.py)
+    return Linear(embedding_size, n_out, policy)
 
 
 class MLPRadialFunction_v2(torch.nn.Module):
@@ -255,49 +271,26 @@ class MLPRadialFunction_v2(torch.nn.Module):
             Linear(n_in, n_next, policy, normalize=normalize)
             for n_in, n_next in itertools.pairwise(sizes)
         )
-        self._gate = self._build_gate(spec, embedding_size, n_out, policy)
+        self.embed_transform = _embed_transform(spec, embedding_size, n_out, policy)
+        embedding = options["chem_embedding"]
+        self._embedding = "" if embedding is None else embedding.name
+        self._embed_i = bool(options["embed_i"])
+        self._embed_j = bool(options["embed_j"])
         l_tile = torch.from_numpy(column_degrees(self.lmax))
         self.register_buffer("l_tile", l_tile, persistent=False)
-
-    def _build_gate(
-        self,
-        spec: InstructionSpec,
-        embedding_size: int | None,
-        n_out: int,
-        policy: DtypePolicy,
-    ) -> tuple[str, bool, bool] | None:
-        """Make ``embed_transform`` and return ``(table name, embed_i, embed_j)``, or ``None`` without a gate."""
-        embedding = spec.options["chem_embedding"]
-        if (embedding is None) != (embedding_size is None):
-            msg = f"instruction {spec.name!r} (MLPRadialFunction_v2): its chem_embedding is {embedding!r}, but an embedding size of {embedding_size!r} was given"
-            raise OptionValueError(msg)
-        self.embed_transform = None
-        # one is None only if both are; both tests narrow the types
-        if embedding is None or embedding_size is None:
-            return None
-        # always normalised, whatever the option (compute.py)
-        self.embed_transform = Linear(embedding_size, n_out, policy)
-        return (
-            embedding.name,
-            bool(spec.options["embed_i"]),
-            bool(spec.options["embed_j"]),
-        )
 
     def _gated(
         self, y: torch.Tensor, inputs: Mapping[str, torch.Tensor]
     ) -> torch.Tensor:
         """Multiply ``y`` by the gate of the embedding (TF's order: neighbour, then centre and the tanh)."""
-        if self._gate is None or self.embed_transform is None:
+        if self.embed_transform is None:
             return y
-        name, embed_i, embed_j = self._gate
-        if not (embed_i or embed_j):
-            return y
-        z = self.embed_transform(inputs[name])
+        z = self.embed_transform(inputs[self._embedding])
         gate: torch.Tensor | float = 1.0
-        if embed_j:
+        if self._embed_j:
             check_index(inputs[BOND_MU_J])
             gate = z.index_select(0, inputs[BOND_MU_J])
-        if embed_i:
+        if self._embed_i:
             check_index(inputs[BOND_MU_I])
             gate = torch.tanh(gate * z.index_select(0, inputs[BOND_MU_I]))
         return y * gate

@@ -164,8 +164,6 @@ def test_the_gate_follows_each_flag_with_the_tanh_only_under_embed_i(gate):
     data = _inputs(np.random.default_rng(RNG_SEED))
     expected = _oracle(twin, data, ["silu", "silu"], gate=gate)
     assert_close(twin(data), expected, FEATURE_F64, f"gate {gate}")
-    assert twin.embed_transform is not None
-    assert twin.embed_transform.norm == pytest.approx(1 / np.sqrt(EMB))
 
 
 def test_the_embedding_transform_is_normalised_whatever_normalize_says():
@@ -229,6 +227,7 @@ def test_each_bond_depends_on_its_own_basis_and_elements_and_relabelling_permute
     for key, change in (
         ("B", lambda t: t + 1.0),
         ("mu_j", lambda t: (t + 1) % N_ELEMENTS),
+        ("mu_i", lambda t: (t + 1) % N_ELEMENTS),
     ):
         changed = dict(data, **{key: data[key].clone()})
         changed[key][3] = change(changed[key][3])
