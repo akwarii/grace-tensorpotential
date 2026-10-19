@@ -1,12 +1,15 @@
 {
- "format_version": 1,
+ "format_version": 2,
  "name": "large_tiny_f64_lm_first",
  "model": "large",
+ "row": "file:model_grace_2L_omat_large_base",
+ "source": {
+  "file": "tests/model_grace_2L_omat_large_base.yaml"
+ },
  "tier": "tiny",
  "dtype": "float64",
  "option": "lm_first",
  "seed": 20260930,
- "parent_yaml": "model_grace_2L_omat_large_base.yaml",
  "yaml": "large_tiny.yaml",
  "yaml_sha256": "a8480d8f8ed9f440730fe7848827ab7965c93b24d588c9671f53813ef7073978",
  "elements": [
@@ -127,9 +130,9 @@
   }
  },
  "library": {
-  "library_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
+  "library_git_sha": "5636f3816860923834f5b9a46357d909d2cd79f0",
   "library_dirty": false,
-  "generator_git_sha": "90f9dd6f696a76fd9cd0867f16f9121fbe415d28",
+  "generator_git_sha": "5636f3816860923834f5b9a46357d909d2cd79f0",
   "generator_dirty": false,
   "versions": {
    "tensorflow": "2.20.0",
@@ -1714,6 +1717,11 @@
    "trainable": true
   }
  ],
+ "layout_options": {
+  "dense_nbr": true,
+  "lm_first": true
+ },
+ "not_made": {},
  "n_arrays": 339,
  "weights_from": "large_tiny_f64",
  "option_pair": {
@@ -2015,6 +2023,7 @@
    "missing": []
   },
   "weights": {
+   "renamed_by_position": 0,
    "only_in_model": [],
    "only_in_weights": [],
    "shape_differs": {},
