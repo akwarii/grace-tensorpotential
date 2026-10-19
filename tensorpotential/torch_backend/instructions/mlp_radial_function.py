@@ -62,6 +62,25 @@ if TYPE_CHECKING:
 _DEFAULT_HIDDEN_LAYERS = (64, 64, 64)
 
 
+def _radial_sizes(spec: InstructionSpec) -> tuple[int, int]:
+    """Return ``(n_rad_max, lmax)`` of a radial MLP; refuse ``n_rad_max < 1`` and ``lmax < 0``."""
+    n_rad_max, lmax = int(spec.options["n_rad_max"]), int(spec.options["lmax"])
+    if n_rad_max < 1 or lmax < 0:
+        cls = spec.cls.rsplit(".", 1)[-1]
+        msg = f"instruction {spec.name!r} ({cls}): n_rad_max must be at least 1 and lmax at least 0, got {n_rad_max} and {lmax}"
+        raise OptionValueError(msg)
+    return n_rad_max, lmax
+
+
+def _radial_layout(
+    y: torch.Tensor, n_rad_max: int, lmax: int, l_tile: torch.Tensor
+) -> torch.Tensor:
+    """``R[b, l*l + l + m, n] = y[b, n * (lmax + 1) + l]``: the MLP output in the backend layout ``[bonds, lm, n]``."""
+    # [bonds, n, l] -> [bonds, l, n], then each l spread over its 2 l + 1 columns
+    y = y.reshape(-1, n_rad_max, lmax + 1).transpose(1, 2)
+    return y.index_select(1, l_tile)
+
+
 class MLPRadialFunction(torch.nn.Module):
     """``MLPRadialFunction``: ``R [bonds, (lmax + 1)**2, n_rad_max]`` from the radial basis.
 
@@ -103,10 +122,7 @@ class MLPRadialFunction(torch.nn.Module):
             msg = f"instruction {spec.name!r} (MLPRadialFunction): basis is null"
             raise OptionValueError(msg)
         self._basis = options["basis"].name
-        self.n_rad_max, self.lmax = int(options["n_rad_max"]), int(options["lmax"])
-        if self.n_rad_max < 1 or self.lmax < 0:
-            msg = f"instruction {spec.name!r} (MLPRadialFunction): n_rad_max must be at least 1 and lmax at least 0, got {self.n_rad_max} and {self.lmax}"
-            raise OptionValueError(msg)
+        self.n_rad_max, self.lmax = _radial_sizes(spec)
         sides = (("i", embedding_size_i), ("j", embedding_size_j))
         embeddings = [
             _embedding(spec, side, options[f"chemical_embedding_{side}"], size)
@@ -149,9 +165,7 @@ class MLPRadialFunction(torch.nn.Module):
         y = self.mlp(self._input(inputs))
         if self.gamma is not None:
             y = variance_norm(y, self.gamma)
-        # [bonds, n, l] -> [bonds, l, n], then each l spread over its 2 l + 1 columns
-        y = y.reshape(-1, self.n_rad_max, self.lmax + 1).transpose(1, 2)
-        return y.index_select(1, self.get_buffer("l_tile"))
+        return _radial_layout(y, self.n_rad_max, self.lmax, self.get_buffer("l_tile"))
 
 
 def _embedding(
@@ -228,10 +242,7 @@ class MLPRadialFunction_v2(torch.nn.Module):
             msg = f"instruction {spec.name!r} (MLPRadialFunction_v2): basis is null"
             raise OptionValueError(msg)
         self._basis = options["basis"].name
-        self.n_rad_max, self.lmax = int(options["n_rad_max"]), int(options["lmax"])
-        if self.n_rad_max < 1 or self.lmax < 0:
-            msg = f"instruction {spec.name!r} (MLPRadialFunction_v2): n_rad_max must be at least 1 and lmax at least 0, got {self.n_rad_max} and {self.lmax}"
-            raise OptionValueError(msg)
+        self.n_rad_max, self.lmax = _radial_sizes(spec)
         hidden = options["hidden_layers"]
         hidden = _DEFAULT_HIDDEN_LAYERS_V2 if hidden is None else tuple(hidden)
         n_out = self.n_rad_max * (self.lmax + 1)
@@ -305,6 +316,4 @@ class MLPRadialFunction_v2(torch.nn.Module):
         for layer, act in zip(hidden, self.activations, strict=True):
             x = act(layer(x))
         y = self._gated(last(x), inputs)
-        # [bonds, n, l] -> [bonds, l, n], then each l spread over its 2 l + 1 columns
-        y = y.reshape(-1, self.n_rad_max, self.lmax + 1).transpose(1, 2)
-        return y.index_select(1, self.get_buffer("l_tile"))
+        return _radial_layout(y, self.n_rad_max, self.lmax, self.get_buffer("l_tile"))
