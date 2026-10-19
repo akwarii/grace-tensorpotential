@@ -4,8 +4,10 @@ Logic: ``CreateOutputTarget`` (the value, null as 0, the dtype); ``LinMLPOut2Sca
 from the sheet (``x @ (w / sqrt(n_in))``, ``silu * 1.6759`` by default, the layer normalisation with ``1e-16``) for one
 and two origins, every activation, no and several hidden layers, ``n_out > 1`` and the hidden features of
 ``return_hidden_target``; ``ConstantScaleShiftTarget`` with the scale alone, a constant shift, a per-element map and an
-embedding shift; the typed errors. Physical values: each atom's energy depends on that atom's features only
-(locality), relabelling the atoms permutes the energies, and a float32 model rounds the omat scale to the float32 value
+embedding shift; ``TrainableShiftTarget`` against a numpy gather of its table, in the dtype of the target; the typed
+errors. Physical values: each atom's energy depends on that atom's features only
+(locality), relabelling the atoms permutes the energies, the learned shifts add one reference energy per atom of
+each element to the total, and a float32 model rounds the omat scale to the float32 value
 TF measured (spec sheet, section 4). The comparison with TensorFlow is ``test_output_targets_golden.py``.
 """
 
@@ -27,6 +29,7 @@ from tensorpotential.torch_backend.instructions.output_targets import (
     ConstantScaleShiftTarget,
     CreateOutputTarget,
     LinMLPOut2ScalarTarget,
+    TrainableShiftTarget,
 )
 from tensorpotential.torch_backend.ops.precision import DtypePolicy
 from tensorpotential.torch_backend.spec.model import InstructionRef, InstructionSpec
@@ -390,3 +393,82 @@ def test_each_atomic_energy_depends_on_its_own_atom_only_and_relabelling_permute
     order = torch.as_tensor(rng.permutation(N_ATOMS))
     relabelled = {k: (v[order] if v.dim() else v) for k, v in inputs.items()}
     torch.testing.assert_close(energies(relabelled), before[order], rtol=0, atol=1e-15)
+
+
+# ------------------------------------------------------------------ TrainableShiftTarget
+
+
+def _trainable(policy=F64, n_types=3) -> TrainableShiftTarget:
+    spec = _spec(
+        "TrainableShiftTarget",
+        "TrainableShiftTarget",
+        target=InstructionRef("atomic_energy"),
+        number_of_atom_types=n_types,
+    )
+    twin = TrainableShiftTarget(spec, policy)
+    shifts = np.array([[-3.5], [0.25], [-11.0]][:n_types])
+    twin.load_state_dict({"at_shifts": torch.as_tensor(shifts, dtype=policy.param)})
+    return twin
+
+
+def test_the_trainable_shift_adds_the_row_of_each_atoms_element():
+    inputs = _energy(np.random.default_rng(RNG_SEED))
+    out = _trainable()(inputs)
+    table = np.array([-3.5, 0.25, -11.0])
+    expected = inputs["atomic_energy"].numpy() + table[[0, 2, 1, 2, 0], None]
+    assert out.dtype == torch.float64
+    np.testing.assert_array_equal(out.detach().numpy(), expected)
+
+
+def test_the_shift_table_starts_at_zero_and_is_the_only_weight():
+    spec = _spec(
+        "TrainableShiftTarget",
+        "TrainableShiftTarget",
+        target=InstructionRef("atomic_energy"),
+        number_of_atom_types=4,
+    )
+    twin = TrainableShiftTarget(spec, F32)
+    (key,) = twin.state_dict()
+    assert key == "at_shifts" and twin.at_shifts.shape == (4, 1)
+    assert twin.at_shifts.dtype == torch.float32
+    assert torch.count_nonzero(twin.at_shifts) == 0
+
+
+def test_a_float32_model_shifts_a_float32_target():
+    inputs = _energy(np.random.default_rng(RNG_SEED), np.float32)
+    out = _trainable(F32)(inputs)
+    assert out.dtype == torch.float32
+    table = np.array([-3.5, 0.25, -11.0], dtype=np.float32)
+    expected = inputs["atomic_energy"].numpy() + table[[0, 2, 1, 2, 0], None]
+    np.testing.assert_array_equal(out.detach().numpy(), expected)
+
+
+def test_no_atom_type_and_a_floating_element_index_are_refused():
+    spec = _spec(
+        "TrainableShiftTarget",
+        "t",
+        target=InstructionRef("atomic_energy"),
+        number_of_atom_types=0,
+    )
+    with pytest.raises(
+        OptionValueError, match="number_of_atom_types must be at least 1"
+    ):
+        TrainableShiftTarget(spec, F64)
+    inputs = _energy(np.random.default_rng(RNG_SEED))
+    inputs["atomic_mu_i"] = inputs["atomic_mu_i"].double()
+    with pytest.raises(DtypeError, match="int32 or int64"):
+        _trainable()(inputs)
+
+
+def test_the_learned_shifts_add_one_reference_energy_per_atom_to_the_total():
+    rng = np.random.default_rng(RNG_SEED)
+    inputs = _energy(rng)
+    twin = _trainable()
+    total = float(twin(inputs).detach().sum() - inputs["atomic_energy"].sum())
+    counts = np.bincount(inputs["atomic_mu_i"].numpy(), minlength=3)
+    assert total == pytest.approx(
+        float(counts @ np.array([-3.5, 0.25, -11.0])), abs=1e-12
+    )
+    order = torch.as_tensor(rng.permutation(N_ATOMS))
+    relabelled = {k: v[order] for k, v in inputs.items()}
+    assert torch.equal(twin(relabelled), twin(inputs)[order])
