@@ -9,10 +9,38 @@ Two tiers (decision D8):
 | | tiny anchors | faithful fixtures |
 |---|---|---|
 | where | `tests_torch/golden/` (committed) | `tests_torch/fixtures/` (the `.npz` files are git-ignored; manifests and yamls are committed) |
-| model | the two 2L yamls with 4 elements and small widths | the two 2L yamls with 6 elements and the real widths |
+| model | every architecture row (below) with 4 elements and small widths | the two 2L yamls with 6 elements and the real widths |
 | structures | `isolated_atom`, `dimer`, `self_image_cell`, `periodic_triple` | those and `fcc4`, `icosahedron_satellite`, `rattled_multi8` |
 | size | each fixture under 1 MB, files together | each file under 25 MB |
 | used for | CI without TensorFlow, the twin tests | the same tests on the real widths, run locally |
+
+## One fixture per architecture row
+
+Every row of `docs/torch_backend/architectures.json` (`tools/architecture_matrix.py`) has its tiny fixtures, except the
+rows whose source is fixture-free (`architecture_matrix.FIXTURE_FREE`: the tensor models, TWIN19). A *source*
+(`python tools/make_golden.py sources` lists them) is a model file of the repository or a preset with its default arguments
+or one argument changed; its label is the file stem or the preset in lower case, a variant adds `__<argument>_<value>`
+(`grace_2layer_v2_25__basis_type_gaussian`, `grace_1layer_v1_24__cutoff_dict`). The two anchors keep their labels `omat`
+and `large`. A preset is built by `architecture_matrix.build_instructions` with the tier's element map (a `cutoff_dict` or an
+`atomic_shift_map` names every element of the tier) and then shrunk like a file. Each manifest records its `row`, its
+`source` (file, or preset and the arguments it was built with) and `layout_options` (whether one of its instructions takes
+`dense_nbr`, `lm_first`).
+
+A row gets a float64 and a float32 fixture; the default row of each family (a file, or a preset without arguments) also gets
+the option pairs of the layout options its model takes. What TensorFlow itself cannot evaluate is listed in `NOT_MADE` of the
+generator, with the reason, and recorded in the manifests (`not_made`); the matrix counts such a row as complete:
+
+| sources | not made | why |
+|---|---|---|
+| the five `*__zbl_cutoff_1_0` | `f32` | `ZBLPotential` compares float64 bond lengths with a float32 cutoff (`tf.Less` fails) |
+| `fs`, `grace_fs_omat` | `lm_first` | `FSOut2ScalarTarget` reads the features in the default layout (out-of-bounds slice) |
+| `model_grace` | `lm_first` | `MLPOut2ScalarTarget` has no `lm_first` transpose (matrix size mismatch) |
+
+LINEAR, FS, their file and the 1L models take no `dense_nbr`. Widths: `TINY_WIDTHS` maps each real width to a small one; the
+entries for 48, 24, 20, 15, 10 and 5 serve the new sources and do not occur in the anchor yamls. The 3L model has its own table
+(`TINY_WIDTHS_OF`: 128 to 3, 64 and 32 to 2): at the common widths its fixture takes 2.3 MB, and still 1.0 MB with three
+distinct widths, so its ranks 32 and 64 share one width (`MERGED_WIDTHS`, accepted by `cells`). `cells` checks every source
+for a lost option cell and for distinct widths that get one tiny width.
 
 ## What is in a fixture
 
@@ -86,17 +114,20 @@ inputs (the dense batch has its own layout). Their manifest records the comparis
 * `lm_first`: every tensor that has an angular axis is the default with that axis moved to the front (shape `[lm, ...]` for
   `[..., lm]`), and so is every Clebsch-Gordan table; all other tensors are equal.
 
-`model_grace.yaml` is not in the set: its output instruction `MLPOut2ScalarTarget` has no `lm_first` transpose (recorded in
-the oracle snapshot of SAFE2).
+`model_grace.yaml` has no `lm_first` pair: its output instruction `MLPOut2ScalarTarget` has no `lm_first` transpose (recorded in
+the oracle snapshot of SAFE2, and in `NOT_MADE`). Its list-format yaml keys the checkpoint by the position of the instruction
+(`11/reducing_YI`), its option pair (rebuilt from a name map) by the name: `assign_weights` matches them by position
+(`renamed_by_position` in the pair's report).
 
 ## Regenerating, verifying, comparing
 
 ```bash
-python tools/make_golden.py write --tier tiny                      # tests_torch/golden/
+python tools/make_golden.py write --tier tiny                      # tests_torch/golden/ (--models LABEL ... for some sources)
 python tools/make_golden.py write --tier faithful                  # tests_torch/fixtures/
 python tools/make_golden.py verify tests_torch/golden              # reload every fixture in TF and compare with itself
 python tools/make_golden.py compare DIR_A DIR_B                    # two runs, array by array
 python tools/make_golden.py cells                                  # every option cell of the parents is still exercised
+python tools/make_golden.py sources                                # the label and the architecture row of every source
 ```
 
 `write` uses one TensorFlow thread and deterministic ops, from a committed tree (the manifest records whether the tree was
@@ -156,12 +187,18 @@ python -m tests_torch.golden.lock record    # check: the same comparison as the 
 | `large_faithful_f64` | 23.07 | 18.61 | 41.71 | 445 |
 | `large_faithful_f32` | 11.41 | 9.03 | 20.47 | 445 |
 
-The option pairs hold no weights: 0.40 to 0.67 MB (tiny) and 10.6 to 23.1 MB (faithful). The faithful target of 25 MB holds
+The tiny tier holds 222 fixtures for the 99 rows (193 in float64 or float32, 17 `lm_first` and 12 `dense_nbr` pairs), 85 MB in
+all; each is under 1 MB with its manifest, the largest 0.94 MB (`grace_2layer_v2_25__zbl_cutoff_1_0_tiny_f64`), the 3L model 0.85 MB.
+The option pairs hold no weights: 0.40 to 0.67 MB (tiny anchors) and 10.6 to 23.1 MB (faithful). The faithful target of 25 MB holds
 for each file; the sum for `large_faithful_f64` is 41.7 MB because its float64 weights alone are 18.6 MB at the real widths.
 
 ## Pitfalls of the generator
 
 * The instruction order of a manifest is the execution order: never write it with sorted keys.
+* Building a preset runs TensorFlow operations, so the thread and determinism settings (`oracle_snapshot.configure_tensorflow`)
+  must come first (`parent_raw` does it); otherwise TensorFlow refuses them ("Intra op parallelism cannot be modified").
+* A matrix argument keyed by element (`cutoff_dict`, `atomic_shift_map`) names the matrix's two elements; a shift map that
+  misses an element of the model fails in TensorFlow (`GatherV2` index out of range), hence `tier_arguments`.
 * The probe's `attribute_objects` walks into the instructions that an instruction refers to (`left`, `radial`, `indicator`), which repeats every table dozens of
   times (2.3 MB instead of 0.1 MB for one tiny fixture); the fixture tables use their own walk (`_own_tables`).
 * A reload test must start from a seed other than the fixture's, or it reproduces the weights without reading them.
