@@ -137,13 +137,12 @@ GAUSSIAN = [i for i in INSTANCES if _init_args(*i)["basis_type"] == "Gaussian"]
 @pytest.mark.parametrize(("fixture", "name"), GAUSSIAN, ids=map(_id, GAUSSIAN))
 def test_the_stored_gaussian_grid_and_scale_are_those_the_yaml_implies(fixture, name):
     args = {**DEFAULTS[COMPUTE + "RadialBasis"], **_init_args(fixture, name)}
-    grid = np.linspace(args["rmin"], args["rcut"], args["nfunc"]).reshape(1, -1)
-    scale = -0.5 / (args["init_gamma"] * (grid[0, 1] - grid[0, 0])) ** 2
+    grid = np.linspace(args["rmin"], args["rcut"], args["nfunc"])
+    scale = -0.5 / (args["init_gamma"] * (grid[1] - grid[0])) ** 2
     dtype = _stored(fixture, name, "rc").dtype
     np.testing.assert_array_equal(
-        _stored(fixture, name, "basis_function/grid"), grid.astype(dtype)
+        _stored(fixture, name, "basis_function/grid"), grid.reshape(1, -1).astype(dtype)
     )
     np.testing.assert_array_equal(
         _stored(fixture, name, "basis_function/scale"), np.asarray(scale, dtype)
     )
-    assert scale < 0

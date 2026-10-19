@@ -89,7 +89,8 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "normalized": _BOOL,
         "kind": _r("int", values=(1,)),
         "reversed": _FALSE,
-        # Gaussian only: they set the stored grid and scale, which the twin reads from the checkpoint
+        # Gaussian only: they set the stored grid and scale, which the twin reads from the checkpoint; which basis
+        # reads which keyword is enforced by the twin (instructions/radial_basis.py, sheet section 7)
         "rmin": _REAL,
         "init_gamma": _REAL,
         "trainable": _BOOL,

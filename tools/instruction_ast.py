@@ -371,15 +371,18 @@ def default_problems(
         info = table.get(cls)
         if info is None:
             continue  # reported by completeness_problems
-        origins = options.DEFAULTS_ORIGIN.get(cls, ())
-        sources = [constructor_info(root, origin) for origin in origins] or [info]
-        missing = [o for o, s in zip(origins, sources, strict=False) if s is None]
+        resolved = {
+            origin: constructor_info(root, origin)
+            for origin in options.DEFAULTS_ORIGIN.get(cls, ())
+        }
+        missing = [origin for origin, source in resolved.items() if source is None]
         found += [
             f"{cls}: the class {origin} that holds its pinned defaults is not defined any more"
             for origin in missing
         ]
         if not missing:
-            found += _class_problems(cls, info, [s for s in sources if s], options)
+            sources = [s for s in resolved.values() if s is not None] or [info]
+            found += _class_problems(cls, info, sources, options)
     return found
 
 
@@ -397,7 +400,7 @@ def _class_problems(
             f"{short}: capture_init_args was removed (the saved yaml would lose its defaults)"
         )
     rules = options.SUPPORTED_OPTIONS[cls]
-    keys = _plain(info).union(*(_plain(s) for s in sources if s is not info))
+    keys = _plain(info).union(*(_plain(s) for s in sources))
     found += [
         f"{short}: constructor parameter {key!r} has no option rule"
         for key in sorted(keys - rules.keys())

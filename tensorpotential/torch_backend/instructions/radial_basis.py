@@ -10,8 +10,7 @@ parameter dtype, so a float32 model evaluates the basis at ``float32(rcut)``), a
 Gaussian basis. A keyword the chosen basis does not read must keep its pinned default (owner decision, section 7): a
 misspelt or misplaced option is refused rather than ignored. Two allow-lists of keywords TF accepts and never reads:
 the Gaussian basis accepts ``rmin``, ``init_gamma`` and ``trainable``, which only set the stored ``grid`` and ``scale``;
-the simplified Bessel basis accepts ``p`` and ``normalized`` (it has no envelope and no normalisation), which the
-``GRACE_*_v2`` presets and ``tests/model_grace.yaml`` write away from their defaults.
+the simplified Bessel basis accepts ``p`` and ``normalized`` (it has no envelope and no normalisation; sheet section 7).
 
 The option table (``spec/options.py``) lets a yaml reach the four bases (``Cheb`` of kind 1 only); each is compared with
 TensorFlow on the golden fixtures (``tests_torch/test_radial_basis_golden.py``).
@@ -40,7 +39,8 @@ _IGNORED: Final[Mapping[str, tuple[str, ...]]] = {
     "Gaussian": ("rmin", "init_gamma", "trainable"),
     "SBessel": ("p", "normalized"),
 }
-"""Keywords TF reads but the twin does not need: they only set weights that the checkpoint holds."""
+"""Keywords TF accepts that do not change the twin's output: Gaussian ones only set weights the checkpoint holds, and the
+simplified Bessel basis never reads its own."""
 _OWN: Final = ("bonds", "basis_type")
 
 
