@@ -6,13 +6,15 @@ Two layers:
   stale, the module is TF-free, the rules are well formed, and planted changes to the decisions are caught;
 - physical values: the rules and defaults are compared with things the module does not call: the constructor
   signatures of the TF classes (``tests/data/instruction_constructor_defaults.json`` and ``inspect``), the
-  source of the TF classes (an AST check that the keys listed as ignored are never read), and
+  source of the TF classes (an AST check that the keys listed as ignored are never read, and that the
+  initialisation-only options are read only in ``build``, with the values TF compares them with), and
   ``metadata_utils.resolve_param_dtype``, which decides the dtype of a yaml without metadata.
 """
 
 from __future__ import annotations
 
 import ast
+import functools
 import inspect
 import json
 import subprocess
@@ -490,3 +492,102 @@ def test_scanned_metadata_param_dtype_is_float32_where_present(rows):
     assert (
         len(row.files) == 8
     )  # the other five yamls have no metadata block: they are read as float64
+
+
+# The initialisation-only options. TF keeps each in an attribute of the same name on the instruction itself, except
+# MLPRadialFunction_v2, which hands init_type to every functions/nn.Linear it creates.
+INIT_ONLY = {
+    ("MLPRadialFunction_v2", "init_type"),
+    ("ScalarChemicalEmbedding", "init"),
+    ("FCRight2Left", "init_vars"),
+    ("FunctionReduceN", "init_vars"),
+    ("InvariantLayerRMSNorm", "init"),
+}
+FORWARDED = {"MLPRadialFunction_v2": ("functions/nn.py", "Linear")}
+
+
+@functools.cache
+def _tree(path: str) -> ast.Module:
+    return ast.parse((ROOT / "tensorpotential" / path).read_text())
+
+
+def _class_node(path: str, name: str) -> ast.ClassDef:
+    (node,) = [
+        n
+        for n in ast.walk(_tree(path))
+        if isinstance(n, ast.ClassDef) and n.name == name
+    ]
+    return node
+
+
+def _holder(cls: str) -> ast.ClassDef:
+    """The class whose source keeps and reads the option of the instruction ``cls``."""
+    return _class_node(*FORWARDED.get(cls, ("instructions/compute.py", cls)))
+
+
+def _uses(node: ast.ClassDef, name: str) -> list[tuple[str, ast.expr]]:
+    """Every load of the parameter ``name`` or of ``self.name`` in the class, with the method it is in."""
+    found = []
+    for method in node.body:
+        if not isinstance(method, ast.FunctionDef):
+            continue
+        for n in ast.walk(method):
+            is_param = isinstance(n, ast.Name) and n.id == name
+            is_attr = (
+                isinstance(n, ast.Attribute)
+                and n.attr == name
+                and isinstance(n.value, ast.Name)
+                and n.value.id == "self"
+            )
+            if (is_param or is_attr) and isinstance(n.ctx, ast.Load):
+                found.append((method.name, n))
+    return found
+
+
+def test_the_initialisation_only_options_are_the_documented_ones():
+    marked = {
+        (short(cls), name)
+        for cls, rules in opt.SUPPORTED_OPTIONS.items()
+        for name, rule in rules.items()
+        if rule.init_only
+    }
+    assert marked == INIT_ONLY
+    assert all(
+        not rule.ignored and rule.kinds == ("str",)
+        for rules in opt.SUPPORTED_OPTIONS.values()
+        for rule in rules.values()
+        if rule.init_only
+    )
+
+
+@pytest.mark.parametrize(("cls", "name"), sorted(INIT_ONLY))
+def test_an_initialisation_only_option_is_read_only_in_build(cls, name):
+    """Oracle: the TF source. The parameter is used in ``__init__`` only, its attribute in ``build`` only."""
+    uses = _uses(_holder(cls), name)
+    assert uses, f"{cls}: {name} is never read"
+    for method, n in uses:
+        expected = "__init__" if isinstance(n, ast.Name) else "build"
+        assert method == expected, f"{cls}: {method} reads {name} (line {n.lineno})"
+    if cls in FORWARDED:
+        # the instruction itself only passes the parameter on, in __init__
+        passed = _uses(_class_node("instructions/compute.py", cls), name)
+        assert passed and all(
+            m == "__init__" and isinstance(n, ast.Name) for m, n in passed
+        )
+
+
+@pytest.mark.parametrize(("cls", "name"), sorted(INIT_ONLY))
+def test_an_initialisation_only_option_accepts_every_value_tf_tells_apart(cls, name):
+    """Oracle: the TF source. The accepted values are the strings the holder compares the option with."""
+    node = _holder(cls)
+    used = {id(n) for _, n in _uses(node, name)}
+    compared = {
+        c.value
+        for n in ast.walk(node)
+        if isinstance(n, ast.Compare) and id(n.left) in used
+        for side in n.comparators
+        for c in ast.walk(side)
+        if isinstance(c, ast.Constant) and isinstance(c.value, str)
+    }
+    rule = opt.SUPPORTED_OPTIONS[opt.COMPUTE + cls][name]
+    assert set(rule.values or ()) == compared

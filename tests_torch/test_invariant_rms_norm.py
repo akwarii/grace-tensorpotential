@@ -24,6 +24,7 @@ from tensorpotential.torch_backend.ops.precision import DtypePolicy
 from tensorpotential.torch_backend.spec.model import InstructionRef, InstructionSpec
 from tensorpotential.torch_backend.spec.options import COMPUTE, DEFAULTS
 from tests_torch.golden.tolerances import FEATURE_F32, FEATURE_F64, assert_close
+from tests_torch.init_only import assert_option_is_ignored
 
 RNG_SEED = 20261019
 F64, F32 = DtypePolicy(torch.float64), DtypePolicy(torch.float32)
@@ -172,3 +173,14 @@ def test_each_atom_is_normalised_on_its_own_features_and_the_norm_is_odd():
     keep = [a for a in range(N_ATOMS) if a != 2]
     assert torch.equal(moved[keep], out[keep])
     assert torch.equal(moved[2], -out[2])
+
+
+@pytest.mark.parametrize("type_", ["full", "only_nonlin"])
+def test_init_changes_neither_the_state_nor_the_output(type_):
+    inputs = {"I": _features(np.random.default_rng(RNG_SEED))}
+    assert_option_is_ignored(
+        lambda **o: _twin(type_, **o),
+        COMPUTE + "InvariantLayerRMSNorm",
+        "init",
+        inputs,
+    )

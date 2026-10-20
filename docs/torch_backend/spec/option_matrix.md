@@ -8,7 +8,8 @@ regenerate with
         --markdown docs/torch_backend/spec/option_matrix.md
 
 The statuses are the decisions of `tensorpotential/torch_backend/spec/options.py`: `supported` (a twin
-implements it), `ignored` (a key the TF constructor accepts and never reads), `rejected` (with the reason). A
+implements it), `ignored` (a key the TF constructor accepts and never reads, or reads only to initialise a
+variable that the checkpoint then sets), `rejected` (with the reason). A
 value that no scanned in-scope model uses is rejected by default (closed-world policy, rule R3). `unclassified`
 must not occur: `tests/test_options.py` fails on it, and on a stale copy of this file.
 
@@ -42,7 +43,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | compute.CropProductFunction | all options |  |  | 1 | 3 | rejected: not one of the instruction classes the first twin set covers (decision D2: the 2L OMAT and large models first); needed by the FS family |
 | compute.EquivariantRMSNorm | all options |  |  | 1 | 2 | rejected: not one of the instruction classes the first twin set covers (decision D2: the 2L OMAT and large models first); needed by the 3L model |
 | compute.FCRight2Left | __cls__ | str | `"tensorpotential.instructions.compute.FCRight2Left"` | 11 | 57 | supported |
-| compute.FCRight2Left | init_vars | str | `"random"` | 11 | 57 | supported |
+| compute.FCRight2Left | init_vars | str | `"random"` | 11 | 57 | ignored: initialisation only, read when TF creates the variable |
 | compute.FCRight2Left | is_central_atom_type_dependent | bool | `false` | 2 | 6 | supported |
 | compute.FCRight2Left | is_central_atom_type_dependent | null | `null` | 11 | 51 | supported |
 | compute.FCRight2Left | left | ref |  | 11 | 57 | supported |
@@ -61,7 +62,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | compute.FunctionReduceN | chemical_embedding | null | `null` | 3 | 9 | ignored: accepted, not read by the constructor |
 | compute.FunctionReduceN | downscale_embedding_size | int | 16 | 3 | 9 | ignored: accepted, not read by the constructor |
 | compute.FunctionReduceN | init_target_value | str | `"zeros"` | 12 | 53 | supported |
-| compute.FunctionReduceN | init_vars | str | `"random"` | 12 | 53 | supported |
+| compute.FunctionReduceN | init_vars | str | `"random"` | 12 | 53 | ignored: initialisation only, read when TF creates the variable |
 | compute.FunctionReduceN | instructions | list[ref] |  | 12 | 53 | supported |
 | compute.FunctionReduceN | is_central_atom_type_dependent | bool | `false`, `true` | 12 | 53 | supported |
 | compute.FunctionReduceN | lm_first | bool | `false` | 8 | 39 | supported |
@@ -79,7 +80,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | compute.FunctionReduceN | simplify | bool | `false`, `true` | 12 | 53 | supported |
 | compute.GeneralProductFunction | all options |  |  | 1 | 9 | rejected: not one of the instruction classes the first twin set covers (decision D2: the 2L OMAT and large models first); needed by the 3L model |
 | compute.InvariantLayerRMSNorm | __cls__ | str | `"tensorpotential.instructions.compute.InvariantLayerRMSNorm"` | 6 | 13 | supported |
-| compute.InvariantLayerRMSNorm | init | str | `"zeros"` | 6 | 13 | supported |
+| compute.InvariantLayerRMSNorm | init | str | `"zeros"` | 6 | 13 | ignored: initialisation only, read when TF creates the variable |
 | compute.InvariantLayerRMSNorm | inpt | ref |  | 6 | 13 | supported |
 | compute.InvariantLayerRMSNorm | type | str | `"full"`, `"only_nonlin"` | 6 | 13 | supported |
 | compute.LinearRadialFunction | all options |  |  | 1 | 1 | rejected: not one of the instruction classes the first twin set covers (decision D2: the 2L OMAT and large models first); needed by the FS family |
@@ -102,7 +103,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | compute.MLPRadialFunction_v2 | embed_i | bool | `false` | 8 | 13 | supported |
 | compute.MLPRadialFunction_v2 | embed_j | bool | `true` | 8 | 13 | supported |
 | compute.MLPRadialFunction_v2 | hidden_layers | list[int] |  | 8 | 13 | supported |
-| compute.MLPRadialFunction_v2 | init_type | str | `"normal"` | 8 | 13 | supported |
+| compute.MLPRadialFunction_v2 | init_type | str | `"normal"` | 8 | 13 | ignored: initialisation only, read when TF creates the variable |
 | compute.MLPRadialFunction_v2 | input_shape | null | `null` | 8 | 13 | supported |
 | compute.MLPRadialFunction_v2 | lmax | int | 4 | 8 | 13 | supported |
 | compute.MLPRadialFunction_v2 | lora_config | null | `null` | 7 | 11 | supported |
@@ -140,7 +141,7 @@ must not occur: `tests/test_options.py` fails on it, and on a stale copy of this
 | compute.ScalarChemicalEmbedding | __cls__ | str | `"tensorpotential.instructions.compute.ScalarChemicalEmbedding"` | 13 | 13 | supported |
 | compute.ScalarChemicalEmbedding | element_map | dict[str,int] |  | 13 | 13 | supported |
 | compute.ScalarChemicalEmbedding | embedding_size | int | 2 to 128 | 13 | 13 | supported |
-| compute.ScalarChemicalEmbedding | init | str | `"random"` | 12 | 12 | supported |
+| compute.ScalarChemicalEmbedding | init | str | `"random"` | 12 | 12 | ignored: initialisation only, read when TF creates the variable |
 | compute.ScalarChemicalEmbedding | is_trainable | bool | `true` | 13 | 13 | supported |
 | compute.ScalarChemicalEmbedding | lora_config | null | `null` | 8 | 8 | supported |
 | compute.ScaledBondVector | __cls__ | str | `"tensorpotential.instructions.compute.ScaledBondVector"` | 13 | 13 | supported |

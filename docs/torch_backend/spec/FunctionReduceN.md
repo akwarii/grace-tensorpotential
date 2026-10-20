@@ -141,7 +141,7 @@ source to the weight dtype before the contraction, as TF does.
   runs but leaves the tables unchanged: `drop_unused` is a no-op on them, `tests/test_compute.py:4119`, `4168`). Only one
   model yaml has it, `GRACE-FS-OMAT.yaml` (instruction `E`, with `CropProductFunction`, a class outside the 17); no yaml
   with `ProductFunction` does. Decided (owner, 2026-10-04): rejected. The option table of SPEC2 still accepts both booleans.
-- `init_vars`: accepted, no effect. `init_target_value` is **ported** (see section 5). `is_central_atom_type_dependent`,
+- `init_vars`: initialisation-only option (`init_only` rule of `spec/options.py`): every value TF accepts loads (`random`, `uniform`, `zeros`), no effect. `init_target_value` is **ported** (see section 5). `is_central_atom_type_dependent`,
   `normalize = False`, `out_norm = True`, `scale != 1`, `lm_first`: ported; those not set by a 2L yaml need option-pair
   fixtures.
 - `upd_init_args_new_elements` and the element-selection mixin (`compute.py:3340-3341`): element restriction is out of

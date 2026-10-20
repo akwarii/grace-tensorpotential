@@ -78,7 +78,8 @@ the consumers cast it (`to_dtype_of`).
 - `get_index_to_select`, `prepare_variables_for_selected_elements`, `upd_init_args_new_elements`
   (`compute.py:1076-1114`) restrict a model to a subset of elements. Decision D19: the model loads with its full
   element set, so none of them is part of the twin.
-- `init` and `is_trainable` are accepted and ignored by the twin (no effect on a loaded model).
+- `init` is an initialisation-only option (`init_only` rule of `spec/options.py`): every value TF accepts loads (`random`, `zero`, `zeros`, `delta`); `is_trainable` is accepted; the twin ignores both (no
+  effect on a loaded model).
 
 ## 8. Golden-fixture keys
 

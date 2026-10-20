@@ -128,7 +128,7 @@ the einsums: a mixed input raises `DtypeError` instead of promoting.
   an option-pair fixture. `prepare_variables_for_selected_elements` and `upd_init_args_new_elements` raise
   `NotImplementedError` for it in TF (`compute.py:3766-3772`); element restriction is out of scope (decision D19).
 - `left_coefs = False`, `normalize = False`, `norm_out = False`: ported.
-- `init_vars`: accepted and ignored.
+- `init_vars`: initialisation-only option (`init_only` rule of `spec/options.py`): every value TF accepts loads (`random`, `uniform`, `zeros`) and the twin ignores it.
 - No common `(l, parity)` between the operands ends in a bare numpy `ValueError` in TF (finding 14, pinned at
   `tests/test_compute.py:4687`); the twin raises a typed error naming the instruction.
 - `local = True`: not applicable.

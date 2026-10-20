@@ -8,7 +8,8 @@ format is scanned as the class ``<metadata>``.
 
 ``classify`` gives each row its status against the decisions in
 ``tensorpotential/torch_backend/spec/options.py`` (loaded by path, so that TensorFlow is not imported):
-``supported``, ``ignored`` (a key the TF constructor swallows), ``rejected`` with the reason, or ``unclassified``,
+``supported``, ``ignored`` (a key the TF constructor swallows, or one it reads only to initialise a variable),
+``rejected`` with the reason, or ``unclassified``,
 which means the matrix is incomplete. The exit status is 1 when a row is unclassified.
 
 Usage::
@@ -51,7 +52,8 @@ regenerate with
         --markdown docs/torch_backend/spec/option_matrix.md
 
 The statuses are the decisions of `tensorpotential/torch_backend/spec/options.py`: `supported` (a twin
-implements it), `ignored` (a key the TF constructor accepts and never reads), `rejected` (with the reason). A
+implements it), `ignored` (a key the TF constructor accepts and never reads, or reads only to initialise a
+variable that the checkpoint then sets), `rejected` (with the reason). A
 value that no scanned in-scope model uses is rejected by default (closed-world policy, rule R3). `unclassified`
 must not occur: `tests/test_options.py` fails on it, and on a stale copy of this file.
 """
@@ -219,11 +221,11 @@ def classify(row: Row, options: ModuleType) -> tuple[str, str]:
         return "supported", ""
     rule = rules.get(row.option)
     if rule is not None and _accepts(rule, row):
-        return (
-            ("ignored", "accepted, not read by the constructor")
-            if rule.ignored
-            else ("supported", "")
-        )
+        if rule.ignored:
+            return "ignored", "accepted, not read by the constructor"
+        if rule.init_only:
+            return "ignored", "initialisation only, read when TF creates the variable"
+        return "supported", ""
     reason = _rejection(options, row)
     if reason is not None:
         return "rejected", reason

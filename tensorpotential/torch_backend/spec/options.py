@@ -42,11 +42,16 @@ class OptionRule:
     ignored
         The key is swallowed by the ``**kwargs`` of the TF constructor and has no effect on the forward pass;
         it is accepted so that existing yamls load, and nothing reads it.
+    init_only
+        A constructor parameter that TF reads only when it creates a variable (in ``build``): it chooses the
+        initial value, a converted model takes every variable from the checkpoint, so the twin ignores it.
+        ``values`` lists every value the TF class accepts.
     """
 
     kinds: tuple[str, ...]
     values: tuple[Any, ...] | None = None
     ignored: bool = False
+    init_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,11 @@ def _r(
     *kinds: str, values: tuple[Any, ...] | None = None, ignored: bool = False
 ) -> OptionRule:
     return OptionRule(kinds, values, ignored)
+
+
+def _init_only(*values: str) -> OptionRule:
+    """Rule of a ``str`` option that only picks a TF initialiser: every value the TF class accepts."""
+    return OptionRule(("str",), values, init_only=True)
 
 
 _REF = _r("ref")
@@ -117,7 +127,8 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "hidden_layers": _r("list[int]"),
         "activation": _r("list[str]", values=("silu",)),
         "no_weight_decay": _TRUE,
-        "init_type": _r("str", values=("normal",)),
+        # init_only: handed to every functions/nn.py Linear, which reads it in build
+        "init_type": _init_only("normal", "uniform", "zeros"),
         "normalize": _TRUE,
         "chem_embedding": _NULL,
         "embed_i": _FALSE,
@@ -128,7 +139,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "element_map": _r("dict[str,int]"),
         "embedding_size": _INT,
         "is_trainable": _TRUE,
-        "init": _r("str", values=("random",)),
+        "init": _init_only("random", "zero", "zeros", "delta"),  # read in build
         "lora_config": _NO_LORA,
     },
     COMPUTE + "SingleParticleBasisFunctionScalarInd": {
@@ -192,7 +203,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "left_coefs": _BOOL,
         "is_central_atom_type_dependent": _r("bool", "null", values=(False, None)),
         "number_of_atom_types": _NULL,
-        "init_vars": _r("str", values=("random",)),
+        "init_vars": _init_only("random", "uniform", "zeros"),  # read in build
         "normalize": _TRUE,
         "norm_out": _TRUE,
         "lora_config": _NO_LORA,
@@ -206,7 +217,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
         "out_norm": _BOOL,
         "is_central_atom_type_dependent": _BOOL,
         "number_of_atom_types": _r("int", "null"),
-        "init_vars": _r("str", values=("random",)),
+        "init_vars": _init_only("random", "uniform", "zeros"),  # read in build
         "normalize": _TRUE,
         "init_target_value": _r(
             "str", values=("zeros", "ones")
@@ -222,7 +233,7 @@ SUPPORTED_OPTIONS: Final[Mapping[str, Mapping[str, OptionRule]]] = {
     COMPUTE + "InvariantLayerRMSNorm": {
         "inpt": _REF,
         "type": _r("str", values=("full", "only_nonlin")),
-        "init": _r("str", values=("zeros",)),
+        "init": _init_only("zeros", "ones", "random", "near_zero"),  # read in build
     },
     OUTPUT + "CreateOutputTarget": {"initial_value": _r("float"), "l": _ZERO},
     OUTPUT + "LinMLPOut2ScalarTarget": {
